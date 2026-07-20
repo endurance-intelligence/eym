@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Endurance Intelligence</title>
+    <script>
+      (function () {
+        var base = "/eym/";
+        var path = location.pathname.indexOf(base) === 0 ? location.pathname.slice(base.length) : "";
+        var route = path ? "/" + path.replace(/^\/+/, "") : "/";
+        location.replace(base + "#" + route + location.search);
+      })();
+    </script>
+  </head>
+  <body></body>
+</html>
