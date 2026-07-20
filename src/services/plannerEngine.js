@@ -453,8 +453,11 @@ function commitmentWorkoutType(commitment) {
   }[commitment.sport] || "Sonstiges";
 }
 
-function isRunPlanEntry(entry) {
-  return ["Easy Run", "Long Run", "Schwellenlauf", "Intervalle", "Backyard Training", "ORC Run", "ORC Track", "Samstagsoption", "Laufband"].includes(entry.type);
+function isReplaceablePlanEntry(entry) {
+  return entry.source === "planner-engine"
+    && !entry.completed
+    && !entry.fixed
+    && !["Stabi", "Mobility", "Ruhetag"].includes(entry.type);
 }
 
 function applyRecurringCommitments(plan, weekStart, config, mode = "all") {
@@ -470,8 +473,10 @@ function applyRecurringCommitments(plan, weekStart, config, mode = "all") {
     const date = isoDate(dateForDay(weekStart, dayIndex));
     const type = commitmentWorkoutType(commitment);
     const sameDay = plan.map((entry, index) => ({ entry, index })).filter(({ entry }) => entry.date === date);
-    const replaceable = commitment.sport === "running" && commitment.replaceRunOnSameDay !== false
-      ? sameDay.find(({ entry }) => isRunPlanEntry(entry))
+    const conflictMode = commitment.conflictMode
+      || (commitment.replaceRunOnSameDay === true ? "replace" : commitment.allowCombination === false ? "exclusive" : "combine");
+    const replaceable = conflictMode === "replace"
+      ? sameDay.find(({ entry }) => isReplaceablePlanEntry(entry))
       : null;
     const distance = Number(commitment.distanceKm || replaceable?.entry?.distance || 0);
     const duration = Number(commitment.durationMinutes || replaceable?.entry?.duration || 60);
@@ -486,7 +491,8 @@ function applyRecurringCommitments(plan, weekStart, config, mode = "all") {
       fixed: true,
       commitmentId: commitment.id,
       commitmentLoad: commitment.load || "medium",
-      allowCombination: commitment.allowCombination !== false,
+      conflictMode,
+      allowCombination: conflictMode !== "exclusive",
       replacedWorkout: replaceable ? { title: replaceable.entry.title, type: replaceable.entry.type } : null,
     };
 
@@ -495,7 +501,7 @@ function applyRecurringCommitments(plan, weekStart, config, mode = "all") {
       return;
     }
 
-    if (commitment.allowCombination === false) {
+    if (conflictMode === "exclusive") {
       sameDay
         .filter(({ entry }) => !entry.completed && entry.source === "planner-engine")
         .map(({ index }) => index)

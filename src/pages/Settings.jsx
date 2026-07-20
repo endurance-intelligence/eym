@@ -7,6 +7,7 @@ import { mergeGarminActivities, readGarminExport } from "../services/garminImpor
 import { calendarSubscriptionUrl } from "../services/supabase";
 import { fetchIntervalsStatus, intervalsOnlineReady } from "../services/intervals";
 import {
+  CONFLICT_MODE_OPTIONS,
   DEFAULT_REPLACEMENT_SPORTS,
   LOAD_OPTIONS,
   SPORT_OPTIONS,
@@ -29,6 +30,7 @@ export default function Settings() {
   const [intervalsMessage, setIntervalsMessage] = useState("");
   const [intervalsBusy, setIntervalsBusy] = useState(false);
   const [commitmentDraft, setCommitmentDraft] = useState(null);
+  const [commitmentMessage, setCommitmentMessage] = useState("");
   const garminInput = useRef(null);
 
   const commitments = Array.isArray(state.planner?.recurringCommitments) ? state.planner.recurringCommitments : [];
@@ -58,6 +60,7 @@ export default function Settings() {
         ? commitments.map((item) => item.id === normalized.id ? normalized : item)
         : [...commitments, normalized],
     });
+    setCommitmentMessage("Fixtermin gespeichert. Der bestehende Wochenplan bleibt unverändert. Die Änderung greift bei der nächsten Planung oder wenn du die betroffenen Tage unter „Woche anpassen“ neu planst.");
     setCommitmentDraft(null);
   }
 
@@ -168,9 +171,11 @@ export default function Settings() {
       <Card className="wide settings-commitments-card">
         <div className="settings-section-heading">
           <div><p className="eyebrow">Feste Termine</p><h2>Wiederkehrende Einheiten</h2></div>
-          <button type="button" onClick={() => setCommitmentDraft(emptyCommitment())}>+ Termin hinzufügen</button>
+          <button type="button" onClick={() => { setCommitmentMessage(""); setCommitmentDraft(emptyCommitment()); }}>+ Termin hinzufügen</button>
         </div>
-        <p className="muted">EYM berücksichtigt diese Termine bei jeder neuen Wochenplanung.{hasMigratedCommitments ? " Bestehende Fixtermine wurden aus deiner bisherigen Konfiguration automatisch übernommen." : " Neue Termine kannst du frei nach Sportart, Tag, Uhrzeit und Belastung anlegen."}</p>
+        <p className="muted">EYM berücksichtigt diese Termine bei jeder neuen oder neu berechneten Wochenplanung.{hasMigratedCommitments ? " Bestehende Fixtermine wurden aus deiner bisherigen Konfiguration automatisch übernommen." : " Neue Termine kannst du frei nach Sportart, Tag, Uhrzeit und Belastung anlegen."}</p>
+        <div className="settings-plan-scope-note"><strong>Wichtig:</strong><span>Das Speichern hier ändert deinen bereits bestehenden Wochenplan nicht automatisch. Für die laufende Woche nutzt du anschließend gezielt „Woche anpassen“.</span></div>
+        {commitmentMessage && <div className="settings-save-message">✓ {commitmentMessage}</div>}
         {commitments.length ? (
           <div className="settings-commitment-list">
             {commitments.map((item) => (
@@ -180,9 +185,10 @@ export default function Settings() {
                   <strong>{item.name}</strong>
                   <span>{item.weekday} · {item.time || "flexibel"} · {sportLabel(item.sport)}</span>
                   <small>{item.durationMinutes ? `${item.durationMinutes} min` : "Dauer offen"}{item.distanceKm ? ` · ${item.distanceKm} km` : ""} · Belastung {LOAD_OPTIONS.find((entry) => entry.value === item.load)?.label || "Mittel"}</small>
+                  <span className={`commitment-behavior ${item.conflictMode || "combine"}`}>{CONFLICT_MODE_OPTIONS.find((entry) => entry.value === (item.conflictMode || "combine"))?.label || "Als zusätzliche Einheit einplanen"}</span>
                 </div>
                 <div className="commitment-actions">
-                  <button type="button" className="secondary" onClick={() => setCommitmentDraft({ ...item })}>Bearbeiten</button>
+                  <button type="button" className="secondary" onClick={() => { setCommitmentMessage(""); setCommitmentDraft({ ...item }); }}>Bearbeiten</button>
                   <button type="button" className="secondary" onClick={() => deleteCommitment(item.id)}>Löschen</button>
                 </div>
               </article>
@@ -193,21 +199,29 @@ export default function Settings() {
         {commitmentDraft && (
           <form className="settings-commitment-form" onSubmit={saveCommitment}>
             <div className="settings-section-heading"><div><p className="eyebrow">Termin bearbeiten</p><h3>{commitments.some((item) => item.id === commitmentDraft.id) ? commitmentDraft.name || "Fixtermin" : "Neuer Fixtermin"}</h3></div><button type="button" className="secondary" onClick={() => setCommitmentDraft(null)}>Schließen</button></div>
-            <div className="form-grid">
+            <label className="settings-active-toggle">
+              <input type="checkbox" checked={commitmentDraft.enabled !== false} onChange={(event) => setCommitmentDraft({ ...commitmentDraft, enabled: event.target.checked })} />
+              <span><b>Termin regelmäßig berücksichtigen</b><small>Du kannst ihn später auch kurzfristig nur für eine einzelne Woche aussetzen.</small></span>
+            </label>
+            <div className="form-grid settings-commitment-form-grid">
               <label>Name<input required value={commitmentDraft.name} placeholder="z. B. Lauftreff" onChange={(event) => setCommitmentDraft({ ...commitmentDraft, name: event.target.value })} /></label>
-              <label>Sportart<select value={commitmentDraft.sport} onChange={(event) => setCommitmentDraft({ ...commitmentDraft, sport: event.target.value, replaceRunOnSameDay: event.target.value === "running" })}>{SPORT_OPTIONS.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>
+              <label>Sportart<select value={commitmentDraft.sport} onChange={(event) => setCommitmentDraft({ ...commitmentDraft, sport: event.target.value })}>{SPORT_OPTIONS.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>
               <label>Wochentag<select value={commitmentDraft.weekday} onChange={(event) => setCommitmentDraft({ ...commitmentDraft, weekday: event.target.value })}>{WEEKDAYS.map((day) => <option key={day}>{day}</option>)}</select></label>
               <label>Uhrzeit<input type="time" value={commitmentDraft.time} onChange={(event) => setCommitmentDraft({ ...commitmentDraft, time: event.target.value })} /></label>
               <label>Dauer in Minuten<input type="number" min="0" value={commitmentDraft.durationMinutes} onChange={(event) => setCommitmentDraft({ ...commitmentDraft, durationMinutes: Number(event.target.value) })} /></label>
               <label>Übliche Distanz in km<input type="number" min="0" step="0.1" value={commitmentDraft.distanceKm} onChange={(event) => setCommitmentDraft({ ...commitmentDraft, distanceKm: Number(event.target.value) })} /></label>
               <label>Belastung<select value={commitmentDraft.load} onChange={(event) => setCommitmentDraft({ ...commitmentDraft, load: event.target.value })}>{LOAD_OPTIONS.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>
             </div>
-            <div className="settings-check-grid">
-              <label><input type="checkbox" checked={commitmentDraft.enabled !== false} onChange={(event) => setCommitmentDraft({ ...commitmentDraft, enabled: event.target.checked })} /> Regelmäßig aktiv</label>
-              <label><input type="checkbox" checked={commitmentDraft.allowCombination !== false} onChange={(event) => setCommitmentDraft({ ...commitmentDraft, allowCombination: event.target.checked })} /> Weitere Einheit am selben Tag erlaubt</label>
-              {commitmentDraft.sport === "running" && <label><input type="checkbox" checked={commitmentDraft.replaceRunOnSameDay !== false} onChange={(event) => setCommitmentDraft({ ...commitmentDraft, replaceRunOnSameDay: event.target.checked })} /> Geplanten Lauf an diesem Tag ersetzen</label>}
+            <section className="settings-conflict-section">
+              <div><p className="eyebrow">Planungsverhalten</p><h4>Was soll passieren, wenn an diesem Tag schon Training geplant ist?</h4></div>
+              <div className="settings-conflict-options">
+                {CONFLICT_MODE_OPTIONS.map((option) => <label className={commitmentDraft.conflictMode === option.value ? "selected" : ""} key={option.value}><input type="radio" name="commitment-conflict-mode" value={option.value} checked={commitmentDraft.conflictMode === option.value} onChange={() => setCommitmentDraft({ ...commitmentDraft, conflictMode: option.value })} /><span><b>{option.label}</b><small>{option.description}</small></span></label>)}
+              </div>
+            </section>
+            <div className="settings-form-footer">
+              <span>Speichert die Grundregel. Der laufende Wochenplan bleibt unangetastet.</span>
+              <button className="primary" type="submit">Fixtermin speichern</button>
             </div>
-            <button className="primary" type="submit">Fixtermin speichern</button>
           </form>
         )}
       </Card>

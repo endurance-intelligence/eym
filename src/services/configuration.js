@@ -1,4 +1,4 @@
-export const CONFIGURATION_VERSION = 2;
+export const CONFIGURATION_VERSION = 3;
 
 export const WEEKDAYS = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"];
 
@@ -20,6 +20,24 @@ export const LOAD_OPTIONS = [
 ];
 
 export const DEFAULT_REPLACEMENT_SPORTS = ["running", "cycling", "rowing", "mobility", "swimming", "football"];
+
+export const CONFLICT_MODE_OPTIONS = [
+  {
+    value: "replace",
+    label: "Passende Einheit ersetzen",
+    description: "Ersetzt an diesem Tag eine noch offene, automatisch geplante Ausdauereinheit. Stabi, Mobility und manuelle Einträge bleiben erhalten.",
+  },
+  {
+    value: "combine",
+    label: "Als zusätzliche Einheit einplanen",
+    description: "Der Fixtermin kommt zusätzlich zu den bereits geplanten Einheiten in den Tag.",
+  },
+  {
+    value: "exclusive",
+    label: "Tag für diesen Termin reservieren",
+    description: "Entfernt andere noch offene, automatisch geplante Einheiten an diesem Tag.",
+  },
+];
 
 const sportLabels = Object.fromEntries(SPORT_OPTIONS.map((entry) => [entry.value, entry.label]));
 
@@ -93,6 +111,15 @@ function legacyCommitments(planner = {}) {
 }
 
 export function normalizeCommitment(commitment = {}) {
+  const legacyConflictMode = commitment.replaceRunOnSameDay === true
+    ? "replace"
+    : commitment.allowCombination === false
+      ? "exclusive"
+      : "combine";
+  const conflictMode = ["combine", "replace", "exclusive"].includes(commitment.conflictMode)
+    ? commitment.conflictMode
+    : legacyConflictMode;
+
   return {
     id: commitment.id || crypto.randomUUID(),
     name: String(commitment.name || sportLabels[commitment.sport] || "Fixtermin").trim(),
@@ -104,8 +131,10 @@ export function normalizeCommitment(commitment = {}) {
     distanceKm: Math.max(0, Number(commitment.distanceKm || 0)),
     load: ["low", "medium", "high"].includes(commitment.load) ? commitment.load : "medium",
     enabled: commitment.enabled !== false,
-    allowCombination: commitment.allowCombination !== false,
-    replaceRunOnSameDay: commitment.replaceRunOnSameDay !== false && commitment.sport === "running",
+    conflictMode,
+    // Legacy fields stay available so existing state and older planner code remain compatible.
+    allowCombination: conflictMode !== "exclusive",
+    replaceRunOnSameDay: conflictMode === "replace",
     migratedFrom: commitment.migratedFrom || "",
   };
 }
@@ -158,7 +187,6 @@ export function emptyCommitment() {
     distanceKm: 0,
     load: "medium",
     enabled: true,
-    allowCombination: true,
-    replaceRunOnSameDay: true,
+    conflictMode: "replace",
   });
 }

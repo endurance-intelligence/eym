@@ -92,3 +92,13 @@ The planner now supports two different adjustment scopes:
 
 1. replace, move or delete selected units without changing the remaining week
 2. recalculate selected days or the complete remaining week using the current check-in and configuration
+
+## Fixed-term behavior (v2.9.1)
+
+Recurring commitments now use one explicit planning behavior instead of multiple overlapping checkboxes:
+
+- **Replace**: replaces one open automatically planned endurance session on the same day while retaining mobility/strength and manual entries.
+- **Combine**: adds the commitment alongside existing sessions.
+- **Exclusive**: reserves the day and removes other open automatically planned sessions.
+
+Saving a recurring commitment changes the planning configuration only. An already generated week is intentionally left untouched and can be changed through **Woche anpassen**.
