@@ -73,3 +73,22 @@ The direct EYM-to-Strava OAuth integration has been removed. Existing imported a
 ## Open Food Facts
 
 Fuel Lab reads public product data from Open Food Facts. Missing products are kept locally with photo, barcode and manually entered nutrition data. The UI then offers a direct contribution link so the barcode can be completed in Open Food Facts and checked again later.
+
+## Configuration model (v2.9)
+
+Athlete-specific planning data is stored inside the existing `athlete_data.app_data` JSON document. No additional Supabase migration is required for v2.9.
+
+The first load migrates the previous personal settings automatically:
+
+- display name and all existing athlete data stay unchanged
+- the former Monday football switch becomes a recurring commitment
+- the former Wednesday ORC Run switch becomes a recurring commitment
+- an explicitly confirmed Saturday ORC Track becomes a recurring commitment
+- plans, reviews, activities, missions, equipment, fuel and calendar tokens are preserved
+
+Users can then maintain profile data, recurring commitments and permitted replacement sports under **Settings**. Deleting all recurring commitments is respected after the one-time migration and does not recreate the legacy entries.
+
+The planner now supports two different adjustment scopes:
+
+1. replace, move or delete selected units without changing the remaining week
+2. recalculate selected days or the complete remaining week using the current check-in and configuration

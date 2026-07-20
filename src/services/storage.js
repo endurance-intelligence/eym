@@ -1,3 +1,5 @@
+import { migrateConfiguration } from "./configuration";
+
 const KEY = "endurance-intelligence.v1";
 
 function isDemoEntry(entry) {
@@ -31,7 +33,7 @@ function sanitizeState(state, defaults) {
     calendar: { ...defaults.calendar, ...(state?.calendar || {}) },
   };
   delete sanitized.strava;
-  return sanitized;
+  return migrateConfiguration(sanitized);
 }
 
 export function loadState(defaults) {
@@ -43,7 +45,7 @@ export function loadState(defaults) {
     // Fall through to clean defaults.
   }
 
-  return defaults;
+  return migrateConfiguration(defaults);
 }
 
 export function saveState(state) {

@@ -4,6 +4,7 @@ import { defaultState } from "../data/defaults";
 import { loadState, saveState } from "../services/storage";
 import { loadCloudState, saveCloudState, signOut, supabase } from "../services/supabase";
 import { fetchIntervalsStatus, mapIntervalsActivities, mergeIntervalsActivities, syncIntervalsActivities } from "../services/intervals";
+import { migrateConfiguration } from "../services/configuration";
 
 const AppContext = createContext(null);
 
@@ -136,7 +137,7 @@ function mergeState(localState = {}, cloudState = {}) {
   };
   // Remove the retired direct Strava connection while keeping already imported activities.
   delete merged.strava;
-  return migrateReviewFuelCatalog(merged);
+  return migrateConfiguration(migrateReviewFuelCatalog(merged));
 }
 
 function stateForCloud(state) {

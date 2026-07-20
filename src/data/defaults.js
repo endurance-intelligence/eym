@@ -38,6 +38,10 @@ export const mission = {
 export const defaultState = {
   profile: {
     displayName: "",
+    birthDate: "",
+    heightCm: "",
+    weightKg: "",
+    units: "metric",
   },
   activities: [],
   reviews: {},
@@ -54,7 +58,11 @@ export const defaultState = {
     rowingDays: ["Freitag"],
     runDays: ["Dienstag", "Mittwoch", "Freitag", "Samstag", "Sonntag"],
     doubleTrainingDays: ["Dienstag", "Freitag"],
-    fixedAppointments: { football: true, orcRun: true, saturdayMode: "open", extraOrcTrackDay: "" },
+    fixedAppointments: { football: false, orcRun: false, saturdayMode: "off", extraOrcTrackDay: "" },
+    recurringCommitments: [],
+    replacementSports: ["running", "cycling", "rowing", "mobility", "swimming", "football"],
+    configurationVersion: 2,
+    legacyMigrationComplete: false,
     maxOutdoorTemperature: 29,
     maxWindGust: 55,
     maxLongRun: 38,

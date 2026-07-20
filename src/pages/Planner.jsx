@@ -14,11 +14,56 @@ import {
 import { downloadCalendar } from "../services/calendar";
 import { preferredActivities } from "../services/activityUtils";
 import { publishIntervalsWeek } from "../services/intervals";
+import { DEFAULT_REPLACEMENT_SPORTS, SPORT_OPTIONS, sportLabel } from "../services/configuration";
 import "./Planner.css";
 
 const dayFormatter = new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" });
 const reasonOptions = ["Keine Zeit", "Müde", "Schmerzen", "Krankheit", "Wetter", "Verschoben", "Bewusst ausgelassen", "Aktivität nicht erkannt", "Sonstiges"];
 const plannerDays = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"];
+
+function replacementWorkoutType(sport) {
+  return {
+    running: "Easy Run",
+    football: "Fußball",
+    cycling: "Radfahren",
+    rowing: "Rudern",
+    mobility: "Mobility",
+    swimming: "Schwimmen",
+    strength: "Stabi",
+  }[sport] || "Sonstiges";
+}
+
+function adjustmentReplacementOptions(planner = {}) {
+  const allowed = new Set(planner.replacementSports?.length ? planner.replacementSports : DEFAULT_REPLACEMENT_SPORTS);
+  const options = [];
+  if (allowed.has("running")) {
+    options.push({ key: "preset:easy-run", label: "Alternativer lockerer Lauf", sport: "running", type: "Easy Run", preserveDistance: true });
+    options.push({ key: "preset:orc-track", label: "ORC Track", sport: "running", type: "ORC Track", preserveDistance: true });
+  }
+  SPORT_OPTIONS.filter((entry) => allowed.has(entry.value) && entry.value !== "running" && entry.value !== "other").forEach((entry) => {
+    options.push({ key: `sport:${entry.value}`, label: entry.label, sport: entry.value, type: replacementWorkoutType(entry.value), preserveDistance: false });
+  });
+  (planner.recurringCommitments || []).filter((entry) => entry.enabled !== false).forEach((entry) => {
+    options.push({
+      key: `commitment:${entry.id}`,
+      label: `${entry.name} (Fixtermin)`,
+      sport: entry.sport,
+      type: entry.workoutType || replacementWorkoutType(entry.sport),
+      title: entry.name,
+      duration: Number(entry.durationMinutes || 0),
+      distance: Number(entry.distanceKm || 0),
+      preserveDistance: entry.sport === "running" && !Number(entry.distanceKm || 0),
+      commitmentId: entry.id,
+    });
+  });
+  options.push({ key: "preset:rest", label: "Ruhetag / Erholung", sport: "rest", type: "Ruhetag", preserveDistance: false, duration: 0 });
+  return options.filter((entry, index, all) => all.findIndex((candidate) => candidate.key === entry.key) === index);
+}
+
+function commitmentDate(weekStart, commitment) {
+  const index = plannerDays.indexOf(commitment.weekday);
+  return index >= 0 ? isoDate(dateForDay(weekStart, index)) : "";
+}
 
 function planFingerprint(plan) {
   return JSON.stringify(plan.map((item) => ({
@@ -174,6 +219,8 @@ export default function Planner() {
   const [missedEditing, setMissedEditing] = useState(null);
   const [planningOpen, setPlanningOpen] = useState(false);
   const [planningDraft, setPlanningDraft] = useState(null);
+  const [adjustmentOpen, setAdjustmentOpen] = useState(false);
+  const [adjustmentDraft, setAdjustmentDraft] = useState(null);
   const [overwriteConfirmOpen, setOverwriteConfirmOpen] = useState(false);
   const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
   const [publishBusy, setPublishBusy] = useState(false);
@@ -214,7 +261,9 @@ export default function Planner() {
     const previousEnd = dateForDay(previousStart, 6);
     return state.plan.some((item) => !item.archived && item.date >= isoDate(previousStart) && item.date <= isoDate(previousEnd));
   }, [state.plan, offsetWeeks]);
-  const config = state.planner || {};
+  const config = useMemo(() => state.planner || {}, [state.planner]);
+  const recurringCommitments = Array.isArray(config.recurringCommitments) ? config.recurringCommitments.filter((entry) => entry.enabled !== false) : [];
+  const replacementOptions = useMemo(() => adjustmentReplacementOptions(config), [config]);
   const reasonCounts = useMemo(() => recentReasonCounts(state.plan, weekStart), [state.plan, weekStart]);
   const coachReviewReference = useMemo(() => offsetWeeks === 0 ? new Date(Date.now() + 86400000) : weekStart, [offsetWeeks, weekStart]);
   const coachGuidance = useMemo(() => reviewGuidance(canonicalActivities, state.reviews, coachReviewReference), [canonicalActivities, state.reviews, coachReviewReference]);
@@ -224,7 +273,7 @@ export default function Planner() {
   const currentPlanFingerprint = useMemo(() => planFingerprint(publishablePlan), [publishablePlan]);
   const publishedWeek = config.intervalSync?.[weekKey] || null;
   const planChangedAfterPublish = Boolean(publishedWeek && publishedWeek.fingerprint !== currentPlanFingerprint);
-  const modalVisible = Boolean(editing || missedEditing || planningOpen || overwriteConfirmOpen || publishConfirmOpen);
+  const modalVisible = Boolean(editing || missedEditing || planningOpen || adjustmentOpen || overwriteConfirmOpen || publishConfirmOpen);
 
   useEffect(() => {
     if (!modalVisible) return undefined;
@@ -267,6 +316,14 @@ export default function Planner() {
   }
 
   function requestPlanning() {
+    if (weekPlan.length) {
+      openAdjustment();
+      return;
+    }
+    openPlanning();
+  }
+
+  function requestFullPlanning() {
     if (offsetWeeks === 0 && replaceableCurrentEntries.length > 0) {
       setOverwriteConfirmOpen(true);
       return;
@@ -274,15 +331,32 @@ export default function Planner() {
     openPlanning();
   }
 
-  function openPlanning() {
+  function openAdjustment(preselectedId = "") {
+    const adjustable = weekPlan.filter((item) => !item.completed && !item.missedReason && (offsetWeeks > 0 || item.date >= todayKey));
+    const initialId = preselectedId || adjustable.find((item) => normalizedType(`${item.type} ${item.title}`) === "running")?.id || adjustable[0]?.id || "";
+    const initial = adjustable.find((item) => item.id === initialId);
+    setAdjustmentDraft({
+      action: "replace",
+      selectedIds: initialId ? [initialId] : [],
+      selectedDates: initial?.date ? [initial.date] : [],
+      replacementKey: replacementOptions[0]?.key || "",
+      moveDate: initial?.date || isoDate(weekStart),
+      moveTime: initial?.time || "18:00",
+    });
+    setAdjustmentOpen(true);
+  }
+
+  function openPlanning(adjustDates = []) {
     const lastCheckin = state.healthCheckins?.[0]?.checkin || config.checkin || {};
     setPlanningDraft({
+      adjustDates,
       stabiCount: Number(config.stabiCount ?? 2),
       stabiDays: config.stabiDays?.length ? config.stabiDays : ["Dienstag", "Donnerstag"],
       rowingCount: Number(config.rowingCount ?? 1),
       rowingDays: config.rowingDays?.length ? config.rowingDays : ["Freitag"],
       runDays: config.runDays?.length ? config.runDays : ["Dienstag", "Mittwoch", "Freitag", "Samstag", "Sonntag"],
       doubleTrainingDays: config.doubleTrainingDays || ["Dienstag", "Freitag"],
+      recurringCommitments: (config.recurringCommitments || []).map((entry) => ({ ...entry, activeThisWeek: entry.enabled !== false })),
       fixedAppointments: {
         football: config.fixedAppointments?.football !== false,
         orcRun: config.fixedAppointments?.orcRun !== false,
@@ -303,6 +377,77 @@ export default function Planner() {
     setPlanningOpen(true);
   }
 
+  function toggleAdjustmentItem(id) {
+    setAdjustmentDraft((current) => {
+      const selecting = !current.selectedIds.includes(id);
+      const selectedIds = selecting
+        ? [...current.selectedIds, id]
+        : current.selectedIds.filter((value) => value !== id);
+      const itemDate = weekPlan.find((item) => item.id === id)?.date;
+      const selectedDates = selecting && itemDate && !current.selectedDates.includes(itemDate)
+        ? [...current.selectedDates, itemDate]
+        : current.selectedDates;
+      return { ...current, selectedIds, selectedDates };
+    });
+  }
+
+  function toggleAdjustmentDate(date) {
+    setAdjustmentDraft((current) => ({
+      ...current,
+      selectedDates: current.selectedDates.includes(date)
+        ? current.selectedDates.filter((value) => value !== date)
+        : [...current.selectedDates, date],
+    }));
+  }
+
+  function applyUnitAdjustment(event) {
+    event.preventDefault();
+    if (!adjustmentDraft?.selectedIds?.length) return;
+    const selected = new Set(adjustmentDraft.selectedIds);
+    const option = replacementOptions.find((entry) => entry.key === adjustmentDraft.replacementKey);
+    setState((current) => ({
+      ...current,
+      plan: current.plan.flatMap((item) => {
+        if (!selected.has(item.id)) return [item];
+        if (adjustmentDraft.action === "delete") return [];
+        if (adjustmentDraft.action === "move") {
+          return [{ ...item, date: adjustmentDraft.moveDate, day: plannerDays[new Date(`${adjustmentDraft.moveDate}T12:00:00`).getDay() === 0 ? 6 : new Date(`${adjustmentDraft.moveDate}T12:00:00`).getDay() - 1], time: adjustmentDraft.moveTime || item.time, intervalsPublishedAt: null }];
+        }
+        if (!option) return [item];
+        const originalDistance = Number(item.distance || 0);
+        const nextDistance = option.preserveDistance ? originalDistance : Number(option.distance || 0);
+        const nextDuration = Number(option.duration || item.duration || 60);
+        const title = option.key === "preset:easy-run"
+          ? `${nextDistance || originalDistance || 5} km locker`
+          : option.title || option.label;
+        return [{
+          ...item,
+          title,
+          type: option.type,
+          distance: nextDistance,
+          duration: nextDuration,
+          optional: false,
+          fixed: Boolean(option.commitmentId),
+          commitmentId: option.commitmentId || null,
+          choicePending: false,
+          choiceOptions: null,
+          intervalsPublishedAt: null,
+          replacedWorkout: { title: item.title, type: item.type, distance: originalDistance },
+          notes: `Wochenanpassung: ${item.title} wurde durch ${title} ersetzt. Andere Einheiten an diesem Tag bleiben unverändert.`,
+        }];
+      }),
+    }));
+    setStatus(`${adjustmentDraft.selectedIds.length} Einheit${adjustmentDraft.selectedIds.length === 1 ? "" : "en"} angepasst. Der übrige Wochenplan blieb unverändert.`);
+    setAdjustmentOpen(false);
+  }
+
+  function replanSelectedDays() {
+    if (!adjustmentDraft?.selectedDates?.length) return;
+    const dates = adjustmentDraft.selectedDates;
+    setAdjustmentOpen(false);
+    openPlanning(dates);
+  }
+
   function toggleDay(field, day) {
     setPlanningDraft((current) => ({
       ...current,
@@ -316,10 +461,10 @@ export default function Planner() {
     setPlanningDraft((current) => ({ ...current, checkin: { ...current.checkin, [field]: value } }));
   }
 
-  function updateFixedAppointment(field, value) {
+  function updateWeeklyCommitment(id, activeThisWeek) {
     setPlanningDraft((current) => ({
       ...current,
-      fixedAppointments: { ...current.fixedAppointments, [field]: value },
+      recurringCommitments: current.recurringCommitments.map((entry) => entry.id === id ? { ...entry, activeThisWeek } : entry),
     }));
   }
 
@@ -509,6 +654,12 @@ export default function Planner() {
           : "Die Laufoption am Samstag wurde aus dem Wochenplan entfernt.");
   }
 
+  function skipCommitmentThisWeek(item, name) {
+    if (!item) return;
+    setState((current) => ({ ...current, plan: current.plan.filter((entry) => entry.id !== item.id) }));
+    setStatus(`${name} wurde nur für diese Woche ausgesetzt. Die feste Konfiguration bleibt erhalten.`);
+  }
+
   function resolveSaturdayChoice(_item, choice) {
     setSaturdayPlanMode(choice === "orc" ? "orc" : "alternative");
   }
@@ -526,7 +677,14 @@ export default function Planner() {
       setStatus("Standort/Wetter nicht verfügbar – Plan wird ohne Wetteranpassung erstellt.");
     }
 
-    const effectiveConfig = { ...config, ...(overrideConfig || {}) };
+    const requestedDates = Array.isArray(overrideConfig?.adjustDates) ? overrideConfig.adjustDates : [];
+    const draftCommitments = Array.isArray(overrideConfig?.recurringCommitments)
+      ? overrideConfig.recurringCommitments.map(({ activeThisWeek, ...entry }) => ({ ...entry, enabled: activeThisWeek !== false }))
+      : config.recurringCommitments;
+    const overridePlanner = { ...(overrideConfig || {}) };
+    delete overridePlanner.adjustDates;
+    delete overridePlanner.recurringCommitments;
+    const effectiveConfig = { ...config, ...overridePlanner, recurringCommitments: draftCommitments };
     const generated = generateWeekPlan({
       activities: canonicalActivities,
       reviews: state.reviews,
@@ -551,14 +709,16 @@ export default function Planner() {
         ...current.plan.filter((item) => {
           const outsideWeek = item.date < isoDate(weekStart) || item.date > isoDate(weekEnd);
           const protectedEntry = item.source !== "planner-engine" || item.completed || item.missedReason || (offsetWeeks === 0 && item.date < todayKey);
+          if (requestedDates.length) return outsideWeek || !requestedDates.includes(item.date) || protectedEntry;
           return outsideWeek || protectedEntry;
         }),
-        ...generated.plan,
+        ...(requestedDates.length ? generated.plan.filter((item) => requestedDates.includes(item.date)) : generated.plan),
       ],
       healthCheckins: [checkinRecord, ...(current.healthCheckins || [])].slice(0, 20),
       planner: {
         ...current.planner,
         ...effectiveConfig,
+        recurringCommitments: current.planner?.recurringCommitments || [],
         lastGeneratedAt: new Date().toISOString(),
         lastTarget: generated.target,
         lastPhase: generated.phase.label,
@@ -573,7 +733,8 @@ export default function Planner() {
     const readinessNotes = generated.readiness.notes.length ? ` ${generated.readiness.notes.join(" ")}` : "";
     const targetLabel = generated.planningTarget?.name ? ` · Fokus ${generated.planningTarget.name}` : "";
     const loopLabel = generated.loopStrategy ? ` · Loop-Block ${generated.loopStrategy.loops} × ${String(generated.loopStrategy.loopKm).replace(".", ",")} km` : "";
-    setStatus(`${generated.phase.label}${targetLabel} · ${loadLabel} · berechneter Laufrahmen ${generated.target} km${loopLabel}. Bereits gelaufen: ${actualRunningKm.toFixed(1)} km. ${generated.recoveryReason}${readinessNotes}`);
+    const scopeLabel = requestedDates.length ? `Ausgewählte Tage (${requestedDates.length}) neu geplant. ` : "";
+    setStatus(`${scopeLabel}${generated.phase.label}${targetLabel} · ${loadLabel} · berechneter Laufrahmen ${generated.target} km${loopLabel}. Bereits gelaufen: ${actualRunningKm.toFixed(1)} km. ${generated.recoveryReason}${readinessNotes}`);
     setPlanningOpen(false);
   }
 
@@ -725,7 +886,31 @@ export default function Planner() {
         <button onClick={() => { setOffsetWeeks((value) => value + 1); setForecast([]); }}>→</button>
       </div>
 
-      {offsetWeeks >= 0 && (
+      {offsetWeeks >= 0 && (recurringCommitments.length ? (
+        <Card className="wide planner-live-appointments planner-generic-appointments">
+          <div className="planner-live-appointments-copy">
+            <p className="eyebrow">Feste Termine dieser Woche</p>
+            <h2>Individuelle Termine statt festem ORC-Schema</h2>
+            <p className="muted">Die Termine stammen aus deiner Konfiguration. Du kannst die konkrete Einheit ersetzen oder sie nur für diese Woche aussetzen, ohne den Rest des Plans neu zu berechnen.</p>
+          </div>
+          <div className="planner-live-appointment-grid">
+            {recurringCommitments.map((commitment) => {
+              const date = commitmentDate(weekStart, commitment);
+              const slot = weekPlan.find((item) => item.commitmentId === commitment.id)
+                || weekPlan.find((item) => item.date === date && `${item.title} ${item.type}`.toLowerCase().includes(String(commitment.name || "").toLowerCase()));
+              const editable = Boolean(slot && !slot.completed && (offsetWeeks > 0 || slot.date >= todayKey));
+              return <section key={commitment.id}>
+                <div><span>{commitment.weekday} · {commitment.time}</span><strong>{slot?.title || commitment.name}</strong><small>{sportLabel(commitment.sport)} · {commitment.durationMinutes || slot?.duration || 0} min{commitment.distanceKm ? ` · ${commitment.distanceKm} km` : ""}</small></div>
+                <div className="planner-live-buttons">
+                  <button type="button" onClick={() => slot && openAdjustment(slot.id)} disabled={!editable}>Einheit anpassen</button>
+                  <button type="button" onClick={() => skipCommitmentThisWeek(slot, commitment.name)} disabled={!editable}>Diese Woche aussetzen</button>
+                </div>
+              </section>;
+            })}
+          </div>
+          {publishedWeek && planChangedAfterPublish && <small className="planner-saturday-dirty">Fixtermin geändert – anschließend „Garmin aktualisieren“ drücken.</small>}
+        </Card>
+      ) : (
         <Card className="wide planner-live-appointments">
           <div className="planner-live-appointments-copy">
             <p className="eyebrow">Fixtermine anpassen</p>
@@ -735,26 +920,18 @@ export default function Planner() {
           <div className="planner-live-appointment-grid">
             <section>
               <div><span>Montag</span><strong>{footballMode === "fixed" ? "Fußball" : footballMode === "replacement" ? footballSlot?.title : "Erholungstag"}</strong></div>
-              <div className="planner-live-buttons">
-                <button type="button" className={footballMode === "fixed" ? "selected" : ""} onClick={() => setLiveAppointmentMode("football", "fixed")} disabled={!footballEditable}>⚽ Fußball</button>
-                <button type="button" className={footballMode === "replacement" ? "selected" : ""} onClick={() => setLiveAppointmentMode("football", "replacement")} disabled={!footballEditable}>✦ Ersatz</button>
-                <button type="button" className={footballMode === "rest" ? "selected" : ""} onClick={() => setLiveAppointmentMode("football", "rest")} disabled={!footballEditable}>○ Erholung</button>
-              </div>
+              <div className="planner-live-buttons"><button type="button" className={footballMode === "fixed" ? "selected" : ""} onClick={() => setLiveAppointmentMode("football", "fixed")} disabled={!footballEditable}>⚽ Fußball</button><button type="button" className={footballMode === "replacement" ? "selected" : ""} onClick={() => setLiveAppointmentMode("football", "replacement")} disabled={!footballEditable}>✦ Ersatz</button><button type="button" className={footballMode === "rest" ? "selected" : ""} onClick={() => setLiveAppointmentMode("football", "rest")} disabled={!footballEditable}>○ Erholung</button></div>
             </section>
             <section>
               <div><span>Mittwoch</span><strong>{orcRunMode === "fixed" ? "ORC Run" : orcRunMode === "replacement" ? orcRunSlot?.title : "Erholungstag"}</strong></div>
-              <div className="planner-live-buttons">
-                <button type="button" className={orcRunMode === "fixed" ? "selected" : ""} onClick={() => setLiveAppointmentMode("orcRun", "fixed")} disabled={!orcRunEditable}>📍 ORC Run</button>
-                <button type="button" className={orcRunMode === "replacement" ? "selected" : ""} onClick={() => setLiveAppointmentMode("orcRun", "replacement")} disabled={!orcRunEditable}>🟢 Alternative</button>
-                <button type="button" className={orcRunMode === "rest" ? "selected" : ""} onClick={() => setLiveAppointmentMode("orcRun", "rest")} disabled={!orcRunEditable}>○ Erholung</button>
-              </div>
+              <div className="planner-live-buttons"><button type="button" className={orcRunMode === "fixed" ? "selected" : ""} onClick={() => setLiveAppointmentMode("orcRun", "fixed")} disabled={!orcRunEditable}>📍 ORC Run</button><button type="button" className={orcRunMode === "replacement" ? "selected" : ""} onClick={() => setLiveAppointmentMode("orcRun", "replacement")} disabled={!orcRunEditable}>🟢 Alternative</button><button type="button" className={orcRunMode === "rest" ? "selected" : ""} onClick={() => setLiveAppointmentMode("orcRun", "rest")} disabled={!orcRunEditable}>○ Erholung</button></div>
             </section>
           </div>
           {publishedWeek && planChangedAfterPublish && <small className="planner-saturday-dirty">Fixtermin geändert – anschließend „Garmin aktualisieren“ drücken.</small>}
         </Card>
-      )}
+      ))}
 
-      {offsetWeeks >= 0 && (
+      {offsetWeeks >= 0 && !recurringCommitments.length && (
         <Card className="wide planner-saturday-control">
           <div>
             <p className="eyebrow">Samstagsentscheidung</p>
@@ -776,7 +953,7 @@ export default function Planner() {
         <div>
           <p className="eyebrow">Planlogik</p>
           <h2>Mission → Historie → adaptive Belastung → Befinden → Wetter</h2>
-          <p className="muted">Fixtermine werden vor jeder Planung bestätigt. Der 3:1-Rhythmus dient als Grundgerüst, wird bei Müdigkeit, Schmerzen, Krankheit oder auffälliger Herzfrequenz aber früher entlastet. Samstag kann als ORC Track, Alternativlauf oder offene Entweder-oder-Einheit geplant werden.</p>
+          <p className="muted">Deine konfigurierten Fixtermine werden vor jeder Planung bestätigt. Der 3:1-Rhythmus dient als Grundgerüst und wird bei Müdigkeit, Schmerzen, Krankheit oder auffälliger Herzfrequenz früher entlastet. Einzelne Tage und Einheiten lassen sich anschließend gezielt ändern.</p>
         </div>
         <div className="planner-settings">
           <label>Max. Außentemperatur<input type="number" value={config.maxOutdoorTemperature || 29} onChange={(event) => patchConfig({ maxOutdoorTemperature: Number(event.target.value) })} /><span>°C</span></label>
@@ -914,6 +1091,55 @@ export default function Planner() {
         </div>
       )}
 
+      {adjustmentOpen && adjustmentDraft && (
+        <div className="modal-backdrop">
+          <form className="modal planner-modal planner-adjustment-modal" onSubmit={applyUnitAdjustment}>
+            <button type="button" className="close" onClick={() => setAdjustmentOpen(false)}>×</button>
+            <p className="eyebrow">Woche anpassen</p>
+            <h2>Nur das ändern, was wirklich betroffen ist</h2>
+            <p className="muted">Wähle einzelne Einheiten oder ganze Tage. Nicht ausgewählte Einheiten bleiben unverändert.</p>
+
+            <div className="planner-adjustment-layout">
+              <section>
+                <h3>1. Einheit auswählen</h3>
+                <div className="planner-adjustment-units">
+                  {plannerDays.map((day, index) => {
+                    const date = isoDate(dateForDay(weekStart, index));
+                    const entries = weekPlan.filter((item) => item.date === date && !item.completed && !item.missedReason && (offsetWeeks > 0 || item.date >= todayKey));
+                    if (!entries.length) return null;
+                    return <div className="planner-adjustment-day" key={date}>
+                      <label className="planner-adjustment-day-toggle"><input type="checkbox" checked={adjustmentDraft.selectedDates.includes(date)} onChange={() => toggleAdjustmentDate(date)} /><span>{day} · {new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit" }).format(new Date(`${date}T12:00:00`))}</span></label>
+                      {entries.map((item) => <label className="planner-adjustment-unit" key={item.id}><input type="checkbox" checked={adjustmentDraft.selectedIds.includes(item.id)} onChange={() => toggleAdjustmentItem(item.id)} /><span><b>{item.time ? `${item.time} · ` : ""}{item.title}</b><small>{item.type}{Number(item.distance || 0) ? ` · ${Number(item.distance).toFixed(1).replace(".0", "")} km` : ""} · {item.duration || 0} min</small></span></label>)}
+                    </div>;
+                  })}
+                </div>
+              </section>
+
+              <section>
+                <h3>2. Änderung festlegen</h3>
+                <div className="planner-adjustment-actions">
+                  <button type="button" className={adjustmentDraft.action === "replace" ? "selected" : ""} onClick={() => setAdjustmentDraft({ ...adjustmentDraft, action: "replace" })}>Ersetzen</button>
+                  <button type="button" className={adjustmentDraft.action === "move" ? "selected" : ""} onClick={() => setAdjustmentDraft({ ...adjustmentDraft, action: "move" })}>Verschieben</button>
+                  <button type="button" className={adjustmentDraft.action === "delete" ? "selected" : ""} onClick={() => setAdjustmentDraft({ ...adjustmentDraft, action: "delete" })}>Löschen</button>
+                </div>
+                {adjustmentDraft.action === "replace" && <label>Ersatz<select value={adjustmentDraft.replacementKey} onChange={(event) => setAdjustmentDraft({ ...adjustmentDraft, replacementKey: event.target.value })}>{replacementOptions.map((option) => <option value={option.key} key={option.key}>{option.label}</option>)}</select></label>}
+                {adjustmentDraft.action === "move" && <div className="form-grid"><label>Neues Datum<input type="date" min={todayKey} value={adjustmentDraft.moveDate} onChange={(event) => setAdjustmentDraft({ ...adjustmentDraft, moveDate: event.target.value })} /></label><label>Neue Uhrzeit<input type="time" value={adjustmentDraft.moveTime} onChange={(event) => setAdjustmentDraft({ ...adjustmentDraft, moveTime: event.target.value })} /></label></div>}
+                {adjustmentDraft.action === "delete" && <div className="setup-note"><strong>Nur ausgewählte Einheiten:</strong> Andere Einheiten am selben Tag und der restliche Wochenplan bleiben erhalten.</div>}
+                <button className="primary" type="submit" disabled={!adjustmentDraft.selectedIds.length}>{adjustmentDraft.action === "replace" ? "Ausgewählte Einheit ersetzen" : adjustmentDraft.action === "move" ? "Ausgewählte Einheit verschieben" : "Ausgewählte Einheit löschen"}</button>
+              </section>
+            </div>
+
+            <section className="planner-adjustment-replan">
+              <div><p className="eyebrow">Größere Änderung</p><h3>Ausgewählte Tage oder Restwoche neu berechnen</h3><p className="muted">Der Coach berücksichtigt Mission, Historie, Befinden, Wetter und deine konfigurierten Fixtermine neu.</p></div>
+              <div className="button-row">
+                <button type="button" className="secondary" disabled={!adjustmentDraft.selectedDates.length} onClick={replanSelectedDays}>Ausgewählte Tage neu planen</button>
+                <button type="button" className="secondary" onClick={() => { setAdjustmentOpen(false); requestFullPlanning(); }}>Komplette Restwoche neu planen</button>
+              </div>
+            </section>
+          </form>
+        </div>
+      )}
+
       {overwriteConfirmOpen && (
         <div className="modal-backdrop">
           <div className="modal planner-overwrite-modal">
@@ -976,34 +1202,14 @@ export default function Planner() {
               <div className="planner-fixed-copy">
                 <p className="eyebrow">Fixtermine dieser Woche</p>
                 <h3>Welche Termine stehen wirklich?</h3>
-                <p className="muted">Nicht bestätigte Termine werden durch passende Trainingseinheiten ersetzt.</p>
+                <p className="muted">Deine wiederkehrenden Termine kommen aus den Settings. Eine Absage gilt nur für diese Woche und ändert die Grundkonfiguration nicht.</p>
               </div>
-              <label className="planner-fixed-toggle">
-                <input type="checkbox" checked={planningDraft.fixedAppointments.football} onChange={(event) => updateFixedAppointment("football", event.target.checked)} />
-                <span><b>Montag · Fußball</b><small>Intensive Belastung einplanen</small></span>
-              </label>
-              <label className="planner-fixed-toggle">
-                <input type="checkbox" checked={planningDraft.fixedAppointments.orcRun} onChange={(event) => updateFixedAppointment("orcRun", event.target.checked)} />
-                <span><b>Mittwoch · ORC Run</b><small>Gruppenlauf als Fixtermin</small></span>
-              </label>
-              <label className="planner-fixed-select"><span><b>Samstag</b><small>ORC Track und Alternative nutzen denselben Slot</small></span>
-                <select value={planningDraft.fixedAppointments.saturdayMode} onChange={(event) => updateFixedAppointment("saturdayMode", event.target.value)}>
-                  <option value="open">Noch offen – ORC Track oder Alternativlauf planen</option>
-                  <option value="orc">ORC Track steht fest</option>
-                  <option value="alternative">Kein ORC Track – Alternativlauf planen</option>
-                  <option value="off">Samstag ohne Lauf planen</option>
-                </select>
-              </label>
-              <label className="planner-fixed-select"><span><b>Zusätzlicher ORC Track</b><small>Ersetzt an diesem Tag den geplanten Lauf; Stabi/Mobility bleibt als Kombi-Einheit bestehen.</small></span>
-                <select value={planningDraft.fixedAppointments.extraOrcTrackDay || ""} onChange={(event) => updateFixedAppointment("extraOrcTrackDay", event.target.value)}>
-                  <option value="">Kein zusätzlicher Termin</option>
-                  <option value="Montag">Montag</option>
-                  <option value="Dienstag">Dienstag</option>
-                  <option value="Donnerstag">Donnerstag</option>
-                  <option value="Freitag">Freitag</option>
-                  <option value="Sonntag">Sonntag</option>
-                </select>
-              </label>
+              {planningDraft.recurringCommitments?.length ? planningDraft.recurringCommitments.map((commitment) => (
+                <label className="planner-fixed-toggle" key={commitment.id}>
+                  <input type="checkbox" checked={commitment.activeThisWeek !== false} onChange={(event) => updateWeeklyCommitment(commitment.id, event.target.checked)} />
+                  <span><b>{commitment.weekday} · {commitment.name}</b><small>{commitment.time || "flexibel"} · {sportLabel(commitment.sport)} · Belastung {commitment.load === "high" ? "hoch" : commitment.load === "low" ? "niedrig" : "mittel"}</small></span>
+                </label>
+              )) : <div className="settings-empty-state">Noch keine wiederkehrenden Fixtermine. Du kannst sie unter Settings anlegen.</div>}
             </section>
 
             <div className="form-grid">
@@ -1039,7 +1245,7 @@ export default function Planner() {
             <div className="planner-day-picker"><strong>Rudern an welchen Tagen?</strong><div>{plannerDays.map((day) => <button type="button" className={planningDraft.rowingDays.includes(day) ? "selected" : ""} onClick={() => toggleDay("rowingDays", day)} key={`row-${day}`}>{day.slice(0, 2)}</button>)}</div></div>
             <div className="planner-day-picker"><strong>An welchen Tagen ist echtes Doppeltraining erlaubt?</strong><div>{plannerDays.map((day) => <button type="button" className={planningDraft.doubleTrainingDays.includes(day) ? "selected" : ""} onClick={() => toggleDay("doubleTrainingDays", day)} key={`double-${day}`}>{day.slice(0, 2)}</button>)}</div><small>Gemeint sind Fußball + Lauf, Rudern + Lauf oder zwei Ausdauereinheiten. Stabi/Mobility + Lauf ist nur ein Kombi-Tag und braucht keine Freigabe.</small></div>
             <label>Zusätzliche Notiz<textarea value={planningDraft.checkin.notes} onChange={(event) => updateCheckin("notes", event.target.value)} placeholder="Reise, wenig Zeit, besondere Termine …" /></label>
-            <button className="primary" type="submit">Plan berechnen</button>
+            <button className="primary" type="submit">{planningDraft.adjustDates?.length ? "Ausgewählte Tage berechnen" : "Plan berechnen"}</button>
           </form>
         </div>
       )}

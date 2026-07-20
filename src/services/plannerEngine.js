@@ -18,6 +18,9 @@ export const workoutTypes = [
   "Rudern",
   "Laufband",
   "Radfahren",
+  "Schwimmen",
+  "Mobility",
+  "Sonstiges",
   "Ruhetag",
 ];
 
@@ -436,9 +439,77 @@ function applyExtraOrcTrack(plan, weekStart, dayName, config) {
   };
 }
 
+
+function commitmentWorkoutType(commitment) {
+  if (commitment.workoutType) return commitment.workoutType;
+  return {
+    running: "Easy Run",
+    football: "Fußball",
+    cycling: "Radfahren",
+    rowing: "Rudern",
+    mobility: "Stabi",
+    swimming: "Schwimmen",
+    strength: "Stabi",
+  }[commitment.sport] || "Sonstiges";
+}
+
+function isRunPlanEntry(entry) {
+  return ["Easy Run", "Long Run", "Schwellenlauf", "Intervalle", "Backyard Training", "ORC Run", "ORC Track", "Samstagsoption", "Laufband"].includes(entry.type);
+}
+
+function applyRecurringCommitments(plan, weekStart, config, mode = "all") {
+  const commitments = Array.isArray(config.recurringCommitments)
+    ? config.recurringCommitments.filter((entry) => entry && entry.enabled !== false)
+    : [];
+
+  commitments.forEach((commitment) => {
+    if (mode === "running" && commitment.sport !== "running") return;
+    if (mode === "non-running" && commitment.sport === "running") return;
+    const dayIndex = DAY_INDEX[commitment.weekday];
+    if (dayIndex === undefined) return;
+    const date = isoDate(dateForDay(weekStart, dayIndex));
+    const type = commitmentWorkoutType(commitment);
+    const sameDay = plan.map((entry, index) => ({ entry, index })).filter(({ entry }) => entry.date === date);
+    const replaceable = commitment.sport === "running" && commitment.replaceRunOnSameDay !== false
+      ? sameDay.find(({ entry }) => isRunPlanEntry(entry))
+      : null;
+    const distance = Number(commitment.distanceKm || replaceable?.entry?.distance || 0);
+    const duration = Number(commitment.durationMinutes || replaceable?.entry?.duration || 60);
+    const values = {
+      time: commitment.time || replaceable?.entry?.time || "18:00",
+      title: commitment.name || type,
+      type,
+      distance,
+      duration,
+      notes: `Konfigurierter Fixtermin (${commitment.weekday}). Belastung: ${commitment.load === "high" ? "hoch" : commitment.load === "low" ? "niedrig" : "mittel"}.`,
+      optional: false,
+      fixed: true,
+      commitmentId: commitment.id,
+      commitmentLoad: commitment.load || "medium",
+      allowCombination: commitment.allowCombination !== false,
+      replacedWorkout: replaceable ? { title: replaceable.entry.title, type: replaceable.entry.type } : null,
+    };
+
+    if (replaceable) {
+      plan[replaceable.index] = { ...replaceable.entry, ...values };
+      return;
+    }
+
+    if (commitment.allowCombination === false) {
+      sameDay
+        .filter(({ entry }) => !entry.completed && entry.source === "planner-engine")
+        .map(({ index }) => index)
+        .sort((left, right) => right - left)
+        .forEach((index) => plan.splice(index, 1));
+    }
+    plan.push(item(weekStart, dayIndex, values));
+  });
+}
+
 function distributeEasyKilometers(plan, weekStart, target, fixedKm, config, phase, readiness, cycle) {
   const allowed = new Set(config.runDays?.length ? config.runDays : ["Dienstag", "Mittwoch", "Freitag", "Samstag", "Sonntag"]);
-  const fixedAppointments = config.fixedAppointments || {};
+  const hasRecurringCommitments = Array.isArray(config.recurringCommitments) && config.recurringCommitments.length > 0;
+  const fixedAppointments = hasRecurringCommitments ? { football: false, orcRun: false } : (config.fixedAppointments || {});
   const trueDoubleDays = new Set(config.doubleTrainingDays || []);
 
   function hasEnduranceSession(day) {
@@ -518,11 +589,12 @@ export function generateWeekPlan({
     : earlyRecoveryWeek
       ? "Entlastung wurde wegen Befinden, Reviews oder ausgefallener Einheiten vorgezogen."
       : "Belastungswoche innerhalb des adaptiven Aufbauzyklus.";
+  const hasRecurringCommitments = Array.isArray(config.recurringCommitments) && config.recurringCommitments.length > 0;
   const fixedAppointments = {
-    football: config.fixedAppointments?.football !== false,
-    orcRun: config.fixedAppointments?.orcRun !== false,
-    saturdayMode: config.fixedAppointments?.saturdayMode || "open",
-    extraOrcTrackDay: config.fixedAppointments?.extraOrcTrackDay || "",
+    football: hasRecurringCommitments ? false : config.fixedAppointments?.football !== false,
+    orcRun: hasRecurringCommitments ? false : config.fixedAppointments?.orcRun !== false,
+    saturdayMode: hasRecurringCommitments ? "off" : config.fixedAppointments?.saturdayMode || "open",
+    extraOrcTrackDay: hasRecurringCommitments ? "" : config.fixedAppointments?.extraOrcTrackDay || "",
   };
 
   const base = recentAverage || Math.max(25, Math.min(45, Number(goal?.targetKm || mission?.targetKm || 50) * 0.4));
@@ -534,6 +606,9 @@ export function generateWeekPlan({
   target = Math.max(readiness.longRunAllowed ? 22 : 12, Math.round(target));
 
   const allowedRuns = new Set(config.runDays?.length ? config.runDays : ["Dienstag", "Mittwoch", "Freitag", "Samstag", "Sonntag"]);
+  (config.recurringCommitments || [])
+    .filter((entry) => entry?.enabled !== false && entry.sport === "running" && DAY_INDEX[entry.weekday] !== undefined)
+    .forEach((entry) => allowedRuns.add(entry.weekday));
   const wednesdayKm = fixedAppointments.orcRun ? Math.min(10, Math.max(6, Math.round(target * 0.18))) : 0;
   const saturdayKm = fixedAppointments.saturdayMode !== "off" && phase.key !== "taper" && readiness.longRunAllowed
     ? Math.min(10, Math.max(recoveryWeek ? 5 : 6, Math.round(target * 0.13)))
@@ -644,9 +719,11 @@ export function generateWeekPlan({
     }));
   }
 
-  const fixedKm = wednesdayKm + saturdayKm + (loopPrescription?.distance || longRun);
+  applyRecurringCommitments(plan, weekStart, config, "running");
+  const fixedKm = plan.reduce((sum, entry) => sum + Number(entry.distance || 0), 0);
   distributeEasyKilometers(plan, weekStart, target, fixedKm, config, phase, readiness, cycle);
   applyExtraOrcTrack(plan, weekStart, fixedAppointments.extraOrcTrackDay, config);
+  applyRecurringCommitments(plan, weekStart, config, "non-running");
   addStrengthSessions(plan, weekStart, config, readiness);
 
   if (!readiness.hardAllowed) {

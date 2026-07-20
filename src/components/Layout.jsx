@@ -1,4 +1,6 @@
 import { NavLink, Outlet } from "react-router-dom";
+import packageJson from "../../package.json";
+import { useApp } from "../context/AppContext";
 
 const links = [
   ["/", "Briefing", "◉"],
@@ -13,12 +15,16 @@ const links = [
 ];
 
 export default function Layout() {
+  const { state } = useApp();
+  const milestones = Array.isArray(state.mission?.milestones) ? state.mission.milestones : [];
+  const mainTarget = milestones.find((item) => item.isMainTarget && !item.archived) || state.mission || {};
+  const targetLabel = Number(mainTarget.targetKm || 0) > 0 ? `${Number(mainTarget.targetKm)} KM` : "ZIEL SETZEN";
   return (
     <div className="shell">
       <aside>
-        <div className="brand"><b>Endurance Intelligence</b><span>Eat your miles.</span><small>v2.6</small></div>
+        <div className="brand"><b>Endurance Intelligence</b><span>Eat your miles.</span><small>v{packageJson.version}</small></div>
         <nav>{links.map(([to, name, icon]) => <NavLink key={to} to={to} end={to === "/"}><i>{icon}</i>{name}</NavLink>)}</nav>
-        <div className="aside-foot">MISSION 01<br /><strong>112 KM</strong></div>
+        <div className="aside-foot"><span>{mainTarget.name || "Deine Mission"}</span><br /><strong>{targetLabel}</strong></div>
       </aside>
       <main className="content"><Outlet /></main>
     </div>
