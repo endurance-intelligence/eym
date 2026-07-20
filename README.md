@@ -2,7 +2,7 @@
 
 **Eat your miles.**
 
-Endurance Intelligence is a personal endurance dashboard with adaptive weekly planning, Intervals.icu and optional Strava sync, Garmin ZIP import, workout reviews, equipment tracking, Fuel Lab and a Supabase-backed calendar subscription.
+Endurance Intelligence is a personal endurance dashboard with adaptive weekly planning, Intervals.icu activity sync, Garmin ZIP import, workout reviews, equipment tracking, Fuel Lab and a Supabase-backed calendar subscription.
 
 ## Local development
 
@@ -49,26 +49,26 @@ Redirect URL: https://endurance-intelligence.github.io/eym/**
 
 Deploy the Edge Functions from `supabase/functions` and apply the migrations from `supabase/migrations`.
 
-Required Supabase secrets:
+Required Supabase secrets for the current private Intervals.icu test connection:
 
 ```text
-STRAVA_CLIENT_ID
-STRAVA_CLIENT_SECRET
 INTERVALS_ATHLETE_ID
 INTERVALS_API_KEY
 ```
 
 The standard Supabase secrets (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`) are supplied by Supabase to Edge Functions.
 
-## Strava application
+## Intervals.icu
 
-Set the Strava authorization callback domain to:
+Intervals.icu is the central activity hub. Users connect Garmin, Strava, Polar or another supported platform under Intervals.icu → Settings → Connections. EYM then imports the consolidated activities from Intervals.icu instead of maintaining separate provider integrations.
 
-```text
-endurance-intelligence.github.io
-```
+For Garmin planned workouts, enable **Upload planned workouts** in the Garmin connection inside Intervals.icu.
 
-The callback URL used by the application is generated from the deployed Vite base path.
+The current API-key integration is for the private test account only. Before EYM is opened to multiple users, it must be replaced by a user-specific Intervals.icu OAuth flow.
+
+## Retired direct Strava connection
+
+The direct EYM-to-Strava OAuth integration has been removed. Existing imported activities remain in the user data. The migration `20260720150000_remove_direct_strava.sql` removes the obsolete `strava_connections` token table.
 
 ## Open Food Facts
 

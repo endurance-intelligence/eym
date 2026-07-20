@@ -227,8 +227,63 @@ export function coachInsight(activities, reviews) {
 }
 
 export function recovery(reviews, activities) {
-  const vals = activities.slice(0, 3).map((activity) => reviews[activity.id]).filter(Boolean);
-  if (!vals.length) return { label: "Unbekannt", tone: "neutral" };
-  const score = vals.reduce((sum, review) => sum + Number(review.legs || 5) + Number(review.energy || 5) - Number(review.rpe || 5), 0) / vals.length;
-  return score >= 8 ? { label: "Ready", tone: "good" } : score >= 4 ? { label: "Caution", tone: "warn" } : { label: "Recover", tone: "bad" };
+  const vals = activities
+    .slice(0, 6)
+    .map((activity) => reviews[activity.id])
+    .filter(Boolean)
+    .slice(0, 3);
+
+  if (!vals.length) {
+    return {
+      label: "Noch offen",
+      tone: "neutral",
+      text: "Bewerte mindestens einen Lauf. Danach kann EYM Beine, Energie und empfundene Belastung sinnvoll einordnen.",
+      reviewed: 0,
+      legs: "–",
+      energy: "–",
+      rpe: "–",
+    };
+  }
+
+  const averageValue = (key, fallback) => vals.reduce((sum, review) => sum + Number(review[key] ?? fallback), 0) / vals.length;
+  const legs = averageValue("legs", 5);
+  const energy = averageValue("energy", 5);
+  const rpe = averageValue("rpe", 5);
+  const score = legs + energy - rpe;
+  const metrics = {
+    reviewed: vals.length,
+    legs: legs.toFixed(1).replace(".0", ""),
+    energy: energy.toFixed(1).replace(".0", ""),
+    rpe: rpe.toFixed(1).replace(".0", ""),
+  };
+
+  if (score >= 8) {
+    return {
+      ...metrics,
+      label: "Bereit",
+      tone: "good",
+      text: "Beine und Energie liegen im stabilen Bereich. Die geplante Einheit kann wie vorgesehen stattfinden.",
+    };
+  }
+
+  if (score >= 4) {
+    const reasons = [
+      legs < 6 ? "müdere Beine" : "",
+      energy < 6 ? "niedrigere Energie" : "",
+      rpe >= 8 ? "eine hohe letzte Belastung" : "",
+    ].filter(Boolean);
+    return {
+      ...metrics,
+      label: "Mit Vorsicht",
+      tone: "warn",
+      text: `Die letzten Bewertungen zeigen ${reasons.length ? reasons.join(" und ") : "gemischte Erholungswerte"}. Die geplante Einheit ist möglich, aber ohne zusätzlichen Tempodruck.`,
+    };
+  }
+
+  return {
+    ...metrics,
+    label: "Erholung priorisieren",
+    tone: "bad",
+    text: "Die letzten Bewertungen sprechen klar für Entlastung. Heute sehr locker trainieren, verkürzen oder pausieren.",
+  };
 }

@@ -36,6 +36,9 @@ export const mission = {
 };
 
 export const defaultState = {
+  profile: {
+    displayName: "",
+  },
   activities: [],
   reviews: {},
   activityGroups: [],
@@ -74,15 +77,6 @@ export const defaultState = {
   intervals: {
     connected: false,
     configured: false,
-    lastSyncAt: null,
-    importFrom: "2025-01-01",
-  },
-  strava: {
-    connected: false,
-    athlete: null,
-    token: null,
-    refreshToken: null,
-    expiresAt: null,
     lastSyncAt: null,
     importFrom: "2025-01-01",
   },

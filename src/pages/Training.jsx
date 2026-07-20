@@ -4,7 +4,6 @@ import { Card, PageTitle } from "../components/UI";
 import { fmtDate, pace, hours } from "../utils/format";
 import ReviewModal from "../components/ReviewModal";
 import ActivityNameModal from "../components/ActivityNameModal";
-import { stravaOnlineReady } from "../services/strava";
 import { intervalsOnlineReady } from "../services/intervals";
 import {
   activityDate,
@@ -56,10 +55,9 @@ function summaries(activities) {
 }
 
 export default function Training() {
-  const { state, setState, addActivity, updateActivity, syncStravaNow, syncIntervalsNow, intervalsSyncStatus } = useApp();
+  const { state, setState, addActivity, updateActivity, syncIntervalsNow, intervalsSyncStatus } = useApp();
   const [selected, setSelected] = useState(null);
   const [editingName, setEditingName] = useState(null);
-  const [syncing, setSyncing] = useState(false);
   const [message, setMessage] = useState("");
   const [mergeMode, setMergeMode] = useState(false);
   const [mergeSelection, setMergeSelection] = useState([]);
@@ -177,23 +175,6 @@ export default function Training() {
     setState((current) => ({ ...current, activityGroups: current.activityGroups.filter((group) => group.id !== activity.id) }));
   }
 
-  async function syncStrava() {
-    if (!stravaOnlineReady() || !state.strava.connected) {
-      setMessage("Strava ist noch nicht verbunden. Öffne Settings → Strava.");
-      return;
-    }
-    setSyncing(true);
-    setMessage("Aktivitäten werden aus Strava geladen …");
-    try {
-      const result = await syncStravaNow();
-      setMessage(`${result.added || 0} neue Aktivitäten geladen, ${result.duplicates || 0} vorhandene Einheiten ergänzt.`);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error));
-    } finally {
-      setSyncing(false);
-    }
-  }
-
   async function syncIntervals() {
     if (!intervalsOnlineReady() || !state.intervals?.connected) {
       setMessage("Intervals.icu ist noch nicht eingerichtet. Öffne Settings → Intervals.icu.");
@@ -213,7 +194,6 @@ export default function Training() {
       <PageTitle eyebrow="Training" title="Deine Einheiten">
         <div className="page-actions">
           {state.intervals?.connected && intervalsOnlineReady() && <button onClick={syncIntervals} disabled={intervalsSyncStatus === "syncing"}>{intervalsSyncStatus === "syncing" ? "Synchronisiere …" : "↻ Intervals.icu"}</button>}
-          {state.strava.connected && stravaOnlineReady() && <button className="strava" onClick={syncStrava} disabled={syncing}>{syncing ? "Synchronisiere …" : "↻ Strava"}</button>}
           <button onClick={toggleMergeMode}>{mergeMode ? "Zusammenfassen beenden" : "⇄ Läufe zusammenfassen"}</button>
           <button onClick={addManualActivity}>+ Manuell</button>
         </div>
@@ -245,7 +225,7 @@ export default function Training() {
         <div className="training-toolbar">
           <div>
             <strong>{activities.length} Einheiten</strong>
-            <span>{state.intervals?.connected ? `Letzter Intervals.icu-Sync: ${formatSyncTime(state.intervals.lastSyncAt)}` : state.strava.connected ? `Letzter Strava-Sync: ${formatSyncTime(state.strava.lastSyncAt)}` : "Garmin-Import und Cloud sind aktiv"}</span>
+            <span>{state.intervals?.connected ? `Letzter Intervals.icu-Sync: ${formatSyncTime(state.intervals.lastSyncAt)}` : "Garmin-Import und Cloud sind aktiv"}</span>
           </div>
           {message && <p>{message}</p>}
         </div>

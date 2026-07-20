@@ -1,7 +1,6 @@
 import { useRef, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { Card, PageTitle } from "../components/UI";
-import { connectStrava, disconnectStravaConnection, stravaOnlineReady, stravaStatus } from "../services/strava";
 import { downloadCalendar } from "../services/calendar";
 import { resetState } from "../services/storage";
 import { mergeGarminActivities, readGarminExport } from "../services/garminImport";
@@ -9,18 +8,14 @@ import { calendarSubscriptionUrl } from "../services/supabase";
 import { fetchIntervalsStatus, intervalsOnlineReady } from "../services/intervals";
 
 export default function Settings() {
-  const { state, setState, session, cloudStatus, cloudUpdatedAt, calendarToken, stravaSyncStatus, intervalsSyncStatus, syncIntervalsNow, syncStravaNow, uploadLocalState, reloadCloudState, logout } = useApp();
-  const [message, setMessage] = useState("");
+  const { state, setState, session, cloudStatus, cloudUpdatedAt, calendarToken, intervalsSyncStatus, syncIntervalsNow, uploadLocalState, reloadCloudState, logout } = useApp();
   const [calendarMessage, setCalendarMessage] = useState("");
-  const [busy, setBusy] = useState(false);
   const [garminBusy, setGarminBusy] = useState(false);
   const [garminPreview, setGarminPreview] = useState(null);
   const [garminMessage, setGarminMessage] = useState("");
   const [intervalsMessage, setIntervalsMessage] = useState("");
   const [intervalsBusy, setIntervalsBusy] = useState(false);
   const garminInput = useRef(null);
-
-
 
   async function checkIntervals() {
     setIntervalsBusy(true);
@@ -50,35 +45,6 @@ export default function Settings() {
       setIntervalsMessage(`${result.added || 0} neue Aktivitäten geladen, ${result.duplicates || 0} vorhandene Einheiten ergänzt.`);
     } catch (error) {
       setIntervalsMessage(error instanceof Error ? error.message : String(error));
-    }
-  }
-
-  async function connect() {
-    setBusy(true);
-    setMessage("");
-    try { await connectStrava(state.strava.connected); }
-    catch (error) { setMessage(error instanceof Error ? error.message : String(error)); setBusy(false); }
-  }
-
-  async function disconnectStrava() {
-    setBusy(true);
-    setMessage("");
-    try {
-      await disconnectStravaConnection();
-      setState((current) => ({ ...current, strava: { ...current.strava, connected: false, athlete: null, lastSyncAt: null } }));
-      setMessage("Strava-Verbindung entfernt. Bereits importierte Aktivitäten bleiben erhalten.");
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error));
-    } finally { setBusy(false); }
-  }
-
-  async function syncStrava() {
-    setMessage("");
-    try {
-      const result = await syncStravaNow();
-      setMessage(`${result.added || 0} neue Aktivitäten geladen, ${result.duplicates || 0} vorhandene Einheiten ergänzt.`);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error));
     }
   }
 
@@ -117,8 +83,6 @@ export default function Settings() {
     setGarminPreview(null);
   }
 
-  const athleteName = [state.strava.athlete?.firstname, state.strava.athlete?.lastname].filter(Boolean).join(" ");
-  const stravaInfo = stravaStatus();
   const calendarUrl = calendarToken ? calendarSubscriptionUrl(calendarToken) : "";
   const cloudStatusLabel = { local: "Nur lokal", loading: "Cloud wird geladen …", saving: "Wird gespeichert …", synced: "Synchronisiert", error: "Synchronisierung fehlgeschlagen" }[cloudStatus] || cloudStatus;
 
@@ -130,6 +94,7 @@ export default function Settings() {
         <p className="muted">Angemeldet als <b>{session?.user?.email}</b>. Änderungen werden automatisch in Supabase gespeichert und auf anderen Geräten geladen.</p>
         <span className={`cloud-status ${cloudStatus}`}>{cloudStatusLabel}</span>
         {cloudUpdatedAt && <p className="muted">Letzte Cloud-Aktualisierung: {new Date(cloudUpdatedAt).toLocaleString("de-DE")}</p>}
+        <label className="settings-name-field">Anzeigename für das Briefing<input value={state.profile?.displayName || ""} placeholder="z. B. Daniel" onChange={(event) => setState((current) => ({ ...current, profile: { ...current.profile, displayName: event.target.value } }))} /></label>
         <div className="button-row">
           <button onClick={uploadLocalState}>Lokale Daten in Cloud übernehmen</button>
           <button className="secondary" onClick={reloadCloudState}>Cloud neu laden</button>
@@ -137,38 +102,30 @@ export default function Settings() {
         </div>
       </Card>
 
-      <Card>
-        <p className="eyebrow">Intervals.icu · primär</p>
-        <h2>{state.intervals?.connected ? "Verbunden" : state.intervals?.configured ? "Verbindung prüfen" : "Noch nicht eingerichtet"}</h2>
-        <p className="muted">Neue Garmin-Aktivitäten können automatisch über Intervals.icu geladen werden. Strava bleibt als optionale Ersatzquelle erhalten.</p>
+      <Card className="wide intervals-setup-card">
+        <p className="eyebrow">Intervals.icu · Datenzentrale</p>
+        <h2>{state.intervals?.connected ? "Verbunden und bereit" : state.intervals?.configured ? "Verbindung prüfen" : "Trainingsplattformen bündeln"}</h2>
+        <p className="muted">EYM bindet Strava, Garmin oder Polar nicht mehr einzeln an. Du verbindest deine Plattformen einmal in Intervals.icu; EYM lädt die zusammengeführten Aktivitäten anschließend von dort.</p>
+        <div className="intervals-setup-grid">
+          <div className="intervals-setup-step"><span>1</span><div><strong>Intervals.icu öffnen</strong><small>Anmelden oder kostenlos ein Konto erstellen.</small></div></div>
+          <div className="intervals-setup-step"><span>2</span><div><strong>Datenquelle verbinden</strong><small>Unter Settings → Connections Garmin, Strava, Polar oder deine Plattform auswählen.</small></div></div>
+          <div className="intervals-setup-step"><span>3</span><div><strong>Synchronisierung abwarten</strong><small>Prüfen, ob deine letzten Aktivitäten in Intervals.icu sichtbar sind.</small></div></div>
+          <div className="intervals-setup-step"><span>4</span><div><strong>In EYM prüfen</strong><small>Verbindung testen und danach die Aktivitäten synchronisieren.</small></div></div>
+        </div>
         {state.intervals?.lastSyncAt && <p className="muted">Letzter Sync: {new Date(state.intervals.lastSyncAt).toLocaleString("de-DE")}</p>}
         <div className="button-row">
+          <a className="button-link" href="https://intervals.icu/settings/connections" target="_blank" rel="noreferrer">Intervals.icu Connections öffnen</a>
           <button onClick={checkIntervals} disabled={intervalsBusy || !intervalsOnlineReady()}>{intervalsBusy ? "Prüfe …" : "Verbindung prüfen"}</button>
           {state.intervals?.connected && <button className="secondary" onClick={syncIntervals} disabled={intervalsSyncStatus === "syncing"}>{intervalsSyncStatus === "syncing" ? "Synchronisiert …" : "Jetzt synchronisieren"}</button>}
         </div>
-        <p className="muted">Einrichtung: Intervals.icu → Settings → Developer Settings → API Key erzeugen. Der Key wird ausschließlich als Supabase-Secret gespeichert.</p>
-        <p className="muted"><b>Garmin-Workouts:</b> In Intervals.icu unter Settings → Garmin „Upload planned workouts“ aktivieren. Danach kannst du bestätigte Wochen direkt aus dem Wochenplan senden.</p>
+        <div className="setup-note"><strong>Garmin-Workouts:</strong> In Intervals.icu bei der Garmin-Verbindung „Upload planned workouts“ aktivieren. Dann können bestätigte Wochenpläne über Intervals.icu auf die Garmin-Uhr gelangen.</div>
+        <div className="setup-note"><strong>Für mehrere EYM-Nutzer:</strong> Die persönliche Anmeldung wird als Intervals.icu-OAuth-Verbindung umgesetzt. Die aktuelle serverseitige Verbindung bleibt bis dahin ausschließlich für den privaten Testbetrieb.</div>
         {intervalsMessage && <p className="connection-message">{intervalsMessage}</p>}
       </Card>
 
-      <Card>
-        <p className="eyebrow">Strava · optional</p><h2>{stravaInfo.ready ? (state.strava.connected ? "Verbunden" : "Nicht verbunden") : stravaInfo.label}</h2>
-        <p className="muted">{stravaInfo.ready
-          ? (state.strava.connected ? `${athleteName ? `Verbunden mit ${athleteName}. ` : ""}Neue Aktivitäten werden beim Öffnen der App automatisch synchronisiert.` : "OAuth und Synchronisierung laufen über eine sichere Supabase-Funktion – ohne localhost und ohne separaten Server.")
-          : `${stravaInfo.reason} Bereits importierte Strava-Aktivitäten bleiben erhalten.`}</p>
-        {state.strava.lastSyncAt && <p className="muted">Letzter Sync: {new Date(state.strava.lastSyncAt).toLocaleString("de-DE")}</p>}
-        <div className="button-row">
-          <button className="strava" onClick={connect} disabled={busy || !stravaOnlineReady()}>{busy ? "Strava wird geöffnet …" : state.strava.connected ? "Neu verbinden" : "Connect with Strava"}</button>
-          {state.strava.connected && <button className="secondary" onClick={syncStrava} disabled={stravaSyncStatus === "syncing"}>{stravaSyncStatus === "syncing" ? "Synchronisiert …" : "Jetzt synchronisieren"}</button>}
-          {state.strava.connected && <button className="secondary" onClick={disconnectStrava} disabled={busy}>Verbindung entfernen</button>}
-        </div>
-        {message && <p className="connection-message">{message}</p>}
-      </Card>
-
-
       <Card className="wide">
         <p className="eyebrow">Garmin · Historie & Backup</p><h2>Garmin-Export importieren</h2>
-        <p className="muted">Liest den vollständigen Garmin-Datenexport direkt im Browser. Importiert werden alle Aktivitäten ab 01.01.2025; vorhandene Strava-Aktivitäten werden als Duplikate erkannt und ergänzt.</p>
+        <p className="muted">Liest den vollständigen Garmin-Datenexport direkt im Browser. Importiert werden alle Aktivitäten ab 01.01.2025; bereits vorhandene Aktivitäten werden als Duplikate erkannt und sinnvoll zusammengeführt.</p>
         <input
           ref={garminInput}
           type="file"

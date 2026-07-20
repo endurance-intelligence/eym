@@ -1,8 +1,5 @@
 [functions.calendar]
 verify_jwt = false
 
-[functions.strava]
-verify_jwt = true
-
 [functions.intervals]
 verify_jwt = true

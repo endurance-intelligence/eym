@@ -3,7 +3,6 @@ import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { defaultState } from "../data/defaults";
 import { loadState, saveState } from "../services/storage";
 import { loadCloudState, saveCloudState, signOut, supabase } from "../services/supabase";
-import { fetchStravaConnectionStatus, mapStravaActivities, mergeStravaActivities, syncStravaActivities } from "../services/strava";
 import { fetchIntervalsStatus, mapIntervalsActivities, mergeIntervalsActivities, syncIntervalsActivities } from "../services/intervals";
 
 const AppContext = createContext(null);
@@ -123,6 +122,7 @@ function mergeState(localState = {}, cloudState = {}) {
     fuel: inventory.fuel,
     healthCheckins: asArray(cloud.healthCheckins, asArray(local.healthCheckins)),
     reviews: inventory.reviews,
+    profile: { ...defaultState.profile, ...(local.profile || {}), ...(cloud.profile || {}) },
     mission: {
       ...defaultState.mission,
       ...(local.mission || {}),
@@ -133,27 +133,16 @@ function mergeState(localState = {}, cloudState = {}) {
     garmin: { ...defaultState.garmin, ...(local.garmin || {}), ...(cloud.garmin || {}) },
     calendar: { ...defaultState.calendar, ...(local.calendar || {}), ...(cloud.calendar || {}) },
     intervals: { ...defaultState.intervals, ...(local.intervals || {}), ...(cloud.intervals || {}) },
-    strava: {
-      ...defaultState.strava,
-      ...(local.strava || {}),
-      ...(cloud.strava || {}),
-      // OAuth tokens stay on the current device. They are not written to the shared JSON state.
-      token: local.strava?.token || null,
-      refreshToken: local.strava?.refreshToken || null,
-    },
   };
+  // Remove the retired direct Strava connection while keeping already imported activities.
+  delete merged.strava;
   return migrateReviewFuelCatalog(merged);
 }
 
 function stateForCloud(state) {
-  return {
-    ...state,
-    strava: {
-      ...state.strava,
-      token: null,
-      refreshToken: null,
-    },
-  };
+  const cloudState = { ...state };
+  delete cloudState.strava;
+  return cloudState;
 }
 
 export function AppProvider({ children }) {
@@ -163,11 +152,9 @@ export function AppProvider({ children }) {
   const [cloudStatus, setCloudStatus] = useState("local");
   const [cloudUpdatedAt, setCloudUpdatedAt] = useState(null);
   const [calendarToken, setCalendarToken] = useState(null);
-  const [stravaSyncStatus, setStravaSyncStatus] = useState("idle");
   const [intervalsSyncStatus, setIntervalsSyncStatus] = useState("idle");
   const cloudHydrated = useRef(false);
   const skipNextCloudSave = useRef(false);
-  const stravaAutoSyncStarted = useRef(false);
   const intervalsAutoSyncStarted = useRef(false);
 
   useEffect(() => saveState(state), [state]);
@@ -186,9 +173,7 @@ export function AppProvider({ children }) {
         cloudHydrated.current = false;
         setCloudStatus("local");
         setCalendarToken(null);
-        stravaAutoSyncStarted.current = false;
         intervalsAutoSyncStarted.current = false;
-        setStravaSyncStatus("idle");
         setIntervalsSyncStatus("idle");
       }
     });
@@ -314,62 +299,6 @@ export function AppProvider({ children }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user?.id, cloudStatus]);
 
-  async function syncStravaNow({ silent = false } = {}) {
-    if (!session?.user?.id) return { added: 0, duplicates: 0 };
-    if (!silent) setStravaSyncStatus("syncing");
-    try {
-      const dates = state.activities.map((activity) => activity.date).filter(Boolean).sort();
-      const latest = dates.at(-1);
-      const afterDate = latest ? new Date(`${latest}T00:00:00Z`) : new Date("2025-01-01T00:00:00Z");
-      afterDate.setUTCDate(afterDate.getUTCDate() - 2);
-      const result = await syncStravaActivities(afterDate.toISOString().slice(0, 10));
-      const imported = mapStravaActivities(Array.isArray(result.activities) ? result.activities : []);
-      const merged = mergeStravaActivities(state.activities, imported);
-      const syncedAt = result.syncedAt || new Date().toISOString();
-      setState((current) => ({
-        ...current,
-        activities: mergeStravaActivities(current.activities, imported).activities,
-        strava: {
-          ...current.strava,
-          connected: true,
-          athlete: result.athlete || current.strava.athlete || null,
-          lastSyncAt: syncedAt,
-        },
-      }));
-      setStravaSyncStatus("synced");
-      return { added: merged.added, duplicates: merged.duplicates, total: imported.length };
-    } catch (error) {
-      setStravaSyncStatus("error");
-      if (!silent) throw error;
-      console.warn("Automatic Strava sync failed", error);
-      return { added: 0, duplicates: 0, error };
-    }
-  }
-
-  useEffect(() => {
-    if (!session?.user?.id || cloudStatus !== "synced" || stravaAutoSyncStarted.current) return;
-    stravaAutoSyncStarted.current = true;
-    let cancelled = false;
-    async function checkAndSync() {
-      try {
-        const status = await fetchStravaConnectionStatus();
-        if (cancelled) return;
-        if (!status.connected) {
-          setState((current) => ({ ...current, strava: { ...current.strava, connected: false, athlete: null } }));
-          return;
-        }
-        setState((current) => ({ ...current, strava: { ...current.strava, connected: true, athlete: status.athlete || current.strava.athlete } }));
-        const lastSync = state.strava?.lastSyncAt ? new Date(state.strava.lastSyncAt).getTime() : 0;
-        if (Date.now() - lastSync > 15 * 60_000) await syncStravaNow({ silent: true });
-      } catch (error) {
-        console.warn("Strava status check failed", error);
-      }
-    }
-    checkAndSync();
-    return () => { cancelled = true; };
-  // The cloud status marks the point at which the shared state is ready.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.user?.id, cloudStatus]);
 
   async function uploadLocalState() {
     if (!session?.user?.id) return;
@@ -401,10 +330,8 @@ export function AppProvider({ children }) {
     cloudStatus,
     cloudUpdatedAt,
     calendarToken,
-    stravaSyncStatus,
     intervalsSyncStatus,
     syncIntervalsNow,
-    syncStravaNow,
     uploadLocalState,
     reloadCloudState,
     logout: signOut,

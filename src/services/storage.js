@@ -5,7 +5,7 @@ function isDemoEntry(entry) {
 }
 
 function sanitizeState(state, defaults) {
-  return {
+  const sanitized = {
     ...defaults,
     ...state,
     activities: Array.isArray(state?.activities)
@@ -23,12 +23,15 @@ function sanitizeState(state, defaults) {
       : [],
     reviews: state?.reviews && typeof state.reviews === "object" ? state.reviews : {},
     healthCheckins: Array.isArray(state?.healthCheckins) ? state.healthCheckins : [],
+    profile: { ...defaults.profile, ...(state?.profile || {}) },
     planner: { ...defaults.planner, ...(state?.planner || {}) },
-    strava: { ...defaults.strava, ...(state?.strava || {}) },
     garmin: { ...defaults.garmin, ...(state?.garmin || {}) },
+    intervals: { ...defaults.intervals, ...(state?.intervals || {}) },
     mission: { ...defaults.mission, ...(state?.mission || {}) },
     calendar: { ...defaults.calendar, ...(state?.calendar || {}) },
   };
+  delete sanitized.strava;
+  return sanitized;
 }
 
 export function loadState(defaults) {

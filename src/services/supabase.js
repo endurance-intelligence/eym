@@ -14,14 +14,9 @@ export const supabase = createClient(supabaseUrl, supabasePublishableKey, {
 });
 
 function stateForCloud(state) {
-  return {
-    ...state,
-    strava: {
-      ...state.strava,
-      token: null,
-      refreshToken: null,
-    },
-  };
+  const cloudState = { ...state };
+  delete cloudState.strava;
+  return cloudState;
 }
 
 export async function signUp(email, password) {
