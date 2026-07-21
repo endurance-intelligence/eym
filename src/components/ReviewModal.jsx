@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { useApp } from "../context/AppContext";
-import { Score } from "./UI";
 import { hydration } from "../services/insights";
 import { eventTitleFor, isOfficialEvent } from "../services/achievements";
 import { isRoadCyclingActivity, reviewKind, reviewKindLabel } from "../services/activityUtils";
@@ -19,13 +18,55 @@ const emptyNutritionItem = () => ({
   affectsInventory: false,
 });
 
-function ZeroScore({ label, value, onChange, help }) {
+function scoreMeaning(value, variant = "positive") {
+  const numeric = Number(value || 0);
+  if (variant === "effort") {
+    if (numeric <= 2) return "Sehr locker";
+    if (numeric <= 4) return "Locker";
+    if (numeric <= 6) return "Moderat";
+    if (numeric <= 8) return "Hart";
+    return numeric === 10 ? "Maximal" : "Sehr hart";
+  }
+  if (variant === "soreness") {
+    if (numeric === 0) return "Keine Beschwerden";
+    if (numeric <= 2) return "Kaum spürbar";
+    if (numeric <= 4) return "Leicht";
+    if (numeric <= 6) return "Deutlich";
+    if (numeric <= 8) return "Stark";
+    return "Sehr stark";
+  }
+  if (numeric <= 2) return "Sehr schlecht";
+  if (numeric <= 4) return "Schlecht";
+  if (numeric <= 6) return "Okay";
+  if (numeric <= 8) return "Gut";
+  return "Sehr gut";
+}
+
+function ReviewScore({ label, value, onChange, low, high, description, variant = "positive", min = 1, wide = false }) {
   return (
-    <label className="score">
-      <span>{label}<b>{value}/10</b></span>
-      <input type="range" min="0" max="10" value={value} onChange={(event) => onChange(Number(event.target.value))} />
-      {help && <small>{help}</small>}
+    <label className={`review-score review-score-${variant} ${wide ? "wide-score" : ""}`}>
+      <span className="review-score-heading"><b>{label}</b><strong>{value}/10 · {scoreMeaning(value, variant)}</strong></span>
+      <input type="range" min={min} max="10" value={value} onChange={(event) => onChange(Number(event.target.value))} />
+      <span className="review-score-scale"><small>{low}</small><small>{high}</small></span>
+      {description && <p>{description}</p>}
     </label>
+  );
+}
+
+function SymptomPicker({ title, options, selected = [], onChange }) {
+  function toggle(value) {
+    if (value.startsWith("Keine")) {
+      onChange(selected.includes(value) ? [] : [value]);
+      return;
+    }
+    const withoutNone = selected.filter((item) => !item.startsWith("Keine"));
+    onChange(withoutNone.includes(value) ? withoutNone.filter((item) => item !== value) : [...withoutNone, value]);
+  }
+  return (
+    <div className="review-symptom-picker">
+      <b>{title}</b>
+      <div>{options.map((option) => <button type="button" className={selected.includes(option) ? "selected" : ""} onClick={() => toggle(option)} key={option}>{option}</button>)}</div>
+    </div>
   );
 }
 
@@ -62,6 +103,9 @@ export default function ReviewModal({ activity, onClose }) {
     energy: old.energy ?? 7,
     stomach: old.stomach ?? 8,
     rpe: old.rpe ?? 5,
+    overallFeeling: old.overallFeeling ?? 7,
+    legSymptoms: Array.isArray(old.legSymptoms) ? old.legSymptoms : [],
+    stomachSymptoms: Array.isArray(old.stomachSymptoms) ? old.stomachSymptoms : [],
     upperBodySoreness: old.upperBodySoreness ?? 0,
     backSoreness: old.backSoreness ?? 0,
     mobility: old.mobility ?? 7,
@@ -269,11 +313,17 @@ export default function ReviewModal({ activity, onClose }) {
 
         {kind === "endurance" ? (
           <>
-            <div className="scores">
-              <Score label="Beine" value={review.legs} onChange={(value) => set("legs", Number(value))} />
-              <Score label="Energie" value={review.energy} onChange={(value) => set("energy", Number(value))} />
-              <Score label="Magen" value={review.stomach} onChange={(value) => set("stomach", Number(value))} />
-              <Score label="Anstrengung" value={review.rpe} onChange={(value) => set("rpe", Number(value))} />
+            <div className="review-timing-note"><strong>Bewertung direkt nach der Einheit</strong><span>Bewerte, wie du dich unmittelbar nach Abschluss der Einheit fühlst. Beschwerden oder Auffälligkeiten während der Einheit kannst du zusätzlich markieren.</span></div>
+            <div className="scores review-score-grid">
+              <ReviewScore label="Beine" value={review.legs} onChange={(value) => set("legs", value)} low="Sehr schlecht · schwer / schmerzhaft" high="Sehr gut · frisch / beschwerdefrei" description="10 bedeutet: Die Beine fühlen sich frisch, locker und ohne Auffälligkeiten an." />
+              <ReviewScore label="Energie" value={review.energy} onChange={(value) => set("energy", value)} low="Völlig leer" high="Sehr energiegeladen" description="10 bedeutet: Du fühlst dich körperlich und mental sehr energiegeladen." />
+              <ReviewScore label="Magenverträglichkeit" value={review.stomach} onChange={(value) => set("stomach", value)} low="Starke Beschwerden" high="Keine Beschwerden" description="10 bedeutet: Getränke und Verpflegung wurden ohne Magen-Darm-Beschwerden vertragen." />
+              <ReviewScore label="Wahrgenommene Belastung" value={review.rpe} onChange={(value) => set("rpe", value)} low="Sehr locker" high="Maximal anstrengend" description="Hier beschreibt eine hohe Zahl nicht die Qualität, sondern wie anstrengend die Einheit war." variant="effort" />
+              <ReviewScore label="Gesamtgefühl" value={review.overallFeeling} onChange={(value) => set("overallFeeling", value)} low="Sehr schlecht" high="Sehr gut" description="Wie zufrieden bist du insgesamt mit der Einheit und deinem Zustand danach?" wide />
+            </div>
+            <div className="review-symptom-grid">
+              <SymptomPicker title="Auffälligkeiten Beine" selected={review.legSymptoms} onChange={(value) => set("legSymptoms", value)} options={["Keine Auffälligkeiten", "Schwere Beine", "Muskelkater", "Schmerzen", "Krämpfe"]} />
+              <SymptomPicker title="Auffälligkeiten Magen" selected={review.stomachSymptoms} onChange={(value) => set("stomachSymptoms", value)} options={["Keine Beschwerden", "Übelkeit", "Völlegefühl", "Seitenstechen", "Toilettendrang"]} />
             </div>
             <div className="form-grid">
               <label>Getrunken (ml)<input type="number" min="0" value={review.drinkMl} onChange={(event) => updateDrink(event.target.value)} /></label>
@@ -378,16 +428,17 @@ export default function ReviewModal({ activity, onClose }) {
           </>
         ) : (
           <>
+            <div className="review-timing-note"><strong>Bewertung direkt nach der Einheit</strong><span>Bewerte, wie du dich unmittelbar nach Abschluss der Einheit fühlst. Beschwerden während der Einheit kannst du in den Notizen ergänzen.</span></div>
             <div className="strength-review-intro">
               <strong>Einfluss auf das Lauftraining</strong>
               <span>Rudern, Stabi und Mobility belasten anders als ein Lauf. Deshalb erfassen wir Muskelkater, Rücken und Beweglichkeit separat.</span>
             </div>
-            <div className="scores strength-scores">
-              <ZeroScore label="Muskelkater Oberkörper" value={review.upperBodySoreness} onChange={(value) => set("upperBodySoreness", value)} help="0 = keiner, 10 = sehr stark" />
-              <ZeroScore label="Rücken / Nacken" value={review.backSoreness} onChange={(value) => set("backSoreness", value)} help="0 = frei, 10 = stark belastet" />
-              <Score label="Beweglichkeit" value={review.mobility} onChange={(value) => set("mobility", Number(value))} />
-              <Score label="Energie" value={review.energy} onChange={(value) => set("energy", Number(value))} />
-              <Score label="Anstrengung" value={review.rpe} onChange={(value) => set("rpe", Number(value))} />
+            <div className="scores strength-scores review-score-grid">
+              <ReviewScore label="Muskelkater Oberkörper" value={review.upperBodySoreness} onChange={(value) => set("upperBodySoreness", value)} low="Keine Beschwerden" high="Sehr stark" variant="soreness" min={0} description="0 bedeutet: kein Muskelkater oder ungewöhnliches Spannungsgefühl." />
+              <ReviewScore label="Rücken / Nacken" value={review.backSoreness} onChange={(value) => set("backSoreness", value)} low="Frei" high="Stark belastet" variant="soreness" min={0} description="0 bedeutet: Rücken und Nacken fühlen sich frei an." />
+              <ReviewScore label="Beweglichkeit" value={review.mobility} onChange={(value) => set("mobility", value)} low="Sehr eingeschränkt" high="Sehr beweglich" description="10 bedeutet: Du fühlst dich frei beweglich und ohne Einschränkungen." />
+              <ReviewScore label="Energie" value={review.energy} onChange={(value) => set("energy", value)} low="Völlig leer" high="Sehr energiegeladen" />
+              <ReviewScore label="Wahrgenommene Belastung" value={review.rpe} onChange={(value) => set("rpe", value)} low="Sehr locker" high="Maximal anstrengend" variant="effort" description="Eine hohe Zahl bedeutet: Die Einheit war sehr anstrengend." />
             </div>
             <label className="strength-impact">Beeinträchtigt das dein Laufen?
               <select value={review.impactOnRunning} onChange={(event) => set("impactOnRunning", event.target.value)}>

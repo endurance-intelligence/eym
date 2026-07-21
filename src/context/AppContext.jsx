@@ -122,6 +122,14 @@ function mergeState(localState = {}, cloudState = {}) {
     equipment: asArray(cloud.equipment, asArray(local.equipment)),
     fuel: inventory.fuel,
     healthCheckins: asArray(cloud.healthCheckins, asArray(local.healthCheckins)),
+    mobilityCoach: {
+      ...defaultState.mobilityCoach,
+      ...(local.mobilityCoach || {}),
+      ...(cloud.mobilityCoach || {}),
+      equipment: asArray(cloud.mobilityCoach?.equipment, asArray(local.mobilityCoach?.equipment, defaultState.mobilityCoach.equipment)),
+      physioExerciseIds: asArray(cloud.mobilityCoach?.physioExerciseIds, asArray(local.mobilityCoach?.physioExerciseIds, defaultState.mobilityCoach.physioExerciseIds)),
+      history: asArray(cloud.mobilityCoach?.history, asArray(local.mobilityCoach?.history)),
+    },
     reviews: inventory.reviews,
     profile: { ...defaultState.profile, ...(local.profile || {}), ...(cloud.profile || {}) },
     mission: {

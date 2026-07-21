@@ -2,6 +2,19 @@ export const CONFIGURATION_VERSION = 3;
 
 export const WEEKDAYS = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"];
 
+export function sortCommitments(commitments = []) {
+  return [...commitments].sort((left, right) => {
+    const leftDay = WEEKDAYS.indexOf(left.weekday);
+    const rightDay = WEEKDAYS.indexOf(right.weekday);
+    const normalizedLeftDay = leftDay >= 0 ? leftDay : WEEKDAYS.length;
+    const normalizedRightDay = rightDay >= 0 ? rightDay : WEEKDAYS.length;
+    if (normalizedLeftDay !== normalizedRightDay) return normalizedLeftDay - normalizedRightDay;
+    const timeOrder = String(left.time || "23:59").localeCompare(String(right.time || "23:59"));
+    if (timeOrder !== 0) return timeOrder;
+    return String(left.name || "").localeCompare(String(right.name || ""), "de");
+  });
+}
+
 export const SPORT_OPTIONS = [
   { value: "running", label: "Laufen" },
   { value: "football", label: "Fußball" },

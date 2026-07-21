@@ -1,6 +1,6 @@
 import { useApp } from "../context/AppContext";
 import { Card, Metric, PageTitle } from "../components/UI";
-import { coachInsight, recovery, hydration } from "../services/insights";
+import { recovery, hydration } from "../services/insights";
 import { daysUntil, pace, hours } from "../utils/format";
 import WeatherCard from "../components/WeatherCard";
 import { activityTimestamp, isRunningActivity, preferredActivities } from "../services/activityUtils";
@@ -193,82 +193,49 @@ export default function Briefing() {
     .filter((item) => !item.archived && !item.isMainTarget && new Date(`${item.date}T23:59:59`) >= new Date())
     .sort((a, b) => new Date(a.date) - new Date(b.date))[0];
 
+  const weekOpenItems = rows.reduce((sum, row) => sum + row.items.filter((item) => item.tone === "planned").length, 0);
+
   return (
     <>
       <PageTitle eyebrow={copy.eyebrow} title={`${copy.greeting}${name ? `, ${name}` : ""}.`}><span className="tagline">Eat your miles.</span></PageTitle>
-      <div className="grid">
+      <div className="grid briefing-grid">
         <Card className="wide today-card">
           <div className="today-card-heading">
-            <div>
-              <p className="eyebrow">Heute · {todayLabel.format(new Date())}</p>
-              <h2>{today.headline}</h2>
-            </div>
-            <span className={`today-summary ${today.open ? "planned" : today.done ? "done" : "rest"}`}>
-              {today.open ? `${today.open} offen` : today.done ? `${today.done} erledigt` : "Regeneration"}
-            </span>
+            <div><p className="eyebrow">Heute · {todayLabel.format(new Date())}</p><h2>{today.headline}</h2></div>
+            <span className={`today-summary ${today.open ? "planned" : today.done ? "done" : "rest"}`}>{today.open ? `${today.open} offen` : today.done ? `${today.done} erledigt` : "Regeneration"}</span>
           </div>
           <div className="today-workout-list">
-            {today.items.map((item) => (
-              <div className={`today-workout-row ${item.tone}`} key={item.id}>
-                <span className="today-status-pill">{item.status}</span>
-                <div className="today-workout-copy">
-                  <h3>{item.title}</h3>
-                  {item.detail && <strong>{item.detail}</strong>}
-                  {item.note && <p>{item.note}</p>}
-                </div>
-              </div>
-            ))}
+            {today.items.map((item) => <div className={`today-workout-row ${item.tone}`} key={item.id}><span className="today-status-pill">{item.status}</span><div className="today-workout-copy"><h3>{item.title}</h3>{item.detail && <strong>{item.detail}</strong>}{item.note && <p>{item.note}</p>}</div></div>)}
           </div>
         </Card>
 
-        <Card className="hero">
-          <p className="eyebrow">Mission</p>
-          <h2>{state.mission.name}</h2>
-          <div className="hero-stats">
-            <Metric label="Verbleibend" value={`${daysUntil(state.mission.date)} Tage`} />
-            <Metric label="Diese Woche" value={`${weekDistance.toFixed(1)} km`} />
-            <Metric label="Berechneter Rahmen" value={calculatedTarget ? `${calculatedTarget} km` : "Noch offen"} sub={state.planner?.lastPhase || "Wochenplan erstellen"} />
-          </div>
+        <Card className="hero briefing-mission-card">
+          <p className="eyebrow">Mission</p><h2>{state.mission.name}</h2>
+          <div className="hero-stats"><Metric label="Verbleibend" value={`${daysUntil(state.mission.date)} Tage`} /><Metric label="Diese Woche" value={`${weekDistance.toFixed(1)} km`} /><Metric label="Rahmen" value={calculatedTarget ? `${calculatedTarget} km` : "Noch offen"} sub={state.planner?.lastPhase || "Wochenplan erstellen"} /></div>
           {calculatedTarget > 0 && <div className="progress"><i style={{ width: `${Math.min(100, weekDistance / calculatedTarget * 100)}%` }} /></div>}
           {nextEvent && <div className="milestone-strip"><div><span>Nächstes Rennen</span><strong>{nextEvent.name}</strong><small>{nextEvent.location || "Ort noch offen"}</small></div><div className="milestone-count"><b>{daysUntil(nextEvent.date)}</b><span>Tage</span></div></div>}
         </Card>
         <WeatherCard />
 
-        <Card className="readiness-card">
-          <p className="eyebrow">Trainingsbereitschaft</p>
-          <h2 className={`status ${recoveryState.tone}`}>{recoveryState.label}</h2>
-          <p>{recoveryState.text}</p>
-          {recoveryState.reviewed > 0 && (
-            <div className="readiness-metrics">
-              <span>Beine <b>{recoveryState.legs}/10</b></span>
-              <span>Energie <b>{recoveryState.energy}/10</b></span>
-              <span>Belastung <b>{recoveryState.rpe}/10</b></span>
-            </div>
-          )}
-          <p className="muted readiness-basis">Basis: die letzten {recoveryState.reviewed || 0} bewerteten Laufeinheiten.</p>
-        </Card>
-
-        <Card>
-          <p className="eyebrow">Letzter Lauf</p>
-          {latestActivity ? <><h2>{latestActivity.name}</h2><p className="runline">{latestActivity.distance} km · {hours(latestActivity.duration)} · {pace(latestActivity.distance, latestActivity.duration)} · {latestActivity.elevation} hm</p><p>{hydrationState ? `Getrunken ${latestReview.drinkMl} ml. Geschätztes Defizit: ${hydrationState.deficit} ml.` : "Review offen – Trinkmenge und Körpergefühl ergänzen."}</p></> : <p>Importiere Aktivitäten, um deine echten Läufe zu sehen.</p>}
-        </Card>
-
-        <Card className="wide insight"><p className="eyebrow">Coach-Hinweis</p><h2>{coachInsight(runningActivities, state.reviews)}</h2></Card>
-        <Card className="wide briefing-week-card">
-          <p className="eyebrow">Wochenplan</p>
-          <h2>Die komplette Woche</h2>
-          <div className="briefing-week-list">
-            {rows.map((row) => (
-              <div className={`briefing-week-row ${row.today ? "today" : ""}`} key={row.dateKey}>
-                <div className="briefing-week-day"><strong>{dayLabel.format(row.date)}</strong>{row.today && <span>Heute</span>}</div>
-                <div className="briefing-week-items">
-                  {row.items.map((item) => <div className={`briefing-week-item ${item.tone}`} key={item.id}><b>{item.title}</b>{item.detail && <span>{item.detail}</span>}</div>)}
-                </div>
-              </div>
-            ))}
+        <Card className="wide briefing-status-card">
+          <div className="briefing-status-block">
+            <p className="eyebrow">Trainingsbereitschaft</p>
+            <div className="briefing-status-line"><h2 className={recoveryState.tone}>{recoveryState.label}</h2>{recoveryState.reviewed > 0 && <span>Beine {recoveryState.legs}/10 · Energie {recoveryState.energy}/10 · Belastung {recoveryState.rpe}/10</span>}</div>
+            <p>{recoveryState.text}</p>
+          </div>
+          <div className="briefing-status-divider" />
+          <div className="briefing-status-block">
+            <p className="eyebrow">Zuletzt</p>
+            {latestActivity ? <><div className="briefing-status-line"><h2>{latestActivity.name}</h2><span>{latestActivity.distance} km · {hours(latestActivity.duration)} · {pace(latestActivity.distance, latestActivity.duration)}</span></div><p>{hydrationState ? `Getrunken ${latestReview.drinkMl} ml · geschätztes Defizit ${hydrationState.deficit} ml.` : "Review offen – Körpergefühl und Trinkmenge ergänzen."}</p></> : <p>Importiere Aktivitäten, um deine echten Läufe zu sehen.</p>}
           </div>
         </Card>
-        <Card className="wide"><p className="eyebrow">Lernpunkt</p><blockquote>{hydrationState ? `Für ähnliche Bedingungen sind ungefähr ${hydrationState.recommendedLow}–${hydrationState.recommendedHigh} ml pro Stunde ein sinnvoller Startpunkt.` : "Je genauer du Trinkmenge und Gefühl protokollierst, desto persönlicher werden deine Empfehlungen."}</blockquote></Card>
+
+        <details className="wide briefing-disclosure">
+          <summary><div><p className="eyebrow">Wochenplan</p><strong>Komplette Woche anzeigen</strong><span>{weekOpenItems} offene Einheit{weekOpenItems === 1 ? "" : "en"} · {calculatedTarget ? `${calculatedTarget} km Rahmen` : "Rahmen noch offen"}</span></div><b>⌄</b></summary>
+          <div className="briefing-week-list">
+            {rows.map((row) => <div className={`briefing-week-row ${row.today ? "today" : ""}`} key={row.dateKey}><div className="briefing-week-day"><strong>{dayLabel.format(row.date)}</strong>{row.today && <span>Heute</span>}</div><div className="briefing-week-items">{row.items.map((item) => <div className={`briefing-week-item ${item.tone}`} key={item.id}><b>{item.title}</b>{item.detail && <span>{item.detail}</span>}</div>)}</div></div>)}
+          </div>
+        </details>
       </div>
     </>
   );

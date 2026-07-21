@@ -102,3 +102,20 @@ Recurring commitments now use one explicit planning behavior instead of multiple
 - **Exclusive**: reserves the day and removes other open automatically planned sessions.
 
 Saving a recurring commitment changes the planning configuration only. An already generated week is intentionally left untouched and can be changed through **Woche anpassen**.
+
+## Briefing and recurring commitments (v2.9.2)
+
+- Recurring commitments are displayed in weekday order, then by time.
+- Coach guidance is shown only in the Coach area instead of being duplicated in the briefing.
+- The hydration learning point from the latest reviewed run is now included with the Coach recommendation.
+
+## Information architecture, reviews and mobility coach (v2.10)
+
+- Settings are split into overview, profile, training/planning, connections and data/calendar.
+- The briefing focuses on today; readiness and the latest run are compact, and the full week is expandable.
+- Weekly recurring commitments are collapsed into a short summary until they are needed.
+- Targeted week adjustments show a preview before a unit is replaced, moved or deleted.
+- Coach content is grouped into Today, Development, Stabi & Mobility and Knowledge.
+- Reviews explicitly refer to the feeling immediately after the workout. Every scale shows both endpoints and translates the selected number into plain language.
+- Leg and stomach symptoms can be marked separately from the numeric rating.
+- The Stabi & Mobility coach builds 10–30 minute workouts around saved physio exercises and available equipment, including resistance bands, dumbbells/weights and kettlebells.

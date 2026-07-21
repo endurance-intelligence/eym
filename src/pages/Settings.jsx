@@ -14,6 +14,7 @@ import {
   WEEKDAYS,
   emptyCommitment,
   normalizeCommitment,
+  sortCommitments,
   sportLabel,
 } from "../services/configuration";
 
@@ -31,9 +32,12 @@ export default function Settings() {
   const [intervalsBusy, setIntervalsBusy] = useState(false);
   const [commitmentDraft, setCommitmentDraft] = useState(null);
   const [commitmentMessage, setCommitmentMessage] = useState("");
+  const [section, setSection] = useState("overview");
   const garminInput = useRef(null);
 
-  const commitments = Array.isArray(state.planner?.recurringCommitments) ? state.planner.recurringCommitments : [];
+  const commitments = sortCommitments(
+    Array.isArray(state.planner?.recurringCommitments) ? state.planner.recurringCommitments : [],
+  );
   const hasMigratedCommitments = commitments.some((item) => item.migratedFrom);
   const replacementSports = state.planner?.replacementSports || DEFAULT_REPLACEMENT_SPORTS;
 
@@ -151,15 +155,50 @@ export default function Settings() {
   const calendarUrl = calendarToken ? calendarSubscriptionUrl(calendarToken) : "";
   const cloudStatusLabel = { local: "Nur lokal", loading: "Cloud wird geladen …", saving: "Wird gespeichert …", synced: "Synchronisiert", error: "Synchronisierung fehlgeschlagen" }[cloudStatus] || cloudStatus;
 
+  const sectionTabs = [
+    ["overview", "Übersicht"],
+    ["profile", "Profil"],
+    ["planning", "Training & Planung"],
+    ["connections", "Verbindungen"],
+    ["data", "Daten & Kalender"],
+  ];
+
   return <>
-    <PageTitle eyebrow="Settings" title="Profil, Planung & Daten" />
-    <div className="grid">
+    <PageTitle eyebrow="Settings" title="Deine Konfiguration" />
+    <div className="section-tabs settings-tabs" role="tablist" aria-label="Einstellungsbereiche">
+      {sectionTabs.map(([key, label]) => <button type="button" className={section === key ? "selected" : ""} onClick={() => setSection(key)} key={key}>{label}</button>)}
+    </div>
+
+    {section === "overview" && <div className="grid settings-overview-grid">
+      <Card className="settings-overview-card">
+        <p className="eyebrow">Profil</p><h2>{state.profile?.displayName || "Noch ohne Anzeigename"}</h2>
+        <p className="muted">{state.profile?.birthDate ? `Geburtsdatum ${new Date(`${state.profile.birthDate}T12:00:00`).toLocaleDateString("de-DE")}` : "Geburtsdatum optional"}{state.profile?.heightCm ? ` · ${state.profile.heightCm} cm` : ""}{state.profile?.weightKg ? ` · ${state.profile.weightKg} kg` : ""}</p>
+        <button type="button" onClick={() => setSection("profile")}>Profil öffnen</button>
+      </Card>
+      <Card className="settings-overview-card">
+        <p className="eyebrow">Training & Planung</p><h2>{commitments.length} Fixtermine</h2>
+        <p className="muted">{commitments.length ? commitments.map((item) => `${item.weekday.slice(0, 2)} · ${item.name}`).join(" · ") : "Noch keine wiederkehrenden Einheiten"}</p>
+        <button type="button" onClick={() => setSection("planning")}>Planungsregeln öffnen</button>
+      </Card>
+      <Card className="settings-overview-card">
+        <p className="eyebrow">Verbindungen</p><h2>{state.intervals?.connected ? "Intervals.icu verbunden" : "Intervals.icu noch offen"}</h2>
+        <p className="muted">Cloud: {cloudStatusLabel}{state.intervals?.lastSyncAt ? ` · letzter Aktivitäts-Sync ${new Date(state.intervals.lastSyncAt).toLocaleDateString("de-DE")}` : ""}</p>
+        <button type="button" onClick={() => setSection("connections")}>Verbindungen öffnen</button>
+      </Card>
+      <Card className="settings-overview-card">
+        <p className="eyebrow">Daten & Kalender</p><h2>{calendarToken ? "Kalenderabo aktiv" : "Kalenderabo vorbereiten"}</h2>
+        <p className="muted">{state.garmin?.lastImportAt ? `Garmin-Import: ${new Date(state.garmin.lastImportAt).toLocaleDateString("de-DE")}` : "Garmin-Historie kann als Backup importiert werden."}</p>
+        <button type="button" onClick={() => setSection("data")}>Datenbereich öffnen</button>
+      </Card>
+    </div>}
+
+    {section === "profile" && <div className="grid">
       <Card className="wide settings-profile-card">
         <div className="settings-section-heading">
           <div><p className="eyebrow">Athletenprofil</p><h2>Persönliche Grundlage</h2></div>
           {hasMigratedCommitments && <span className="settings-migration-badge">Bestehende Daten übernommen</span>}
         </div>
-        <p className="muted">Deine bisherigen Pläne, Missionen und Aktivitäten bleiben erhalten. Neue Angaben sind optional und verbessern später die individuelle Belastungssteuerung.</p>
+        <p className="muted">Deine bisherigen Pläne, Missionen und Aktivitäten bleiben erhalten. Die Angaben sind optional und verbessern später die individuelle Belastungssteuerung.</p>
         <div className="form-grid settings-profile-grid">
           <label>Anzeigename<input value={state.profile?.displayName || ""} placeholder="z. B. Daniel" onChange={(event) => updateProfile("displayName", event.target.value)} /></label>
           <label>Geburtsdatum<input type="date" value={state.profile?.birthDate || ""} onChange={(event) => updateProfile("birthDate", event.target.value)} /></label>
@@ -167,130 +206,54 @@ export default function Settings() {
           <label>Gewicht in kg<input type="number" min="30" max="250" step="0.1" value={state.profile?.weightKg ?? ""} placeholder="optional" onChange={(event) => updateProfile("weightKg", numberOrBlank(event.target.value))} /></label>
         </div>
       </Card>
+    </div>}
 
+    {section === "planning" && <div className="grid">
       <Card className="wide settings-commitments-card">
         <div className="settings-section-heading">
           <div><p className="eyebrow">Feste Termine</p><h2>Wiederkehrende Einheiten</h2></div>
           <button type="button" onClick={() => { setCommitmentMessage(""); setCommitmentDraft(emptyCommitment()); }}>+ Termin hinzufügen</button>
         </div>
-        <p className="muted">EYM berücksichtigt diese Termine bei jeder neuen oder neu berechneten Wochenplanung.{hasMigratedCommitments ? " Bestehende Fixtermine wurden aus deiner bisherigen Konfiguration automatisch übernommen." : " Neue Termine kannst du frei nach Sportart, Tag, Uhrzeit und Belastung anlegen."}</p>
-        <div className="settings-plan-scope-note"><strong>Wichtig:</strong><span>Das Speichern hier ändert deinen bereits bestehenden Wochenplan nicht automatisch. Für die laufende Woche nutzt du anschließend gezielt „Woche anpassen“.</span></div>
+        <p className="muted">EYM berücksichtigt diese Termine bei jeder neuen oder neu berechneten Wochenplanung.{hasMigratedCommitments ? " Bestehende Fixtermine wurden automatisch übernommen." : " Neue Termine kannst du frei anlegen."}</p>
+        <div className="settings-plan-scope-note"><strong>Aktuelle Woche:</strong><span>Das Speichern hier ändert den bestehenden Plan nicht. Kurzfristige Änderungen erledigst du im Wochenplan über „Woche anpassen“.</span></div>
         {commitmentMessage && <div className="settings-save-message">✓ {commitmentMessage}</div>}
-        {commitments.length ? (
-          <div className="settings-commitment-list">
-            {commitments.map((item) => (
-              <article className={item.enabled === false ? "disabled" : ""} key={item.id}>
-                <button type="button" className={`commitment-toggle ${item.enabled === false ? "off" : "on"}`} onClick={() => toggleCommitment(item.id)} aria-label={`${item.name} ${item.enabled === false ? "aktivieren" : "deaktivieren"}`}><span /></button>
-                <div className="commitment-copy">
-                  <strong>{item.name}</strong>
-                  <span>{item.weekday} · {item.time || "flexibel"} · {sportLabel(item.sport)}</span>
-                  <small>{item.durationMinutes ? `${item.durationMinutes} min` : "Dauer offen"}{item.distanceKm ? ` · ${item.distanceKm} km` : ""} · Belastung {LOAD_OPTIONS.find((entry) => entry.value === item.load)?.label || "Mittel"}</small>
-                  <span className={`commitment-behavior ${item.conflictMode || "combine"}`}>{CONFLICT_MODE_OPTIONS.find((entry) => entry.value === (item.conflictMode || "combine"))?.label || "Als zusätzliche Einheit einplanen"}</span>
-                </div>
-                <div className="commitment-actions">
-                  <button type="button" className="secondary" onClick={() => { setCommitmentMessage(""); setCommitmentDraft({ ...item }); }}>Bearbeiten</button>
-                  <button type="button" className="secondary" onClick={() => deleteCommitment(item.id)}>Löschen</button>
-                </div>
-              </article>
-            ))}
+        {commitments.length ? <div className="settings-commitment-list">
+          {commitments.map((item) => <article className={item.enabled === false ? "disabled" : ""} key={item.id}>
+            <button type="button" className={`commitment-toggle ${item.enabled === false ? "off" : "on"}`} onClick={() => toggleCommitment(item.id)} aria-label={`${item.name} ${item.enabled === false ? "aktivieren" : "deaktivieren"}`}><span /></button>
+            <div className="commitment-copy"><strong>{item.name}</strong><span>{item.weekday} · {item.time || "flexibel"} · {sportLabel(item.sport)}</span><small>{item.durationMinutes ? `${item.durationMinutes} min` : "Dauer offen"}{item.distanceKm ? ` · ${item.distanceKm} km` : ""} · Belastung {LOAD_OPTIONS.find((entry) => entry.value === item.load)?.label || "Mittel"}</small><span className={`commitment-behavior ${item.conflictMode || "combine"}`}>{CONFLICT_MODE_OPTIONS.find((entry) => entry.value === (item.conflictMode || "combine"))?.label || "Als zusätzliche Einheit einplanen"}</span></div>
+            <div className="commitment-actions"><button type="button" className="secondary" onClick={() => { setCommitmentMessage(""); setCommitmentDraft({ ...item }); }}>Bearbeiten</button><button type="button" className="secondary" onClick={() => deleteCommitment(item.id)}>Löschen</button></div>
+          </article>)}
+        </div> : <div className="settings-empty-state">Noch keine festen Termine. Neue Wochen werden nur aus Verfügbarkeit, Mission und Belastung geplant.</div>}
+
+        {commitmentDraft && <form className="settings-commitment-form" onSubmit={saveCommitment}>
+          <div className="settings-section-heading"><div><p className="eyebrow">Termin bearbeiten</p><h3>{commitments.some((item) => item.id === commitmentDraft.id) ? commitmentDraft.name || "Fixtermin" : "Neuer Fixtermin"}</h3></div><button type="button" className="secondary" onClick={() => setCommitmentDraft(null)}>Schließen</button></div>
+          <label className="settings-active-toggle"><input type="checkbox" checked={commitmentDraft.enabled !== false} onChange={(event) => setCommitmentDraft({ ...commitmentDraft, enabled: event.target.checked })} /><span><b>Termin regelmäßig berücksichtigen</b><small>Kann später nur für eine einzelne Woche ausgesetzt werden.</small></span></label>
+          <div className="form-grid settings-commitment-form-grid">
+            <label>Name<input required value={commitmentDraft.name} placeholder="z. B. Lauftreff" onChange={(event) => setCommitmentDraft({ ...commitmentDraft, name: event.target.value })} /></label>
+            <label>Sportart<select value={commitmentDraft.sport} onChange={(event) => setCommitmentDraft({ ...commitmentDraft, sport: event.target.value })}>{SPORT_OPTIONS.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>
+            <label>Wochentag<select value={commitmentDraft.weekday} onChange={(event) => setCommitmentDraft({ ...commitmentDraft, weekday: event.target.value })}>{WEEKDAYS.map((day) => <option key={day}>{day}</option>)}</select></label>
+            <label>Uhrzeit<input type="time" value={commitmentDraft.time} onChange={(event) => setCommitmentDraft({ ...commitmentDraft, time: event.target.value })} /></label>
+            <label>Dauer in Minuten<input type="number" min="0" value={commitmentDraft.durationMinutes} onChange={(event) => setCommitmentDraft({ ...commitmentDraft, durationMinutes: Number(event.target.value) })} /></label>
+            <label>Übliche Distanz in km<input type="number" min="0" step="0.1" value={commitmentDraft.distanceKm} onChange={(event) => setCommitmentDraft({ ...commitmentDraft, distanceKm: Number(event.target.value) })} /></label>
+            <label>Belastung<select value={commitmentDraft.load} onChange={(event) => setCommitmentDraft({ ...commitmentDraft, load: event.target.value })}>{LOAD_OPTIONS.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>
           </div>
-        ) : <div className="settings-empty-state">Noch keine festen Termine. Neue Wochen werden nur aus Verfügbarkeit, Mission und Belastung geplant.</div>}
-
-        {commitmentDraft && (
-          <form className="settings-commitment-form" onSubmit={saveCommitment}>
-            <div className="settings-section-heading"><div><p className="eyebrow">Termin bearbeiten</p><h3>{commitments.some((item) => item.id === commitmentDraft.id) ? commitmentDraft.name || "Fixtermin" : "Neuer Fixtermin"}</h3></div><button type="button" className="secondary" onClick={() => setCommitmentDraft(null)}>Schließen</button></div>
-            <label className="settings-active-toggle">
-              <input type="checkbox" checked={commitmentDraft.enabled !== false} onChange={(event) => setCommitmentDraft({ ...commitmentDraft, enabled: event.target.checked })} />
-              <span><b>Termin regelmäßig berücksichtigen</b><small>Du kannst ihn später auch kurzfristig nur für eine einzelne Woche aussetzen.</small></span>
-            </label>
-            <div className="form-grid settings-commitment-form-grid">
-              <label>Name<input required value={commitmentDraft.name} placeholder="z. B. Lauftreff" onChange={(event) => setCommitmentDraft({ ...commitmentDraft, name: event.target.value })} /></label>
-              <label>Sportart<select value={commitmentDraft.sport} onChange={(event) => setCommitmentDraft({ ...commitmentDraft, sport: event.target.value })}>{SPORT_OPTIONS.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>
-              <label>Wochentag<select value={commitmentDraft.weekday} onChange={(event) => setCommitmentDraft({ ...commitmentDraft, weekday: event.target.value })}>{WEEKDAYS.map((day) => <option key={day}>{day}</option>)}</select></label>
-              <label>Uhrzeit<input type="time" value={commitmentDraft.time} onChange={(event) => setCommitmentDraft({ ...commitmentDraft, time: event.target.value })} /></label>
-              <label>Dauer in Minuten<input type="number" min="0" value={commitmentDraft.durationMinutes} onChange={(event) => setCommitmentDraft({ ...commitmentDraft, durationMinutes: Number(event.target.value) })} /></label>
-              <label>Übliche Distanz in km<input type="number" min="0" step="0.1" value={commitmentDraft.distanceKm} onChange={(event) => setCommitmentDraft({ ...commitmentDraft, distanceKm: Number(event.target.value) })} /></label>
-              <label>Belastung<select value={commitmentDraft.load} onChange={(event) => setCommitmentDraft({ ...commitmentDraft, load: event.target.value })}>{LOAD_OPTIONS.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>
-            </div>
-            <section className="settings-conflict-section">
-              <div><p className="eyebrow">Planungsverhalten</p><h4>Was soll passieren, wenn an diesem Tag schon Training geplant ist?</h4></div>
-              <div className="settings-conflict-options">
-                {CONFLICT_MODE_OPTIONS.map((option) => <label className={commitmentDraft.conflictMode === option.value ? "selected" : ""} key={option.value}><input type="radio" name="commitment-conflict-mode" value={option.value} checked={commitmentDraft.conflictMode === option.value} onChange={() => setCommitmentDraft({ ...commitmentDraft, conflictMode: option.value })} /><span><b>{option.label}</b><small>{option.description}</small></span></label>)}
-              </div>
-            </section>
-            <div className="settings-form-footer">
-              <span>Speichert die Grundregel. Der laufende Wochenplan bleibt unangetastet.</span>
-              <button className="primary" type="submit">Fixtermin speichern</button>
-            </div>
-          </form>
-        )}
+          <section className="settings-conflict-section"><div><p className="eyebrow">Planungsverhalten</p><h4>Was soll passieren, wenn an diesem Tag schon Training geplant ist?</h4></div><div className="settings-conflict-options">{CONFLICT_MODE_OPTIONS.map((option) => <label className={commitmentDraft.conflictMode === option.value ? "selected" : ""} key={option.value}><input type="radio" name="commitment-conflict-mode" value={option.value} checked={commitmentDraft.conflictMode === option.value} onChange={() => setCommitmentDraft({ ...commitmentDraft, conflictMode: option.value })} /><span><b>{option.label}</b><small>{option.description}</small></span></label>)}</div></section>
+          <div className="settings-form-footer"><span>Speichert die Grundregel. Der laufende Wochenplan bleibt unangetastet.</span><button className="primary" type="submit">Fixtermin speichern</button></div>
+        </form>}
       </Card>
 
-      <Card className="wide settings-replacements-card">
-        <p className="eyebrow">Woche anpassen</p><h2>Erlaubte Ersatzarten</h2>
-        <p className="muted">Diese Sportarten werden angeboten, wenn du eine einzelne geplante Einheit ersetzen möchtest. Eigene Fixtermine erscheinen zusätzlich automatisch als Auswahl.</p>
-        <div className="settings-sport-picker">
-          {SPORT_OPTIONS.filter((option) => option.value !== "other").map((option) => <button type="button" className={replacementSports.includes(option.value) ? "selected" : ""} onClick={() => toggleReplacementSport(option.value)} key={option.value}>{option.label}</button>)}
-        </div>
-      </Card>
+      <Card className="wide settings-replacements-card"><p className="eyebrow">Woche anpassen</p><h2>Erlaubte Ersatzarten</h2><p className="muted">Diese Sportarten werden angeboten, wenn du eine einzelne Einheit ersetzen möchtest. Eigene Fixtermine erscheinen zusätzlich automatisch.</p><div className="settings-sport-picker">{SPORT_OPTIONS.filter((option) => option.value !== "other").map((option) => <button type="button" className={replacementSports.includes(option.value) ? "selected" : ""} onClick={() => toggleReplacementSport(option.value)} key={option.value}>{option.label}</button>)}</div></Card>
+    </div>}
 
-      <Card className="wide">
-        <p className="eyebrow">Endurance Intelligence Cloud</p><h2>Geräteübergreifend synchronisiert</h2>
-        <p className="muted">Angemeldet als <b>{session?.user?.email}</b>. Änderungen werden automatisch in Supabase gespeichert und auf anderen Geräten geladen.</p>
-        <span className={`cloud-status ${cloudStatus}`}>{cloudStatusLabel}</span>
-        {cloudUpdatedAt && <p className="muted">Letzte Cloud-Aktualisierung: {new Date(cloudUpdatedAt).toLocaleString("de-DE")}</p>}
-        <div className="button-row">
-          <button onClick={uploadLocalState}>Lokale Daten in Cloud übernehmen</button>
-          <button className="secondary" onClick={reloadCloudState}>Cloud neu laden</button>
-          <button className="secondary" onClick={logout}>Abmelden</button>
-        </div>
-      </Card>
+    {section === "connections" && <div className="grid">
+      <Card className="wide"><p className="eyebrow">Endurance Intelligence Cloud</p><h2>Geräteübergreifend synchronisiert</h2><p className="muted">Angemeldet als <b>{session?.user?.email}</b>. Änderungen werden automatisch in Supabase gespeichert.</p><span className={`cloud-status ${cloudStatus}`}>{cloudStatusLabel}</span>{cloudUpdatedAt && <p className="muted">Letzte Cloud-Aktualisierung: {new Date(cloudUpdatedAt).toLocaleString("de-DE")}</p>}<div className="button-row"><button onClick={uploadLocalState}>Lokale Daten in Cloud übernehmen</button><button className="secondary" onClick={reloadCloudState}>Cloud neu laden</button><button className="secondary" onClick={logout}>Abmelden</button></div></Card>
+      <Card className="wide intervals-setup-card"><p className="eyebrow">Intervals.icu · Datenzentrale</p><h2>{state.intervals?.connected ? "Verbunden und bereit" : state.intervals?.configured ? "Verbindung prüfen" : "Trainingsplattformen bündeln"}</h2><p className="muted">Garmin, Strava, Polar oder weitere Plattformen werden in Intervals.icu verbunden. EYM lädt die zusammengeführten Aktivitäten von dort.</p><div className="intervals-setup-grid"><div className="intervals-setup-step"><span>1</span><div><strong>Intervals.icu öffnen</strong><small>Anmelden oder kostenlos ein Konto erstellen.</small></div></div><div className="intervals-setup-step"><span>2</span><div><strong>Datenquelle verbinden</strong><small>Unter Settings → Connections Garmin, Strava, Polar oder deine Plattform auswählen.</small></div></div><div className="intervals-setup-step"><span>3</span><div><strong>Sync prüfen</strong><small>Kontrollieren, ob deine letzten Aktivitäten sichtbar sind.</small></div></div><div className="intervals-setup-step"><span>4</span><div><strong>EYM verbinden</strong><small>Verbindung testen und Aktivitäten synchronisieren.</small></div></div></div>{state.intervals?.lastSyncAt && <p className="muted">Letzter Sync: {new Date(state.intervals.lastSyncAt).toLocaleString("de-DE")}</p>}<div className="button-row"><a className="button-link" href="https://intervals.icu/settings/connections" target="_blank" rel="noreferrer">Intervals.icu Connections öffnen</a><button onClick={checkIntervals} disabled={intervalsBusy || !intervalsOnlineReady()}>{intervalsBusy ? "Prüfe …" : "Verbindung prüfen"}</button>{state.intervals?.connected && <button className="secondary" onClick={syncIntervals} disabled={intervalsSyncStatus === "syncing"}>{intervalsSyncStatus === "syncing" ? "Synchronisiert …" : "Jetzt synchronisieren"}</button>}</div><div className="setup-note"><strong>Garmin-Workouts:</strong> Bei der Garmin-Verbindung „Upload planned workouts“ aktivieren.</div><div className="setup-note"><strong>Mehrere EYM-Nutzer:</strong> Die persönliche Anmeldung wird als Intervals.icu-OAuth-Verbindung umgesetzt. Die aktuelle Verbindung bleibt bis dahin privater Testbetrieb.</div>{intervalsMessage && <p className="connection-message">{intervalsMessage}</p>}</Card>
+    </div>}
 
-      <Card className="wide intervals-setup-card">
-        <p className="eyebrow">Intervals.icu · Datenzentrale</p>
-        <h2>{state.intervals?.connected ? "Verbunden und bereit" : state.intervals?.configured ? "Verbindung prüfen" : "Trainingsplattformen bündeln"}</h2>
-        <p className="muted">EYM bindet Strava, Garmin oder Polar nicht mehr einzeln an. Du verbindest deine Plattformen einmal in Intervals.icu; EYM lädt die zusammengeführten Aktivitäten anschließend von dort.</p>
-        <div className="intervals-setup-grid">
-          <div className="intervals-setup-step"><span>1</span><div><strong>Intervals.icu öffnen</strong><small>Anmelden oder kostenlos ein Konto erstellen.</small></div></div>
-          <div className="intervals-setup-step"><span>2</span><div><strong>Datenquelle verbinden</strong><small>Unter Settings → Connections Garmin, Strava, Polar oder deine Plattform auswählen.</small></div></div>
-          <div className="intervals-setup-step"><span>3</span><div><strong>Synchronisierung abwarten</strong><small>Prüfen, ob deine letzten Aktivitäten in Intervals.icu sichtbar sind.</small></div></div>
-          <div className="intervals-setup-step"><span>4</span><div><strong>In EYM prüfen</strong><small>Verbindung testen und danach die Aktivitäten synchronisieren.</small></div></div>
-        </div>
-        {state.intervals?.lastSyncAt && <p className="muted">Letzter Sync: {new Date(state.intervals.lastSyncAt).toLocaleString("de-DE")}</p>}
-        <div className="button-row">
-          <a className="button-link" href="https://intervals.icu/settings/connections" target="_blank" rel="noreferrer">Intervals.icu Connections öffnen</a>
-          <button onClick={checkIntervals} disabled={intervalsBusy || !intervalsOnlineReady()}>{intervalsBusy ? "Prüfe …" : "Verbindung prüfen"}</button>
-          {state.intervals?.connected && <button className="secondary" onClick={syncIntervals} disabled={intervalsSyncStatus === "syncing"}>{intervalsSyncStatus === "syncing" ? "Synchronisiert …" : "Jetzt synchronisieren"}</button>}
-        </div>
-        <div className="setup-note"><strong>Garmin-Workouts:</strong> In Intervals.icu bei der Garmin-Verbindung „Upload planned workouts“ aktivieren. Dann können bestätigte Wochenpläne über Intervals.icu auf die Garmin-Uhr gelangen.</div>
-        <div className="setup-note"><strong>Für mehrere EYM-Nutzer:</strong> Die persönliche Anmeldung wird als Intervals.icu-OAuth-Verbindung umgesetzt. Die aktuelle serverseitige Verbindung bleibt bis dahin ausschließlich für den privaten Testbetrieb.</div>
-        {intervalsMessage && <p className="connection-message">{intervalsMessage}</p>}
-      </Card>
-
-      <Card className="wide">
-        <p className="eyebrow">Garmin · Historie & Backup</p><h2>Garmin-Export importieren</h2>
-        <p className="muted">Liest den vollständigen Garmin-Datenexport direkt im Browser. Importiert werden alle Aktivitäten ab 01.01.2025; bereits vorhandene Aktivitäten werden als Duplikate erkannt und sinnvoll zusammengeführt.</p>
-        <input ref={garminInput} type="file" accept=".zip,.json,application/zip,application/json" hidden onChange={(event) => previewGarmin(event.target.files?.[0])} />
-        <div className="button-row">
-          <button onClick={() => garminInput.current?.click()} disabled={garminBusy}>{garminBusy ? "Export wird geprüft …" : "Garmin ZIP auswählen"}</button>
-          {garminPreview && <button className="secondary" onClick={importGarmin}>Import starten</button>}
-        </div>
-        {garminPreview && <div className="import-preview"><div><span>Aktivitäten</span><strong>{garminPreview.total}</strong></div><div><span>Läufe</span><strong>{garminPreview.runs}</strong></div><div><span>Laufkilometer</span><strong>{garminPreview.distance.toFixed(1)} km</strong></div><div><span>Zeitraum</span><strong>{garminPreview.firstDate} – {garminPreview.lastDate}</strong></div><p className="muted import-types">{Object.entries(garminPreview.byType).sort((a, b) => b[1] - a[1]).map(([type, count]) => `${type}: ${count}`).join(" · ")}</p></div>}
-        {state.garmin?.lastImportAt && <p className="muted">Letzter Import: {new Date(state.garmin.lastImportAt).toLocaleString("de-DE")} · {state.garmin.imported} neu · {state.garmin.duplicates} Duplikate</p>}
-        {garminMessage && <p className="connection-message">{garminMessage}</p>}
-      </Card>
-
-      <Card>
-        <p className="eyebrow">Apple Kalender</p><h2>Kalender-Abo</h2>
-        <p className="muted">Die Cloud-Adresse liefert deinen aktuellen Wochenplan automatisch als Kalenderabo. Nach Änderungen muss keine Datei mehr manuell hochgeladen werden.</p>
-        <div className="button-row"><button onClick={() => navigator.clipboard?.writeText(calendarUrl).then(() => setCalendarMessage("Kalenderadresse kopiert."))} disabled={!calendarToken}>Abo-Adresse kopieren</button><button className="secondary" onClick={() => downloadCalendar(state.plan)}>ICS als Datei</button></div>
-        {calendarUrl && <><label className="calendar-url-label">Abo-Adresse<input readOnly value={calendarUrl} onFocus={(event) => event.target.select()} /></label><p className="muted">Sobald die Supabase-Funktion <b>calendar</b> veröffentlicht wurde, aktualisiert sich dieses Abo automatisch aus deinen Cloud-Daten.</p><p className="muted">Auf dem iPhone: Kalender → Kalender hinzufügen → Kalenderabonnement hinzufügen → Adresse einsetzen.</p></>}
-        {calendarMessage && <p className="connection-message">{calendarMessage}</p>}
-      </Card>
-
-      <Card>
-        <p className="eyebrow">Lokale Daten</p><h2>Reset</h2><p className="muted">Entfernt Reviews, importierte Aktivitäten und lokale Einstellungen aus diesem Browser.</p><button onClick={resetState}>Daten zurücksetzen</button>
-      </Card>
-    </div>
+    {section === "data" && <div className="grid">
+      <Card className="wide"><p className="eyebrow">Garmin · Historie & Backup</p><h2>Garmin-Export importieren</h2><p className="muted">Liest den vollständigen Garmin-Datenexport direkt im Browser. Vorhandene Aktivitäten werden als Duplikate erkannt und zusammengeführt.</p><input ref={garminInput} type="file" accept=".zip,.json,application/zip,application/json" hidden onChange={(event) => previewGarmin(event.target.files?.[0])} /><div className="button-row"><button onClick={() => garminInput.current?.click()} disabled={garminBusy}>{garminBusy ? "Export wird geprüft …" : "Garmin ZIP auswählen"}</button>{garminPreview && <button className="secondary" onClick={importGarmin}>Import starten</button>}</div>{garminPreview && <div className="import-preview"><div><span>Aktivitäten</span><strong>{garminPreview.total}</strong></div><div><span>Läufe</span><strong>{garminPreview.runs}</strong></div><div><span>Laufkilometer</span><strong>{garminPreview.distance.toFixed(1)} km</strong></div><div><span>Zeitraum</span><strong>{garminPreview.firstDate} – {garminPreview.lastDate}</strong></div><p className="muted import-types">{Object.entries(garminPreview.byType).sort((a, b) => b[1] - a[1]).map(([type, count]) => `${type}: ${count}`).join(" · ")}</p></div>}{state.garmin?.lastImportAt && <p className="muted">Letzter Import: {new Date(state.garmin.lastImportAt).toLocaleString("de-DE")} · {state.garmin.imported} neu · {state.garmin.duplicates} Duplikate</p>}{garminMessage && <p className="connection-message">{garminMessage}</p>}</Card>
+      <Card><p className="eyebrow">Apple Kalender</p><h2>Kalender-Abo</h2><p className="muted">Die Cloud-Adresse liefert deinen aktuellen Wochenplan automatisch als Kalenderabo.</p><div className="button-row"><button onClick={() => navigator.clipboard?.writeText(calendarUrl).then(() => setCalendarMessage("Kalenderadresse kopiert."))} disabled={!calendarToken}>Abo-Adresse kopieren</button><button className="secondary" onClick={() => downloadCalendar(state.plan)}>ICS als Datei</button></div>{calendarUrl && <><label className="calendar-url-label">Abo-Adresse<input readOnly value={calendarUrl} onFocus={(event) => event.target.select()} /></label><p className="muted">Auf dem iPhone: Kalender → Kalender hinzufügen → Kalenderabonnement hinzufügen → Adresse einsetzen.</p></>}{calendarMessage && <p className="connection-message">{calendarMessage}</p>}</Card>
+      <Card><p className="eyebrow">Lokale Daten</p><h2>Reset</h2><p className="muted">Entfernt Reviews, importierte Aktivitäten und lokale Einstellungen aus diesem Browser.</p><button onClick={resetState}>Daten zurücksetzen</button></Card>
+    </div>}
   </>;
 }

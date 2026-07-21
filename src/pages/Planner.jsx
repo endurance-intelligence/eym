@@ -14,7 +14,7 @@ import {
 import { downloadCalendar } from "../services/calendar";
 import { preferredActivities } from "../services/activityUtils";
 import { publishIntervalsWeek } from "../services/intervals";
-import { DEFAULT_REPLACEMENT_SPORTS, SPORT_OPTIONS, sportLabel } from "../services/configuration";
+import { DEFAULT_REPLACEMENT_SPORTS, SPORT_OPTIONS, sortCommitments, sportLabel } from "../services/configuration";
 import "./Planner.css";
 
 const dayFormatter = new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" });
@@ -262,7 +262,11 @@ export default function Planner() {
     return state.plan.some((item) => !item.archived && item.date >= isoDate(previousStart) && item.date <= isoDate(previousEnd));
   }, [state.plan, offsetWeeks]);
   const config = useMemo(() => state.planner || {}, [state.planner]);
-  const recurringCommitments = Array.isArray(config.recurringCommitments) ? config.recurringCommitments.filter((entry) => entry.enabled !== false) : [];
+  const recurringCommitments = sortCommitments(
+    Array.isArray(config.recurringCommitments)
+      ? config.recurringCommitments.filter((entry) => entry.enabled !== false)
+      : [],
+  );
   const replacementOptions = useMemo(() => adjustmentReplacementOptions(config), [config]);
   const reasonCounts = useMemo(() => recentReasonCounts(state.plan, weekStart), [state.plan, weekStart]);
   const coachReviewReference = useMemo(() => offsetWeeks === 0 ? new Date(Date.now() + 86400000) : weekStart, [offsetWeeks, weekStart]);
@@ -273,6 +277,8 @@ export default function Planner() {
   const currentPlanFingerprint = useMemo(() => planFingerprint(publishablePlan), [publishablePlan]);
   const publishedWeek = config.intervalSync?.[weekKey] || null;
   const planChangedAfterPublish = Boolean(publishedWeek && publishedWeek.fingerprint !== currentPlanFingerprint);
+  const adjustmentSelectedItems = adjustmentDraft?.selectedIds?.map((id) => weekPlan.find((item) => item.id === id)).filter(Boolean) || [];
+  const adjustmentReplacement = replacementOptions.find((entry) => entry.key === adjustmentDraft?.replacementKey);
   const modalVisible = Boolean(editing || missedEditing || planningOpen || adjustmentOpen || overwriteConfirmOpen || publishConfirmOpen);
 
   useEffect(() => {
@@ -887,29 +893,28 @@ export default function Planner() {
       </div>
 
       {offsetWeeks >= 0 && (recurringCommitments.length ? (
-        <Card className="wide planner-live-appointments planner-generic-appointments">
-          <div className="planner-live-appointments-copy">
-            <p className="eyebrow">Feste Termine dieser Woche</p>
-            <h2>Individuelle Termine statt festem ORC-Schema</h2>
-            <p className="muted">Die Termine stammen aus deiner Konfiguration. Du kannst die konkrete Einheit ersetzen oder sie nur für diese Woche aussetzen, ohne den Rest des Plans neu zu berechnen.</p>
+        <details className="card wide planner-commitments-disclosure planner-generic-appointments">
+          <summary>
+            <div><p className="eyebrow">Feste Termine dieser Woche</p><h2>{recurringCommitments.length} Termine</h2><span>{recurringCommitments.map((item) => `${item.weekday.slice(0, 2)} · ${item.name}`).join(" · ")}</span></div>
+            <b>Termine anzeigen</b>
+          </summary>
+          <div className="planner-commitments-body">
+            <p className="muted">Hier änderst du nur diese konkrete Woche. Die Grundkonfiguration unter Settings bleibt erhalten.</p>
+            <div className="planner-live-appointment-grid">
+              {recurringCommitments.map((commitment) => {
+                const date = commitmentDate(weekStart, commitment);
+                const slot = weekPlan.find((item) => item.commitmentId === commitment.id)
+                  || weekPlan.find((item) => item.date === date && `${item.title} ${item.type}`.toLowerCase().includes(String(commitment.name || "").toLowerCase()));
+                const editable = Boolean(slot && !slot.completed && (offsetWeeks > 0 || slot.date >= todayKey));
+                return <section key={commitment.id}>
+                  <div><span>{commitment.weekday} · {commitment.time}</span><strong>{slot?.title || commitment.name}</strong><small>{sportLabel(commitment.sport)} · {commitment.durationMinutes || slot?.duration || 0} min{commitment.distanceKm ? ` · ${commitment.distanceKm} km` : ""}</small></div>
+                  <div className="planner-live-buttons"><button type="button" onClick={() => slot && openAdjustment(slot.id)} disabled={!editable}>Einheit anpassen</button><button type="button" onClick={() => skipCommitmentThisWeek(slot, commitment.name)} disabled={!editable}>Diese Woche aussetzen</button></div>
+                </section>;
+              })}
+            </div>
+            {publishedWeek && planChangedAfterPublish && <small className="planner-saturday-dirty">Fixtermin geändert – anschließend „Garmin aktualisieren“ drücken.</small>}
           </div>
-          <div className="planner-live-appointment-grid">
-            {recurringCommitments.map((commitment) => {
-              const date = commitmentDate(weekStart, commitment);
-              const slot = weekPlan.find((item) => item.commitmentId === commitment.id)
-                || weekPlan.find((item) => item.date === date && `${item.title} ${item.type}`.toLowerCase().includes(String(commitment.name || "").toLowerCase()));
-              const editable = Boolean(slot && !slot.completed && (offsetWeeks > 0 || slot.date >= todayKey));
-              return <section key={commitment.id}>
-                <div><span>{commitment.weekday} · {commitment.time}</span><strong>{slot?.title || commitment.name}</strong><small>{sportLabel(commitment.sport)} · {commitment.durationMinutes || slot?.duration || 0} min{commitment.distanceKm ? ` · ${commitment.distanceKm} km` : ""}</small></div>
-                <div className="planner-live-buttons">
-                  <button type="button" onClick={() => slot && openAdjustment(slot.id)} disabled={!editable}>Einheit anpassen</button>
-                  <button type="button" onClick={() => skipCommitmentThisWeek(slot, commitment.name)} disabled={!editable}>Diese Woche aussetzen</button>
-                </div>
-              </section>;
-            })}
-          </div>
-          {publishedWeek && planChangedAfterPublish && <small className="planner-saturday-dirty">Fixtermin geändert – anschließend „Garmin aktualisieren“ drücken.</small>}
-        </Card>
+        </details>
       ) : (
         <Card className="wide planner-live-appointments">
           <div className="planner-live-appointments-copy">
@@ -961,16 +966,6 @@ export default function Planner() {
           <label>Letzte Phase<input readOnly value={config.lastPhase || "Noch nicht berechnet"} /></label>
           <label>Letzter Laufrahmen<input readOnly value={config.lastTarget ? `${config.lastTarget} km` : "Noch nicht berechnet"} /></label>
         </div>
-      </Card>
-
-      <Card className={`wide planner-coach-guidance ${coachGuidance.notes.length ? "active" : "stable"}`}>
-        <div>
-          <p className="eyebrow">Dynamischer Coach</p>
-          <h2>{coachGuidance.notes.length ? "Der nächste Plan wird angepasst" : "Keine Warnsignale in den letzten Reviews"}</h2>
-        </div>
-        {coachGuidance.notes.length ? (
-          <ul>{coachGuidance.notes.map((note) => <li key={note}>{note}</li>)}</ul>
-        ) : <p className="muted">Umfang und Intensität bleiben innerhalb der missionsbasierten, adaptiven Belastungssteuerung.</p>}
       </Card>
 
       {publishedWeek && (
@@ -1128,6 +1123,12 @@ export default function Planner() {
                 <button className="primary" type="submit" disabled={!adjustmentDraft.selectedIds.length}>{adjustmentDraft.action === "replace" ? "Ausgewählte Einheit ersetzen" : adjustmentDraft.action === "move" ? "Ausgewählte Einheit verschieben" : "Ausgewählte Einheit löschen"}</button>
               </section>
             </div>
+
+            <section className="planner-adjustment-preview">
+              <div><p className="eyebrow">3. Änderung prüfen</p><h3>Das wird geändert</h3></div>
+              {adjustmentSelectedItems.length ? <div className="planner-adjustment-preview-list">{adjustmentSelectedItems.map((item) => <article key={item.id}><div><strong>{item.day || new Intl.DateTimeFormat("de-DE", { weekday: "long" }).format(new Date(`${item.date}T12:00:00`))} · {item.time || "flexibel"}</strong><span>{item.title}</span></div><b>→</b><div><strong>{adjustmentDraft.action === "replace" ? adjustmentReplacement?.label || "Ersatz auswählen" : adjustmentDraft.action === "move" ? `${adjustmentDraft.moveDate || "Datum wählen"} · ${adjustmentDraft.moveTime || item.time || "flexibel"}` : "Wird entfernt"}</strong><span>{adjustmentDraft.action === "replace" ? "Andere Einheiten des Tages bleiben erhalten" : adjustmentDraft.action === "move" ? "Inhalt der Einheit bleibt gleich" : "Nur diese ausgewählte Einheit"}</span></div></article>)}</div> : <p className="muted">Wähle links mindestens eine Einheit aus. Danach siehst du hier die konkrete Auswirkung.</p>}
+              <div className="planner-adjustment-scope-note">Nicht ausgewählte Einheiten und Tage bleiben unverändert.</div>
+            </section>
 
             <section className="planner-adjustment-replan">
               <div><p className="eyebrow">Größere Änderung</p><h3>Ausgewählte Tage oder Restwoche neu berechnen</h3><p className="muted">Der Coach berücksichtigt Mission, Historie, Befinden, Wetter und deine konfigurierten Fixtermine neu.</p></div>

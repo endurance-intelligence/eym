@@ -50,6 +50,13 @@ export const defaultState = {
   equipment: [],
   fuel: [],
   healthCheckins: [],
+  mobilityCoach: {
+    durationMinutes: 25,
+    condition: "normal",
+    equipment: ["mat", "band"],
+    physioExerciseIds: ["cat-cow", "ankle-circles", "band-adduction"],
+    history: [],
+  },
   mission,
   planner: {
     stabiCount: 2,
