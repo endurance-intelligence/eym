@@ -109,6 +109,35 @@ function todayOverview(plan, activities) {
   return { items, headline, done, open };
 }
 
+function nextDayOverview(plan) {
+  const date = new Date();
+  date.setHours(12, 0, 0, 0);
+  date.setDate(date.getDate() + 1);
+  const dateKey = isoDate(date);
+  const entries = plan
+    .filter((item) => !item.archived && item.date === dateKey)
+    .sort((a, b) => `${a.time || "99:99"}${a.title || ""}`.localeCompare(`${b.time || "99:99"}${b.title || ""}`));
+  const items = entries.map((item) => ({
+    id: `upcoming-${item.id}`,
+    title: item.title,
+    detail: plannedMetrics(item),
+    tone: item.missedReason ? "missed" : item.optional ? "optional" : item.type === "Ruhetag" ? "rest" : "planned",
+    status: item.missedReason ? "Ausgefallen" : item.optional ? "Optional" : item.type === "Ruhetag" ? "Frei" : "Geplant",
+  }));
+
+  if (!items.length) {
+    items.push({
+      id: `upcoming-rest-${dateKey}`,
+      title: "Regenerationstag",
+      detail: "Keine Einheit geplant",
+      tone: "rest",
+      status: "Frei",
+    });
+  }
+
+  return { date, dateKey, items };
+}
+
 function weekRows(plan, activities) {
   const weekStart = startOfCurrentWeek();
   const todayKey = isoDate(new Date());
@@ -186,6 +215,7 @@ export default function Briefing() {
   const calculatedTarget = Number(state.planner?.lastTarget || 0);
   const rows = weekRows(state.plan, activities);
   const today = todayOverview(state.plan, activities);
+  const upcoming = nextDayOverview(state.plan);
   const copy = briefingLanguage();
   const name = displayName(state, session);
 
@@ -206,6 +236,12 @@ export default function Briefing() {
           </div>
           <div className="today-workout-list">
             {today.items.map((item) => <div className={`today-workout-row ${item.tone}`} key={item.id}><span className="today-status-pill">{item.status}</span><div className="today-workout-copy"><h3>{item.title}</h3>{item.detail && <strong>{item.detail}</strong>}{item.note && <p>{item.note}</p>}</div></div>)}
+          </div>
+          <div className="today-upcoming-preview">
+            <div className="today-upcoming-heading"><div><p className="eyebrow">Als Nächstes</p><strong>Morgen · {todayLabel.format(upcoming.date)}</strong></div><span>Preview</span></div>
+            <div className="today-upcoming-items">
+              {upcoming.items.map((item) => <div className={`today-upcoming-item ${item.tone}`} key={item.id}><span>{item.status}</span><div><b>{item.title}</b>{item.detail && <small>{item.detail}</small>}</div></div>)}
+            </div>
           </div>
         </Card>
 

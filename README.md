@@ -161,7 +161,7 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 
 - `OPEN_FOOD_FACTS_USER_ID`
 - `OPEN_FOOD_FACTS_PASSWORD`
-- `OPEN_FOOD_FACTS_USER_AGENT` (recommended format: `EnduranceIntelligence/2.18.0 (contact@example.com)`)
+- `OPEN_FOOD_FACTS_USER_AGENT` (recommended format: `EnduranceIntelligence/2.18.1 (contact@example.com)`)
 - `OPEN_FOOD_FACTS_APP_SALT` (a random secret used to derive a stable pseudonymous app UUID per EYM user)
 
 ## Personal ambient themes (v2.16)
@@ -193,3 +193,12 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 - Limits forward navigation to the next week. That week can only be generated after all review-relevant activities from the current week have reviews and every required planned unit is completed, matched, moved or explicitly marked as cancelled.
 - Provides a weekly-closure checklist with direct links to missing reviews and unresolved units.
 - No Supabase migration is required. The new cancellation and planner state remain inside the existing athlete data document.
+
+
+## Planner dialog, collapsible months and next-day preview (v2.18.1)
+
+- Gives the cancellation workflow more horizontal room and switches to a single-column layout earlier on laptops and tablets.
+- Keeps cancellation reason, note and Coach explanation readable without clipped action buttons.
+- Makes activity history collapsible by month as well as by ISO calendar week. The current month and current week remain open by default.
+- Adds a compact tomorrow preview below today's Briefing so the next planned session is visible without opening the full week.
+- No Supabase migration is required.

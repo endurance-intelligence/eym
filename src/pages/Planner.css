@@ -197,3 +197,32 @@
   .planner-gate-actions{display:grid;grid-template-columns:1fr}
   .planner-gate-actions>*{width:100%}
 }
+
+
+/* v2.18.1 – roomier cancellation workflow */
+.planner-adjustment-modal{width:min(1220px,calc(100vw - 24px));max-width:1220px;max-height:calc(100dvh - 24px)}
+.planner-adjustment-layout{grid-template-columns:minmax(420px,.9fr) minmax(520px,1.1fr);gap:24px}
+.planner-adjustment-layout.cancel-mode{grid-template-columns:minmax(390px,.8fr) minmax(570px,1.2fr)}
+.planner-adjustment-change{overflow:visible}
+.planner-adjustment-actions{grid-template-columns:repeat(3,minmax(125px,1fr));width:100%}
+.planner-adjustment-actions button{min-width:0;white-space:normal}
+.planner-cancel-fields{grid-template-columns:minmax(220px,.75fr) minmax(0,1.25fr);align-items:start}
+.planner-cancel-fields>label{min-width:0}
+.planner-cancel-fields select,.planner-cancel-fields textarea{width:100%}
+.planner-cancel-fields .setup-note{grid-column:1/-1;line-height:1.5}
+.planner-adjustment-change>.primary{margin-top:2px}
+@media(max-width:1450px){
+  .planner-adjustment-modal{width:min(900px,calc(100vw - 24px))}
+  .planner-adjustment-layout,.planner-adjustment-layout.cancel-mode{grid-template-columns:1fr}
+  .planner-adjustment-layout>section:last-child{position:static}
+  .planner-adjustment-units{max-height:330px}
+}
+@media(max-width:760px){
+  .planner-adjustment-modal{max-height:calc(100dvh - 12px);padding:22px 14px}
+  .planner-adjustment-layout{gap:14px;margin:17px 0}
+  .planner-adjustment-layout>section{padding:14px}
+  .planner-adjustment-actions{grid-template-columns:1fr}
+  .planner-cancel-fields{grid-template-columns:1fr}
+  .planner-cancel-fields .setup-note{grid-column:auto}
+  .planner-adjustment-units{max-height:300px;padding-right:4px}
+}

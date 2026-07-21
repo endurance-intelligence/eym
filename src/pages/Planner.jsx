@@ -1179,8 +1179,8 @@ export default function Planner() {
             <h2>Nur das ändern, was wirklich betroffen ist</h2>
             <p className="muted">Der bestehende Wochenplan bleibt stabil. Wähle nur die Einheit aus, die ersetzt, verschoben oder als ausgefallen dokumentiert werden soll.</p>
 
-            <div className="planner-adjustment-layout">
-              <section>
+            <div className={`planner-adjustment-layout ${adjustmentDraft.action === "cancel" ? "cancel-mode" : ""}`}>
+              <section className="planner-adjustment-selection">
                 <h3>1. Einheit auswählen</h3>
                 <div className="planner-adjustment-units">
                   {plannerDays.map((day, index) => {
@@ -1195,7 +1195,7 @@ export default function Planner() {
                 </div>
               </section>
 
-              <section>
+              <section className="planner-adjustment-change">
                 <h3>2. Änderung festlegen</h3>
                 <div className="planner-adjustment-actions">
                   <button type="button" className={adjustmentDraft.action === "replace" ? "selected" : ""} onClick={() => setAdjustmentDraft({ ...adjustmentDraft, action: "replace" })}>Ersetzen</button>
