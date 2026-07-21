@@ -6,162 +6,483 @@ export const MOBILITY_EQUIPMENT = [
   { id: "step", label: "Bank / stabile Stufe" },
 ];
 
-export const MOBILITY_EXERCISES = [
+export const MOBILITY_FOCUS_AREAS = [
   {
+    id: "core",
+    label: "Core & Rumpf",
+    shortLabel: "Core",
+    description: "Rumpfspannung, Beckenstabilität und kontrollierte Kraftübertragung.",
+  },
+  {
+    id: "ankle",
+    label: "Sprunggelenk & Fuß",
+    shortLabel: "Sprunggelenk",
+    description: "Beweglichkeit, Fußgewölbe, Waden- und Schienbeinmuskulatur.",
+  },
+  {
+    id: "hips",
+    label: "Hüfte & Gesäß",
+    shortLabel: "Hüfte",
+    description: "Hüftstabilität, Gesäßkraft und eine ruhige Beckenführung.",
+  },
+  {
+    id: "adductors",
+    label: "Adduktoren",
+    shortLabel: "Adduktoren",
+    description: "Innenschenkel kontrolliert kräftigen und beweglich halten.",
+  },
+  {
+    id: "back",
+    label: "Rücken & Haltung",
+    shortLabel: "Rücken",
+    description: "Wirbelsäulenbeweglichkeit, Schultergürtel und aufrechte Haltung.",
+  },
+  {
+    id: "knee-axis",
+    label: "Knie & Beinachse",
+    shortLabel: "Beinachse",
+    description: "Kontrollierte Knieausrichtung und einbeinige Stabilität.",
+  },
+  {
+    id: "balance",
+    label: "Balance & Koordination",
+    shortLabel: "Balance",
+    description: "Einbeinstand, Körperkontrolle und koordinierte Bewegungen.",
+  },
+  {
+    id: "mobility",
+    label: "Beweglichkeit",
+    shortLabel: "Beweglichkeit",
+    description: "Ruhige Mobilisation für Hüfte, Rücken, Sprunggelenk und Brustwirbelsäule.",
+  },
+  {
+    id: "strength",
+    label: "Ganzkörperkraft",
+    shortLabel: "Kraft",
+    description: "Grundübungen mit Körpergewicht, Kurzhanteln oder Kettlebell.",
+  },
+];
+
+const exercise = (definition) => ({
+  seconds: 60,
+  equipment: [],
+  focusAreas: [],
+  intensity: "medium",
+  steps: [],
+  cues: [],
+  mistakes: [],
+  ...definition,
+});
+
+export const MOBILITY_EXERCISES = [
+  exercise({
     id: "cat-cow",
     name: "Katze-Kuh",
     group: "Mobilität",
     seconds: 60,
-    equipment: [],
     physioDefault: true,
+    focusAreas: ["back", "mobility"],
+    visual: "cat-cow",
+    purpose: "Mobilisiert die Wirbelsäule und macht die Bewegung des Beckens bewusst.",
     instruction: "Im Vierfüßler langsam zwischen Rundrücken und sanfter Streckung wechseln. Nicht ins Endgefühl drücken.",
-  },
-  {
+    steps: ["Vierfüßlerstand einnehmen.", "Wirbelsäule Wirbel für Wirbel runden.", "Danach kontrolliert in die sanfte Streckung wechseln."],
+    cues: ["Langsam atmen", "Schultern weg von den Ohren", "Bewegung nicht erzwingen"],
+    mistakes: ["Schwung holen", "Nur den Kopf bewegen", "Ins Hohlkreuz drücken"],
+    easier: "Bewegungsumfang verkleinern.",
+    harder: "Am Ende jeder Position zwei ruhige Atemzüge halten.",
+  }),
+  exercise({
     id: "ankle-circles",
     name: "Fußkreisen",
     group: "Fuß & Sprunggelenk",
     seconds: 90,
-    equipment: [],
     physioDefault: true,
+    focusAreas: ["ankle", "mobility"],
+    visual: "ankle-circles",
+    purpose: "Bewegt das Sprunggelenk in alle Richtungen und verbessert die Gelenkwahrnehmung.",
     instruction: "Je Fuß kontrolliert in beide Richtungen kreisen. Das Knie möglichst ruhig halten.",
-  },
-  {
+    steps: ["Im Sitzen oder Liegen ein Bein leicht anheben.", "Den Fuß langsam nach außen kreisen.", "Richtung wechseln und anschließend die Seite tauschen."],
+    cues: ["Große, ruhige Kreise", "Knie bleibt still", "Beide Richtungen trainieren"],
+    mistakes: ["Zu schnell kreisen", "Das ganze Bein mitdrehen", "Nur kleine Zehenbewegungen"],
+    easier: "Ferse auflegen und nur den Vorfuß bewegen.",
+    harder: "Mit dem Fuß langsam das Alphabet in die Luft schreiben.",
+  }),
+  exercise({
     id: "band-adduction",
     name: "Adduktoren mit Gummiband",
     group: "Physio",
     seconds: 120,
     equipment: ["band"],
     physioDefault: true,
+    focusAreas: ["adductors", "hips"],
+    visual: "band-adduction",
+    purpose: "Kräftigt die Oberschenkelinnenseite bei stabiler Beckenposition.",
     instruction: "In der vom Physio gezeigten Variante arbeiten. Becken stabil halten und jede Seite langsam ausführen.",
-  },
-  {
+    steps: ["Band seitlich befestigen und am Arbeitsbein anlegen.", "Aufrecht und stabil stehen.", "Bein kontrolliert zur Körpermitte führen und langsam zurücklassen."],
+    cues: ["Becken bleibt gerade", "Standbein leicht gebeugt", "Keine ruckartige Bewegung"],
+    mistakes: ["Oberkörper zur Seite kippen", "Band zurückschnellen lassen", "Fuß stark ausdrehen"],
+    easier: "Leichteres Band oder kleinerer Bewegungsweg.",
+    harder: "Schwereres Band oder kurze Haltephase an der Körpermitte.",
+  }),
+  exercise({
     id: "adductor-rockback",
     name: "Adduktoren-Rockback",
     group: "Mobilität",
     seconds: 75,
     equipment: ["mat"],
+    focusAreas: ["adductors", "hips", "mobility"],
+    visual: "adductor-rockback",
+    purpose: "Mobilisiert die Adduktoren kontrolliert, ohne lange statisch zu dehnen.",
     instruction: "Im Vierfüßler ein Bein seitlich ausstrecken und das Becken kontrolliert nach hinten schieben.",
-  },
-  {
+    steps: ["Aus dem Vierfüßler ein Bein seitlich ausstrecken.", "Fuß flach oder Ferse am Boden lassen.", "Becken langsam nach hinten schieben und wieder nach vorn kommen."],
+    cues: ["Rücken bleibt lang", "Becken gerade halten", "Nur bis zu einem angenehmen Zug"],
+    mistakes: ["Rundrücken machen", "Zu weit nach hinten drücken", "Ausgestrecktes Knie verdrehen"],
+    easier: "Bein weniger weit seitlich ausstellen.",
+    harder: "In der hinteren Position einen Atemzug halten.",
+  }),
+  exercise({
     id: "dead-bug",
     name: "Dead Bug",
     group: "Rumpf",
     seconds: 60,
     equipment: ["mat"],
+    focusAreas: ["core"],
+    visual: "dead-bug",
+    purpose: "Trainiert tiefe Rumpfspannung, während Arme und Beine unabhängig bewegt werden.",
     instruction: "Lendenwirbelsäule ruhig halten. Gegenüberliegenden Arm und Bein langsam absenken und zurückführen.",
-  },
-  {
+    steps: ["Auf den Rücken legen, Hüfte und Knie etwa 90 Grad beugen.", "Arme über den Schultern halten.", "Gegenüberliegenden Arm und ein Bein langsam absenken, zurückführen und wechseln."],
+    cues: ["Unterer Rücken bleibt ruhig", "Lang ausatmen", "Langsame Bewegung"],
+    mistakes: ["Hohlkreuz entstehen lassen", "Arme und Beine zu tief absenken", "Zu schnell wechseln"],
+    easier: "Nur die Ferse abtippen oder nur einen Arm bewegen.",
+    harder: "Beine weiter strecken oder ein leichtes Gewicht halten.",
+  }),
+  exercise({
     id: "bird-dog",
     name: "Bird Dog",
     group: "Rumpf",
     seconds: 60,
     equipment: ["mat"],
+    focusAreas: ["core", "back", "balance"],
+    visual: "bird-dog",
+    purpose: "Verbindet Rumpfspannung, Beckenstabilität und diagonale Koordination.",
     instruction: "Gegenüberliegenden Arm und Bein strecken. Becken und Rumpf bleiben möglichst unbewegt.",
-  },
-  {
-    id: "glute-bridge",
-    name: "Glute Bridge",
-    group: "Gesäß & Hüfte",
+    steps: ["Vierfüßlerstand mit Händen unter den Schultern.", "Einen Arm nach vorn und das gegenüberliegende Bein nach hinten führen.", "Kurz stabilisieren, kontrolliert zurück und Seite wechseln."],
+    cues: ["Becken zeigt zum Boden", "Nacken bleibt lang", "Nicht höher als der Rücken strecken"],
+    mistakes: ["Hüfte aufdrehen", "Ins Hohlkreuz fallen", "Arm und Bein hochwerfen"],
+    easier: "Nur einen Arm oder nur ein Bein anheben.",
+    harder: "Unter dem Körper Ellenbogen und Knie zusammenführen.",
+  }),
+  exercise({
+    id: "pallof-press",
+    name: "Pallof Press",
+    group: "Rumpf",
     seconds: 60,
-    equipment: ["mat"],
-    instruction: "Hüfte kontrolliert anheben, Gesäß anspannen und ohne Schwung absenken.",
-  },
-  {
+    equipment: ["band"],
+    focusAreas: ["core"],
+    visual: "pallof-press",
+    purpose: "Trainiert den Rumpf gegen Rotation – hilfreich für eine stabile Laufhaltung.",
+    instruction: "Seitlich zum befestigten Band stehen, Hände vor der Brust halten und langsam nach vorn drücken, ohne den Rumpf zu verdrehen.",
+    steps: ["Band auf Brusthöhe seitlich befestigen.", "Seitlich zum Zug stehen und Band vor der Brust halten.", "Arme ausstrecken, kurz stabil bleiben und zurückführen; Seite wechseln."],
+    cues: ["Rippen über dem Becken", "Becken bleibt gerade", "Band kontrollieren"],
+    mistakes: ["Zum Band drehen", "Schultern hochziehen", "Zu schweres Band wählen"],
+    easier: "Näher am Befestigungspunkt stehen.",
+    harder: "Weiter weg stehen oder im halben Kniestand arbeiten.",
+  }),
+  exercise({
     id: "forearm-plank",
     name: "Unterarmstütz",
     group: "Rumpf",
     seconds: 45,
     equipment: ["mat"],
+    focusAreas: ["core"],
+    visual: "plank",
+    purpose: "Kräftigt den Rumpf isometrisch und verbessert die Ganzkörperspannung.",
     instruction: "Bauch und Gesäß aktiv halten. Bei nachlassender Form auf den Knien fortsetzen oder pausieren.",
-  },
-  {
+    steps: ["Unterarme aufstützen und Beine nach hinten strecken.", "Körper in einer langen Linie halten.", "Ruhig weiteratmen und Spannung sauber halten."],
+    cues: ["Gesäß anspannen", "Bauchnabel sanft einziehen", "Boden aktiv wegdrücken"],
+    mistakes: ["Hüfte hängt durch", "Gesäß zu hoch", "Luft anhalten"],
+    easier: "Knie absetzen.",
+    harder: "Abwechselnd einen Fuß wenige Zentimeter anheben.",
+  }),
+  exercise({
     id: "side-plank",
     name: "Seitstütz",
     group: "Rumpf",
     seconds: 60,
     equipment: ["mat"],
+    focusAreas: ["core", "hips"],
+    visual: "side-plank",
+    purpose: "Kräftigt seitliche Rumpfmuskulatur und Hüftstabilität.",
     instruction: "Etwa zur Hälfte die Seite wechseln. Schulter aktiv wegdrücken und das Becken stabil halten.",
-  },
-  {
+    steps: ["Seitlich auf dem Unterarm abstützen.", "Becken anheben und Körper lang halten.", "Ruhig atmen, danach kontrolliert die Seite wechseln."],
+    cues: ["Ellenbogen unter der Schulter", "Becken nach vorn ausrichten", "Kopf in Verlängerung"],
+    mistakes: ["Becken sinkt ab", "Schulter fällt ein", "Oberkörper dreht nach vorn"],
+    easier: "Unteres Knie ablegen.",
+    harder: "Oberes Bein anheben.",
+  }),
+  exercise({
     id: "slow-mountain-climber",
     name: "Langsame Bergsteiger",
     group: "Rumpf dynamisch",
     seconds: 45,
     equipment: ["mat"],
+    focusAreas: ["core", "hips"],
+    intensity: "high",
+    visual: "mountain-climber",
+    purpose: "Fordert dynamische Rumpfspannung bei wechselnder Beinbewegung.",
     instruction: "Knie abwechselnd ruhig nach vorn führen. Kein Sprint: Rumpfspannung und saubere Bewegung zählen.",
-  },
-  {
+    steps: ["Hohe Stützposition einnehmen.", "Ein Knie kontrolliert in Richtung Brust führen.", "Zurückstellen und langsam die Seite wechseln."],
+    cues: ["Schultern über den Händen", "Becken ruhig", "Langsamer als beim Konditionstraining"],
+    mistakes: ["Hüpfen", "Rücken rund machen", "Hüfte stark drehen"],
+    easier: "Hände auf einer Bank oder Wand abstützen.",
+    harder: "Knie diagonal zum gegenüberliegenden Ellenbogen führen.",
+  }),
+  exercise({
+    id: "glute-bridge",
+    name: "Glute Bridge",
+    group: "Gesäß & Hüfte",
+    seconds: 60,
+    equipment: ["mat"],
+    focusAreas: ["hips", "core"],
+    visual: "glute-bridge",
+    purpose: "Aktiviert Gesäß und hintere Kette bei kontrollierter Beckenposition.",
+    instruction: "Hüfte kontrolliert anheben, Gesäß anspannen und ohne Schwung absenken.",
+    steps: ["Rückenlage, Füße hüftbreit aufstellen.", "Becken anheben, bis Schulter, Hüfte und Knie eine Linie bilden.", "Kurz halten und langsam absenken."],
+    cues: ["Druck über ganze Füße", "Rippen unten halten", "Gesäß statt Rücken nutzen"],
+    mistakes: ["Ins Hohlkreuz drücken", "Knie fallen nach innen", "Mit Schwung arbeiten"],
+    easier: "Kleinerer Bewegungsweg.",
+    harder: "Miniband über den Knien oder einbeinig ausführen.",
+  }),
+  exercise({
+    id: "clamshell",
+    name: "Clamshell",
+    group: "Gesäß & Hüfte",
+    seconds: 75,
+    equipment: ["mat"],
+    focusAreas: ["hips", "knee-axis"],
+    visual: "clamshell",
+    purpose: "Kräftigt die seitliche Hüfte und unterstützt eine stabile Beinachse.",
+    instruction: "Seitlage, Knie gebeugt. Oberes Knie öffnen, ohne das Becken nach hinten rollen zu lassen.",
+    steps: ["Seitlich liegen, Hüfte und Knie leicht beugen.", "Füße zusammenlassen.", "Oberes Knie kontrolliert öffnen und wieder schließen; Seite wechseln."],
+    cues: ["Becken übereinander", "Kleine saubere Bewegung", "Gesäß seitlich spüren"],
+    mistakes: ["Becken nach hinten rollen", "Füße trennen", "Zu großen Bewegungsweg erzwingen"],
+    easier: "Ohne Band arbeiten.",
+    harder: "Miniband oberhalb der Knie verwenden.",
+  }),
+  exercise({
     id: "calf-raise",
     name: "Wadenheben",
     group: "Fuß & Unterschenkel",
     seconds: 60,
-    equipment: [],
+    focusAreas: ["ankle", "knee-axis"],
+    visual: "calf-raise",
+    purpose: "Kräftigt Wade und Achillessehnenbereich kontrolliert.",
     instruction: "Langsam hochdrücken, oben kurz halten und kontrolliert absenken. Bei Bedarf an einer Wand festhalten.",
-  },
-  {
-    id: "hip-flexor-stretch",
-    name: "Hüftbeuger-Stretch",
-    group: "Mobilität",
-    seconds: 90,
-    equipment: ["mat"],
-    instruction: "Je Seite ruhig halten. Becken leicht aufrichten, ohne ins Hohlkreuz auszuweichen.",
-  },
-  {
-    id: "thoracic-rotation",
-    name: "Brustwirbelsäulen-Rotation",
-    group: "Mobilität",
+    steps: ["Aufrecht stehen, Füße parallel.", "Fersen langsam anheben.", "Oben kurz halten und über drei Sekunden absenken."],
+    cues: ["Gewicht über Groß- und Kleinzehenballen", "Fersen bleiben parallel", "Volle Kontrolle"],
+    mistakes: ["Nach außen wegknicken", "Hochfedern", "Nur schnell absenken"],
+    easier: "Beidbeinig und mit Halt.",
+    harder: "Einbeinig oder auf einer Stufe ausführen.",
+  }),
+  exercise({
+    id: "knee-to-wall",
+    name: "Knie-zur-Wand-Mobilisation",
+    group: "Fuß & Sprunggelenk",
     seconds: 75,
-    equipment: ["mat"],
-    instruction: "Aus dem Vierfüßler einen Arm öffnen und der Hand mit dem Blick folgen. Becken bleibt ruhig.",
-  },
-  {
-    id: "goblet-squat",
-    name: "Goblet Squat",
-    group: "Kraft",
+    focusAreas: ["ankle", "mobility"],
+    visual: "knee-to-wall",
+    purpose: "Verbessert die Dorsalflexion des Sprunggelenks für Laufen, Kniebeuge und Treppenbewegungen.",
+    instruction: "Fuß flach vor eine Wand stellen und das Knie kontrolliert zur Wand führen, ohne dass die Ferse abhebt.",
+    steps: ["Fuß wenige Zentimeter vor die Wand stellen.", "Knie über den zweiten oder dritten Zeh zur Wand führen.", "Ferse bleibt am Boden; Abstand bei Bedarf anpassen und Seite wechseln."],
+    cues: ["Ferse bleibt unten", "Knie folgt der Fußrichtung", "Ruhige Wiederholungen"],
+    mistakes: ["Fußgewölbe kollabiert", "Knie kippt stark nach innen", "Ferse hebt ab"],
+    easier: "Näher an die Wand rücken.",
+    harder: "Abstand leicht vergrößern, ohne die Technik zu verlieren.",
+  }),
+  exercise({
+    id: "tibialis-raise",
+    name: "Tibialis Raises",
+    group: "Fuß & Unterschenkel",
     seconds: 60,
-    equipmentAny: ["dumbbells", "kettlebell"],
-    instruction: "Gewicht nah vor dem Körper halten. Kontrolliert absenken, Knie stabil führen und sauber aufstehen.",
-  },
-  {
-    id: "weighted-rdl",
-    name: "Romanian Deadlift",
-    group: "Kraft",
+    focusAreas: ["ankle"],
+    visual: "tibialis-raise",
+    purpose: "Kräftigt die Muskulatur an der Vorderseite des Unterschenkels.",
+    instruction: "Mit dem Rücken an eine Wand lehnen, Fersen stehen lassen und die Fußspitzen kontrolliert anheben und absenken.",
+    steps: ["Rücken an eine Wand lehnen und Füße etwas nach vorn stellen.", "Fersen bleiben fest am Boden.", "Fußspitzen hochziehen und langsam absenken."],
+    cues: ["Nur das Sprunggelenk bewegt sich", "Langsam absenken", "Knie locker"],
+    mistakes: ["Fersen anheben", "Mit dem Oberkörper wippen", "Bewegung zu schnell ausführen"],
+    easier: "Aufrechter stehen und weniger zurücklehnen.",
+    harder: "Füße weiter von der Wand entfernen.",
+  }),
+  exercise({
+    id: "short-foot",
+    name: "Fußgewölbe aktivieren",
+    group: "Fuß & Sprunggelenk",
     seconds: 60,
-    equipmentAny: ["dumbbells", "kettlebell"],
-    instruction: "Hüfte nach hinten schieben, Rücken neutral halten und das Gewicht nah am Körper führen.",
-  },
-  {
-    id: "suitcase-carry",
-    name: "Suitcase Carry",
-    group: "Rumpf & Haltung",
+    focusAreas: ["ankle", "balance"],
+    visual: "short-foot",
+    purpose: "Aktiviert die kleinen Fußmuskeln, ohne die Zehen einzukrallen.",
+    instruction: "Ferse und Vorfuß am Boden lassen und den Großzehenballen sanft in Richtung Ferse ziehen, sodass sich das Fußgewölbe hebt.",
+    steps: ["Barfuß sitzen oder stehen.", "Ferse, Groß- und Kleinzehenballen am Boden lassen.", "Fuß sanft verkürzen und Gewölbe anheben, dann lösen."],
+    cues: ["Zehen bleiben lang", "Drei-Punkt-Kontakt halten", "Kleine Bewegung genügt"],
+    mistakes: ["Zehen krallen", "Fuß nach außen rollen", "Zu viel Kraft einsetzen"],
+    easier: "Im Sitzen üben.",
+    harder: "Im Einbeinstand ausführen.",
+  }),
+  exercise({
+    id: "single-leg-balance",
+    name: "Einbeinstand",
+    group: "Balance",
     seconds: 75,
-    equipmentAny: ["dumbbells", "kettlebell"],
-    instruction: "Gewicht einseitig tragen, aufrecht gehen und nach der Hälfte die Seite wechseln.",
-  },
-  {
+    focusAreas: ["ankle", "balance", "knee-axis"],
+    visual: "single-leg-balance",
+    purpose: "Trainiert Fuß-, Sprunggelenk- und Beinachsenstabilität im Stand.",
+    instruction: "Auf einem Bein stehen, Fußgewölbe aktiv halten und das Knie ruhig über dem Fuß ausrichten. Nach der Hälfte wechseln.",
+    steps: ["Aufrecht stehen und einen festen Punkt ansehen.", "Ein Bein anheben und Standfuß aktiv halten.", "Ruhig stabilisieren und danach Seite wechseln."],
+    cues: ["Drei-Punkt-Kontakt am Fuß", "Knie weich", "Becken bleibt waagerecht"],
+    mistakes: ["Standfuß knickt ein", "Knie wird durchgedrückt", "Becken kippt stark"],
+    easier: "Mit einem Finger an der Wand sichern.",
+    harder: "Kopf drehen oder einen Gegenstand langsam um den Körper führen.",
+  }),
+  exercise({
+    id: "band-ankle-eversion",
+    name: "Sprunggelenk mit Band nach außen",
+    group: "Fuß & Sprunggelenk",
+    seconds: 75,
+    equipment: ["band"],
+    focusAreas: ["ankle"],
+    visual: "band-ankle",
+    purpose: "Kräftigt die seitliche Unterschenkelmuskulatur für Sprunggelenkstabilität.",
+    instruction: "Band am Vorfuß anlegen und den Fuß kontrolliert nach außen bewegen, ohne das Knie mitzudrehen.",
+    steps: ["Im Sitzen Band seitlich am Vorfuß befestigen.", "Knie und Unterschenkel ruhig halten.", "Fuß nach außen führen und langsam zurücklassen; Seite wechseln."],
+    cues: ["Bewegung nur im Sprunggelenk", "Langsam zurückführen", "Kleiner sauberer Weg"],
+    mistakes: ["Ganzes Bein drehen", "Band zurückschnellen lassen", "Zu starke Spannung"],
+    easier: "Leichteres Band verwenden.",
+    harder: "Endposition zwei Sekunden halten.",
+  }),
+  exercise({
     id: "step-up",
     name: "Kontrollierte Step-ups",
     group: "Beinachse",
     seconds: 75,
     equipment: ["step"],
+    focusAreas: ["knee-axis", "hips", "balance"],
+    visual: "step-up",
+    purpose: "Trainiert einbeinige Kraft und kontrollierte Knieausrichtung.",
     instruction: "Auf eine stabile Stufe steigen, Knie kontrolliert führen und langsam wieder absteigen.",
-  },
-  {
+    steps: ["Einen Fuß vollständig auf eine stabile Stufe stellen.", "Über dieses Bein nach oben drücken.", "Oben kurz stabilisieren und kontrolliert absteigen; Seite wechseln."],
+    cues: ["Knie folgt den Zehen", "Druck über den ganzen Fuß", "Nicht vom hinteren Bein abspringen"],
+    mistakes: ["Knie kippt nach innen", "Nur mit Schwung hochkommen", "Fuß steht halb auf der Stufe"],
+    easier: "Niedrigere Stufe wählen.",
+    harder: "Kurzhanteln halten oder Abstieg langsamer ausführen.",
+  }),
+  exercise({
+    id: "hip-flexor-stretch",
+    name: "Hüftbeuger-Stretch",
+    group: "Mobilität",
+    seconds: 90,
+    equipment: ["mat"],
+    focusAreas: ["hips", "mobility"],
+    visual: "hip-flexor",
+    purpose: "Mobilisiert die Hüftvorderseite bei aufgerichtetem Becken.",
+    instruction: "Je Seite ruhig halten. Becken leicht aufrichten, ohne ins Hohlkreuz auszuweichen.",
+    steps: ["Halbkniestand einnehmen.", "Becken leicht nach hinten kippen.", "Gewicht sanft nach vorn verlagern und Seite wechseln."],
+    cues: ["Gesäß der hinteren Seite anspannen", "Rippen unten", "Kleiner Weg genügt"],
+    mistakes: ["Ins Hohlkreuz gehen", "Vorderes Knie weit vorschieben", "Becken aufdrehen"],
+    easier: "Mehr Polster unter das Knie legen.",
+    harder: "Arm der hinteren Seite über Kopf nehmen.",
+  }),
+  exercise({
+    id: "thoracic-rotation",
+    name: "Brustwirbelsäulen-Rotation",
+    group: "Mobilität",
+    seconds: 75,
+    equipment: ["mat"],
+    focusAreas: ["back", "mobility"],
+    visual: "thoracic-rotation",
+    purpose: "Mobilisiert die Brustwirbelsäule und entlastet eine starre Oberkörperhaltung.",
+    instruction: "Aus dem Vierfüßler einen Arm öffnen und der Hand mit dem Blick folgen. Becken bleibt ruhig.",
+    steps: ["Vierfüßlerstand einnehmen.", "Eine Hand hinter den Kopf legen.", "Ellenbogen nach unten und anschließend kontrolliert zur Decke öffnen; Seite wechseln."],
+    cues: ["Becken bleibt ruhig", "Bewegung aus dem oberen Rücken", "Ruhig atmen"],
+    mistakes: ["Nur den Arm bewegen", "Becken mitdrehen", "In den Nacken ausweichen"],
+    easier: "Bewegungsweg verkleinern.",
+    harder: "In der geöffneten Position kurz halten.",
+  }),
+  exercise({
+    id: "goblet-squat",
+    name: "Goblet Squat",
+    group: "Kraft",
+    seconds: 60,
+    equipmentAny: ["dumbbells", "kettlebell"],
+    focusAreas: ["strength", "hips", "knee-axis", "ankle"],
+    intensity: "high",
+    visual: "goblet-squat",
+    purpose: "Kräftigt Beine und Rumpf in einer alltagsnahen Kniebeugebewegung.",
+    instruction: "Gewicht nah vor dem Körper halten. Kontrolliert absenken, Knie stabil führen und sauber aufstehen.",
+    steps: ["Gewicht dicht vor der Brust halten.", "Hüfte und Knie gleichzeitig beugen.", "Kontrolliert tief gehen und über den ganzen Fuß aufstehen."],
+    cues: ["Rumpf stabil", "Knie folgen den Zehen", "Gewicht nah am Körper"],
+    mistakes: ["Fersen heben ab", "Knie kollabieren nach innen", "Rücken rundet stark"],
+    easier: "Ohne Gewicht auf eine Bank setzen und aufstehen.",
+    harder: "Langsamer absenken oder schwereres Gewicht verwenden.",
+  }),
+  exercise({
+    id: "weighted-rdl",
+    name: "Romanian Deadlift",
+    group: "Kraft",
+    seconds: 60,
+    equipmentAny: ["dumbbells", "kettlebell"],
+    focusAreas: ["strength", "hips", "back"],
+    intensity: "high",
+    visual: "rdl",
+    purpose: "Kräftigt hintere Kette und Hüftstreckung bei neutralem Rücken.",
+    instruction: "Hüfte nach hinten schieben, Rücken neutral halten und das Gewicht nah am Körper führen.",
+    steps: ["Aufrecht stehen, Gewicht vor den Oberschenkeln.", "Knie leicht beugen und Hüfte weit nach hinten schieben.", "Spannung in der Rückseite fühlen und durch Hüftstreckung aufrichten."],
+    cues: ["Rücken bleibt lang", "Gewicht nah am Körper", "Hüfte bewegt sich nach hinten"],
+    mistakes: ["Kniebeuge statt Hüftknick", "Rücken rund machen", "Gewicht weit vom Körper"],
+    easier: "Ohne Gewicht den Hüftknick üben.",
+    harder: "Einbeinig oder schwerer ausführen.",
+  }),
+  exercise({
+    id: "suitcase-carry",
+    name: "Suitcase Carry",
+    group: "Rumpf & Haltung",
+    seconds: 75,
+    equipmentAny: ["dumbbells", "kettlebell"],
+    focusAreas: ["core", "strength", "balance"],
+    visual: "suitcase-carry",
+    purpose: "Trainiert Rumpf und Haltung gegen seitliches Abknicken.",
+    instruction: "Gewicht einseitig tragen, aufrecht gehen und nach der Hälfte die Seite wechseln.",
+    steps: ["Ein Gewicht wie einen Koffer an einer Seite halten.", "Aufrecht und ruhig gehen.", "Nicht zur Last kippen; nach der Hälfte Seite wechseln."],
+    cues: ["Schultern auf gleicher Höhe", "Kurze kontrollierte Schritte", "Rumpf bleibt aufrecht"],
+    mistakes: ["Zur Seite kippen", "Schulter hochziehen", "Zu schweres Gewicht"],
+    easier: "Leichteres Gewicht oder kürzere Strecke.",
+    harder: "Langsamer gehen oder Gewicht erhöhen.",
+  }),
+  exercise({
     id: "child-pose-breathing",
     name: "Kindhaltung & ruhige Atmung",
     group: "Abschluss",
     seconds: 90,
     equipment: ["mat"],
+    focusAreas: ["back", "mobility"],
+    intensity: "low",
+    visual: "child-pose",
+    purpose: "Ruhiger Abschluss, um Spannung zu lösen und die Atmung zu beruhigen.",
     instruction: "Ruhig atmen und Spannung lösen. Die Position nur so weit einnehmen, wie sie angenehm bleibt.",
-  },
+    steps: ["Aus dem Vierfüßler das Becken nach hinten führen.", "Arme entspannt nach vorn oder neben den Körper legen.", "Ruhig in Flanken und Rücken atmen."],
+    cues: ["Keine Position erzwingen", "Lange Ausatmung", "Schultern entspannen"],
+    mistakes: ["Schmerzen ignorieren", "Luft anhalten", "Zu viel Druck auf Knie oder Rücken"],
+    easier: "Kissen unter Becken oder Stirn legen.",
+    harder: "Nicht nötig – der Abschluss soll ruhig bleiben.",
+  }),
 ];
 
-export const DEFAULT_PHYSIO_EXERCISES = MOBILITY_EXERCISES.filter((exercise) => exercise.physioDefault).map((exercise) => exercise.id);
+export const DEFAULT_PHYSIO_EXERCISES = MOBILITY_EXERCISES.filter((item) => item.physioDefault).map((item) => item.id);
 
-function hasEquipment(exercise, selectedEquipment) {
+function hasEquipment(item, selectedEquipment) {
   const selected = new Set(selectedEquipment || []);
-  if (exercise.equipment?.some((item) => !selected.has(item))) return false;
-  if (exercise.equipmentAny?.length && !exercise.equipmentAny.some((item) => selected.has(item))) return false;
+  if (item.equipment?.some((equipmentId) => !selected.has(equipmentId))) return false;
+  if (item.equipmentAny?.length && !item.equipmentAny.some((equipmentId) => selected.has(equipmentId))) return false;
   return true;
 }
 
@@ -174,66 +495,137 @@ function uniqueExercises(items) {
   });
 }
 
-function exerciseById(id) {
-  return MOBILITY_EXERCISES.find((exercise) => exercise.id === id);
+function rotate(items, offset = 0) {
+  if (!items.length) return items;
+  const normalized = Math.abs(Number(offset || 0)) % items.length;
+  return [...items.slice(normalized), ...items.slice(0, normalized)];
 }
 
-export function buildMobilityWorkout({ durationMinutes = 25, condition = "normal", equipment = ["mat", "band"], physioExerciseIds = DEFAULT_PHYSIO_EXERCISES } = {}) {
+export function exerciseById(id) {
+  return MOBILITY_EXERCISES.find((item) => item.id === id);
+}
+
+export function focusAreaById(id) {
+  return MOBILITY_FOCUS_AREAS.find((item) => item.id === id);
+}
+
+export function focusAreaLabel(id) {
+  return focusAreaById(id)?.shortLabel || id;
+}
+
+export function exercisesForFocus(id) {
+  return MOBILITY_EXERCISES.filter((item) => item.focusAreas.includes(id));
+}
+
+export function buildMobilityWorkout({
+  durationMinutes = 25,
+  condition = "normal",
+  equipment = ["mat", "band"],
+  physioExerciseIds = [],
+  focusAreaIds = [],
+  rotationOffset = 0,
+} = {}) {
   const targetSeconds = Math.max(10, Number(durationMinutes || 25)) * 60;
-  const selectedPhysio = physioExerciseIds.map(exerciseById).filter(Boolean);
-  const availablePhysio = selectedPhysio.filter((exercise) => hasEquipment(exercise, equipment));
-  const missingPhysio = selectedPhysio.filter((exercise) => !hasEquipment(exercise, equipment));
-  const available = MOBILITY_EXERCISES.filter((exercise) => hasEquipment(exercise, equipment));
+  const selectedPhysio = (physioExerciseIds || []).map(exerciseById).filter(Boolean);
+  const availablePhysio = selectedPhysio.filter((item) => hasEquipment(item, equipment));
+  const missingPhysio = selectedPhysio.filter((item) => !hasEquipment(item, equipment));
+  const selectedFocusIds = (focusAreaIds || []).filter((id) => focusAreaById(id));
+  const available = MOBILITY_EXERCISES.filter((item) => hasEquipment(item, equipment));
+  const conditionAvailable = condition === "tired"
+    ? available.filter((item) => item.intensity !== "high")
+    : available;
 
-  const mobility = available.filter((exercise) => ["Mobilität", "Fuß & Sprunggelenk", "Fuß & Unterschenkel"].includes(exercise.group));
-  const stability = available.filter((exercise) => ["Rumpf", "Rumpf dynamisch", "Gesäß & Hüfte", "Beinachse"].includes(exercise.group));
-  const strength = available.filter((exercise) => ["Kraft", "Rumpf & Haltung"].includes(exercise.group));
-  const finishers = available.filter((exercise) => exercise.group === "Abschluss");
+  const physioIds = new Set(availablePhysio.map((item) => item.id));
+  const finishers = conditionAvailable.filter((item) => item.group === "Abschluss");
+  const finisherIds = new Set(finishers.map((item) => item.id));
+  const pool = conditionAvailable.filter((item) => !physioIds.has(item.id) && !finisherIds.has(item.id));
 
-  const conditionPool = condition === "tired"
-    ? [...mobility, ...stability.filter((exercise) => !["forearm-plank", "slow-mountain-climber"].includes(exercise.id))]
+  const focusSequence = [];
+  if (selectedFocusIds.length) {
+    const focusSlots = Number(durationMinutes || 25) >= 20 ? 2 : 1;
+    const rotatedFocusIds = rotate(selectedFocusIds, rotationOffset);
+    for (let slot = 0; slot < focusSlots; slot += 1) {
+      const focusId = rotatedFocusIds[slot % rotatedFocusIds.length];
+      const candidate = rotate(
+        pool.filter((item) => item.focusAreas.includes(focusId) && !focusSequence.some((selected) => selected.id === item.id)),
+        rotationOffset + slot,
+      )[0];
+      if (candidate) focusSequence.push(candidate);
+    }
+  }
+
+  const standardPriority = condition === "tired"
+    ? ["Mobilität", "Fuß & Sprunggelenk", "Balance", "Rumpf", "Gesäß & Hüfte", "Fuß & Unterschenkel", "Beinachse"]
     : condition === "fresh"
-      ? [...stability, ...strength, ...mobility]
-      : [...stability, ...mobility, ...strength];
-
-  const physioIds = new Set(availablePhysio.map((exercise) => exercise.id));
-  const finisherIds = new Set(finishers.map((exercise) => exercise.id));
-  const base = uniqueExercises(conditionPool.filter((exercise) => !physioIds.has(exercise.id) && !finisherIds.has(exercise.id)));
+      ? ["Rumpf", "Gesäß & Hüfte", "Kraft", "Rumpf & Haltung", "Beinachse", "Fuß & Sprunggelenk", "Mobilität"]
+      : ["Rumpf", "Fuß & Sprunggelenk", "Gesäß & Hüfte", "Mobilität", "Balance", "Beinachse", "Kraft"];
+  const standardSequence = rotate(uniqueExercises(standardPriority.flatMap((group) => pool.filter((item) => item.group === group))), rotationOffset);
 
   const items = [];
   let usedSeconds = 0;
-  const add = (exercise, round = 1) => {
-    if (!exercise) return;
-    const seconds = Number(exercise.seconds || 60);
-    if (usedSeconds + seconds > targetSeconds + 45 && items.length >= 3) return;
-    items.push({ ...exercise, stepId: `${exercise.id}-${round}-${items.length}`, round });
+  const add = (item, reason = "Standard", round = 1) => {
+    if (!item) return false;
+    const seconds = Number(item.seconds || 60);
+    if (usedSeconds + seconds > targetSeconds + 45 && items.length >= 3) return false;
+    const matchedFocus = selectedFocusIds.filter((focusId) => item.focusAreas.includes(focusId));
+    items.push({
+      ...item,
+      stepId: `${item.id}-${round}-${items.length}`,
+      round,
+      selectionReason: reason,
+      matchedFocus,
+    });
     usedSeconds += seconds;
+    return true;
   };
 
-  availablePhysio.forEach((exercise) => add(exercise, 1));
-  let round = 1;
+  availablePhysio.forEach((item) => add(item, "Physio-Priorität", 1));
+  uniqueExercises(focusSequence).forEach((item) => {
+    const labels = selectedFocusIds.filter((id) => item.focusAreas.includes(id)).map(focusAreaLabel);
+    add(item, labels.length ? `Schwerpunkt ${labels.join(" & ")}` : "Persönlicher Schwerpunkt", 1);
+  });
+
+  const alreadySelectedIds = new Set(items.map((item) => item.id));
+  const base = standardSequence.filter((item) => !alreadySelectedIds.has(item.id));
   let index = 0;
+  let round = 1;
   while (usedSeconds < targetSeconds - 90 && base.length) {
-    const exercise = base[index % base.length];
-    add(exercise, round);
+    const candidate = base[index % base.length];
+    if (!candidate) break;
+    add(candidate, "Ausgewogener Basisblock", round);
     index += 1;
-    if (index % base.length === 0) round += 1;
-    if (round > 4) break;
+    if (base.length && index % base.length === 0) round += 1;
+    if (round > 4 || index > 40) break;
   }
 
-  if (finishers[0] && !items.some((item) => item.id === finishers[0].id) && usedSeconds + finishers[0].seconds <= targetSeconds + 60) {
-    add(finishers[0], round);
+  const finisher = rotate(finishers, rotationOffset)[0];
+  if (finisher && !items.some((item) => item.id === finisher.id) && usedSeconds + finisher.seconds <= targetSeconds + 60) {
+    add(finisher, "Ruhiger Abschluss", round + 1);
   }
+
+  const focusLabels = selectedFocusIds.map(focusAreaLabel);
+  const focusExerciseCount = items.filter((item) => item.matchedFocus?.length && item.selectionReason.startsWith("Schwerpunkt")).length;
+  const missingFocus = selectedFocusIds.filter((focusId) => !conditionAvailable.some((item) => item.focusAreas.includes(focusId)));
 
   return {
-    id: `mobility-${durationMinutes}-${condition}-${equipment.join("-")}-${physioExerciseIds.join("-")}`,
-    title: condition === "tired" ? "Regeneration & Bewegungsqualität" : condition === "fresh" ? "Läufer-Stabilität mit Kraft" : "Läufer-Basis: Mobility & Stabi",
+    id: `mobility-${durationMinutes}-${condition}-${equipment.join("-")}-${physioExerciseIds.join("-")}-${selectedFocusIds.join("-")}-${rotationOffset}`,
+    title: focusLabels.length
+      ? `${focusLabels.join(" & ")} im Fokus`
+      : condition === "tired"
+        ? "Regeneration & Bewegungsqualität"
+        : condition === "fresh"
+          ? "Ausgewogene Läufer-Stabilität mit Kraft"
+          : "Ausgewogene Mobility & Stabi-Basis",
     durationMinutes: Math.max(1, Math.round(usedSeconds / 60)),
     targetMinutes: Number(durationMinutes || 25),
     condition,
     equipment,
+    focusAreaIds: selectedFocusIds,
+    focusLabels,
+    focusExerciseCount,
     items,
     missingPhysio,
+    missingFocus,
   };
 }
 

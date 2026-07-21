@@ -12,14 +12,16 @@ import {
   reviewKindLabel,
 } from "../services/activityUtils";
 import ReviewModal from "../components/ReviewModal";
+import ExerciseGuide, { ExerciseGuideButton } from "../components/ExerciseGuide";
 import { activitiesWithGroups } from "../services/activityGroups";
 import { fmtDate } from "../utils/format";
 import {
   buildMobilityWorkout,
-  DEFAULT_PHYSIO_EXERCISES,
   equipmentLabel,
+  focusAreaLabel,
   MOBILITY_EQUIPMENT,
   MOBILITY_EXERCISES,
+  MOBILITY_FOCUS_AREAS,
 } from "../services/mobilityWorkouts";
 
 const monthFormatter = new Intl.DateTimeFormat("de-DE", { month: "long", year: "numeric" });
@@ -48,11 +50,19 @@ function secondsLabel(seconds) {
   return `${String(minutes).padStart(2, "0")}:${String(rest).padStart(2, "0")}`;
 }
 
+function materialText(exercise) {
+  const ids = exercise.equipment?.length ? exercise.equipment : exercise.equipmentAny || [];
+  return ids.length ? ids.map(equipmentLabel).join(" / ") : "Ohne Material";
+}
+
 export default function Coach() {
   const { state, setState } = useApp();
   const [selected, setSelected] = useState(null);
+  const [selectedGuide, setSelectedGuide] = useState(null);
   const [activeTab, setActiveTab] = useState("today");
   const [runner, setRunner] = useState(null);
+  const [libraryFocus, setLibraryFocus] = useState("all");
+  const [librarySearch, setLibrarySearch] = useState("");
   const now = useMemo(() => new Date(), []);
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   const canonicalActivities = useMemo(() => preferredActivities(state.activities), [state.activities]);
@@ -77,14 +87,30 @@ export default function Coach() {
   const durationMinutes = Number(mobilitySettings.durationMinutes || 25);
   const condition = mobilitySettings.condition || "normal";
   const equipment = Array.isArray(mobilitySettings.equipment) ? mobilitySettings.equipment : DEFAULT_MOBILITY_EQUIPMENT;
-  const physioExerciseIds = Array.isArray(mobilitySettings.physioExerciseIds) && mobilitySettings.physioExerciseIds.length
-    ? mobilitySettings.physioExerciseIds
-    : DEFAULT_PHYSIO_EXERCISES;
-  const workout = useMemo(() => buildMobilityWorkout({ durationMinutes, condition, equipment, physioExerciseIds }), [durationMinutes, condition, equipment, physioExerciseIds]);
+  const physioExerciseIds = useMemo(() => Array.isArray(mobilitySettings.physioExerciseIds) ? mobilitySettings.physioExerciseIds : [], [mobilitySettings.physioExerciseIds]);
+  const focusAreaIds = useMemo(() => Array.isArray(mobilitySettings.focusAreaIds) ? mobilitySettings.focusAreaIds : [], [mobilitySettings.focusAreaIds]);
+  const workoutHistory = Array.isArray(mobilitySettings.history) ? mobilitySettings.history : [];
+  const workout = useMemo(() => buildMobilityWorkout({
+    durationMinutes,
+    condition,
+    equipment,
+    physioExerciseIds,
+    focusAreaIds,
+    rotationOffset: workoutHistory.length,
+  }), [durationMinutes, condition, equipment, physioExerciseIds, focusAreaIds, workoutHistory.length]);
   const localToday = new Date();
   const todayKey = `${localToday.getFullYear()}-${String(localToday.getMonth() + 1).padStart(2, "0")}-${String(localToday.getDate()).padStart(2, "0")}`;
   const todayMobilityPlan = state.plan.find((item) => !item.archived && item.date === todayKey && /stabi|mobility|kraft/i.test(`${item.title || ""} ${item.type || ""}`));
-  const physioCandidates = MOBILITY_EXERCISES.filter((exercise) => exercise.physioDefault || ["adductor-rockback", "hip-flexor-stretch", "thoracic-rotation"].includes(exercise.id));
+  const physioCandidates = MOBILITY_EXERCISES.filter((exercise) => exercise.physioDefault || ["adductor-rockback", "hip-flexor-stretch", "thoracic-rotation", "knee-to-wall", "pallof-press"].includes(exercise.id));
+  const visibleLibraryExercises = useMemo(() => {
+    const query = librarySearch.trim().toLocaleLowerCase("de-DE");
+    return MOBILITY_EXERCISES.filter((exercise) => {
+      if (libraryFocus !== "all" && !exercise.focusAreas.includes(libraryFocus)) return false;
+      if (!query) return true;
+      const haystack = `${exercise.name} ${exercise.group} ${exercise.purpose} ${exercise.focusAreas.map(focusAreaLabel).join(" ")}`.toLocaleLowerCase("de-DE");
+      return haystack.includes(query);
+    });
+  }, [libraryFocus, librarySearch]);
 
   function updateMobility(patch) {
     setState((current) => ({
@@ -105,6 +131,15 @@ export default function Coach() {
     setRunner(null);
   }
 
+  function toggleFocus(id) {
+    if (focusAreaIds.includes(id)) {
+      updateMobility({ focusAreaIds: focusAreaIds.filter((item) => item !== id) });
+    } else if (focusAreaIds.length < 3) {
+      updateMobility({ focusAreaIds: [...focusAreaIds, id] });
+    }
+    setRunner(null);
+  }
+
   function startWorkout() {
     if (!workout.items.length) return;
     setRunner({ index: 0, remaining: workout.items[0].seconds, running: true, complete: false });
@@ -118,7 +153,8 @@ export default function Coach() {
         title: workout.title,
         durationMinutes: workout.durationMinutes,
         exerciseIds: workout.items.map((item) => item.id),
-      }, ...(mobilitySettings.history || [])].slice(0, 30),
+        focusAreaIds,
+      }, ...workoutHistory].slice(0, 30),
     });
     setRunner(null);
   }
@@ -205,14 +241,47 @@ export default function Coach() {
 
       {activeTab === "mobility" && (
         <div className="grid mobility-coach-grid">
+          <Card className="wide mobility-focus-card">
+            <div className="settings-section-heading">
+              <div>
+                <p className="eyebrow">Persönliche Trainingsschwerpunkte</p>
+                <h2>Woran möchtest du arbeiten?</h2>
+                <p className="muted">Optional und für jeden Nutzer frei einstellbar. Ohne Auswahl erzeugt EYM ein ausgewogenes Standard-Workout. Mit Schwerpunkten kommen je nach verfügbarer Zeit ein bis zwei passende Übungen zusätzlich in den Ablauf.</p>
+              </div>
+              <span>{focusAreaIds.length}/3 gewählt</span>
+            </div>
+            <div className="mobility-focus-picker">
+              <button type="button" className={!focusAreaIds.length ? "selected standard" : "standard"} onClick={() => { updateMobility({ focusAreaIds: [] }); setRunner(null); }}>
+                <strong>Standard / ausgewogen</strong>
+                <span>Keine individuelle Priorität</span>
+              </button>
+              {MOBILITY_FOCUS_AREAS.map((focus) => {
+                const selectedFocus = focusAreaIds.includes(focus.id);
+                const disabled = !selectedFocus && focusAreaIds.length >= 3;
+                return (
+                  <button type="button" disabled={disabled} className={selectedFocus ? "selected" : ""} onClick={() => toggleFocus(focus.id)} key={focus.id}>
+                    <strong>{focus.label}</strong>
+                    <span>{focus.description}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {focusAreaIds.length > 0 && <p className="mobility-focus-summary"><b>Aktiv:</b> {focusAreaIds.map(focusAreaLabel).join(" · ")} <span>Die Auswahl wird in deiner Cloud-Konfiguration gespeichert.</span></p>}
+          </Card>
+
           <Card className="wide mobility-workout-hero">
             <div className="mobility-workout-heading">
               <div>
                 <p className="eyebrow">Stabi & Mobility Workout</p>
                 <h2>{todayMobilityPlan ? `Heute geplant: ${todayMobilityPlan.title}` : workout.title}</h2>
-                <p className="muted">Deine Physio-Übungen haben Vorrang. Der restliche Block passt sich Zeit, Tagesform und vorhandenem Material an.</p>
+                <p className="muted">Physio-Übungen haben Vorrang. Danach berücksichtigt EYM deine persönlichen Schwerpunkte, Tagesform, Zeit und vorhandenes Material.</p>
               </div>
               <strong>{workout.durationMinutes} min</strong>
+            </div>
+            <div className="mobility-workout-summary">
+              <span><b>{workout.items.length}</b> Schritte</span>
+              <span><b>{workout.focusExerciseCount}</b> Fokus-Schritte</span>
+              <span><b>{physioExerciseIds.length}</b> Physio-Prioritäten</span>
             </div>
             <div className="mobility-controls">
               <label>Zeit
@@ -231,6 +300,7 @@ export default function Coach() {
               <div>{MOBILITY_EQUIPMENT.map((item) => <button type="button" className={equipment.includes(item.id) ? "selected" : ""} onClick={() => toggleEquipment(item.id)} key={item.id}>{item.label}</button>)}</div>
             </div>
             {workout.missingPhysio.length > 0 && <div className="mobility-warning"><strong>Physioübung aktuell nicht im Workout:</strong> {workout.missingPhysio.map((item) => `${item.name} (${(item.equipment || item.equipmentAny || []).map(equipmentLabel).join(" oder ")})`).join(", ")}</div>}
+            {workout.missingFocus.length > 0 && <div className="mobility-warning"><strong>Schwerpunkt ohne passende Übung:</strong> {workout.missingFocus.map(focusAreaLabel).join(", ")}. Prüfe das ausgewählte Material.</div>}
           </Card>
 
           <Card className="wide mobility-workout-plan">
@@ -242,22 +312,54 @@ export default function Coach() {
                   <h2>{activeExercise.name}</h2>
                   <strong>{secondsLabel(runner.remaining)}</strong>
                   <p>{activeExercise.instruction}</p>
-                  <div className="button-row"><button type="button" onClick={() => setRunner({ ...runner, running: !runner.running })}>{runner.running ? "Pause" : "Weiter"}</button><button type="button" className="secondary" onClick={() => setRunner((current) => { const nextIndex = Math.min(workout.items.length - 1, current.index + 1); return { index: nextIndex, remaining: workout.items[nextIndex].seconds, running: current.running, complete: false }; })}>Nächste Übung</button><button type="button" className="secondary" onClick={() => setRunner(null)}>Beenden</button></div>
+                  <small className="mobility-selection-reason">{activeExercise.selectionReason}</small>
+                  <div className="button-row"><button type="button" onClick={() => setRunner({ ...runner, running: !runner.running })}>{runner.running ? "Pause" : "Weiter"}</button><button type="button" className="secondary" onClick={() => setSelectedGuide(activeExercise)}>Anleitung</button><button type="button" className="secondary" onClick={() => setRunner((current) => { const nextIndex = Math.min(workout.items.length - 1, current.index + 1); return { index: nextIndex, remaining: workout.items[nextIndex].seconds, running: current.running, complete: false }; })}>Nächste Übung</button><button type="button" className="secondary" onClick={() => setRunner(null)}>Beenden</button></div>
                 </>}
               </div>
             )}
             <div className="mobility-exercise-list">
-              {workout.items.map((exercise, index) => <article className={runner?.index === index ? "active" : ""} key={exercise.stepId}><span>{index + 1}</span><div><strong>{exercise.name}</strong><small>{exercise.group} · {Math.round(exercise.seconds / 15) * 15} Sek.</small><p>{exercise.instruction}</p></div></article>)}
+              {workout.items.map((exercise, index) => (
+                <article className={runner?.index === index ? "active" : ""} key={exercise.stepId}>
+                  <span>{index + 1}</span>
+                  <div>
+                    <div className="mobility-exercise-heading"><strong>{exercise.name}</strong><ExerciseGuideButton exercise={exercise} onOpen={setSelectedGuide} compact /></div>
+                    <small>{exercise.group} · {Math.round(exercise.seconds / 15) * 15} Sek.</small>
+                    <em>{exercise.selectionReason}</em>
+                    <p>{exercise.instruction}</p>
+                  </div>
+                </article>
+              ))}
             </div>
           </Card>
 
           <Card className="wide physio-library-card">
             <p className="eyebrow">Meine Physio-Übungen</p>
-            <h2>Immer bevorzugt einbauen</h2>
-            <p className="muted">Aktiviere nur Übungen, die du kennst oder die dir gezeigt wurden. Deine Physio-Vorgaben haben Vorrang vor allgemeinen Vorschlägen.</p>
-            <div className="physio-picker">{physioCandidates.map((exercise) => <button type="button" className={physioExerciseIds.includes(exercise.id) ? "selected" : ""} onClick={() => togglePhysio(exercise.id)} key={exercise.id}><strong>{exercise.name}</strong><span>{exercise.equipment?.length ? exercise.equipment.map(equipmentLabel).join(" · ") : "Ohne Material"}</span></button>)}</div>
-            <details className="exercise-library-disclosure"><summary>Komplette Übungsbibliothek anzeigen</summary><div>{MOBILITY_EXERCISES.map((exercise) => <article key={exercise.id}><strong>{exercise.name}</strong><span>{exercise.group}{(exercise.equipment || exercise.equipmentAny)?.length ? ` · ${(exercise.equipment || exercise.equipmentAny).map(equipmentLabel).join(" / ")}` : " · ohne Material"}</span><p>{exercise.instruction}</p></article>)}</div></details>
-            <p className="mobility-safety-note">Schmerz ist kein Trainingsziel. Übungen abbrechen oder vereinfachen, wenn die Bewegung Beschwerden auslöst; bei Physio-Vorgaben gilt die gezeigte Ausführung.</p>
+            <h2>Nur persönliche Vorgaben fest anheften</h2>
+            <p className="muted">Dieser Bereich ist bewusst individuell. Neue Nutzer starten ohne Physio-Pflichtübungen. Aktiviere nur Übungen, die du kennst oder die dir gezeigt wurden; sie werden vor allgemeinen Vorschlägen eingeplant.</p>
+            <div className="physio-picker">{physioCandidates.map((exercise) => <button type="button" className={physioExerciseIds.includes(exercise.id) ? "selected" : ""} onClick={() => togglePhysio(exercise.id)} key={exercise.id}><strong>{exercise.name}</strong><span>{materialText(exercise)}</span></button>)}</div>
+          </Card>
+
+          <Card className="wide exercise-library-card">
+            <div className="settings-section-heading">
+              <div><p className="eyebrow">Übungsbibliothek</p><h2>Bewegung ansehen, dann sauber ausführen</h2><p className="muted">Jede Übung enthält eine schematische Bewegungsfolge, Schritt-für-Schritt-Erklärung, Technikhinweise, typische Fehler sowie eine leichtere und schwierigere Variante.</p></div>
+              <span>{visibleLibraryExercises.length} Übungen</span>
+            </div>
+            <div className="exercise-library-toolbar">
+              <label>Übung suchen<input type="search" value={librarySearch} onChange={(event) => setLibrarySearch(event.target.value)} placeholder="z. B. Dead Bug oder Sprunggelenk" /></label>
+              <label>Schwerpunkt<select value={libraryFocus} onChange={(event) => setLibraryFocus(event.target.value)}><option value="all">Alle Bereiche</option>{MOBILITY_FOCUS_AREAS.map((focus) => <option value={focus.id} key={focus.id}>{focus.label}</option>)}</select></label>
+            </div>
+            <div className="exercise-library-grid">
+              {visibleLibraryExercises.map((exercise) => (
+                <article key={exercise.id}>
+                  <div className="exercise-library-card-heading"><div><span>{exercise.group}</span><h3>{exercise.name}</h3></div>{physioExerciseIds.includes(exercise.id) && <b>Physio</b>}</div>
+                  <p>{exercise.purpose}</p>
+                  <small>{materialText(exercise)} · {exercise.focusAreas.map(focusAreaLabel).join(" · ") || "Allgemein"}</small>
+                  <ExerciseGuideButton exercise={exercise} onOpen={setSelectedGuide} />
+                </article>
+              ))}
+            </div>
+            {!visibleLibraryExercises.length && <p className="empty-library-result">Keine passende Übung gefunden. Suche oder Schwerpunkt anpassen.</p>}
+            <p className="mobility-safety-note">Schmerz ist kein Trainingsziel. Übungen abbrechen oder vereinfachen, wenn die Bewegung Beschwerden auslöst; bei Physio-Vorgaben gilt die persönlich gezeigte Ausführung.</p>
           </Card>
         </div>
       )}
@@ -279,6 +381,7 @@ export default function Coach() {
       )}
 
       {selected && <ReviewModal activity={selected} onClose={() => setSelected(null)} />}
+      {selectedGuide && <ExerciseGuide exercise={selectedGuide} onClose={() => setSelectedGuide(null)} />}
     </>
   );
 }

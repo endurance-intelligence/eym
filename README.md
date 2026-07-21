@@ -119,3 +119,13 @@ Saving a recurring commitment changes the planning configuration only. An alread
 - Reviews explicitly refer to the feeling immediately after the workout. Every scale shows both endpoints and translates the selected number into plain language.
 - Leg and stomach symptoms can be marked separately from the numeric rating.
 - The Stabi & Mobility coach builds 10–30 minute workouts around saved physio exercises and available equipment, including resistance bands, dumbbells/weights and kettlebells.
+
+## Configurable exercise focus and guidance (v2.11)
+
+- Every user can choose up to three personal Stabi & Mobility focus areas, or keep the balanced standard mode.
+- Available focus areas include core, ankle/foot, hips/glutes, adductors, back/posture, knee axis, balance, mobility and whole-body strength.
+- Focus areas are user configuration, not hard-coded athlete assumptions. New users start with the balanced standard mode and without personal physio exercises.
+- Depending on workout duration, EYM prioritizes one or two additional exercises for the selected focus areas and rotates the selection after completed workouts.
+- Physio exercises remain a separate optional priority list and are only enabled by the user.
+- The exercise library can be searched and filtered by focus area. Each exercise has a schematic movement visual, step-by-step instructions, technique cues, common mistakes and easier/harder variants.
+- `.gitattributes` normalizes text files to LF to make future patches consistent on Windows and Unix systems.
