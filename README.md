@@ -164,5 +164,16 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 
 - `OPEN_FOOD_FACTS_USER_ID`
 - `OPEN_FOOD_FACTS_PASSWORD`
-- `OPEN_FOOD_FACTS_USER_AGENT` (recommended format: `EnduranceIntelligence/2.15.0 (contact@example.com)`)
+- `OPEN_FOOD_FACTS_USER_AGENT` (recommended format: `EnduranceIntelligence/2.16.0 (contact@example.com)`)
 - `OPEN_FOOD_FACTS_APP_SALT` (a random secret used to derive a stable pseudonymous app UUID per EYM user)
+
+## Personal ambient themes (v2.16)
+
+- Adds a user-specific appearance area under **Settings → Darstellung**.
+- Includes EYM Green, Miami, Ice Blue, Sunset, Violet and Amber presets.
+- Custom mode supports separate primary and secondary colors.
+- Ambient glow can be enabled, disabled and adjusted from 0–100 percent.
+- Theme changes are previewed immediately and stored inside the existing user-specific `athlete_data.app_data` document.
+- The theme engine uses CSS design tokens for backgrounds, surfaces, borders, typography, navigation, cards, buttons, charts and decorative highlights.
+- Semantic warning, error and success states remain readable independently of the selected decorative theme.
+- No Supabase migration is required.

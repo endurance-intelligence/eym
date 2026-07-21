@@ -1,3 +1,5 @@
+import { DEFAULT_APPEARANCE } from "../services/theme";
+
 export const mission = {
   id: "hbu-2026",
   name: "Heartbeat Ultra Fulda",
@@ -36,6 +38,7 @@ export const mission = {
 };
 
 export const defaultState = {
+  appearance: DEFAULT_APPEARANCE,
   profile: {
     displayName: "",
     birthDate: "",

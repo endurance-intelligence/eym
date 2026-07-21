@@ -6,6 +6,7 @@ import { resetState } from "../services/storage";
 import { mergeGarminActivities, readGarminExport } from "../services/garminImport";
 import { calendarSubscriptionUrl } from "../services/supabase";
 import { fetchIntervalsStatus, intervalsOnlineReady } from "../services/intervals";
+import { normalizeAppearance, resolveTheme, THEME_PRESET_LIST } from "../services/theme";
 import {
   CONFLICT_MODE_OPTIONS,
   DEFAULT_REPLACEMENT_SPORTS,
@@ -40,6 +41,16 @@ export default function Settings() {
   );
   const hasMigratedCommitments = commitments.some((item) => item.migratedFrom);
   const replacementSports = state.planner?.replacementSports || DEFAULT_REPLACEMENT_SPORTS;
+  const appearance = normalizeAppearance(state.appearance);
+  const activeTheme = resolveTheme(appearance);
+  const customTheme = resolveTheme({ ...appearance, themeId: "custom" });
+
+  function updateAppearance(patch) {
+    setState((current) => ({
+      ...current,
+      appearance: normalizeAppearance({ ...current.appearance, ...patch }),
+    }));
+  }
 
   function updateProfile(field, value) {
     setState((current) => ({
@@ -159,6 +170,7 @@ export default function Settings() {
     ["overview", "Übersicht"],
     ["profile", "Profil"],
     ["planning", "Training & Planung"],
+    ["appearance", "Darstellung"],
     ["connections", "Verbindungen"],
     ["data", "Daten & Kalender"],
   ];
@@ -179,6 +191,12 @@ export default function Settings() {
         <p className="eyebrow">Training & Planung</p><h2>{commitments.length} Fixtermine</h2>
         <p className="muted">{commitments.length ? commitments.map((item) => `${item.weekday.slice(0, 2)} · ${item.name}`).join(" · ") : "Noch keine wiederkehrenden Einheiten"}</p>
         <button type="button" onClick={() => setSection("planning")}>Planungsregeln öffnen</button>
+      </Card>
+      <Card className="settings-overview-card settings-overview-theme">
+        <p className="eyebrow">Darstellung</p><h2>{activeTheme.label}</h2>
+        <div className="theme-overview-swatches"><span style={{ background: activeTheme.primary }} /><span style={{ background: activeTheme.secondary }} /></div>
+        <p className="muted">Persönliches Ambient-Theme · Glow {appearance.glowEnabled ? `${appearance.glowIntensity} %` : "aus"}</p>
+        <button type="button" onClick={() => setSection("appearance")}>Theme anpassen</button>
       </Card>
       <Card className="settings-overview-card">
         <p className="eyebrow">Verbindungen</p><h2>{state.intervals?.connected ? "Intervals.icu verbunden" : "Intervals.icu noch offen"}</h2>
@@ -243,6 +261,55 @@ export default function Settings() {
       </Card>
 
       <Card className="wide settings-replacements-card"><p className="eyebrow">Woche anpassen</p><h2>Erlaubte Ersatzarten</h2><p className="muted">Diese Sportarten werden angeboten, wenn du eine einzelne Einheit ersetzen möchtest. Eigene Fixtermine erscheinen zusätzlich automatisch.</p><div className="settings-sport-picker">{SPORT_OPTIONS.filter((option) => option.value !== "other").map((option) => <button type="button" className={replacementSports.includes(option.value) ? "selected" : ""} onClick={() => toggleReplacementSport(option.value)} key={option.value}>{option.label}</button>)}</div></Card>
+    </div>}
+
+    {section === "appearance" && <div className="grid appearance-settings-grid">
+      <Card className="wide appearance-live-card">
+        <div className="appearance-live-copy">
+          <p className="eyebrow">Live-Vorschau</p>
+          <h2>{activeTheme.label}</h2>
+          <p className="muted">Die Auswahl wirkt sofort auf Navigation, Karten, Buttons, Diagramme und Highlights. Sie wird mit deinem EYM-Konto synchronisiert.</p>
+        </div>
+        <div className="ambient-preview" style={{ "--preview-primary": activeTheme.primary, "--preview-secondary": activeTheme.secondary, "--preview-bg": activeTheme.background, "--preview-card": activeTheme.card }}>
+          <div className="ambient-preview-lights"><i /><i /></div>
+          <div className="ambient-preview-sidebar"><b>EI</b><span /><span className="active" /><span /></div>
+          <div className="ambient-preview-content"><small>TAGESBRIEFING</small><strong>Dein Training.</strong><div><span>HEUTE</span><b>Alles im Blick</b></div></div>
+        </div>
+      </Card>
+
+      <Card className="wide">
+        <p className="eyebrow">Ambient Presets</p><h2>Stimmung auswählen</h2>
+        <p className="muted">Der dunkle Aufbau bleibt erhalten. Akzente, Flächen und der subtile Lichtschein wechseln passend zum Theme.</p>
+        <div className="theme-preset-grid">
+          {THEME_PRESET_LIST.map((preset) => <button type="button" className={`theme-preset-card ${appearance.themeId === preset.id ? "selected" : ""}`} onClick={() => updateAppearance({ themeId: preset.id })} key={preset.id}>
+            <span className="theme-preset-visual" style={{ background: `linear-gradient(135deg, ${preset.background}, ${preset.card})` }}><i style={{ background: preset.primary }} /><i style={{ background: preset.secondary }} /></span>
+            <span className="theme-preset-copy"><b>{preset.label}</b><small>{preset.description}</small></span>
+            {appearance.themeId === preset.id && <em>Aktiv</em>}
+          </button>)}
+          <button type="button" className={`theme-preset-card ${appearance.themeId === "custom" ? "selected" : ""}`} onClick={() => updateAppearance({ themeId: "custom" })}>
+            <span className="theme-preset-visual" style={{ background: `linear-gradient(135deg, ${customTheme.background}, ${customTheme.card})` }}><i style={{ background: appearance.customPrimary }} /><i style={{ background: appearance.customSecondary }} /></span>
+            <span className="theme-preset-copy"><b>Custom</b><small>Deine eigene Ambientebeleuchtung.</small></span>
+            {appearance.themeId === "custom" && <em>Aktiv</em>}
+          </button>
+        </div>
+      </Card>
+
+      <Card className="appearance-custom-card">
+        <p className="eyebrow">Custom Theme</p><h2>Eigene Farben</h2>
+        <p className="muted">Primärfarbe steuert Navigation und Hauptakzente. Die zweite Farbe erzeugt den Ambient-Kontrast.</p>
+        <div className="appearance-color-fields">
+          <label><span>Primärfarbe</span><input type="color" value={appearance.customPrimary} onChange={(event) => updateAppearance({ themeId: "custom", customPrimary: event.target.value })} /><code>{appearance.customPrimary}</code></label>
+          <label><span>Sekundärfarbe</span><input type="color" value={appearance.customSecondary} onChange={(event) => updateAppearance({ themeId: "custom", customSecondary: event.target.value })} /><code>{appearance.customSecondary}</code></label>
+        </div>
+        <button type="button" className="primary" onClick={() => updateAppearance({ themeId: "custom" })}>Custom Theme verwenden</button>
+      </Card>
+
+      <Card className="appearance-glow-card">
+        <p className="eyebrow">Lichtintensität</p><h2>Glow einstellen</h2>
+        <label className="appearance-glow-toggle"><input type="checkbox" checked={appearance.glowEnabled} onChange={(event) => updateAppearance({ glowEnabled: event.target.checked })} /><span><b>Ambient Glow aktiv</b><small>Subtiler Lichtschein an aktiven Elementen und wichtigen Karten.</small></span></label>
+        <label className="appearance-glow-range"><span><b>Intensität</b><strong>{appearance.glowIntensity} %</strong></span><input type="range" min="0" max="100" step="1" value={appearance.glowIntensity} disabled={!appearance.glowEnabled} onChange={(event) => updateAppearance({ glowIntensity: Number(event.target.value) })} /></label>
+        <p className="muted">Die Lesbarkeit und Statusfarben bleiben erhalten. Der Regler verändert nur den dekorativen Lichtschein.</p>
+      </Card>
     </div>}
 
     {section === "connections" && <div className="grid">

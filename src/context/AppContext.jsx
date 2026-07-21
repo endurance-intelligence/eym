@@ -5,6 +5,7 @@ import { loadState, saveState } from "../services/storage";
 import { loadCloudState, saveCloudState, signOut, supabase } from "../services/supabase";
 import { fetchIntervalsStatus, mapIntervalsActivities, mergeIntervalsActivities, syncIntervalsActivities } from "../services/intervals";
 import { migrateConfiguration } from "../services/configuration";
+import { applyTheme, normalizeAppearance } from "../services/theme";
 
 const AppContext = createContext(null);
 
@@ -133,6 +134,7 @@ function mergeState(localState = {}, cloudState = {}) {
       history: asArray(cloud.mobilityCoach?.history, asArray(local.mobilityCoach?.history)),
     },
     reviews: inventory.reviews,
+    appearance: normalizeAppearance({ ...defaultState.appearance, ...(local.appearance || {}), ...(cloud.appearance || {}) }),
     profile: { ...defaultState.profile, ...(local.profile || {}), ...(cloud.profile || {}) },
     mission: {
       ...defaultState.mission,
@@ -169,6 +171,10 @@ export function AppProvider({ children }) {
   const intervalsAutoSyncStarted = useRef(false);
 
   useEffect(() => saveState(state), [state]);
+
+  useEffect(() => {
+    applyTheme(state.appearance);
+  }, [state.appearance]);
 
   useEffect(() => {
     let active = true;

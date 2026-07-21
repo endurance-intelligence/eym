@@ -1,4 +1,5 @@
 import { migrateConfiguration } from "./configuration";
+import { normalizeAppearance } from "./theme";
 
 const KEY = "endurance-intelligence.v1";
 
@@ -34,6 +35,7 @@ function sanitizeState(state, defaults) {
       knownExerciseIds: Array.isArray(state?.mobilityCoach?.knownExerciseIds) ? state.mobilityCoach.knownExerciseIds : defaults.mobilityCoach.knownExerciseIds,
       history: Array.isArray(state?.mobilityCoach?.history) ? state.mobilityCoach.history : defaults.mobilityCoach.history,
     },
+    appearance: normalizeAppearance({ ...defaults.appearance, ...(state?.appearance || {}) }),
     profile: { ...defaults.profile, ...(state?.profile || {}) },
     planner: { ...defaults.planner, ...(state?.planner || {}) },
     garmin: { ...defaults.garmin, ...(state?.garmin || {}) },
