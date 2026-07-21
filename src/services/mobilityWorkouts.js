@@ -112,6 +112,23 @@ export const MOBILITY_EXERCISES = [
     harder: "Mit dem Fuß langsam das Alphabet in die Luft schreiben.",
   }),
   exercise({
+    id: "ankle-pumps",
+    name: "Fußwippe (Fußspitze hoch und tief)",
+    subtitle: "Ankle Pumps · Sprunggelenk bewusst bewegen",
+    quickStart: "Setz dich hin oder leg dich auf den Rücken. Ziehe die Fußspitzen kräftig Richtung Schienbein und drücke sie danach kontrolliert von dir weg.",
+    group: "Fuß & Sprunggelenk",
+    seconds: 60,
+    focusAreas: ["ankle", "mobility"],
+    visual: "ankle-pumps",
+    purpose: "Bewegt das Sprunggelenk ohne Körpergewicht und macht den gesamten Weg nach oben und unten bewusst.",
+    instruction: "Fersen liegen auf. Fußspitzen abwechselnd Richtung Schienbein ziehen und kontrolliert nach vorn strecken.",
+    steps: ["Im Sitzen oder Liegen beide Fersen auflegen.", "Fußspitzen so weit wie angenehm Richtung Schienbein ziehen.", "Anschließend kontrolliert nach vorn strecken und ruhig wiederholen."],
+    cues: ["Knie und Beine bleiben ruhig", "Beide Richtungen vollständig nutzen", "Nicht ruckartig arbeiten"],
+    mistakes: ["Nur die Zehen bewegen", "Mit den ganzen Beinen wippen", "In einen schmerzhaften Endbereich drücken"],
+    easier: "Nur einen Fuß gleichzeitig bewegen.",
+    harder: "In der oberen und unteren Position jeweils zwei Sekunden halten.",
+  }),
+  exercise({
     id: "band-adduction",
     name: "Adduktoren mit Gummiband",
     quickStart: "Stell dich seitlich zur Bandbefestigung. Das Band zieht das Arbeitsbein nach außen; führe das gestreckte Bein langsam zur Körpermitte.",
@@ -297,7 +314,9 @@ export const MOBILITY_EXERCISES = [
   }),
   exercise({
     id: "calf-raise",
-    name: "Wadenheben",
+    name: "Wadenheben beidbeinig",
+    subtitle: "Beide Fersen langsam anheben",
+    quickStart: "Stell dich aufrecht hin und halte dich bei Bedarf fest. Drücke beide Fersen langsam hoch, halte kurz und senke sie über etwa drei Sekunden ab.",
     group: "Fuß & Unterschenkel",
     seconds: 60,
     focusAreas: ["ankle", "knee-axis"],
@@ -309,6 +328,25 @@ export const MOBILITY_EXERCISES = [
     mistakes: ["Nach außen wegknicken", "Hochfedern", "Nur schnell absenken"],
     easier: "Beidbeinig und mit Halt.",
     harder: "Einbeinig oder auf einer Stufe ausführen.",
+  }),
+  exercise({
+    id: "single-leg-calf-raise",
+    name: "Wadenheben einbeinig",
+    subtitle: "Wadenkraft und Sprunggelenkstabilität pro Seite",
+    quickStart: "Stell dich auf ein Bein und halte dich leicht an einer Wand fest. Hebe die Ferse langsam an, halte oben kurz und senke sie kontrolliert ab. Danach Seite wechseln.",
+    sideSwitch: true,
+    group: "Fuß & Unterschenkel",
+    seconds: 75,
+    focusAreas: ["ankle", "balance", "knee-axis"],
+    visual: "single-leg-calf-raise",
+    purpose: "Kräftigt Wade und Fuß einseitig und macht Unterschiede zwischen links und rechts sichtbar.",
+    asymmetryNote: "Beginne auf der schwächeren Seite, arbeite aber auf beiden Seiten mit derselben sauberen Zeit. Qualität geht vor Wiederholungszahl.",
+    instruction: "Auf einem Bein langsam auf den Vorfuß drücken, oben stabilisieren und die Ferse kontrolliert absenken.",
+    steps: ["Neben einer Wand auf ein Bein stellen.", "Ferse gerade nach oben anheben, ohne nach außen wegzuknicken.", "Oben kurz halten, langsam absenken und nach dem Signal die Seite wechseln."],
+    cues: ["Druck über Groß- und Kleinzehenballen", "Ferse steigt gerade hoch", "Nur so viele saubere Wiederholungen wie möglich"],
+    mistakes: ["Mit dem Oberkörper hochfedern", "Sprunggelenk kippt nach außen", "Zu schnell nach unten fallen"],
+    easier: "Mit beiden Füßen hochgehen und nur einbeinig absenken.",
+    harder: "Auf einer Stufe arbeiten oder eine leichte Kurzhantel halten.",
   }),
   exercise({
     id: "knee-to-wall",
@@ -331,7 +369,9 @@ export const MOBILITY_EXERCISES = [
   }),
   exercise({
     id: "tibialis-raise",
-    name: "Tibialis Raises",
+    name: "Tibialis Raises (Fußspitzenheben)",
+    subtitle: "Fersen bleiben unten, Fußspitzen gehen hoch",
+    quickStart: "Lehne dich mit dem Rücken an eine Wand, Füße etwas nach vorn. Lass die Fersen am Boden und ziehe beide Fußspitzen hoch Richtung Schienbein.",
     group: "Fuß & Unterschenkel",
     seconds: 60,
     focusAreas: ["ankle"],
@@ -380,6 +420,24 @@ export const MOBILITY_EXERCISES = [
     harder: "Kopf drehen oder einen Gegenstand langsam um den Körper führen.",
   }),
   exercise({
+    id: "single-leg-clock-reach",
+    name: "Einbeinstand mit Uhrzeiger-Tippen",
+    subtitle: "Freien Fuß nach vorn, seitlich und hinten tippen",
+    quickStart: "Steh auf einem Bein. Tippe mit dem freien Fuß wie auf einem Zifferblatt kontrolliert nach vorn, schräg zur Seite und nach hinten, ohne das Standbein zu verlieren.",
+    sideSwitch: true,
+    group: "Balance",
+    seconds: 90,
+    focusAreas: ["ankle", "balance", "knee-axis"],
+    visual: "clock-reach",
+    purpose: "Trainiert das Sprunggelenk in wechselnden Richtungen und verbindet Balance mit kontrollierter Beinachse.",
+    instruction: "Auf einem Bein stehen und mit dem freien Fuß mehrere Punkte rund um den Körper antippen. Standfuß und Knie bleiben kontrolliert.",
+    steps: ["Neben einer Wand auf ein Bein stellen.", "Mit dem freien Fuß erst nach vorn, dann seitlich und anschließend nach hinten tippen.", "Zur Mitte zurückkehren, ruhig wiederholen und nach dem Signal die Seite wechseln."],
+    cues: ["Standfuß bleibt als Dreipunkt stabil", "Knie folgt den Zehen", "Reichweite nur so groß wie kontrollierbar"],
+    mistakes: ["Mit dem Oberkörper stark ausweichen", "Standknie kippt nach innen", "Freien Fuß vollständig belasten"],
+    easier: "Nur nach vorn und seitlich tippen und mit einem Finger sichern.",
+    harder: "Größere Reichweite oder langsameres Zurückführen.",
+  }),
+  exercise({
     id: "band-ankle-eversion",
     name: "Sprunggelenk mit Band nach außen",
     subtitle: "Eversion · nur den Fuß gegen den Bandzug drehen",
@@ -397,6 +455,44 @@ export const MOBILITY_EXERCISES = [
     mistakes: ["Ganzes Bein drehen", "Band zurückschnellen lassen", "Zu starke Spannung"],
     easier: "Leichteres Band verwenden.",
     harder: "Endposition zwei Sekunden halten.",
+  }),
+  exercise({
+    id: "band-ankle-inversion",
+    name: "Sprunggelenk mit Band nach innen",
+    subtitle: "Inversion · Vorfuß kontrolliert zur Körpermitte",
+    quickStart: "Setz dich hin. Das Band zieht den Vorfuß nach außen. Halte Knie und Unterschenkel still und bewege nur den Fuß kontrolliert nach innen.",
+    sideSwitch: true,
+    group: "Fuß & Sprunggelenk",
+    seconds: 75,
+    equipment: ["band"],
+    focusAreas: ["ankle"],
+    visual: "band-ankle-inversion",
+    purpose: "Kräftigt die Muskulatur an der Innenseite des Unterschenkels und ergänzt die Bewegung nach außen.",
+    instruction: "Band am Vorfuß anlegen und den Fuß gegen den Zug nach innen führen. Das ganze Bein bleibt ruhig.",
+    steps: ["Im Sitzen das Band außen am Vorfuß befestigen.", "Knie und Unterschenkel gerade ausrichten.", "Vorfuß nach innen bewegen, langsam zurücklassen und nach dem Signal die Seite wechseln."],
+    cues: ["Nur das Sprunggelenk bewegt sich", "Kleiner sauberer Bewegungsweg", "Rückweg genauso kontrollieren"],
+    mistakes: ["Knie nach innen drehen", "Band zurückschnellen lassen", "Fuß stark nach unten drücken"],
+    easier: "Leichteres Band oder kleinerer Weg.",
+    harder: "Endposition zwei Sekunden halten.",
+  }),
+  exercise({
+    id: "band-ankle-dorsiflexion",
+    name: "Sprunggelenk mit Band nach oben",
+    subtitle: "Fußspitze gegen Widerstand zum Schienbein ziehen",
+    quickStart: "Setz dich mit gestrecktem Bein hin. Befestige das Band vor dir am Vorfuß. Ziehe die Fußspitze Richtung Schienbein und lass sie langsam wieder nach vorn.",
+    sideSwitch: true,
+    group: "Fuß & Sprunggelenk",
+    seconds: 75,
+    equipment: ["band"],
+    focusAreas: ["ankle"],
+    visual: "band-ankle-dorsiflexion",
+    purpose: "Kräftigt die Bewegung der Fußspitze nach oben und die Muskulatur an der Vorderseite des Unterschenkels.",
+    instruction: "Band am Vorfuß befestigen und die Fußspitze kontrolliert Richtung Schienbein ziehen, ohne das Knie zu bewegen.",
+    steps: ["Im Sitzen das Bein ausstrecken und das Band vor dem Fuß befestigen.", "Ferse liegen lassen und Fußspitze Richtung Schienbein ziehen.", "Langsam zurückführen und nach dem Signal die Seite wechseln."],
+    cues: ["Ferse bleibt ruhig", "Zehen entspannt lassen", "Bewegung kommt aus dem Sprunggelenk"],
+    mistakes: ["Ganzes Bein zurückziehen", "Nur die Zehen krallen", "Band unkontrolliert zurückziehen lassen"],
+    easier: "Leichteres Band verwenden oder ohne Band üben.",
+    harder: "Obere Position zwei Sekunden halten.",
   }),
   exercise({
     id: "step-up",
@@ -543,6 +639,18 @@ function rotate(items, offset = 0) {
   return [...items.slice(normalized), ...items.slice(0, normalized)];
 }
 
+function interleaveExerciseGroups(items, groupOrder, offset = 0) {
+  const grouped = groupOrder.map((group, index) => rotate(items.filter((item) => item.group === group), offset + index));
+  const maxLength = Math.max(0, ...grouped.map((group) => group.length));
+  const result = [];
+  for (let row = 0; row < maxLength; row += 1) {
+    grouped.forEach((group) => {
+      if (group[row]) result.push(group[row]);
+    });
+  }
+  return uniqueExercises(result);
+}
+
 export function exerciseById(id) {
   return MOBILITY_EXERCISES.find((item) => item.id === id);
 }
@@ -624,7 +732,7 @@ export function buildMobilityWorkout({
     : condition === "fresh"
       ? ["Rumpf", "Gesäß & Hüfte", "Kraft", "Rumpf & Haltung", "Beinachse", "Fuß & Sprunggelenk", "Mobilität"]
       : ["Rumpf", "Fuß & Sprunggelenk", "Gesäß & Hüfte", "Mobilität", "Balance", "Beinachse", "Kraft"];
-  const standardSequence = rotate(uniqueExercises(standardPriority.flatMap((group) => pool.filter((item) => item.group === group))), rotationOffset);
+  const standardSequence = interleaveExerciseGroups(pool, standardPriority, rotationOffset);
 
   const items = [];
   let activeSeconds = 0;

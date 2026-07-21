@@ -148,3 +148,10 @@ Saving a recurring commitment changes the planning configuration only. An alread
 - Knee-to-wall guidance includes a side-comparison note without treating asymmetry as a diagnosis.
 - Completing the full Coach workflow automatically stores the workout and marks today's matching Stabi/Mobility plan item as completed.
 - Audio, voice and weak-side settings are user-specific. No database migration is required.
+
+## Expanded ankle library and compact training history (v2.14)
+
+- Adds ankle pumps, single-leg calf raises, clock reaches, band inversion and band dorsiflexion to the configurable exercise library.
+- Keeps ankle work user-selectable through the existing focus system; users without an ankle focus continue to receive balanced standard workouts.
+- Improves German exercise names, quick-start instructions and schematic movement guides for ankle exercises.
+- Keeps the current ISO calendar week open in Training and collapses older weeks into compact summaries that can be opened per KW.

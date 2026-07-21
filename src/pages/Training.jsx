@@ -65,6 +65,8 @@ export default function Training() {
   const rawActivities = useMemo(() => preferredActivities(state.activities, { hideStrava: Boolean(state.intervals?.connected) }), [state.activities, state.intervals?.connected]);
   const activities = useMemo(() => activitiesWithGroups(rawActivities, state.activityGroups), [rawActivities, state.activityGroups]);
   const currentMonth = new Date().toISOString().slice(0, 7);
+  const currentWeekKey = isoDateLocal(startOfIsoWeek(new Date()));
+  const [openWeeks, setOpenWeeks] = useState(() => new Set([currentWeekKey]));
   const currentMonthActivities = activities.filter((activity) => monthKey(activity) === currentMonth);
   const currentMonthSummary = useMemo(() => summaries(currentMonthActivities), [currentMonthActivities]);
 
@@ -85,6 +87,15 @@ export default function Training() {
       weeks: [...weeks.entries()].sort((a, b) => b[0].localeCompare(a[0])),
     }));
   }, [activities]);
+
+  function toggleWeek(weekKey) {
+    setOpenWeeks((current) => {
+      const next = new Set(current);
+      if (next.has(weekKey)) next.delete(weekKey);
+      else next.add(weekKey);
+      return next;
+    });
+  }
 
   function addManualActivity() {
     const name = window.prompt("Name des Trainings?");
@@ -240,31 +251,55 @@ export default function Training() {
                   <div><span>Monat</span><h2>{monthTitle(month.key)}</h2></div>
                   <div className="training-month-chips">{month.summary.map((item) => <span key={item.key}>{item.label}: <b>{item.count}</b>{item.distance > 0 ? ` · ${item.distance.toFixed(1)} km` : ""}</span>)}</div>
                 </header>
-                {month.weeks.map(([weekKey, weekActivities]) => (
-                  <div className="training-week" key={weekKey}>
-                    <h3>{weekLabel(weekKey)}</h3>
-                    <div className="activity-list">
-                      {weekActivities.map((activity) => {
-                        const kind = reviewKind(activity);
-                        return (
-                          <article className={`activity-row ${kind ? "reviewable" : "no-review"} ${mergeSelection.includes(activity.id) ? "merge-selected" : ""} ${activity.isActivityGroup ? "activity-group-row" : ""} ${mergeMode && !activity.isActivityGroup && isRunningActivity(activity) ? "merge-candidate" : ""}`} key={activity.id}>
-                            {mergeMode && !activity.isActivityGroup && isRunningActivity(activity) && <button type="button" className="activity-merge-check" disabled={Boolean(state.reviews[activity.id])} onClick={() => toggleMergeActivity(activity)} aria-label={`${activity.name} auswählen`}>{mergeSelection.includes(activity.id) ? "✓" : "○"}</button>}
-                            <button className="activity activity-main" onClick={() => mergeMode && !activity.isActivityGroup ? toggleMergeActivity(activity) : kind && setSelected(activity)} disabled={!kind && !mergeMode} title={mergeMode ? "Zum Zusammenfassen auswählen" : kind ? `${reviewKindLabel(activity)} öffnen` : "Für diese Aktivität ist kein Review nötig"}>
-                              <div><b>{activity.name}</b><span>{fmtDate(activityDate(activity))} · {sourceLabel(activity)} · {sportGroup(activity).label}{activity.isActivityGroup ? ` · ${activity.memberCount} Teile` : ""}{activity.weather?.temperature != null || activity.temperature != null ? ` · ${Math.round(Number(activity.weather?.temperature ?? activity.temperature))} °C` : ""}</span></div>
-                              <div className="activity-metrics"><strong>{Number(activity.distance || 0).toLocaleString("de-DE", { maximumFractionDigits: 2 })} km</strong><span>{hours(activity.duration)} · {Number(activity.distance || 0) > 0 ? pace(activity.distance, activity.duration) : "–"}</span></div>
-                              <div className="activity-secondary"><strong>{activity.elevation || 0} hm</strong><span>{activity.avgHr ? `Ø ${activity.avgHr} bpm` : "Kein Puls"}</span></div>
-                              <em>{kind ? (state.reviews[activity.id] ? "✓ Review" : month.key === currentMonth ? "Review öffnen" : "Review optional") : "Kein Review nötig"}</em>
-                            </button>
-                            <div className="activity-row-actions">
-                              <button className="activity-edit-button" onClick={() => setEditingName(activity)} aria-label={`${activity.name} umbenennen`} title="Trainingsname ändern">✎</button>
-                              {activity.isActivityGroup && !state.reviews[activity.id] && <button className="activity-edit-button activity-unmerge-button" onClick={() => dissolveGroup(activity)} aria-label="Zusammenfassung aufheben" title="Zusammenfassung aufheben">↩</button>}
-                            </div>
-                          </article>
-                        );
-                      })}
+                {month.weeks.map(([weekKey, weekActivities]) => {
+                  const isOpen = openWeeks.has(weekKey);
+                  const distance = weekActivities.reduce((sum, activity) => sum + Number(activity.distance || 0), 0);
+                  const duration = weekActivities.reduce((sum, activity) => sum + Number(activity.duration || 0), 0);
+                  const pendingReviews = weekActivities.filter((activity) => reviewKind(activity) && !state.reviews[activity.id]).length;
+                  return (
+                    <div className={`training-week ${isOpen ? "open" : "collapsed"}`} key={weekKey}>
+                      <button
+                        type="button"
+                        className="training-week-toggle"
+                        onClick={() => toggleWeek(weekKey)}
+                        aria-expanded={isOpen}
+                        aria-controls={`training-week-${weekKey}`}
+                      >
+                        <div className="training-week-title">
+                          <span>{weekKey === currentWeekKey ? "Aktuelle Woche" : "Kalenderwoche"}</span>
+                          <h3>{weekLabel(weekKey)}</h3>
+                        </div>
+                        <div className="training-week-summary">
+                          <span>{weekActivities.length} {weekActivities.length === 1 ? "Einheit" : "Einheiten"}</span>
+                          {distance > 0 && <span>{distance.toLocaleString("de-DE", { maximumFractionDigits: 1 })} km</span>}
+                          <span>{hours(duration)}</span>
+                          {pendingReviews > 0 && <em>{pendingReviews} {pendingReviews === 1 ? "Review offen" : "Reviews offen"}</em>}
+                          <b aria-hidden="true">{isOpen ? "−" : "+"}</b>
+                        </div>
+                      </button>
+                      {isOpen && <div className="activity-list" id={`training-week-${weekKey}`}>
+                        {weekActivities.map((activity) => {
+                          const kind = reviewKind(activity);
+                          return (
+                            <article className={`activity-row ${kind ? "reviewable" : "no-review"} ${mergeSelection.includes(activity.id) ? "merge-selected" : ""} ${activity.isActivityGroup ? "activity-group-row" : ""} ${mergeMode && !activity.isActivityGroup && isRunningActivity(activity) ? "merge-candidate" : ""}`} key={activity.id}>
+                              {mergeMode && !activity.isActivityGroup && isRunningActivity(activity) && <button type="button" className="activity-merge-check" disabled={Boolean(state.reviews[activity.id])} onClick={() => toggleMergeActivity(activity)} aria-label={`${activity.name} auswählen`}>{mergeSelection.includes(activity.id) ? "✓" : "○"}</button>}
+                              <button className="activity activity-main" onClick={() => mergeMode && !activity.isActivityGroup ? toggleMergeActivity(activity) : kind && setSelected(activity)} disabled={!kind && !mergeMode} title={mergeMode ? "Zum Zusammenfassen auswählen" : kind ? `${reviewKindLabel(activity)} öffnen` : "Für diese Aktivität ist kein Review nötig"}>
+                                <div><b>{activity.name}</b><span>{fmtDate(activityDate(activity))} · {sourceLabel(activity)} · {sportGroup(activity).label}{activity.isActivityGroup ? ` · ${activity.memberCount} Teile` : ""}{activity.weather?.temperature != null || activity.temperature != null ? ` · ${Math.round(Number(activity.weather?.temperature ?? activity.temperature))} °C` : ""}</span></div>
+                                <div className="activity-metrics"><strong>{Number(activity.distance || 0).toLocaleString("de-DE", { maximumFractionDigits: 2 })} km</strong><span>{hours(activity.duration)} · {Number(activity.distance || 0) > 0 ? pace(activity.distance, activity.duration) : "–"}</span></div>
+                                <div className="activity-secondary"><strong>{activity.elevation || 0} hm</strong><span>{activity.avgHr ? `Ø ${activity.avgHr} bpm` : "Kein Puls"}</span></div>
+                                <em>{kind ? (state.reviews[activity.id] ? "✓ Review" : month.key === currentMonth ? "Review öffnen" : "Review optional") : "Kein Review nötig"}</em>
+                              </button>
+                              <div className="activity-row-actions">
+                                <button className="activity-edit-button" onClick={() => setEditingName(activity)} aria-label={`${activity.name} umbenennen`} title="Trainingsname ändern">✎</button>
+                                {activity.isActivityGroup && !state.reviews[activity.id] && <button className="activity-edit-button activity-unmerge-button" onClick={() => dissolveGroup(activity)} aria-label="Zusammenfassung aufheben" title="Zusammenfassung aufheben">↩</button>}
+                              </div>
+                            </article>
+                          );
+                        })}
+                      </div>}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </section>
             ))}
           </div>

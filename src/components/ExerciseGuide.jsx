@@ -151,6 +151,15 @@ function ExerciseVisual({ visual }) {
     );
   }
 
+  if (visual === "ankle-pumps") {
+    return (
+      <svg viewBox="0 0 300 150" role="img" aria-label="Fußwippe: Fußspitze zum Schienbein ziehen und danach nach vorn strecken">
+        <Panel label="FUSSSPITZE HOCH"><g className="pose" transform="translate(13 12)"><line x1="42" y1="31" x2="67" y2="82" /><line x1="67" y1="82" x2="99" y2="54" /><circle cx="67" cy="82" r="6" className="joint" /><path d="M92 86 A27 27 0 0 0 101 60" className="arrow" /><line x1="22" y1="112" x2="122" y2="112" className="ground" /></g></Panel>
+        <g transform="translate(150 0)"><Panel label="FUSS NACH VORN"><g className="pose motion" transform="translate(13 12)"><line x1="42" y1="31" x2="67" y2="82" /><line x1="67" y1="82" x2="111" y2="89" /><circle cx="67" cy="82" r="6" className="joint" /><path d="M94 54 A31 31 0 0 1 111 81" className="arrow" /><line x1="22" y1="112" x2="122" y2="112" className="ground" /></g></Panel></g>
+      </svg>
+    );
+  }
+
   if (visual === "pallof-press") {
     return (
       <svg viewBox="0 0 300 150" role="img" aria-label="Pallof Press: seitlich zum Band stehen und Hände nach vorn drücken">
@@ -217,6 +226,31 @@ function ExerciseVisual({ visual }) {
       </svg>
     );
   }
+  if (visual === "clock-reach") {
+    return (
+      <svg viewBox="0 0 300 150" role="img" aria-label="Einbeinstand mit Uhrzeiger-Tippen: freier Fuß tippt nach vorn, seitlich und hinten">
+        <Panel label="STABIL STEHEN"><g className="pose" transform="translate(19 8)"><StickFigure joints={{ leftFoot: [49, 121], rightFoot: [78, 82], hip: [52, 78] }} /><circle cx="49" cy="121" r="5" className="joint" /><line x1="14" y1="124" x2="116" y2="124" className="ground" /></g></Panel>
+        <g transform="translate(150 0)"><Panel label="ANTIPPEN"><g className="pose motion" transform="translate(13 8)"><StickFigure joints={{ leftFoot: [48, 121], rightFoot: [111, 111], hip: [52, 78] }} /><path d="M83 91 Q104 80 119 95" className="arrow" /><path d="M82 102 Q105 112 117 120" className="guide-line" /><line x1="14" y1="124" x2="127" y2="124" className="ground" /></g></Panel></g>
+      </svg>
+    );
+  }
+  if (visual === "band-ankle-inversion") {
+    return (
+      <svg viewBox="0 0 300 150" role="img" aria-label="Sprunggelenk mit Band nach innen: Unterschenkel still und Vorfuß zur Körpermitte bewegen">
+        <Panel label="BAND ZIEHT NACH AUSSEN"><g className="pose" transform="translate(9 11)"><line x1="64" y1="24" x2="64" y2="78" /><path d="M64 78 L25 91" /><line x1="25" y1="91" x2="129" y2="91" className="band-line" /><circle cx="64" cy="78" r="6" className="joint" /></g></Panel>
+        <g transform="translate(150 0)"><Panel label="FUSS NACH INNEN"><g className="pose motion" transform="translate(9 11)"><line x1="64" y1="24" x2="64" y2="78" /><path d="M64 78 L22 62" /><line x1="22" y1="62" x2="129" y2="91" className="band-line" /><circle cx="64" cy="78" r="6" className="joint" /><path d="M38 91 A28 28 0 0 1 21 69" className="arrow" /></g></Panel></g>
+      </svg>
+    );
+  }
+  if (visual === "band-ankle-dorsiflexion") {
+    return (
+      <svg viewBox="0 0 300 150" role="img" aria-label="Sprunggelenk mit Band nach oben: Ferse ruhig und Fußspitze zum Schienbein ziehen">
+        <Panel label="BAND VOR DEM FUSS"><g className="pose" transform="translate(9 11)"><line x1="42" y1="28" x2="69" y2="82" /><path d="M69 82 L110 91" /><line x1="110" y1="91" x2="137" y2="91" className="band-line" /><circle cx="69" cy="82" r="6" className="joint" /></g></Panel>
+        <g transform="translate(150 0)"><Panel label="FUSSSPITZE HOCH"><g className="pose motion" transform="translate(9 11)"><line x1="42" y1="28" x2="69" y2="82" /><path d="M69 82 L99 52" /><line x1="99" y1="52" x2="137" y2="91" className="band-line" /><circle cx="69" cy="82" r="6" className="joint" /><path d="M104 83 A30 30 0 0 0 101 58" className="arrow" /></g></Panel></g>
+      </svg>
+    );
+  }
+
   if (visual === "band-ankle") {
     return (
       <svg viewBox="0 0 300 150" role="img" aria-label="Sprunggelenk mit Band nach außen: Unterschenkel still und Vorfuß gegen den Zug nach außen bewegen">
@@ -226,10 +260,12 @@ function ExerciseVisual({ visual }) {
     );
   }
 
-  if (["calf-raise", "tibialis-raise", "single-leg-balance"].includes(visual)) {
+  if (["calf-raise", "single-leg-calf-raise", "tibialis-raise", "single-leg-balance"].includes(visual)) {
     const endJoints = visual === "calf-raise"
       ? { leftFoot: [40, 112], rightFoot: [66, 112], hip: [53, 73] }
-      : visual === "single-leg-balance"
+      : visual === "single-leg-calf-raise"
+        ? { leftFoot: [48, 112], rightFoot: [82, 82], hip: [52, 72] }
+        : visual === "single-leg-balance"
         ? { leftFoot: [48, 120], rightFoot: [82, 82], hip: [52, 78] }
         : visual === "knee-to-wall"
           ? { leftFoot: [28, 120], rightFoot: [83, 120], hip: [67, 80], leftHand: [100, 62], rightHand: [102, 78] }
