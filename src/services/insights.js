@@ -203,11 +203,13 @@ export function coachDashboard(activities = [], reviews = {}, now = new Date()) 
     .map(({ activity, review }) => hydration(activity, review))
     .filter(Boolean);
   const sweatRate = average(hydrationRows.map((item) => item.rate));
+  const sodiumRows = longFuelRows.map(({ review }) => Number(review.sodiumPerHour || 0)).filter((value) => value > 0);
+  const sodiumRate = average(sodiumRows);
   const fuel = {
     value: longFuelRows.length ? `${goodFuel}/${longFuelRows.length} im Zielbereich` : "Noch keine langen Fuel-Tests",
     tone: lowFuel ? "warn" : longFuelRows.length ? "good" : "neutral",
     text: longFuelRows.length
-      ? `${lowFuel ? `${lowFuel} lange Einheit${lowFuel === 1 ? " lag" : "en lagen"} unter dem Kohlenhydrat-Zielbereich. ` : "Die erfassten langen Einheiten liegen beim Fuel im Zielbereich. "}${sweatRate ? `Ermittelte Schweißrate im Mittel: ${Math.round(sweatRate)} ml/h.` : ""}`
+      ? `${lowFuel ? `${lowFuel} lange Einheit${lowFuel === 1 ? " lag" : "en lagen"} unter dem Kohlenhydrat-Zielbereich. ` : "Die erfassten langen Einheiten liegen beim Fuel im Zielbereich. "}${sweatRate ? `Ermittelte Schweißrate im Mittel: ${Math.round(sweatRate)} ml/h. ` : ""}${sodiumRate ? `Natrium wurde im Mittel mit ${Math.round(sodiumRate)} mg/h erfasst; die Bewertung bleibt ohne persönlichen Schweiß- und Salzverlustbereich bewusst neutral.` : ""}`
       : "Bei den nächsten Läufen ab etwa 90 Minuten Fuel und Trinkmenge erfassen, damit der Coach belastbare Muster lernt.",
   };
 

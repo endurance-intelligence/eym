@@ -161,7 +161,7 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 
 - `OPEN_FOOD_FACTS_USER_ID`
 - `OPEN_FOOD_FACTS_PASSWORD`
-- `OPEN_FOOD_FACTS_USER_AGENT` (recommended format: `EnduranceIntelligence/2.18.1 (contact@example.com)`)
+- `OPEN_FOOD_FACTS_USER_AGENT` (recommended format: `EnduranceIntelligence/2.19.0 (contact@example.com)`)
 - `OPEN_FOOD_FACTS_APP_SALT` (a random secret used to derive a stable pseudonymous app UUID per EYM user)
 
 ## Personal ambient themes (v2.16)
@@ -202,3 +202,15 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 - Makes activity history collapsible by month as well as by ISO calendar week. The current month and current week remain open by default.
 - Adds a compact tomorrow preview below today's Briefing so the next planned session is visible without opening the full week.
 - No Supabase migration is required.
+
+## Nutrition-label OCR, sodium and compact Fuel reviews (v2.19)
+
+- Adds sodium per serving and per 100 g/ml to Fuel Lab products, review totals and Coach fuel summaries.
+- Drink powders can store product quantity per mixture, scoop count and the volume of finished drink. A review can therefore record the amount actually consumed in millilitres; EYM converts it to mixtures, carbohydrates, sodium, caffeine and stock usage.
+- Nutrition-table photos are processed locally in the browser with Tesseract.js. Recognized values are copied into editable fields and must be checked against the packaging before saving.
+- Stores the complete nutrition table (energy, carbohydrates, sugar, fat, protein, salt, sodium, magnesium, calcium, vitamin B1 and caffeine) while keeping only training-relevant values prominent.
+- Review fueling uses two explicit modes: select a product from Fuel Lab or enter a one-off item manually. Brand, product name and nutrients are hidden when a catalog product is selected.
+- Historical-stock guidance is shown once for the whole fueling section instead of being repeated for every item.
+- Carbohydrate feedback now explains the result in relation to activity duration and stomach tolerance. Sodium is reported neutrally because an individual target depends on sweat rate, conditions and salt loss.
+- The Open Food Facts function submits the expanded nutrition values and remains responsible for optional photo uploads. Redeploy `open-food-facts` after applying this version.
+- No database migration is required; the new fields remain within the existing athlete data document.

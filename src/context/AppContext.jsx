@@ -7,6 +7,7 @@ import { fetchIntervalsStatus, mapIntervalsActivities, mergeIntervalsActivities,
 import { migrateConfiguration } from "../services/configuration";
 import { applyTheme, normalizeAppearance } from "../services/theme";
 import { findFuelCatalogMatch, fuelCatalogKey, reviewFuelCategory } from "../services/fuelCatalog";
+import { consumedInventoryUnits } from "../services/fuelNutrition";
 
 const AppContext = createContext(null);
 
@@ -32,7 +33,7 @@ function normalizeInventory(activities, items, reviews) {
       if (!product) return { ...item, affectsInventory: false };
       const affectsInventory = !activityDay || activityDay >= product.stockTrackedFrom;
       if (!affectsInventory) {
-        restored[product.id] = (restored[product.id] || 0) + (Number(item.quantity) || 0);
+        restored[product.id] = (restored[product.id] || 0) + consumedInventoryUnits({ ...item, affectsInventory: true }, product);
       }
       return { ...item, affectsInventory };
     });
@@ -70,7 +71,8 @@ function migrateReviewFuelCatalog(inputState = {}) {
         name: String(item.product || "").trim(),
         category,
         carbs: Number(item.carbohydratesPerUnit || 0),
-        caffeine: 0,
+        sodium: Number(item.sodiumPerUnit || 0),
+        caffeine: Number(item.caffeinePerUnit || 0),
         quantity: 0,
         stockUnit: item.unit === "Tabletten" ? "Tabletten" : item.unit === "Beutel" ? "Beutel" : item.unit === "Portionen" ? "Portionen" : "Stück",
         barcode: "",
@@ -338,8 +340,10 @@ export function AppProvider({ children }) {
     logout: signOut,
     upsertReview: (id, review, options = {}) => setState((current) => {
       const usage = (items) => (Array.isArray(items) ? items : []).reduce((result, item) => {
-        if (!item.fuelItemId || item.affectsInventory === false) return result;
-        result[item.fuelItemId] = (result[item.fuelItemId] || 0) + (Number(item.quantity) || 0);
+        const fuelItem = current.fuel.find((candidate) => candidate.id === item.fuelItemId);
+        const consumed = consumedInventoryUnits(item, fuelItem);
+        if (!consumed) return result;
+        result[item.fuelItemId] = (result[item.fuelItemId] || 0) + consumed;
         return result;
       }, {});
 
@@ -365,7 +369,8 @@ export function AppProvider({ children }) {
           name: String(item.product || "").trim(),
           category,
           carbs: Number(item.carbohydratesPerUnit || 0),
-          caffeine: 0,
+          sodium: Number(item.sodiumPerUnit || 0),
+          caffeine: Number(item.caffeinePerUnit || 0),
           quantity: 0,
           stockUnit: item.unit === "Tabletten" ? "Tabletten" : item.unit === "Beutel" ? "Beutel" : item.unit === "Portionen" ? "Portionen" : "Stück",
           barcode: "",

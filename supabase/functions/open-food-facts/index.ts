@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 const jsonHeaders = { ...corsHeaders, "Content-Type": "application/json; charset=utf-8" };
 const APP_NAME = "Endurance Intelligence";
-const APP_VERSION = "2.15.0";
+const APP_VERSION = "2.19.0";
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: jsonHeaders });
@@ -93,8 +93,24 @@ async function writeProduct(product: Record<string, unknown>, credentials: { use
   const barcode = cleanBarcode(product.barcode);
   const servingQuantity = numberOrNull(product.servingQuantity);
   const servingUnit = cleanText(product.servingUnit, 4) || "g";
-  const carbsPer100 = numberOrNull(product.carbsPer100) ?? derivePer100(numberOrNull(product.carbs), servingQuantity);
-  const caffeinePer100 = numberOrNull(product.caffeinePer100) ?? derivePer100(numberOrNull(product.caffeine), servingQuantity);
+  const nutrientFields = [
+    ["carbohydrates", "carbs", "carbsPer100", "g"],
+    ["sugars", "sugar", "sugarPer100", "g"],
+    ["fat", "fat", "fatPer100", "g"],
+    ["proteins", "protein", "proteinPer100", "g"],
+    ["salt", "salt", "saltPer100", "g"],
+    ["sodium", "sodium", "sodiumPer100", "mg"],
+    ["energy-kcal", "energyKcal", "energyKcalPer100", "kcal"],
+    ["magnesium", "magnesium", "magnesiumPer100", "mg"],
+    ["calcium", "calcium", "calciumPer100", "mg"],
+    ["vitamin-b1", "vitaminB1", "vitaminB1Per100", "mg"],
+    ["caffeine", "caffeine", "caffeinePer100", "mg"],
+  ] as const;
+  const nutrients = nutrientFields.map(([offName, servingField, per100Field, unit]) => ({
+    offName,
+    unit,
+    value: numberOrNull(product[per100Field]) ?? derivePer100(numberOrNull(product[servingField]), servingQuantity),
+  })).filter((item) => item.value != null);
   const body = new URLSearchParams({
     code: barcode,
     user_id: credentials.userId,
@@ -111,19 +127,15 @@ async function writeProduct(product: Record<string, unknown>, credentials: { use
   });
   const packageSize = cleanText(product.packageSize, 80);
   if (packageSize) body.set("quantity", packageSize);
-  if (servingQuantity != null) body.set("serving_size", `${servingQuantity} ${servingUnit}`);
+  const preparedVolumeMl = numberOrNull(product.preparedVolumeMl);
+  if (servingQuantity != null) body.set("serving_size", `${servingQuantity} ${servingUnit}${preparedVolumeMl ? ` / ${preparedVolumeMl} ml zubereitet` : ""}`);
   const ingredients = cleanText(product.ingredientsText, 4000);
   if (ingredients) body.set("ingredients_text_de", ingredients);
-  if (carbsPer100 != null) {
-    body.set("nutrition_data_per", "100g");
-    body.set("nutriment_carbohydrates", String(carbsPer100));
-    body.set("nutriment_carbohydrates_unit", "g");
-  }
-  if (caffeinePer100 != null) {
-    body.set("nutrition_data_per", "100g");
-    body.set("nutriment_caffeine", String(caffeinePer100));
-    body.set("nutriment_caffeine_unit", "mg");
-  }
+  if (nutrients.length) body.set("nutrition_data_per", "100g");
+  nutrients.forEach(({ offName, value, unit }) => {
+    body.set(`nutriment_${offName}`, String(value));
+    body.set(`nutriment_${offName}_unit`, unit);
+  });
 
   const response = await fetch("https://world.openfoodfacts.org/cgi/product_jqm2.pl", {
     method: "POST",

@@ -12,20 +12,55 @@ import { compressImageFile } from "../services/imageTools";
 import { contributeOpenFoodFactsProduct, openFoodFactsContributionReady } from "../services/openFoodFactsContribution";
 import { fuelCatalogKey } from "../services/fuelCatalog";
 import { lookupOpenPrices, productPriceSearchLinks } from "../services/productPrices";
+import { extractNutritionLabel } from "../services/nutritionOcr";
 
 const categories = ["Gel", "Drink Mix", "Elektrolyte", "Riegel", "Recovery", "Kapseln", "Sonstiges"];
 const stockUnits = ["Stück", "Portionen", "Tabletten", "Beutel"];
 const servingUnits = ["g", "ml"];
+const nutrientFields = [
+  ["energyKcal", "energyKcalPer100", "Energie", "kcal"],
+  ["carbs", "carbsPer100", "Kohlenhydrate", "g"],
+  ["sugar", "sugarPer100", "davon Zucker", "g"],
+  ["fat", "fatPer100", "Fett", "g"],
+  ["protein", "proteinPer100", "Eiweiß", "g"],
+  ["salt", "saltPer100", "Salz", "g"],
+  ["sodium", "sodiumPer100", "Natrium", "mg"],
+  ["magnesium", "magnesiumPer100", "Magnesium", "mg"],
+  ["calcium", "calciumPer100", "Calcium", "mg"],
+  ["vitaminB1", "vitaminB1Per100", "Vitamin B1", "mg"],
+  ["caffeine", "caffeinePer100", "Koffein", "mg"],
+];
 const emptyProduct = {
   brand: "",
   name: "",
   category: "Gel",
   carbs: "",
+  sodium: "",
   caffeine: "",
+  energyKcal: "",
+  sugar: "",
+  fat: "",
+  protein: "",
+  salt: "",
+  magnesium: "",
+  calcium: "",
+  vitaminB1: "",
   carbsPer100: "",
+  sodiumPer100: "",
   caffeinePer100: "",
+  energyKcalPer100: "",
+  sugarPer100: "",
+  fatPer100: "",
+  proteinPer100: "",
+  saltPer100: "",
+  magnesiumPer100: "",
+  calciumPer100: "",
+  vitaminB1Per100: "",
   servingQuantity: "",
   servingUnit: "g",
+  preparedVolumeMl: "",
+  scoopsPerServing: "",
+  consumptionRecommendation: "",
   ingredientsText: "",
   quantity: "1",
   stockUnit: "Stück",
@@ -38,6 +73,13 @@ const emptyProduct = {
   brandSource: null,
   catalogContributionPending: false,
 };
+
+function nutritionEditorValues(item = {}) {
+  return Object.fromEntries(nutrientFields.flatMap(([perServing, per100]) => [
+    [perServing, numericOrEmpty(item[perServing])],
+    [per100, numericOrEmpty(item[per100])],
+  ]));
+}
 
 function numericOrEmpty(value) {
   return value == null || value === "" ? "" : String(value);
@@ -93,6 +135,9 @@ export default function Fuel() {
   const [productStatuses, setProductStatuses] = useState({});
   const [contributionConsent, setContributionConsent] = useState(false);
   const [contributionStatus, setContributionStatus] = useState("idle");
+  const [nutritionScanStatus, setNutritionScanStatus] = useState("idle");
+  const [nutritionScanMessage, setNutritionScanMessage] = useState("");
+  const [nutritionScanResult, setNutritionScanResult] = useState(null);
   const [notice, setNotice] = useState(null);
   const [priceProduct, setPriceProduct] = useState(null);
   const [priceStatus, setPriceStatus] = useState("idle");
@@ -153,12 +198,13 @@ export default function Fuel() {
     setProduct((current) => ({
       ...current,
       ...result.product,
-      carbs: result.product.carbs ?? current.carbs,
-      caffeine: result.product.caffeine ?? current.caffeine,
-      carbsPer100: result.product.carbsPer100 ?? current.carbsPer100,
-      caffeinePer100: result.product.caffeinePer100 ?? current.caffeinePer100,
+      ...Object.fromEntries(nutrientFields.flatMap(([perServing, per100]) => [
+        [perServing, result.product[perServing] ?? current[perServing]],
+        [per100, result.product[per100] ?? current[per100]],
+      ])),
       servingQuantity: result.product.servingQuantity ?? current.servingQuantity,
       servingUnit: result.product.servingUnit || current.servingUnit,
+      preparedVolumeMl: result.product.preparedVolumeMl ?? current.preparedVolumeMl,
       ingredientsText: result.product.ingredientsText || current.ingredientsText,
       brand: result.product.brand || current.brand,
       name: result.product.name || current.name,
@@ -202,6 +248,31 @@ export default function Fuel() {
     }
   }
 
+  async function analyzeNutritionPhoto(image) {
+    if (!image) return;
+    setNutritionScanStatus("loading");
+    setNutritionScanMessage("Nährwerttabelle wird erkannt … 0 %");
+    setNutritionScanResult(null);
+    try {
+      const result = await extractNutritionLabel(image, (progress) => setNutritionScanMessage(`Nährwerttabelle wird erkannt … ${progress} %`));
+      setNutritionScanResult(result);
+      setProduct((current) => {
+        const next = { ...current, catalogContributionPending: true };
+        Object.entries(result.values).forEach(([key, value]) => {
+          if (value != null && value !== "") next[key] = String(Number.isInteger(value) ? value : Number(value.toFixed(2)));
+        });
+        return next;
+      });
+      setNutritionScanStatus(result.recognized.length ? "success" : "warning");
+      setNutritionScanMessage(result.recognized.length
+        ? `${result.recognized.length} Angaben erkannt und in die Felder übernommen. Bitte kurz mit der Verpackung vergleichen.`
+        : "Das Foto wurde gelesen, aber keine sicheren Nährwertangaben erkannt. Du kannst die Werte manuell ergänzen.");
+    } catch (error) {
+      setNutritionScanStatus("error");
+      setNutritionScanMessage(error.message || "Die Nährwerttabelle konnte nicht automatisch erkannt werden.");
+    }
+  }
+
   async function supportingPhoto(field, event) {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -209,6 +280,7 @@ export default function Fuel() {
     try {
       const imageUrl = await compressImageFile(file, { maxSize: 1400, quality: 0.8 });
       setProduct((current) => ({ ...current, [field]: imageUrl, catalogContributionPending: true }));
+      if (field === "nutritionImageUrl") await analyzeNutritionPhoto(imageUrl);
     } catch (error) {
       setScanStatus("error");
       setScanMessage(error.message || "Das Foto konnte nicht vorbereitet werden.");
@@ -222,6 +294,9 @@ export default function Fuel() {
     setScanMessage("");
     setContributionConsent(false);
     setContributionStatus("idle");
+    setNutritionScanStatus("idle");
+    setNutritionScanMessage("");
+    setNutritionScanResult(null);
     setShowForm(false);
   }
 
@@ -235,12 +310,12 @@ export default function Fuel() {
       brand: item.brand || "",
       name: item.name || "",
       category: item.category || "Gel",
-      carbs: numericOrEmpty(item.carbs),
-      caffeine: numericOrEmpty(item.caffeine),
-      carbsPer100: numericOrEmpty(item.carbsPer100),
-      caffeinePer100: numericOrEmpty(item.caffeinePer100),
+      ...nutritionEditorValues(item),
       servingQuantity: numericOrEmpty(item.servingQuantity),
       servingUnit: item.servingUnit || "g",
+      preparedVolumeMl: numericOrEmpty(item.preparedVolumeMl),
+      scoopsPerServing: numericOrEmpty(item.scoopsPerServing),
+      consumptionRecommendation: item.consumptionRecommendation || "",
       ingredientsText: item.ingredientsText || "",
       quantity: String(item.quantity ?? 0),
       stockUnit: item.stockUnit || stockUnitForCategory(item.category),
@@ -261,6 +336,9 @@ export default function Fuel() {
     setScanMessage(message);
     setContributionConsent(false);
     setContributionStatus("idle");
+    setNutritionScanStatus("idle");
+    setNutritionScanMessage("");
+    setNutritionScanResult(null);
     setShowForm(true);
     window.setTimeout(() => document.querySelector(".fuel-product-editor")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
   }
@@ -297,12 +375,13 @@ export default function Fuel() {
           name: result.product.name || candidate.name,
           barcode: result.product.barcode || candidate.barcode || "",
           category: result.product.category || candidate.category,
-          carbs: result.product.carbs ?? candidate.carbs,
-          caffeine: result.product.caffeine ?? candidate.caffeine,
-          carbsPer100: result.product.carbsPer100 ?? candidate.carbsPer100 ?? null,
-          caffeinePer100: result.product.caffeinePer100 ?? candidate.caffeinePer100 ?? null,
+          ...Object.fromEntries(nutrientFields.flatMap(([perServing, per100]) => [
+            [perServing, result.product[perServing] ?? candidate[perServing] ?? null],
+            [per100, result.product[per100] ?? candidate[per100] ?? null],
+          ])),
           servingQuantity: result.product.servingQuantity ?? candidate.servingQuantity ?? null,
           servingUnit: result.product.servingUnit || candidate.servingUnit || "g",
+          preparedVolumeMl: result.product.preparedVolumeMl ?? candidate.preparedVolumeMl ?? null,
           ingredientsText: result.product.ingredientsText || candidate.ingredientsText || "",
           stockUnit: candidate.stockUnit || result.product.stockUnit,
           imageUrl: result.product.imageUrl || candidate.imageUrl,
@@ -319,6 +398,7 @@ export default function Fuel() {
       }));
       const details = [
         result.product.carbs != null ? `${result.product.carbs} g Carbs` : null,
+        result.product.sodium != null ? `${result.product.sodium} mg Natrium` : null,
         result.product.caffeine != null ? `${result.product.caffeine} mg Koffein` : null,
       ].filter(Boolean).join(" · ");
       setProductStatuses((current) => ({ ...current, [item.id]: { tone: "good", message: details ? `Aktualisiert: ${details}` : "Produktdaten geprüft; keine zusätzlichen Nährwerte vorhanden." } }));
@@ -333,12 +413,15 @@ export default function Fuel() {
       brand: product.brand.trim(),
       name: product.name.trim(),
       category: product.category,
-      carbs: numberOrZero(product.carbs),
-      caffeine: numberOrZero(product.caffeine),
-      carbsPer100: numberOrNull(product.carbsPer100) ?? derivedPer100(product.carbs, servingQuantity),
-      caffeinePer100: numberOrNull(product.caffeinePer100) ?? derivedPer100(product.caffeine, servingQuantity),
+      ...Object.fromEntries(nutrientFields.flatMap(([perServing, per100]) => [
+        [perServing, perServing === "carbs" ? numberOrZero(product[perServing]) : numberOrNull(product[perServing])],
+        [per100, numberOrNull(product[per100]) ?? derivedPer100(product[perServing], servingQuantity)],
+      ])),
       servingQuantity,
       servingUnit: product.servingUnit || "g",
+      preparedVolumeMl: numberOrNull(product.preparedVolumeMl),
+      scoopsPerServing: numberOrNull(product.scoopsPerServing),
+      consumptionRecommendation: product.consumptionRecommendation.trim(),
       ingredientsText: product.ingredientsText.trim(),
       quantity: numberOrZero(product.quantity),
       stockUnit: product.stockUnit || "Stück",
@@ -493,6 +576,7 @@ export default function Fuel() {
   const active = state.fuel.filter((item) => !item.archived);
   const archived = state.fuel.filter((item) => item.archived);
   const computedCarbsPer100 = product.carbsPer100 || derivedPer100(product.carbs, product.servingQuantity);
+  const computedSodiumPer100 = product.sodiumPer100 || derivedPer100(product.sodium, product.servingQuantity);
   const computedCaffeinePer100 = product.caffeinePer100 || derivedPer100(product.caffeine, product.servingQuantity);
 
   return <>
@@ -524,12 +608,15 @@ export default function Fuel() {
           <small>Für Erkennung und Produktbild</small>
           <button type="button" onClick={() => photoInput.current?.click()}>{product.imageUrl ? "Foto ersetzen" : "Foto hinzufügen"}</button>
         </div>
-        <div className="fuel-photo-slot">
+        <div className="fuel-photo-slot fuel-nutrition-photo-slot">
           <input ref={nutritionPhotoInput} className="visually-hidden" type="file" accept="image/*" capture="environment" onChange={(event) => supportingPhoto("nutritionImageUrl", event)} />
           <div className="fuel-photo-preview">{product.nutritionImageUrl ? <img src={product.nutritionImageUrl} alt="Nährwerttabelle" /> : <span>Nährwerte</span>}</div>
           <b>Nährwerttabelle</b>
-          <small>Hilft bei Carbs und Koffein</small>
-          <button type="button" onClick={() => nutritionPhotoInput.current?.click()}>{product.nutritionImageUrl ? "Foto ersetzen" : "Foto hinzufügen"}</button>
+          <small>Foto aufnehmen – EYM liest Portion, Carbs, Natrium und weitere Werte aus.</small>
+          <div className="fuel-photo-button-row">
+            <button type="button" onClick={() => nutritionPhotoInput.current?.click()}>{product.nutritionImageUrl ? "Foto ersetzen" : "Foto hinzufügen"}</button>
+            {product.nutritionImageUrl && <button type="button" className="secondary" disabled={nutritionScanStatus === "loading"} onClick={() => analyzeNutritionPhoto(product.nutritionImageUrl)}>Neu erkennen</button>}
+          </div>
         </div>
         <div className="fuel-photo-slot">
           <input ref={ingredientsPhotoInput} className="visually-hidden" type="file" accept="image/*" capture="environment" onChange={(event) => supportingPhoto("ingredientsImageUrl", event)} />
@@ -539,6 +626,11 @@ export default function Fuel() {
           <button type="button" onClick={() => ingredientsPhotoInput.current?.click()}>{product.ingredientsImageUrl ? "Foto ersetzen" : "Foto hinzufügen"}</button>
         </div>
       </div>
+
+      {nutritionScanMessage && <div className={`fuel-nutrition-scan ${nutritionScanStatus}`}>
+        <div><b>{nutritionScanStatus === "loading" ? "Texterkennung läuft" : nutritionScanStatus === "success" ? "Nährwerte übernommen" : "Nährwerte prüfen"}</b><span>{nutritionScanMessage}</span><small>Die Erkennung läuft lokal im Browser. An Open Food Facts wird erst über „Speichern + übertragen“ gesendet.</small></div>
+        {nutritionScanResult?.rawText && <details><summary>Erkannten Text anzeigen</summary><pre>{nutritionScanResult.rawText}</pre></details>}
+      </div>}
 
       <form className="editor-form fuel-editor-form fuel-editor-sections" onSubmit={(event) => save(event, false)}>
         <div className="fuel-form-section wide">
@@ -553,31 +645,46 @@ export default function Fuel() {
             <label>Marke / Hersteller<input name="brand" value={product.brand} onChange={change} placeholder="Maurten" /></label>
             <label>Produktname<input name="name" value={product.name} onChange={change} placeholder="Gel 100" required /></label>
             <label>Kategorie<select name="category" value={product.category} onChange={change}>{categories.map((category) => <option key={category}>{category}</option>)}</select></label>
-            <label>Packungsangabe<input name="packageSize" value={product.packageSize} onChange={change} placeholder="z. B. 60 g oder 500 ml" /></label>
+            <label>Packungsangabe<input name="packageSize" value={product.packageSize} onChange={change} placeholder="z. B. 400 g oder 12 × 60 g" /></label>
           </div>
         </div>
 
-        <div className="fuel-form-section wide">
-          <p className="eyebrow">Für dein Training</p>
+        <div className="fuel-form-section wide fuel-essential-section">
+          <div className="fuel-section-heading"><div><p className="eyebrow">Essentiell für dein Training</p><h3>Das nutzt EYM für Reviews und Fuel-Feedback</h3></div><span>pro Portion / Mischung</span></div>
           <div className="fuel-form-grid">
-            <label>Kohlenhydrate pro Einheit (g)<input name="carbs" type="number" min="0" step="0.1" value={product.carbs} onChange={change} /></label>
-            <label>Koffein pro Einheit (mg)<input name="caffeine" type="number" min="0" step="1" value={product.caffeine} onChange={change} /></label>
+            <label>Kohlenhydrate (g)<input name="carbs" type="number" min="0" step="0.1" value={product.carbs} onChange={change} /></label>
+            <label>Natrium (mg)<input name="sodium" type="number" min="0" step="1" value={product.sodium} onChange={change} /></label>
+            <label>Koffein (mg)<input name="caffeine" type="number" min="0" step="1" value={product.caffeine} onChange={change} placeholder="leer = nicht angegeben" /></label>
             <label>Bestand<input name="quantity" type="number" min="0" step="0.1" value={product.quantity} onChange={change} /></label>
             <label>Bestandseinheit<select name="stockUnit" value={product.stockUnit} onChange={change}>{stockUnits.map((unit) => <option key={unit}>{unit}</option>)}</select></label>
           </div>
         </div>
 
         <div className="fuel-form-section wide">
-          <p className="eyebrow">Für vollständige Produktdaten</p>
+          <p className="eyebrow">Portion & Zubereitung</p>
           <div className="fuel-form-grid">
-            <label>Portionsmenge<input name="servingQuantity" type="number" min="0" step="0.1" value={product.servingQuantity} onChange={change} placeholder="60" /></label>
+            <label>Produktmenge pro Portion<input name="servingQuantity" type="number" min="0" step="0.1" value={product.servingQuantity} onChange={change} placeholder="40" /></label>
             <label>Einheit<select name="servingUnit" value={product.servingUnit} onChange={change}>{servingUnits.map((unit) => <option key={unit}>{unit}</option>)}</select></label>
-            <label>Kohlenhydrate pro 100 g/ml<input name="carbsPer100" type="number" min="0" step="0.1" value={product.carbsPer100} onChange={change} placeholder={computedCarbsPer100 ?? ""} /></label>
-            <label>Koffein pro 100 g/ml (mg)<input name="caffeinePer100" type="number" min="0" step="0.1" value={product.caffeinePer100} onChange={change} placeholder={computedCaffeinePer100 ?? ""} /></label>
-            <label className="wide">Zutaten laut Verpackung<textarea name="ingredientsText" value={product.ingredientsText} onChange={change} placeholder="Optional: Zutatenliste abschreiben oder fotografieren" /></label>
+            <label>Messlöffel pro Portion<input name="scoopsPerServing" type="number" min="0" step="0.1" value={product.scoopsPerServing} onChange={change} placeholder="3" /></label>
+            <label>Ergibt fertiges Getränk (ml)<input name="preparedVolumeMl" type="number" min="0" step="1" value={product.preparedVolumeMl} onChange={change} placeholder="500" /></label>
+            <label className="wide">Verzehrempfehlung<textarea name="consumptionRecommendation" value={product.consumptionRecommendation} onChange={change} placeholder="z. B. 150 ml alle 15 Minuten; vor, während und nach dem Training" /></label>
           </div>
-          {(computedCarbsPer100 != null || computedCaffeinePer100 != null) && <p className="fuel-derived-values">Aus Portion und Trainingswerten berechnet: {computedCarbsPer100 != null ? `${computedCarbsPer100} g Kohlenhydrate` : "–"} · {computedCaffeinePer100 != null ? `${computedCaffeinePer100} mg Koffein` : "–"} pro 100 {product.servingUnit || "g"}.</p>}
+          {product.preparedVolumeMl && product.carbs !== "" && <div className="fuel-mix-preview"><b>Umrechnung im Review</b><span>100 ml enthalten ca. {(Number(product.carbs || 0) / Number(product.preparedVolumeMl || 1) * 100).toFixed(1)} g Kohlenhydrate{product.sodium !== "" ? ` und ${Math.round(Number(product.sodium || 0) / Number(product.preparedVolumeMl || 1) * 100)} mg Natrium` : ""}.</span></div>}
         </div>
+
+        <details className="fuel-form-section wide fuel-nutrition-details" open={nutritionScanStatus === "success"}>
+          <summary><span><b>Vollständige Nährwerttabelle</b><small>Für Transparenz und Open Food Facts – im Review stehen nur die relevanten Werte.</small></span><strong>Öffnen</strong></summary>
+          <div className="fuel-nutrition-table-editor">
+            <div className="fuel-nutrition-table-head"><span>Nährwert</span><span>pro Portion</span><span>pro 100 {product.servingUnit || "g"}</span></div>
+            {nutrientFields.map(([perServing, per100, label, unit]) => <div className="fuel-nutrition-table-row" key={perServing}>
+              <b>{label} <small>{unit}</small></b>
+              <input aria-label={`${label} pro Portion`} name={perServing} type="number" min="0" step="0.01" value={product[perServing]} onChange={change} />
+              <input aria-label={`${label} pro 100`} name={per100} type="number" min="0" step="0.01" value={product[per100]} onChange={change} placeholder={derivedPer100(product[perServing], product.servingQuantity) ?? ""} />
+            </div>)}
+          </div>
+          {(computedCarbsPer100 != null || computedSodiumPer100 != null || computedCaffeinePer100 != null) && <p className="fuel-derived-values">Berechnet pro 100 {product.servingUnit || "g"}: {computedCarbsPer100 != null ? `${computedCarbsPer100} g Kohlenhydrate` : "–"} · {computedSodiumPer100 != null ? `${computedSodiumPer100} mg Natrium` : "–"} · {computedCaffeinePer100 != null ? `${computedCaffeinePer100} mg Koffein` : "–"}.</p>}
+          <label className="fuel-ingredients-field">Zutaten laut Verpackung<textarea name="ingredientsText" value={product.ingredientsText} onChange={change} placeholder="Optional: Zutatenliste abschreiben oder fotografieren" /></label>
+        </details>
 
         <div className="fuel-contribution-consent wide">
           <label><input type="checkbox" checked={contributionConsent} onChange={(event) => setContributionConsent(event.target.checked)} /><span>Ich bestätige, dass hochgeladene Fotos von mir stammen und unter der Open-Food-Facts-Lizenz geteilt werden dürfen.</span></label>
@@ -599,7 +706,7 @@ export default function Fuel() {
           <div className="fuel-product-copy">
             <p className="eyebrow">{item.category}</p>
             <h2 title={item.brand ? `${item.brand} ${item.name}` : item.name}>{item.brand ? `${item.brand} ${item.name}` : item.name}</h2>
-            <div className="fuel-stats"><b>{item.carbs} g Carbs</b><span>{item.caffeine} mg Koffein</span></div>
+            <div className="fuel-stats"><b>{item.carbs} g Carbs</b><span>{item.sodium != null ? `${Math.round(Number(item.sodium))} mg Natrium` : "Natrium offen"}</span><span>{item.caffeine != null ? `${Math.round(Number(item.caffeine))} mg Koffein` : "Koffein offen"}</span></div>
           </div>
           <div className="fuel-card-actions">
             <button type="button" className="fuel-refresh-button" onClick={() => refreshProduct(item)} disabled={productStatuses[item.id]?.tone === "loading"} title={item.barcode ? "Produktname und Nährwerte per Barcode prüfen" : "Produktdaten anhand von Marke und Name suchen"}>
@@ -618,11 +725,16 @@ export default function Fuel() {
           </div>
         </div>
         <div className="fuel-product-meta">
+          {item.preparedVolumeMl && <small>{item.servingQuantity ? `${item.servingQuantity} ${item.servingUnit || "g"}` : "1 Portion"}{item.scoopsPerServing ? ` · ${item.scoopsPerServing} Messlöffel` : ""} ergeben {item.preparedVolumeMl} ml fertiges Getränk.</small>}
+          {item.consumptionRecommendation && <small>Empfehlung: {item.consumptionRecommendation}</small>}
           {item.barcode && <small className="fuel-barcode">Barcode {item.barcode}{item.source ? ` · ${item.source}` : ""}</small>}
           <small className="fuel-stock-start">Bestand seit {formatDate(`${item.stockTrackedFrom || new Date().toISOString().slice(0, 10)}T12:00:00`)}</small>
           {item.catalogCheckedAt && <small>Produktdaten geprüft am {formatDate(item.catalogCheckedAt)}{item.catalogCompleteness != null ? ` · Katalog ${Math.round(Number(item.catalogCompleteness) * 100)} % vollständig` : ""}</small>}
           {item.catalogSubmittedAt && <small>Zu Open Food Facts beigetragen am {formatDate(item.catalogSubmittedAt)}</small>}
         </div>
+        {(item.energyKcal != null || item.sugar != null || item.salt != null || item.magnesium != null || item.calcium != null) && <details className="fuel-card-nutrition-details"><summary>Vollständige Nährwerte</summary><div>
+          {nutrientFields.map(([perServing, , label, unit]) => item[perServing] != null && <span key={perServing}><small>{label}</small><b>{item[perServing]} {unit}</b></span>)}
+        </div></details>}
         {productNeedsContribution(item) && <div className="fuel-contribution-box">
           <div><b>Produktdaten ergänzen</b><span>{item.barcode ? "Vervollständige Verpackungsdaten und Fotos. Danach kannst du den Beitrag direkt aus EYM senden." : "Ein Barcode oder Foto verbessert die Zuordnung und ermöglicht einen Beitrag zum offenen Katalog."}</span></div>
           <div className="fuel-contribution-actions"><button type="button" onClick={() => editProduct(item, "Ergänze fehlende Angaben und Fotos. Lokale Daten bleiben unabhängig von Open Food Facts gespeichert.")}>Daten ergänzen</button>{item.barcode && <a href={openFoodFactsContributionUrl(item.barcode)} target="_blank" rel="noreferrer">Bei OFF öffnen ↗</a>}</div>

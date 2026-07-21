@@ -59,6 +59,25 @@ function nutrientPer100(product, nutrient, convertSmallToMg = false) {
   return Math.max(0, normalized);
 }
 
+function nutrientPerServing(product, nutrient, convertSmallToMg = false) {
+  const nutrients = product.nutriments || {};
+  let value = asNumber(nutrients[`${nutrient}_serving`]);
+  if (value === null) {
+    const per100 = asNumber(nutrients[`${nutrient}_100g`]);
+    const serving = asNumber(product.serving_quantity);
+    if (per100 !== null && serving !== null) value = per100 * serving / 100;
+  }
+  if (value === null) return null;
+  const normalized = convertSmallToMg && value <= 5 ? value * 1000 : value;
+  return Math.max(0, normalized);
+}
+
+function preparedVolumeMl(product) {
+  const text = [product.serving_size, product.quantity, product.product_name].filter(Boolean).join(" ");
+  const values = [...text.matchAll(/(\d+(?:[.,]\d+)?)\s*ml\b/gi)].map((match) => asNumber(String(match[1]).replace(",", "."))).filter((value) => value !== null);
+  return values[0] || null;
+}
+
 function servingUnit(product) {
   const text = String(product.serving_size || "").toLowerCase();
   if (/ml|milliliter|litre|liter/.test(text)) return "ml";
@@ -124,7 +143,27 @@ function productResult(barcode, source, sourceLabel) {
   const carbs = carbsPerServing(source);
   const caffeine = caffeineMgPerServing(source);
   const carbsPer100 = nutrientPer100(source, "carbohydrates");
+  const sodium = nutrientPerServing(source, "sodium", true);
+  const sodiumPer100 = nutrientPer100(source, "sodium", true);
   const caffeinePer100 = nutrientPer100(source, "caffeine", true);
+  const details = {
+    energyKcal: nutrientPerServing(source, "energy-kcal"),
+    energyKcalPer100: nutrientPer100(source, "energy-kcal"),
+    sugar: nutrientPerServing(source, "sugars"),
+    sugarPer100: nutrientPer100(source, "sugars"),
+    fat: nutrientPerServing(source, "fat"),
+    fatPer100: nutrientPer100(source, "fat"),
+    protein: nutrientPerServing(source, "proteins"),
+    proteinPer100: nutrientPer100(source, "proteins"),
+    salt: nutrientPerServing(source, "salt"),
+    saltPer100: nutrientPer100(source, "salt"),
+    magnesium: nutrientPerServing(source, "magnesium", true),
+    magnesiumPer100: nutrientPer100(source, "magnesium", true),
+    calcium: nutrientPerServing(source, "calcium", true),
+    calciumPer100: nutrientPer100(source, "calcium", true),
+    vitaminB1: nutrientPerServing(source, "vitamin-b1", true),
+    vitaminB1Per100: nutrientPer100(source, "vitamin-b1", true),
+  };
   const brand = firstText(source.brands, source.brand_owner, source.owner, source.manufacturing_places);
   return {
     found: true,
@@ -136,11 +175,15 @@ function productResult(barcode, source, sourceLabel) {
       name: String(source.product_name || source.generic_name || "").trim(),
       category,
       carbs: carbs == null ? null : Math.round(carbs * 10) / 10,
+      sodium: sodium == null ? null : Math.round(sodium),
       caffeine: caffeine == null ? null : Math.round(caffeine),
       carbsPer100: carbsPer100 == null ? null : Math.round(carbsPer100 * 10) / 10,
+      sodiumPer100: sodiumPer100 == null ? null : Math.round(sodiumPer100),
       caffeinePer100: caffeinePer100 == null ? null : Math.round(caffeinePer100 * 10) / 10,
+      ...Object.fromEntries(Object.entries(details).map(([key, value]) => [key, value == null ? null : Math.round(value * 100) / 100])),
       servingQuantity: asNumber(source.serving_quantity),
       servingUnit: servingUnit(source),
+      preparedVolumeMl: preparedVolumeMl(source),
       ingredientsText: String(source.ingredients_text_de || source.ingredients_text || "").trim(),
       stockUnit: stockUnitForCategory(category),
       imageUrl: source.image_front_small_url || source.image_front_url || "",
