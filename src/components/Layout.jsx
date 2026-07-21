@@ -4,10 +4,10 @@ import { useApp } from "../context/AppContext";
 
 const links = [
   ["/", "Briefing", "◉"],
-  ["/mission", "Mission", "◎"],
-  ["/training", "Training", "↗"],
   ["/planner", "Wochenplan", "▦"],
   ["/coach", "Coach", "✦"],
+  ["/mission", "Mission", "◎"],
+  ["/training", "Training", "↗"],
   ["/fuel", "Fuel Lab", "◒"],
   ["/equipment", "Equipment", "◇"],
   ["/analytics", "Analytics", "▥"],

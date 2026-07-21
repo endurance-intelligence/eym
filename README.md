@@ -88,10 +88,7 @@ The first load migrates the previous personal settings automatically:
 
 Users can then maintain profile data, recurring commitments and permitted replacement sports under **Settings**. Deleting all recurring commitments is respected after the one-time migration and does not recreate the legacy entries.
 
-The planner now supports two different adjustment scopes:
-
-1. replace, move or delete selected units without changing the remaining week
-2. recalculate selected days or the complete remaining week using the current check-in and configuration
+Once a week has been created, it remains a stable active plan. Users can replace or move selected units, or document a cancellation with a reason, without recalculating the remaining week.
 
 ## Fixed-term behavior (v2.9.1)
 
@@ -164,7 +161,7 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 
 - `OPEN_FOOD_FACTS_USER_ID`
 - `OPEN_FOOD_FACTS_PASSWORD`
-- `OPEN_FOOD_FACTS_USER_AGENT` (recommended format: `EnduranceIntelligence/2.17.0 (contact@example.com)`)
+- `OPEN_FOOD_FACTS_USER_AGENT` (recommended format: `EnduranceIntelligence/2.18.0 (contact@example.com)`)
 - `OPEN_FOOD_FACTS_APP_SALT` (a random secret used to derive a stable pseudonymous app UUID per EYM user)
 
 ## Personal ambient themes (v2.16)
@@ -185,3 +182,14 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 - Fuel saves close the editor and show a short success message. Open Food Facts contributions show a separate sent confirmation.
 - The contribution consent control is larger and easier to use on desktop and mobile.
 - Low-stock products include a re-order helper. It reads community price observations from Open Prices by barcode and provides direct searches at common German shopping and price-comparison sites. Observed prices may be older and are not guaranteed live inventory.
+
+## Stable weekly workflow and planning gate (v2.18)
+
+- Reorders the main navigation to Briefing, Wochenplan, Coach, Mission and Training before the supporting areas.
+- Replaces the large planner information blocks with one compact weekly status strip.
+- Keeps recurring commitments collapsed and moves planning logic and Intervals/Garmin details into the action menu.
+- Treats an existing week as an active plan: units can be replaced, moved or marked as cancelled, but the remaining week is not recalculated.
+- Cancelled appointments remain visible with their reason so the Coach can distinguish external cancellations from fatigue, pain, illness or weather.
+- Limits forward navigation to the next week. That week can only be generated after all review-relevant activities from the current week have reviews and every required planned unit is completed, matched, moved or explicitly marked as cancelled.
+- Provides a weekly-closure checklist with direct links to missing reviews and unresolved units.
+- No Supabase migration is required. The new cancellation and planner state remain inside the existing athlete data document.
