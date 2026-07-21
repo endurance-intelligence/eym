@@ -71,6 +71,10 @@ const exercise = (definition) => ({
   steps: [],
   cues: [],
   mistakes: [],
+  quickStart: "",
+  sideSwitch: false,
+  switchCue: "Seite wechseln",
+  asymmetryNote: "",
   ...definition,
 });
 
@@ -110,6 +114,8 @@ export const MOBILITY_EXERCISES = [
   exercise({
     id: "band-adduction",
     name: "Adduktoren mit Gummiband",
+    quickStart: "Stell dich seitlich zur Bandbefestigung. Das Band zieht das Arbeitsbein nach außen; führe das gestreckte Bein langsam zur Körpermitte.",
+    sideSwitch: true,
     group: "Physio",
     seconds: 120,
     equipment: ["band"],
@@ -126,7 +132,10 @@ export const MOBILITY_EXERCISES = [
   }),
   exercise({
     id: "adductor-rockback",
-    name: "Adduktoren-Rockback",
+    name: "Adduktoren-Rockback (Vierfüßler)",
+    subtitle: "Innenschenkel im Vierfüßler mobilisieren",
+    quickStart: "Vierfüßlerstand. Ein Bein gestreckt zur Seite, Fuß am Boden. Schiebe das Gesäß langsam Richtung Ferse und wieder nach vorn.",
+    sideSwitch: true,
     group: "Mobilität",
     seconds: 75,
     equipment: ["mat"],
@@ -142,7 +151,9 @@ export const MOBILITY_EXERCISES = [
   }),
   exercise({
     id: "dead-bug",
-    name: "Dead Bug",
+    name: "Dead Bug (Arm/Bein diagonal)",
+    subtitle: "Rückenlage · diagonal Arm und Bein absenken",
+    quickStart: "Lege dich auf den Rücken. Arme zeigen zur Decke, Hüfte und Knie sind 90 Grad gebeugt. Senke rechten Arm und linkes Bein, dann umgekehrt.",
     group: "Rumpf",
     seconds: 60,
     equipment: ["mat"],
@@ -159,6 +170,8 @@ export const MOBILITY_EXERCISES = [
   exercise({
     id: "bird-dog",
     name: "Bird Dog",
+    subtitle: "Vierfüßler · diagonal Arm und Bein strecken",
+    quickStart: "Vierfüßlerstand. Strecke rechten Arm und linkes Bein gleichzeitig lang aus, zurück zur Mitte, dann die andere Diagonale.",
     group: "Rumpf",
     seconds: 60,
     equipment: ["mat"],
@@ -174,7 +187,10 @@ export const MOBILITY_EXERCISES = [
   }),
   exercise({
     id: "pallof-press",
-    name: "Pallof Press",
+    name: "Pallof Press (Anti-Rotation mit Band)",
+    subtitle: "Band gegen Rotation nach vorn drücken",
+    quickStart: "Befestige das Band auf Brusthöhe. Stell dich seitlich dazu, halte es vor der Brust und drücke beide Hände gerade nach vorn, ohne dich zum Band zu drehen.",
+    sideSwitch: true,
     group: "Rumpf",
     seconds: 60,
     equipment: ["band"],
@@ -190,7 +206,9 @@ export const MOBILITY_EXERCISES = [
   }),
   exercise({
     id: "forearm-plank",
-    name: "Unterarmstütz",
+    name: "Unterarmstütz (Plank)",
+    subtitle: "Körper wie ein gerades Brett halten",
+    quickStart: "Ellenbogen unter die Schultern, Unterarme am Boden, Beine lang. Hebe Knie und Becken an und halte den Körper von Kopf bis Ferse in einer Linie.",
     group: "Rumpf",
     seconds: 45,
     equipment: ["mat"],
@@ -207,6 +225,9 @@ export const MOBILITY_EXERCISES = [
   exercise({
     id: "side-plank",
     name: "Seitstütz",
+    subtitle: "Seitliche Plank auf dem Unterarm",
+    quickStart: "Lege dich seitlich ab, Ellenbogen direkt unter der Schulter. Hebe das Becken an und halte Schulter, Hüfte und Füße möglichst in einer Linie.",
+    sideSwitch: true,
     group: "Rumpf",
     seconds: 60,
     equipment: ["mat"],
@@ -239,7 +260,9 @@ export const MOBILITY_EXERCISES = [
   }),
   exercise({
     id: "glute-bridge",
-    name: "Glute Bridge",
+    name: "Glute Bridge (Beckenheben)",
+    subtitle: "Beckenheben in Rückenlage",
+    quickStart: "Rückenlage, Füße aufstellen. Drücke die Füße in den Boden, spanne das Gesäß an und hebe das Becken bis Schulter, Hüfte und Knie eine Linie bilden.",
     group: "Gesäß & Hüfte",
     seconds: 60,
     equipment: ["mat"],
@@ -255,7 +278,10 @@ export const MOBILITY_EXERCISES = [
   }),
   exercise({
     id: "clamshell",
-    name: "Clamshell",
+    name: "Clamshell (Muschelübung)",
+    subtitle: "Muschelbewegung in Seitlage",
+    quickStart: "Seitlage, Knie gebeugt und Füße zusammen. Lass die Füße aufeinander und öffne nur das obere Knie wie eine Muschel; das Becken bleibt übereinander.",
+    sideSwitch: true,
     group: "Gesäß & Hüfte",
     seconds: 75,
     equipment: ["mat"],
@@ -287,11 +313,15 @@ export const MOBILITY_EXERCISES = [
   exercise({
     id: "knee-to-wall",
     name: "Knie-zur-Wand-Mobilisation",
+    subtitle: "Sprunggelenk testen und mobilisieren",
+    quickStart: "Stell einen Fuß flach etwa 3–8 cm vor eine Wand. Schiebe das Knie gerade zur Wand, ohne dass die Ferse abhebt. Danach Seite wechseln.",
+    sideSwitch: true,
     group: "Fuß & Sprunggelenk",
     seconds: 75,
     focusAreas: ["ankle", "mobility"],
     visual: "knee-to-wall",
     purpose: "Verbessert die Dorsalflexion des Sprunggelenks für Laufen, Kniebeuge und Treppenbewegungen.",
+    asymmetryNote: "Teste links und rechts einzeln. Merke dir den größten Abstand zur Wand, bei dem Kniekontakt mit flacher Ferse möglich ist. Ein deutlicher Seitenunterschied ist ein Trainingshinweis, keine Diagnose – nicht in Schmerz oder mit angehobener Ferse erzwingen.",
     instruction: "Fuß flach vor eine Wand stellen und das Knie kontrolliert zur Wand führen, ohne dass die Ferse abhebt.",
     steps: ["Fuß wenige Zentimeter vor die Wand stellen.", "Knie über den zweiten oder dritten Zeh zur Wand führen.", "Ferse bleibt am Boden; Abstand bei Bedarf anpassen und Seite wechseln."],
     cues: ["Ferse bleibt unten", "Knie folgt der Fußrichtung", "Ruhige Wiederholungen"],
@@ -317,6 +347,9 @@ export const MOBILITY_EXERCISES = [
   exercise({
     id: "short-foot",
     name: "Fußgewölbe aktivieren",
+    subtitle: "Short Foot · Fuß sanft verkürzen",
+    quickStart: "Barfuß sitzen oder stehen. Zehen locker lassen. Ziehe den Großzehenballen ganz leicht Richtung Ferse, sodass sich das innere Fußgewölbe hebt.",
+    sideSwitch: true,
     group: "Fuß & Sprunggelenk",
     seconds: 60,
     focusAreas: ["ankle", "balance"],
@@ -332,6 +365,8 @@ export const MOBILITY_EXERCISES = [
   exercise({
     id: "single-leg-balance",
     name: "Einbeinstand",
+    quickStart: "Stell dich auf ein Bein, richte Knie und Fuß gerade aus und halte das Fußgewölbe aktiv. Bei Bedarf mit einem Finger sichern.",
+    sideSwitch: true,
     group: "Balance",
     seconds: 75,
     focusAreas: ["ankle", "balance", "knee-axis"],
@@ -347,6 +382,9 @@ export const MOBILITY_EXERCISES = [
   exercise({
     id: "band-ankle-eversion",
     name: "Sprunggelenk mit Band nach außen",
+    subtitle: "Eversion · nur den Fuß gegen den Bandzug drehen",
+    quickStart: "Setz dich hin. Das Band zieht den Vorfuß nach innen. Halte Knie und Unterschenkel still und bewege nur den Fuß gegen den Zug nach außen.",
+    sideSwitch: true,
     group: "Fuß & Sprunggelenk",
     seconds: 75,
     equipment: ["band"],
@@ -363,6 +401,7 @@ export const MOBILITY_EXERCISES = [
   exercise({
     id: "step-up",
     name: "Kontrollierte Step-ups",
+    sideSwitch: true,
     group: "Beinachse",
     seconds: 75,
     equipment: ["step"],
@@ -379,6 +418,7 @@ export const MOBILITY_EXERCISES = [
   exercise({
     id: "hip-flexor-stretch",
     name: "Hüftbeuger-Stretch",
+    sideSwitch: true,
     group: "Mobilität",
     seconds: 90,
     equipment: ["mat"],
@@ -395,6 +435,7 @@ export const MOBILITY_EXERCISES = [
   exercise({
     id: "thoracic-rotation",
     name: "Brustwirbelsäulen-Rotation",
+    sideSwitch: true,
     group: "Mobilität",
     seconds: 75,
     equipment: ["mat"],
@@ -445,6 +486,7 @@ export const MOBILITY_EXERCISES = [
   exercise({
     id: "suitcase-carry",
     name: "Suitcase Carry",
+    sideSwitch: true,
     group: "Rumpf & Haltung",
     seconds: 75,
     equipmentAny: ["dumbbells", "kettlebell"],

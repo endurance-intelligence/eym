@@ -138,3 +138,13 @@ Saving a recurring commitment changes the planning configuration only. An alread
 - Opening an exercise guide during a workout pauses the timer; it never continues unseen behind the modal.
 - Preparation and transition time count toward the selected workout duration, so a 25-minute workout stays close to 25 minutes.
 - All timing preferences and familiar-exercise selections are user-specific and stored in the existing athlete data.
+
+## Audio cues, clearer exercise guidance and plan completion (v2.13)
+
+- The guided Stabi & Mobility workflow uses distinct sounds for countdown, exercise start, exercise end, side changes and workout completion.
+- Optional German voice cues announce side changes for bilateral exercises such as side plank, Pallof press, ankle work and adductor exercises.
+- Users can store which side currently feels weaker; EYM starts bilateral exercises on that side but keeps both sides at equal duration.
+- Frequently misunderstood exercises have clearer German aliases, a 10-second quick-start explanation and dedicated schematic start/movement illustrations.
+- Knee-to-wall guidance includes a side-comparison note without treating asymmetry as a diagnosis.
+- Completing the full Coach workflow automatically stores the workout and marks today's matching Stabi/Mobility plan item as completed.
+- Audio, voice and weak-side settings are user-specific. No database migration is required.

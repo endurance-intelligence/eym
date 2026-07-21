@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { Card, PageTitle } from "../components/UI";
 import { coachDashboard, hydration } from "../services/insights";
@@ -15,6 +15,7 @@ import ReviewModal from "../components/ReviewModal";
 import ExerciseGuide, { ExerciseGuideButton } from "../components/ExerciseGuide";
 import { activitiesWithGroups } from "../services/activityGroups";
 import { fmtDate } from "../utils/format";
+import { playWorkoutCue, primeWorkoutAudio, speakWorkoutCue } from "../services/workoutAudio";
 import {
   buildMobilityWorkout,
   equipmentLabel,
@@ -85,6 +86,22 @@ function advanceRunner(current) {
   return { ...current, remaining: 0, running: false, complete: true };
 }
 
+function sideOrder(weakSide) {
+  if (weakSide === "right") return ["Rechte Seite", "Linke Seite"];
+  return ["Linke Seite", "Rechte Seite"];
+}
+
+function activeSideLabel(exercise, remaining, weakSide) {
+  if (!exercise?.sideSwitch) return "";
+  const [first, second] = sideOrder(weakSide);
+  const halfway = Math.floor(Number(exercise.seconds || 0) / 2);
+  return Number(remaining || 0) > halfway ? first : second;
+}
+
+function nextSideLabel(weakSide) {
+  return sideOrder(weakSide)[1];
+}
+
 export default function Coach() {
   const { state, setState } = useApp();
   const [selected, setSelected] = useState(null);
@@ -93,6 +110,8 @@ export default function Coach() {
   const [runner, setRunner] = useState(null);
   const [libraryFocus, setLibraryFocus] = useState("all");
   const [librarySearch, setLibrarySearch] = useState("");
+  const previousRunnerRef = useRef(null);
+  const cueKeyRef = useRef("");
   const now = useMemo(() => new Date(), []);
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   const canonicalActivities = useMemo(() => preferredActivities(state.activities), [state.activities]);
@@ -125,6 +144,9 @@ export default function Coach() {
   const transitionSeconds = Number(mobilitySettings.transitionSeconds ?? 10);
   const materialTransitionSeconds = Number(mobilitySettings.materialTransitionSeconds ?? 20);
   const longerPreparationForUnknown = mobilitySettings.longerPreparationForUnknown !== false;
+  const audioEnabled = mobilitySettings.audioEnabled !== false;
+  const voiceCues = mobilitySettings.voiceCues !== false;
+  const weakSide = ["left", "right"].includes(mobilitySettings.weakSide) ? mobilitySettings.weakSide : "none";
   const workoutHistory = Array.isArray(mobilitySettings.history) ? mobilitySettings.history : [];
   const knownExerciseCount = useMemo(() => new Set([...knownExerciseIds, ...physioExerciseIds]).size, [knownExerciseIds, physioExerciseIds]);
   const workout = useMemo(() => buildMobilityWorkout({
@@ -143,7 +165,7 @@ export default function Coach() {
   }), [durationMinutes, condition, equipment, physioExerciseIds, focusAreaIds, knownExerciseIds, preparationSeconds, unknownPreparationSeconds, transitionSeconds, materialTransitionSeconds, longerPreparationForUnknown, workoutHistory.length]);
   const localToday = new Date();
   const todayKey = `${localToday.getFullYear()}-${String(localToday.getMonth() + 1).padStart(2, "0")}-${String(localToday.getDate()).padStart(2, "0")}`;
-  const todayMobilityPlan = state.plan.find((item) => !item.archived && item.date === todayKey && /stabi|mobility|kraft/i.test(`${item.title || ""} ${item.type || ""}`));
+  const todayMobilityPlan = state.plan.find((item) => !item.archived && !item.completed && !item.missedReason && item.date === todayKey && /stabi|mobility|kraft/i.test(`${item.title || ""} ${item.type || ""}`));
   const physioCandidates = MOBILITY_EXERCISES.filter((exercise) => exercise.physioDefault || ["adductor-rockback", "hip-flexor-stretch", "thoracic-rotation", "knee-to-wall", "pallof-press"].includes(exercise.id));
   const visibleLibraryExercises = useMemo(() => {
     const query = librarySearch.trim().toLocaleLowerCase("de-DE");
@@ -195,25 +217,31 @@ export default function Coach() {
     setRunner(null);
   }
 
-  function startWorkout() {
+  async function startWorkout() {
     if (!workout.items.length) return;
+    if (audioEnabled) await primeWorkoutAudio();
+    previousRunnerRef.current = null;
+    cueKeyRef.current = "";
     const items = workout.items.map((item) => ({ ...item }));
     const firstPhase = items[0].preparationSeconds > 0 ? "prepare" : "work";
-    setRunner({ items, title: workout.title, durationMinutes: workout.durationMinutes, index: 0, phase: firstPhase, remaining: runnerPhaseSeconds(items, 0, firstPhase), running: true, complete: false });
+    setRunner({
+      sessionId: crypto.randomUUID(),
+      planItemId: todayMobilityPlan?.id || null,
+      focusAreaIds: [...focusAreaIds],
+      items,
+      title: workout.title,
+      durationMinutes: workout.durationMinutes,
+      index: 0,
+      phase: firstPhase,
+      remaining: runnerPhaseSeconds(items, 0, firstPhase),
+      running: true,
+      complete: false,
+      saved: false,
+    });
   }
 
-  function finishWorkout() {
-    const completedItems = runner?.items?.length ? runner.items : workout.items;
-    updateMobility({
-      history: [{
-        id: crypto.randomUUID(),
-        completedAt: new Date().toISOString(),
-        title: runner?.title || workout.title,
-        durationMinutes: runner?.durationMinutes || workout.durationMinutes,
-        exerciseIds: completedItems.map((item) => item.id),
-        focusAreaIds,
-      }, ...workoutHistory].slice(0, 30),
-    });
+  function closeFinishedWorkout() {
+    if (!runner?.saved) return;
     setRunner(null);
   }
 
@@ -235,9 +263,98 @@ export default function Coach() {
   }, [runner?.running]);
 
   const activeExercise = runner ? runner.items?.[runner.index] : null;
+
+  useEffect(() => {
+    if (!runner?.complete || runner.saved || !runner.sessionId) return undefined;
+    const completedRunner = runner;
+    const saveTimer = window.setTimeout(() => {
+      const completedAt = new Date().toISOString();
+      const completedItems = Array.isArray(completedRunner.items) ? completedRunner.items : [];
+      const historyEntry = {
+        id: crypto.randomUUID(),
+        sessionId: completedRunner.sessionId,
+        completedAt,
+        title: completedRunner.title,
+        durationMinutes: completedRunner.durationMinutes,
+        exerciseIds: completedItems.map((item) => item.id),
+        focusAreaIds: Array.isArray(completedRunner.focusAreaIds) ? completedRunner.focusAreaIds : [],
+        planItemId: completedRunner.planItemId || null,
+      };
+
+      setState((current) => {
+        const currentHistory = Array.isArray(current.mobilityCoach?.history) ? current.mobilityCoach.history : [];
+        const history = currentHistory.some((item) => item.sessionId === completedRunner.sessionId)
+          ? currentHistory
+          : [historyEntry, ...currentHistory].slice(0, 30);
+        return {
+          ...current,
+          mobilityCoach: { ...current.mobilityCoach, history },
+          plan: current.plan.map((item) => item.id === completedRunner.planItemId ? {
+            ...item,
+            completed: true,
+            completedAt,
+            actualTitle: completedRunner.title || "Stabi & Mobility Coach",
+            actualDuration: Number(completedRunner.durationMinutes || 0),
+            actualSource: "EYM Coach",
+            matchedMobilityWorkoutId: completedRunner.sessionId,
+            missedReason: "",
+          } : item),
+        };
+      });
+      setRunner((current) => current?.sessionId === completedRunner.sessionId ? { ...current, saved: true, completedAt } : current);
+    }, 0);
+    return () => window.clearTimeout(saveTimer);
+  }, [runner, setState]);
+
+  useEffect(() => {
+    const previous = previousRunnerRef.current;
+    if (!runner) {
+      previousRunnerRef.current = null;
+      cueKeyRef.current = "";
+      return;
+    }
+    if (!audioEnabled) {
+      previousRunnerRef.current = runner;
+      return;
+    }
+
+    const phaseChanged = !previous || previous.phase !== runner.phase || previous.index !== runner.index;
+    if (runner.complete && !previous?.complete) {
+      playWorkoutCue("complete");
+      if (voiceCues) speakWorkoutCue("Workout abgeschlossen");
+    } else if (phaseChanged) {
+      if (previous?.phase === "work") playWorkoutCue("end");
+      if (runner.phase === "work") {
+        playWorkoutCue("start");
+        if (voiceCues && activeExercise?.sideSwitch) speakWorkoutCue(`Start ${sideOrder(weakSide)[0]}`);
+      }
+    }
+
+    if (runner.running && !runner.complete && runner.remaining > 0 && runner.remaining <= 3) {
+      const countdownKey = `${runner.index}-${runner.phase}-${runner.remaining}`;
+      if (cueKeyRef.current !== countdownKey) {
+        cueKeyRef.current = countdownKey;
+        playWorkoutCue("countdown");
+      }
+    }
+
+    const halfway = Math.floor(Number(activeExercise?.seconds || 0) / 2);
+    if (runner.running && runner.phase === "work" && activeExercise?.sideSwitch && runner.remaining === halfway) {
+      const switchKey = `${runner.index}-switch`;
+      if (cueKeyRef.current !== switchKey) {
+        cueKeyRef.current = switchKey;
+        playWorkoutCue("switch");
+        if (voiceCues) speakWorkoutCue(`${activeExercise.switchCue || "Seite wechseln"}. ${nextSideLabel(weakSide)}`);
+      }
+    }
+
+    previousRunnerRef.current = runner;
+  }, [runner, activeExercise, audioEnabled, voiceCues, weakSide]);
   const runnerPhase = runner?.phase || "work";
   const runnerPhaseLabel = runnerPhase === "prepare" ? "Vorbereitung" : runnerPhase === "transition" ? "Wechselpause" : "Übung";
   const runnerPhaseAction = runnerPhase === "work" ? "Übung abschließen" : runnerPhase === "prepare" ? "Jetzt starten" : "Vorbereitung starten";
+  const runnerSideLabel = activeExercise && runnerPhase === "work" ? activeSideLabel(activeExercise, runner?.remaining, weakSide) : "";
+  const switchMoment = Boolean(activeExercise?.sideSwitch && runnerPhase === "work" && runner?.remaining === Math.floor(Number(activeExercise.seconds || 0) / 2));
 
   return (
     <>
@@ -387,9 +504,19 @@ export default function Coach() {
                     {[10, 15, 20, 30, 45].map((value) => <option value={value} key={value}>{value} Sekunden</option>)}
                   </select>
                 </label>
+                <label>Seite, mit der du beginnst
+                  <select value={weakSide} onChange={(event) => updateMobility({ weakSide: event.target.value })}>
+                    <option value="none">Standard: links beginnen</option>
+                    <option value="left">Links zuerst · aktuell schwächer</option>
+                    <option value="right">Rechts zuerst · aktuell schwächer</option>
+                  </select>
+                </label>
               </div>
               <label className="mobility-timer-toggle"><input type="checkbox" checked={longerPreparationForUnknown} onChange={(event) => { updateMobility({ longerPreparationForUnknown: event.target.checked }); setRunner(null); }} /><span><b>Unbekannte Übungen länger vorbereiten</b><small>Markierte Physio-Übungen gelten automatisch als bekannt. Weitere Übungen kannst du in der Anleitung als bekannt markieren.</small></span></label>
-              <p>Die Pausen zählen zur gewählten Gesamtdauer. Dadurch bleibt ein 25-Minuten-Workout ungefähr 25 Minuten lang und enthält bei längeren Pausen entsprechend weniger Übungen.</p>
+              <label className="mobility-timer-toggle"><input type="checkbox" checked={audioEnabled} onChange={(event) => updateMobility({ audioEnabled: event.target.checked })} /><span><b>Signaltöne im Workout</b><small>Unterschiedliche Töne für Countdown, Start, Ende, Seitenwechsel und Workout-Abschluss.</small></span></label>
+              <label className="mobility-timer-toggle"><input type="checkbox" checked={voiceCues} disabled={!audioEnabled} onChange={(event) => updateMobility({ voiceCues: event.target.checked })} /><span><b>Seitenwechsel ansagen</b><small>Bei Seitstütz, Pallof Press, Sprunggelenkübungen und weiteren beidseitigen Übungen sagt EYM die nächste Seite an.</small></span></label>
+              <div className="mobility-audio-actions"><button type="button" onClick={async () => { await primeWorkoutAudio(); playWorkoutCue("switch"); if (voiceCues) speakWorkoutCue("Seite wechseln"); }}>Töne testen</button><span className="mobility-audio-status">Die Auswahl gilt nur für dein Nutzerprofil.</span></div>
+              <p>Die Pausen zählen zur gewählten Gesamtdauer. Dadurch bleibt ein 25-Minuten-Workout ungefähr 25 Minuten lang. Die zuerst gewählte schwächere Seite erhält nicht automatisch mehr Belastung, sondern wird nur zuerst ausgeführt.</p>
             </details>
             {workout.missingPhysio.length > 0 && <div className="mobility-warning"><strong>Physioübung aktuell nicht im Workout:</strong> {workout.missingPhysio.map((item) => `${item.name} (${(item.equipment || item.equipmentAny || []).map(equipmentLabel).join(" oder ")})`).join(", ")}</div>}
             {workout.missingFocus.length > 0 && <div className="mobility-warning"><strong>Schwerpunkt ohne passende Übung:</strong> {workout.missingFocus.map(focusAreaLabel).join(", ")}. Prüfe das ausgewählte Material.</div>}
@@ -398,12 +525,14 @@ export default function Coach() {
           <Card className="wide mobility-workout-plan">
             <div className="settings-section-heading"><div><p className="eyebrow">Heutiger Ablauf</p><h2>{workout.items.length} Übungsschritte</h2></div>{!runner && <button type="button" className="primary compact-primary" onClick={startWorkout}>Workout starten</button>}</div>
             {runner && (runner.complete || activeExercise) && (
-              <div className={`mobility-runner phase-${runnerPhase} ${runner.complete ? "complete" : ""}`}>
-                {runner.complete ? <><p className="eyebrow">Geschafft</p><h2>Workout abgeschlossen</h2><button type="button" className="primary compact-primary" onClick={finishWorkout}>Abschluss speichern</button></> : <>
+              <div className={`mobility-runner phase-${runnerPhase} ${runner.complete ? "complete" : ""} ${switchMoment ? "switch-now" : ""}`}>
+                {runner.complete ? <><p className="eyebrow">Geschafft</p><h2>Workout abgeschlossen</h2><p className="mobility-completion-note">{runner.saved ? (runner.planItemId ? "Die heutige Stabi-/Mobility-Einheit wurde automatisch als erledigt markiert." : "Das Workout wurde automatisch in deinem Verlauf gespeichert.") : "Workout wird gespeichert …"}</p><button type="button" className="primary compact-primary" onClick={closeFinishedWorkout} disabled={!runner.saved}>Workout schließen</button></> : <>
                   <div className="mobility-runner-topline"><span>{runnerPhaseLabel} · Schritt {runner.index + 1} von {runner.items.length}</span><small>{isExerciseKnown(activeExercise.id) ? "Bekannte Übung" : "Neue Übung"}</small></div>
                   <h2>{runnerPhase === "transition" ? `Als Nächstes: ${activeExercise.name}` : activeExercise.name}</h2>
+                  {activeExercise.subtitle && <small className="mobility-exercise-subtitle">{activeExercise.subtitle}</small>}
                   <strong>{secondsLabel(runner.remaining)}</strong>
-                  <p>{runnerPhase === "transition" ? `${activeExercise.materialChangeBefore ? "Material wechseln und " : "Position einnehmen und "}${materialText(activeExercise)} bereitlegen.` : activeExercise.instruction}</p>
+                  {runnerSideLabel && <span className="mobility-side-status">{runnerSideLabel}{weakSide !== "none" && runnerSideLabel === sideOrder(weakSide)[0] ? " · zuerst trainiert" : ""}</span>}
+                  <p>{runnerPhase === "transition" ? `${activeExercise.materialChangeBefore ? "Material wechseln und " : "Position einnehmen und "}${materialText(activeExercise)} bereitlegen.` : runnerPhase === "prepare" ? activeExercise.quickStart || activeExercise.instruction : activeExercise.instruction}</p>
                   {runnerPhase !== "work" && activeExercise.cues?.length > 0 && <div className="mobility-runner-cues">{activeExercise.cues.slice(0, 3).map((cue) => <span key={cue}>{cue}</span>)}</div>}
                   <div className="mobility-runner-tags"><small className="mobility-selection-reason">{activeExercise.selectionReason}</small>{!isExerciseKnown(activeExercise.id) && <small className="mobility-new-exercise">Mehr Zeit, weil noch nicht als bekannt markiert</small>}</div>
                   <div className="button-row">
@@ -421,10 +550,10 @@ export default function Coach() {
                 <article className={runner?.index === index ? "active" : ""} key={exercise.stepId}>
                   <span>{index + 1}</span>
                   <div>
-                    <div className="mobility-exercise-heading"><strong>{exercise.name}</strong><ExerciseGuideButton exercise={exercise} onOpen={openExerciseGuide} compact /></div>
-                    <small>{exercise.group} · {Math.round(exercise.seconds / 15) * 15} Sek. Übung · {exercise.preparationSeconds} Sek. Vorbereitung{exercise.transitionBeforeSeconds ? ` · ${exercise.transitionBeforeSeconds} Sek. Wechsel davor` : ""}</small>
+                    <div className="mobility-exercise-heading"><div><strong>{exercise.name}</strong>{exercise.subtitle && <small className="mobility-exercise-subtitle">{exercise.subtitle}</small>}</div><ExerciseGuideButton exercise={exercise} onOpen={openExerciseGuide} compact /></div>
+                    <small>{exercise.group} · {Math.round(exercise.seconds / 15) * 15} Sek. Übung · {exercise.preparationSeconds} Sek. Vorbereitung{exercise.transitionBeforeSeconds ? ` · ${exercise.transitionBeforeSeconds} Sek. Wechsel davor` : ""}{exercise.sideSwitch ? " · Signal zur Halbzeit" : ""}</small>
                     <em>{exercise.selectionReason}</em>
-                    <p>{exercise.instruction}</p>
+                    <p>{exercise.quickStart || exercise.instruction}</p>
                   </div>
                 </article>
               ))}
@@ -450,7 +579,7 @@ export default function Coach() {
             <div className="exercise-library-grid">
               {visibleLibraryExercises.map((exercise) => (
                 <article key={exercise.id}>
-                  <div className="exercise-library-card-heading"><div><span>{exercise.group}</span><h3>{exercise.name}</h3></div><div className="exercise-library-badges">{physioExerciseIds.includes(exercise.id) && <b>Physio</b>}{knownExerciseIds.includes(exercise.id) && !physioExerciseIds.includes(exercise.id) && <b className="known">Bekannt</b>}</div></div>
+                  <div className="exercise-library-card-heading"><div><span>{exercise.group}</span><h3>{exercise.name}</h3>{exercise.subtitle && <small className="mobility-exercise-subtitle">{exercise.subtitle}</small>}</div><div className="exercise-library-badges">{physioExerciseIds.includes(exercise.id) && <b>Physio</b>}{knownExerciseIds.includes(exercise.id) && !physioExerciseIds.includes(exercise.id) && <b className="known">Bekannt</b>}</div></div>
                   <p>{exercise.purpose}</p>
                   <small>{materialText(exercise)} · {exercise.focusAreas.map(focusAreaLabel).join(" · ") || "Allgemein"}</small>
                   <ExerciseGuideButton exercise={exercise} onOpen={openExerciseGuide} />
