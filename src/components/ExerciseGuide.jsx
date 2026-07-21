@@ -181,7 +181,7 @@ export function ExerciseGuideButton({ exercise, onOpen, compact = false }) {
   );
 }
 
-export default function ExerciseGuide({ exercise, onClose }) {
+export default function ExerciseGuide({ exercise, onClose, known = false, knownLocked = false, onToggleKnown }) {
   useModalScrollLock(Boolean(exercise));
   if (!exercise) return null;
   const material = exercise.equipment?.length
@@ -225,7 +225,16 @@ export default function ExerciseGuide({ exercise, onClose }) {
           <div><span>Leichter</span><p>{exercise.easier}</p></div>
           <div><span>Schwieriger</span><p>{exercise.harder}</p></div>
         </div>
-        <button type="button" className="primary" onClick={onClose}>Verstanden</button>
+        <div className="exercise-guide-actions">
+          {knownLocked ? (
+            <span className="exercise-known-status locked">Physio-Übung · gilt als bekannt</span>
+          ) : onToggleKnown ? (
+            <button type="button" className={`exercise-known-toggle ${known ? "selected" : ""}`} onClick={() => onToggleKnown(exercise.id)}>
+              {known ? "✓ Übung kenne ich" : "Als bekannt markieren"}
+            </button>
+          ) : null}
+          <button type="button" className="primary" onClick={onClose}>Verstanden</button>
+        </div>
       </section>
     </div>
   );

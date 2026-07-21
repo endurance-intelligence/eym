@@ -129,3 +129,12 @@ Saving a recurring commitment changes the planning configuration only. An alread
 - Physio exercises remain a separate optional priority list and are only enabled by the user.
 - The exercise library can be searched and filtered by focus area. Each exercise has a schematic movement visual, step-by-step instructions, technique cues, common mistakes and easier/harder variants.
 - `.gitattributes` normalizes text files to LF to make future patches consistent on Windows and Unix systems.
+
+## Guided workout timing and familiar exercises (v2.12)
+
+- Every Stabi & Mobility exercise can have a preparation countdown before the active interval.
+- Separate transition pauses are inserted between exercises, with an optional longer pause when equipment changes.
+- New exercises can receive a longer preparation window than familiar exercises. Physio priorities count as familiar, and users can mark any library exercise as known.
+- Opening an exercise guide during a workout pauses the timer; it never continues unseen behind the modal.
+- Preparation and transition time count toward the selected workout duration, so a 25-minute workout stays close to 25 minutes.
+- All timing preferences and familiar-exercise selections are user-specific and stored in the existing athlete data.

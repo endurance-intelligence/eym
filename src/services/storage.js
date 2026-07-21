@@ -31,6 +31,7 @@ function sanitizeState(state, defaults) {
       equipment: Array.isArray(state?.mobilityCoach?.equipment) ? state.mobilityCoach.equipment : defaults.mobilityCoach.equipment,
       physioExerciseIds: Array.isArray(state?.mobilityCoach?.physioExerciseIds) ? state.mobilityCoach.physioExerciseIds : defaults.mobilityCoach.physioExerciseIds,
       focusAreaIds: Array.isArray(state?.mobilityCoach?.focusAreaIds) ? state.mobilityCoach.focusAreaIds : defaults.mobilityCoach.focusAreaIds,
+      knownExerciseIds: Array.isArray(state?.mobilityCoach?.knownExerciseIds) ? state.mobilityCoach.knownExerciseIds : defaults.mobilityCoach.knownExerciseIds,
       history: Array.isArray(state?.mobilityCoach?.history) ? state.mobilityCoach.history : defaults.mobilityCoach.history,
     },
     profile: { ...defaults.profile, ...(state?.profile || {}) },
