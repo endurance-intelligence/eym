@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { Card, PageTitle } from "../components/UI";
 import {
@@ -10,6 +10,8 @@ import {
 } from "../services/productLookup";
 import { compressImageFile } from "../services/imageTools";
 import { contributeOpenFoodFactsProduct, openFoodFactsContributionReady } from "../services/openFoodFactsContribution";
+import { fuelCatalogKey } from "../services/fuelCatalog";
+import { lookupOpenPrices, productPriceSearchLinks } from "../services/productPrices";
 
 const categories = ["Gel", "Drink Mix", "Elektrolyte", "Riegel", "Recovery", "Kapseln", "Sonstiges"];
 const stockUnits = ["Stück", "Portionen", "Tabletten", "Beutel"];
@@ -68,6 +70,19 @@ function productNeedsContribution(item) {
   return Boolean(item.catalogContributionPending || !item.barcode || !item.brand || !item.name);
 }
 
+function formatCurrency(value, currency = "EUR") {
+  if (value == null) return "–";
+  try {
+    return new Intl.NumberFormat("de-DE", { style: "currency", currency }).format(value);
+  } catch {
+    return `${value} ${currency}`;
+  }
+}
+
+function priceLocation(item) {
+  return [item?.location, item?.city].filter(Boolean).join(" · ") || "Ort nicht angegeben";
+}
+
 export default function Fuel() {
   const { state, setState } = useApp();
   const [product, setProduct] = useState(emptyProduct);
@@ -78,9 +93,42 @@ export default function Fuel() {
   const [productStatuses, setProductStatuses] = useState({});
   const [contributionConsent, setContributionConsent] = useState(false);
   const [contributionStatus, setContributionStatus] = useState("idle");
+  const [notice, setNotice] = useState(null);
+  const [priceProduct, setPriceProduct] = useState(null);
+  const [priceStatus, setPriceStatus] = useState("idle");
+  const [priceData, setPriceData] = useState(null);
+  const [priceError, setPriceError] = useState("");
+  const noticeTimer = useRef(null);
   const photoInput = useRef(null);
   const nutritionPhotoInput = useRef(null);
   const ingredientsPhotoInput = useRef(null);
+
+  useEffect(() => () => window.clearTimeout(noticeTimer.current), []);
+
+  function showNotice(message, tone = "good") {
+    window.clearTimeout(noticeTimer.current);
+    setNotice({ message, tone });
+    noticeTimer.current = window.setTimeout(() => setNotice(null), 3600);
+  }
+
+  async function openPriceFinder(item) {
+    setPriceProduct(item);
+    setPriceData(null);
+    setPriceError("");
+    if (!item.barcode) {
+      setPriceStatus("missing-barcode");
+      return;
+    }
+    setPriceStatus("loading");
+    try {
+      const result = await lookupOpenPrices(item.barcode);
+      setPriceData(result);
+      setPriceStatus(result.found ? "success" : "empty");
+    } catch (error) {
+      setPriceStatus("error");
+      setPriceError(error.message || "Preisdaten konnten nicht geladen werden.");
+    }
+  }
 
   function change(event) {
     const { name, value } = event.target;
@@ -327,12 +375,14 @@ export default function Fuel() {
         stockTrackedFrom: existing?.stockTrackedFrom || new Date().toISOString().slice(0, 10),
         ...contribution,
       };
+      const storedKey = fuelCatalogKey(stored);
       return {
         ...current,
         fuel: existing ? current.fuel.map((item) => item.id === targetId ? stored : item) : [...current.fuel, stored],
+        fuelCatalogExclusions: (current.fuelCatalogExclusions || []).filter((key) => key !== storedKey),
       };
     });
-    return targetId;
+    return { targetId, incrementExisting };
   }
 
   async function save(event, contribute = false) {
@@ -350,13 +400,15 @@ export default function Fuel() {
       return;
     }
 
-    const targetId = persistProduct(data, {
+    const wasEditing = Boolean(editingId);
+    const { targetId, incrementExisting } = persistProduct(data, {
       catalogContributionPending: contribute || data.catalogContributionPending,
       contributionStatus: contribute ? "sending" : undefined,
     });
 
     if (!contribute) {
       resetEditor();
+      showNotice(incrementExisting ? "Bestand aufgefüllt" : wasEditing ? "Aktualisiert" : "Hinzugefügt");
       return;
     }
 
@@ -380,6 +432,7 @@ export default function Fuel() {
       setProductStatuses((current) => ({ ...current, [targetId]: { tone: "good", message: "Beitrag gesendet. Open Food Facts verarbeitet Produktdaten und Fotos; die öffentliche Seite kann sich zeitversetzt aktualisieren." } }));
       setContributionStatus("success");
       resetEditor();
+      showNotice(incrementExisting ? "Bestand aufgefüllt und gesendet" : wasEditing ? "Aktualisiert und gesendet" : "Hinzugefügt und gesendet");
     } catch (error) {
       setState((current) => ({
         ...current,
@@ -404,8 +457,30 @@ export default function Fuel() {
   }
 
   function remove(id) {
-    if (!window.confirm("Dieses Fuel-Produkt endgültig löschen? Bereits gespeicherte Reviews behalten ihren Text, verlieren aber die Bestandsverknüpfung.")) return;
-    setState((current) => ({ ...current, fuel: current.fuel.filter((item) => item.id !== id) }));
+    const itemToDelete = state.fuel.find((item) => item.id === id);
+    if (!itemToDelete) return;
+    if (!window.confirm("Dieses Fuel-Produkt endgültig löschen? Reviews behalten ihren Text, das Produkt wird daraus aber nicht erneut im Fuel Lab angelegt.")) return;
+    const deletedKey = fuelCatalogKey(itemToDelete);
+    setState((current) => ({
+      ...current,
+      fuel: current.fuel.filter((item) => item.id !== id),
+      fuelCatalogExclusions: [...new Set([...(current.fuelCatalogExclusions || []), deletedKey])],
+      reviews: Object.fromEntries(Object.entries(current.reviews || {}).map(([activityId, review]) => [activityId, {
+        ...review,
+        nutritionItems: (Array.isArray(review?.nutritionItems) ? review.nutritionItems : []).map((nutritionItem) => (
+          nutritionItem.fuelItemId === id
+            ? { ...nutritionItem, fuelItemId: null, affectsInventory: false, catalogIgnored: true }
+            : nutritionItem
+        )),
+      }])),
+    }));
+    setProductStatuses((current) => {
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
+    if (editingId === id) resetEditor();
+    showNotice("Dauerhaft gelöscht");
   }
 
   function archive(id) {
@@ -424,6 +499,8 @@ export default function Fuel() {
     <PageTitle eyebrow="Fuel Intelligence" title="Fuel Lab">
       <button onClick={() => showForm ? resetEditor() : openNewProduct()}>{showForm ? "Schließen" : "+ Produkt"}</button>
     </PageTitle>
+
+    {notice && <div className={`fuel-toast ${notice.tone}`} role="status"><b>{notice.message}</b><button type="button" aria-label="Hinweis schließen" onClick={() => setNotice(null)}>×</button></div>}
 
     {showForm && <Card className="wide fuel-product-editor">
       <div className="fuel-photo-import">
@@ -503,13 +580,13 @@ export default function Fuel() {
         </div>
 
         <div className="fuel-contribution-consent wide">
-          <label><input type="checkbox" checked={contributionConsent} onChange={(event) => setContributionConsent(event.target.checked)} /> Ich bestätige, dass hochgeladene Fotos von mir stammen und unter der Open-Food-Facts-Lizenz geteilt werden dürfen.</label>
+          <label><input type="checkbox" checked={contributionConsent} onChange={(event) => setContributionConsent(event.target.checked)} /><span>Ich bestätige, dass hochgeladene Fotos von mir stammen und unter der Open-Food-Facts-Lizenz geteilt werden dürfen.</span></label>
           <small>Bestand, persönliche Bewertungen und Verträglichkeit bleiben ausschließlich in EYM.</small>
         </div>
 
         <div className="fuel-editor-actions wide">
-          <button className="secondary" type="submit">{editingId ? "Nur in EYM speichern" : state.fuel.some((item) => item.barcode && item.barcode === product.barcode) ? "Bestand auffüllen" : "Produkt in EYM speichern"}</button>
-          <button className="primary fuel-contribute-button" type="button" disabled={!openFoodFactsContributionReady() || !product.barcode || contributionStatus === "loading"} onClick={(event) => save(event, true)}>{contributionStatus === "loading" ? "Wird gesendet …" : "Speichern & zu Open Food Facts beitragen"}</button>
+          <button className="secondary" type="submit">Speichern</button>
+          <button className="primary fuel-contribute-button" type="button" disabled={!openFoodFactsContributionReady() || !product.barcode || contributionStatus === "loading"} onClick={(event) => save(event, true)}>{contributionStatus === "loading" ? "Wird gesendet …" : "Speichern + übertragen"}</button>
         </div>
       </form>
     </Card>}
@@ -533,6 +610,7 @@ export default function Fuel() {
               <div className="action-menu-panel">
                 <button type="button" onClick={(event) => { editProduct(item); event.currentTarget.closest("details")?.removeAttribute("open"); }}>Bearbeiten</button>
                 <button type="button" onClick={(event) => { refreshProduct(item); event.currentTarget.closest("details")?.removeAttribute("open"); }}>Produktdaten prüfen</button>
+                <button type="button" onClick={(event) => { openPriceFinder(item); event.currentTarget.closest("details")?.removeAttribute("open"); }}>Preis finden</button>
                 <button type="button" onClick={(event) => { archive(item.id); event.currentTarget.closest("details")?.removeAttribute("open"); }}>Archivieren</button>
                 <button type="button" className="danger-button" onClick={(event) => { remove(item.id); event.currentTarget.closest("details")?.removeAttribute("open"); }}>Dauerhaft löschen</button>
               </div>
@@ -554,9 +632,36 @@ export default function Fuel() {
           <div><span>Bestand</span><strong>{item.quantity} <small>{item.stockUnit || "Stück"}</small></strong></div>
           <div className="qty fuel-qty"><button aria-label="Bestand reduzieren" onClick={() => qty(item.id, -1)}>−</button><button aria-label="Bestand erhöhen" onClick={() => qty(item.id, 1)}>+</button></div>
         </div>
-        {Number(item.quantity || 0) <= 2 && <p className="fuel-low-stock">Bestand wird knapp.</p>}
+        {Number(item.quantity || 0) <= 2 && <div className="fuel-low-stock-row"><p className="fuel-low-stock">Bestand wird knapp.</p><button type="button" onClick={() => openPriceFinder(item)}>Nachbestellen</button></div>}
       </Card>)}
       {archived.length > 0 && <Card className="wide"><p className="eyebrow">Archiv</p>{archived.map((item) => <div className="list-row" key={item.id}><span>{item.brand ? `${item.brand} ${item.name}` : item.name} · {item.category}</span><div className="event-actions"><button onClick={() => archive(item.id)}>Reaktivieren</button><button className="danger-button" onClick={() => remove(item.id)}>Löschen</button></div></div>)}</Card>}
     </div>
+
+    {priceProduct && <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setPriceProduct(null)}>
+      <div className="modal fuel-price-modal" role="dialog" aria-modal="true" aria-labelledby="fuel-price-title">
+        <button type="button" className="close" aria-label="Preisvergleich schließen" onClick={() => setPriceProduct(null)}>×</button>
+        <p className="eyebrow">Nachbestellen</p>
+        <h2 id="fuel-price-title">{priceProduct.brand ? `${priceProduct.brand} ${priceProduct.name}` : priceProduct.name}</h2>
+        <p className="muted">Gemeldete Preise aus Open Prices plus direkte Suchen bei gängigen Shops und Preisvergleichen.</p>
+
+        <div className="fuel-price-result">
+          {priceStatus === "loading" && <p>Gemeldete Preise werden geladen …</p>}
+          {priceStatus === "missing-barcode" && <p>Für den offenen Preisdatensatz fehlt ein Barcode. Die Shopsuche funktioniert trotzdem über Marke und Produktname.</p>}
+          {priceStatus === "empty" && <p>Für diesen Barcode wurden noch keine Preise bei Open Prices gemeldet.</p>}
+          {priceStatus === "error" && <p className="bad">{priceError}</p>}
+          {priceStatus === "success" && priceData?.best && <>
+            <div className="fuel-price-highlights">
+              <div><span>Niedrigster gemeldeter Preis</span><strong>{formatCurrency(priceData.best.price, priceData.best.currency)}</strong><small>{formatDate(priceData.best.date)} · {priceLocation(priceData.best)}</small></div>
+              <div><span>Neueste Meldung</span><strong>{formatCurrency(priceData.latest?.price, priceData.latest?.currency)}</strong><small>{formatDate(priceData.latest?.date)} · {priceLocation(priceData.latest)}</small></div>
+            </div>
+            <small className="fuel-price-disclaimer">Open Prices ist ein gemeinschaftlich gepflegter Preisdatensatz. Angaben können älter sein und sind kein garantiert verfügbares Live-Angebot.</small>
+          </>}
+        </div>
+
+        <div className="fuel-shop-links">
+          {productPriceSearchLinks(priceProduct).map((link) => <a key={link.label} href={link.href} target="_blank" rel="noreferrer">{link.label} öffnen ↗</a>)}
+        </div>
+      </div>
+    </div>}
   </>;
 }

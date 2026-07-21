@@ -52,6 +52,7 @@ export const defaultState = {
   plan: [],
   equipment: [],
   fuel: [],
+  fuelCatalogExclusions: [],
   healthCheckins: [],
   mobilityCoach: {
     durationMinutes: 25,

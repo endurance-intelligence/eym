@@ -24,6 +24,7 @@ function sanitizeState(state, defaults) {
     fuel: Array.isArray(state?.fuel)
       ? state.fuel.filter((item) => !isDemoEntry(item))
       : [],
+    fuelCatalogExclusions: Array.isArray(state?.fuelCatalogExclusions) ? state.fuelCatalogExclusions : [],
     reviews: state?.reviews && typeof state.reviews === "object" ? state.reviews : {},
     healthCheckins: Array.isArray(state?.healthCheckins) ? state.healthCheckins : [],
     mobilityCoach: {

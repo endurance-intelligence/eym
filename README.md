@@ -164,7 +164,7 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 
 - `OPEN_FOOD_FACTS_USER_ID`
 - `OPEN_FOOD_FACTS_PASSWORD`
-- `OPEN_FOOD_FACTS_USER_AGENT` (recommended format: `EnduranceIntelligence/2.16.0 (contact@example.com)`)
+- `OPEN_FOOD_FACTS_USER_AGENT` (recommended format: `EnduranceIntelligence/2.17.0 (contact@example.com)`)
 - `OPEN_FOOD_FACTS_APP_SALT` (a random secret used to derive a stable pseudonymous app UUID per EYM user)
 
 ## Personal ambient themes (v2.16)
@@ -177,3 +177,11 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 - The theme engine uses CSS design tokens for backgrounds, surfaces, borders, typography, navigation, cards, buttons, charts and decorative highlights.
 - Semantic warning, error and success states remain readable independently of the selected decorative theme.
 - No Supabase migration is required.
+
+
+## Fuel Lab reliability and re-order helper (v2.17)
+
+- Permanently deleted review-derived products are stored as catalog exclusions so cloud reloads and old reviews do not recreate them.
+- Fuel saves close the editor and show a short success message. Open Food Facts contributions show a separate sent confirmation.
+- The contribution consent control is larger and easier to use on desktop and mobile.
+- Low-stock products include a re-order helper. It reads community price observations from Open Prices by barcode and provides direct searches at common German shopping and price-comparison sites. Observed prices may be older and are not guaranteed live inventory.

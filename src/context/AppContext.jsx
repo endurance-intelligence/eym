@@ -6,34 +6,12 @@ import { loadCloudState, saveCloudState, signOut, supabase } from "../services/s
 import { fetchIntervalsStatus, mapIntervalsActivities, mergeIntervalsActivities, syncIntervalsActivities } from "../services/intervals";
 import { migrateConfiguration } from "../services/configuration";
 import { applyTheme, normalizeAppearance } from "../services/theme";
+import { findFuelCatalogMatch, fuelCatalogKey, reviewFuelCategory } from "../services/fuelCatalog";
 
 const AppContext = createContext(null);
 
 function asArray(value, fallback = []) {
   return Array.isArray(value) ? value : fallback;
-}
-
-function normalizeCatalogText(value) {
-  return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
-}
-
-function reviewFuelCategory(item) {
-  return item.type === "Salz" ? "Kapseln" : item.type || "Sonstiges";
-}
-
-function findFuelCatalogMatch(fuel, reviewItem, category = reviewFuelCategory(reviewItem)) {
-  const productName = normalizeCatalogText(reviewItem.product);
-  const manufacturer = normalizeCatalogText(reviewItem.manufacturer);
-  const sameProduct = fuel.filter((candidate) => (
-    normalizeCatalogText(candidate.name) === productName
-    && candidate.category === category
-  ));
-  const exact = sameProduct.find((candidate) => normalizeCatalogText(candidate.brand) === manufacturer);
-  if (exact) return exact;
-  if (!manufacturer && sameProduct.length === 1) return sameProduct[0];
-  const candidatesWithoutBrand = sameProduct.filter((candidate) => !normalizeCatalogText(candidate.brand));
-  if (manufacturer && candidatesWithoutBrand.length === 1) return candidatesWithoutBrand[0];
-  return null;
 }
 
 function normalizeInventory(activities, items, reviews) {
@@ -72,10 +50,12 @@ function normalizeInventory(activities, items, reviews) {
 
 function migrateReviewFuelCatalog(inputState = {}) {
   const fuel = asArray(inputState.fuel).map((item) => ({ ...item }));
+  const exclusions = new Set(asArray(inputState.fuelCatalogExclusions));
   Object.values(inputState.reviews || {}).forEach((review) => {
     (Array.isArray(review?.nutritionItems) ? review.nutritionItems : []).forEach((item) => {
-      if (!String(item.product || "").trim() || item.hydrationLinked) return;
+      if (!String(item.product || "").trim() || item.hydrationLinked || item.catalogIgnored) return;
       const category = reviewFuelCategory(item);
+      if (exclusions.has(fuelCatalogKey({ category, brand: item.manufacturer, name: item.product }))) return;
       const match = findFuelCatalogMatch(fuel, item, category);
       if (match) {
         if (!String(match.brand || "").trim() && String(item.manufacturer || "").trim()) {
@@ -104,7 +84,7 @@ function migrateReviewFuelCatalog(inputState = {}) {
       });
     });
   });
-  return { ...inputState, fuel };
+  return { ...inputState, fuel, fuelCatalogExclusions: [...exclusions] };
 }
 
 function mergeState(localState = {}, cloudState = {}) {
@@ -122,6 +102,10 @@ function mergeState(localState = {}, cloudState = {}) {
     plan: asArray(cloud.plan, asArray(local.plan)),
     equipment: asArray(cloud.equipment, asArray(local.equipment)),
     fuel: inventory.fuel,
+    fuelCatalogExclusions: [...new Set([
+      ...asArray(local.fuelCatalogExclusions),
+      ...asArray(cloud.fuelCatalogExclusions),
+    ])],
     healthCheckins: asArray(cloud.healthCheckins, asArray(local.healthCheckins)),
     mobilityCoach: {
       ...defaultState.mobilityCoach,
@@ -360,9 +344,13 @@ export function AppProvider({ children }) {
       }, {});
 
       const fuel = [...current.fuel];
+      const exclusions = new Set(asArray(current.fuelCatalogExclusions));
       const nutritionItems = (Array.isArray(review.nutritionItems) ? review.nutritionItems : []).map((item) => {
-        if (item.fuelItemId || !String(item.product || "").trim() || item.hydrationLinked) return item;
+        if (item.fuelItemId || !String(item.product || "").trim() || item.hydrationLinked || item.catalogIgnored) return item;
         const category = reviewFuelCategory(item);
+        if (exclusions.has(fuelCatalogKey({ category, brand: item.manufacturer, name: item.product }))) {
+          return { ...item, fuelItemId: null, affectsInventory: false, catalogIgnored: true };
+        }
         const match = findFuelCatalogMatch(fuel, item, category);
         if (match) {
           if (!String(match.brand || "").trim() && String(item.manufacturer || "").trim()) {
