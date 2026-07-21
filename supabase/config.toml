@@ -3,3 +3,6 @@ verify_jwt = false
 
 [functions.intervals]
 verify_jwt = true
+
+[functions.open-food-facts]
+verify_jwt = true

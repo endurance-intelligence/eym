@@ -155,3 +155,14 @@ Saving a recurring commitment changes the planning configuration only. An alread
 - Keeps ankle work user-selectable through the existing focus system; users without an ankle focus continue to receive balanced standard workouts.
 - Improves German exercise names, quick-start instructions and schematic movement guides for ankle exercises.
 - Keeps the current ISO calendar week open in Training and collapses older weeks into compact summaries that can be opened per KW.
+
+## Fuel Lab enrichment and Open Food Facts contributions (v2.15)
+
+Fuel product cards keep long names to a consistent three-line header. Missing or incomplete catalog entries can be completed inside EYM with barcode, serving data, ingredients, and separate front, nutrition, and ingredients photos. Local values are stored immediately. An authenticated Supabase Edge Function can optionally submit the product data and user-owned photos to Open Food Facts.
+
+Deploy the new function and configure these Supabase secrets before enabling automatic contributions:
+
+- `OPEN_FOOD_FACTS_USER_ID`
+- `OPEN_FOOD_FACTS_PASSWORD`
+- `OPEN_FOOD_FACTS_USER_AGENT` (recommended format: `EnduranceIntelligence/2.15.0 (contact@example.com)`)
+- `OPEN_FOOD_FACTS_APP_SALT` (a random secret used to derive a stable pseudonymous app UUID per EYM user)

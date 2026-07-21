@@ -1,6 +1,6 @@
 const PRODUCT_FIELDS = [
   "code", "product_name", "generic_name", "brands", "brand_owner", "owner", "manufacturing_places", "categories", "categories_tags", "quantity",
-  "serving_quantity", "serving_size", "nutrition_data_per", "nutriments", "image_front_small_url", "image_front_url",
+  "serving_quantity", "serving_size", "nutrition_data_per", "nutriments", "ingredients_text", "ingredients_text_de", "image_front_small_url", "image_front_url", "image_nutrition_url", "image_ingredients_url",
   "completeness", "last_modified_t",
 ].join(",");
 
@@ -49,6 +49,20 @@ function caffeineMgPerServing(product) {
   if (value === null && per100 !== null && serving !== null) value = per100 * serving / 100;
   if (value === null) return null;
   return Math.max(0, value <= 5 ? value * 1000 : value);
+}
+
+
+function nutrientPer100(product, nutrient, convertSmallToMg = false) {
+  const value = asNumber(product.nutriments?.[`${nutrient}_100g`]);
+  if (value === null) return null;
+  const normalized = convertSmallToMg && value <= 5 ? value * 1000 : value;
+  return Math.max(0, normalized);
+}
+
+function servingUnit(product) {
+  const text = String(product.serving_size || "").toLowerCase();
+  if (/ml|milliliter|litre|liter/.test(text)) return "ml";
+  return "g";
 }
 
 function imageFromFile(file) {
@@ -109,6 +123,8 @@ function productResult(barcode, source, sourceLabel) {
   const category = inferCategory(source);
   const carbs = carbsPerServing(source);
   const caffeine = caffeineMgPerServing(source);
+  const carbsPer100 = nutrientPer100(source, "carbohydrates");
+  const caffeinePer100 = nutrientPer100(source, "caffeine", true);
   const brand = firstText(source.brands, source.brand_owner, source.owner, source.manufacturing_places);
   return {
     found: true,
@@ -121,8 +137,15 @@ function productResult(barcode, source, sourceLabel) {
       category,
       carbs: carbs == null ? null : Math.round(carbs * 10) / 10,
       caffeine: caffeine == null ? null : Math.round(caffeine),
+      carbsPer100: carbsPer100 == null ? null : Math.round(carbsPer100 * 10) / 10,
+      caffeinePer100: caffeinePer100 == null ? null : Math.round(caffeinePer100 * 10) / 10,
+      servingQuantity: asNumber(source.serving_quantity),
+      servingUnit: servingUnit(source),
+      ingredientsText: String(source.ingredients_text_de || source.ingredients_text || "").trim(),
       stockUnit: stockUnitForCategory(category),
       imageUrl: source.image_front_small_url || source.image_front_url || "",
+      nutritionImageUrl: source.image_nutrition_url || "",
+      ingredientsImageUrl: source.image_ingredients_url || "",
       source: sourceLabel,
       packageSize: source.quantity || source.serving_size || "",
       catalogCompleteness: asNumber(source.completeness),
