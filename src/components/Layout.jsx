@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from "react-router-dom";
-import packageJson from "../../package.json";
+import { version } from "../../package.json";
 import { useApp } from "../context/AppContext";
 
 const links = [
@@ -22,7 +22,7 @@ export default function Layout() {
   return (
     <div className="shell">
       <aside>
-        <div className="brand"><b>Endurance Intelligence</b><span>Eat your miles.</span><small>v{packageJson.version}</small></div>
+        <div className="brand"><b>Endurance Intelligence</b><span>Eat your miles.</span><small>v{version}</small></div>
         <nav>{links.map(([to, name, icon]) => <NavLink key={to} to={to} end={to === "/"}><i>{icon}</i>{name}</NavLink>)}</nav>
         <div className="aside-foot"><span>{mainTarget.name || "Deine Mission"}</span><br /><strong>{targetLabel}</strong></div>
       </aside>

@@ -1,5 +1,3 @@
-import JSZip from "jszip";
-
 export const GARMIN_IMPORT_FROM = "2025-01-01";
 
 const TYPE_MAP = {
@@ -131,6 +129,7 @@ export async function readGarminExport(file, importFrom = GARMIN_IMPORT_FROM) {
   let sourceFileName = file.name;
 
   if (lowerName.endsWith(".zip")) {
+    const { default: JSZip } = await import("jszip");
     const zip = await JSZip.loadAsync(await file.arrayBuffer());
     const summaryEntry = Object.values(zip.files).find(
       (entry) => !entry.dir && /summarizedactivities\.json$/i.test(entry.name),
