@@ -1,5 +1,5 @@
-import { migrateConfiguration } from "./configuration";
-import { normalizeAppearance } from "./theme";
+import { migrateConfiguration } from "./configuration.js";
+import { normalizeAppearance } from "./theme.js";
 
 const KEY = "endurance-intelligence.v1";
 
@@ -62,6 +62,49 @@ export function loadState(defaults) {
 
 export function saveState(state) {
   localStorage.setItem(KEY, JSON.stringify(state));
+}
+
+export function createStateBackup(state) {
+  return {
+    format: "endurance-intelligence-backup",
+    version: 1,
+    createdAt: new Date().toISOString(),
+    data: state,
+  };
+}
+
+export function downloadStateBackup(state) {
+  const backup = createStateBackup(state);
+  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `eym-backup-${backup.createdAt.slice(0, 10)}.json`;
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+export function parseStateBackup(text, defaults) {
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new Error("Die Sicherungsdatei enthält kein gültiges JSON.");
+  }
+  const wrapped = parsed?.format === "endurance-intelligence-backup";
+  const data = wrapped ? parsed.data : parsed;
+  if (!data || typeof data !== "object" || !["activities", "plan", "profile", "mission"].some((key) => key in data)) {
+    throw new Error("Die Datei ist keine gültige EYM-Sicherung.");
+  }
+  return {
+    state: sanitizeState(data, defaults),
+    createdAt: wrapped ? parsed.createdAt || null : null,
+  };
+}
+
+export async function readStateBackup(file, defaults) {
+  if (!file) throw new Error("Bitte eine EYM-Sicherungsdatei auswählen.");
+  return parseStateBackup(await file.text(), defaults);
 }
 
 export function resetState() {

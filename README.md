@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **3.1.1**
+Current app version: **3.2.0**
 
 **Eat your miles.**
 
@@ -169,7 +169,7 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 
 - `OPEN_FOOD_FACTS_USER_ID`
 - `OPEN_FOOD_FACTS_PASSWORD`
-- `OPEN_FOOD_FACTS_USER_AGENT` (recommended format: `EnduranceIntelligence/3.1.1 (contact@example.com)`)
+- `OPEN_FOOD_FACTS_USER_AGENT` (recommended format: `EnduranceIntelligence/3.2.0 (contact@example.com)`)
 - `OPEN_FOOD_FACTS_APP_SALT` (a random secret used to derive a stable pseudonymous app UUID per EYM user)
 
 ## Personal ambient themes (v2.16)
@@ -241,3 +241,20 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 - Full weather details and the complete week stay available on demand.
 - Hydration recommendations require a sufficiently long activity and a plausible sweat-rate range. Short or implausible measurements show a validation hint instead of extreme litre-per-hour advice.
 - EYM still never changes a planned session automatically; weather and load information remain optional guidance.
+
+## Stability and private image storage v3.2
+
+- Personal recurring commitments remain user configuration. Fresh configurations do not create ORC, football or other athlete-specific appointments automatically.
+- Cloud writes use the last known `updated_at` value. A newer state from another device is reported as a conflict instead of being overwritten silently.
+- Fuel and equipment photos are stored in the private `athlete-images` bucket. Deterministic object paths mean replacements overwrite the existing file and deletion removes the associated objects.
+- Existing embedded Base64 photos migrate automatically after login. The app only replaces an image in the current state when it still matches the migrated source, so concurrent local edits are preserved.
+- Settings can export and restore a versioned JSON backup. Route-loading failures now show a safe reload screen.
+- Automated tests cover generic recurring commitments, activity deduplication, fuel inventory calculations and backup validation.
+
+Before deploying the application, apply `supabase/migrations/20260722120000_athlete_images.sql`. Afterwards run:
+
+```bash
+npm test
+npm run lint
+npm run build
+```

@@ -13,6 +13,14 @@ export const supabase = createClient(supabaseUrl, supabasePublishableKey, {
   },
 });
 
+export class CloudConflictError extends Error {
+  constructor() {
+    super("Der Cloud-Stand wurde auf einem anderen Gerät geändert.");
+    this.name = "CloudConflictError";
+    this.code = "CLOUD_CONFLICT";
+  }
+}
+
 function stateForCloud(state) {
   const cloudState = { ...state };
   delete cloudState.strava;
@@ -53,7 +61,20 @@ export async function loadCloudState(userId) {
   return data;
 }
 
-export async function saveCloudState(userId, state) {
+export async function saveCloudState(userId, state, { expectedUpdatedAt = null, force = false } = {}) {
+  if (expectedUpdatedAt && !force) {
+    const { data, error } = await supabase
+      .from("athlete_data")
+      .update({ app_data: stateForCloud(state) })
+      .eq("user_id", userId)
+      .eq("updated_at", expectedUpdatedAt)
+      .select("calendar_token, updated_at")
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) throw new CloudConflictError();
+    return data;
+  }
+
   const { data, error } = await supabase
     .from("athlete_data")
     .upsert({ user_id: userId, app_data: stateForCloud(state) }, { onConflict: "user_id" })

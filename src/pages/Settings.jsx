@@ -2,7 +2,8 @@ import { useRef, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { Card, PageTitle } from "../components/UI";
 import { downloadCalendar } from "../services/calendar";
-import { resetState } from "../services/storage";
+import { downloadStateBackup, readStateBackup, resetState } from "../services/storage";
+import { defaultState } from "../data/defaults";
 import { mergeGarminActivities, readGarminExport } from "../services/garminImport";
 import { calendarSubscriptionUrl } from "../services/supabase";
 import { fetchIntervalsStatus, intervalsOnlineReady } from "../services/intervals";
@@ -25,7 +26,7 @@ function numberOrBlank(value) {
 }
 
 export default function Settings() {
-  const { state, setState, session, cloudStatus, cloudUpdatedAt, calendarToken, intervalsSyncStatus, syncIntervalsNow, uploadLocalState, reloadCloudState, logout } = useApp();
+  const { state, setState, session, cloudStatus, cloudUpdatedAt, cloudError, imageStorageStatus, imageStorageMessage, retryImageMigration, calendarToken, intervalsSyncStatus, syncIntervalsNow, uploadLocalState, reloadCloudState, logout } = useApp();
   const [calendarMessage, setCalendarMessage] = useState("");
   const [garminBusy, setGarminBusy] = useState(false);
   const [garminPreview, setGarminPreview] = useState(null);
@@ -36,7 +37,9 @@ export default function Settings() {
   const [commitmentMessage, setCommitmentMessage] = useState("");
   const [section, setSection] = useState("overview");
   const [profileMessage, setProfileMessage] = useState("");
+  const [backupMessage, setBackupMessage] = useState("");
   const garminInput = useRef(null);
+  const backupInput = useRef(null);
 
   const commitments = sortCommitments(
     Array.isArray(state.planner?.recurringCommitments) ? state.planner.recurringCommitments : [],
@@ -186,8 +189,25 @@ export default function Settings() {
     setGarminPreview(null);
   }
 
+  async function restoreBackup(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setBackupMessage("");
+    try {
+      const backup = await readStateBackup(file, defaultState);
+      const created = backup.createdAt ? new Date(backup.createdAt).toLocaleString("de-DE") : "unbekannt";
+      const summary = `${backup.state.activities.length} Aktivitäten, ${backup.state.plan.length} Planeinträge und ${backup.state.reviews ? Object.keys(backup.state.reviews).length : 0} Reviews`;
+      if (!window.confirm(`EYM-Sicherung vom ${created} wiederherstellen?\n\n${summary}\n\nDer aktuelle lokale Stand wird ersetzt und anschließend synchronisiert.`)) return;
+      setState(backup.state);
+      setBackupMessage("Sicherung wiederhergestellt. Der Stand wird jetzt mit der Cloud synchronisiert.");
+    } catch (error) {
+      setBackupMessage(error instanceof Error ? error.message : String(error));
+    }
+  }
+
   const calendarUrl = calendarToken ? calendarSubscriptionUrl(calendarToken) : "";
-  const cloudStatusLabel = { local: "Nur lokal", loading: "Cloud wird geladen …", saving: "Wird gespeichert …", synced: "Synchronisiert", error: "Synchronisierung fehlgeschlagen" }[cloudStatus] || cloudStatus;
+  const cloudStatusLabel = { local: "Nur lokal", loading: "Cloud wird geladen …", saving: "Wird gespeichert …", synced: "Synchronisiert", conflict: "Neuerer Stand auf einem anderen Gerät", error: "Synchronisierung fehlgeschlagen" }[cloudStatus] || cloudStatus;
 
   const sectionTabs = [
     ["overview", "Übersicht"],
@@ -358,11 +378,13 @@ export default function Settings() {
     </div>}
 
     {section === "connections" && <div className="grid">
-      <Card className="wide"><p className="eyebrow">Endurance Intelligence Cloud</p><h2>Geräteübergreifend synchronisiert</h2><p className="muted">Angemeldet als <b>{session?.user?.email}</b>. Änderungen werden automatisch in Supabase gespeichert.</p><span className={`cloud-status ${cloudStatus}`}>{cloudStatusLabel}</span>{cloudUpdatedAt && <p className="muted">Letzte Cloud-Aktualisierung: {new Date(cloudUpdatedAt).toLocaleString("de-DE")}</p>}<div className="button-row"><button onClick={uploadLocalState}>Lokale Daten in Cloud übernehmen</button><button className="secondary" onClick={reloadCloudState}>Cloud neu laden</button><button className="secondary" onClick={logout}>Abmelden</button></div></Card>
+      <Card className="wide"><p className="eyebrow">Endurance Intelligence Cloud</p><h2>Geräteübergreifend synchronisiert</h2><p className="muted">Angemeldet als <b>{session?.user?.email}</b>. Änderungen werden automatisch in Supabase gespeichert.</p><span className={`cloud-status ${cloudStatus}`}>{cloudStatusLabel}</span>{cloudUpdatedAt && <p className="muted">Letzte Cloud-Aktualisierung: {new Date(cloudUpdatedAt).toLocaleString("de-DE")}</p>}{cloudError && <p className="connection-message cloud-error-message">{cloudError}</p>}<div className="button-row"><button onClick={uploadLocalState}>{cloudStatus === "conflict" ? "Lokalen Stand behalten" : cloudStatus === "error" ? "Speichern erneut versuchen" : "Lokale Daten in Cloud übernehmen"}</button><button className="secondary" onClick={reloadCloudState}>{cloudStatus === "conflict" ? "Neueren Cloud-Stand laden" : "Cloud neu laden"}</button><button className="secondary" onClick={logout}>Abmelden</button></div></Card>
       <Card className="wide intervals-setup-card"><p className="eyebrow">Intervals.icu · Datenzentrale</p><h2>{state.intervals?.connected ? "Verbunden und bereit" : state.intervals?.configured ? "Verbindung prüfen" : "Trainingsplattformen bündeln"}</h2><p className="muted">Garmin, Strava, Polar oder weitere Plattformen werden in Intervals.icu verbunden. EYM lädt die zusammengeführten Aktivitäten von dort.</p><div className="intervals-setup-grid"><div className="intervals-setup-step"><span>1</span><div><strong>Intervals.icu öffnen</strong><small>Anmelden oder kostenlos ein Konto erstellen.</small></div></div><div className="intervals-setup-step"><span>2</span><div><strong>Datenquelle verbinden</strong><small>Unter Settings → Connections Garmin, Strava, Polar oder deine Plattform auswählen.</small></div></div><div className="intervals-setup-step"><span>3</span><div><strong>Sync prüfen</strong><small>Kontrollieren, ob deine letzten Aktivitäten sichtbar sind.</small></div></div><div className="intervals-setup-step"><span>4</span><div><strong>EYM verbinden</strong><small>Verbindung testen und Aktivitäten synchronisieren.</small></div></div></div>{state.intervals?.lastSyncAt && <p className="muted">Letzter Sync: {new Date(state.intervals.lastSyncAt).toLocaleString("de-DE")}</p>}<div className="button-row"><a className="button-link" href="https://intervals.icu/settings/connections" target="_blank" rel="noreferrer">Intervals.icu Connections öffnen</a><button onClick={checkIntervals} disabled={intervalsBusy || !intervalsOnlineReady()}>{intervalsBusy ? "Prüfe …" : "Verbindung prüfen"}</button>{state.intervals?.connected && <button className="secondary" onClick={syncIntervals} disabled={intervalsSyncStatus === "syncing"}>{intervalsSyncStatus === "syncing" ? "Synchronisiert …" : "Jetzt synchronisieren"}</button>}</div><div className="setup-note"><strong>Garmin-Workouts:</strong> Bei der Garmin-Verbindung „Upload planned workouts“ aktivieren.</div><div className="setup-note"><strong>Mehrere EYM-Nutzer:</strong> Die persönliche Anmeldung wird als Intervals.icu-OAuth-Verbindung umgesetzt. Die aktuelle Verbindung bleibt bis dahin privater Testbetrieb.</div>{intervalsMessage && <p className="connection-message">{intervalsMessage}</p>}</Card>
     </div>}
 
     {section === "data" && <div className="grid">
+      <Card className="wide"><p className="eyebrow">EYM · Datensicherung</p><h2>Sicherung exportieren oder wiederherstellen</h2><p className="muted">Erstellt eine lesbare JSON-Sicherung deiner Pläne, Aktivitäten, Reviews und Einstellungen. Bilder bleiben über ihre privaten Speicherpfade zugeordnet.</p><input ref={backupInput} type="file" accept=".json,application/json" hidden onChange={restoreBackup} /><div className="button-row"><button onClick={() => { downloadStateBackup(state); setBackupMessage("Sicherung heruntergeladen."); }}>Sicherung herunterladen</button><button className="secondary" onClick={() => backupInput.current?.click()}>Sicherung wiederherstellen</button></div>{backupMessage && <p className="connection-message">{backupMessage}</p>}</Card>
+      <Card className="wide"><p className="eyebrow">Supabase · Privater Bildspeicher</p><h2>{imageStorageStatus === "migrating" ? "Bilder werden optimiert" : imageStorageStatus === "error" ? "Bildspeicher prüfen" : "Bilder platzsparend gespeichert"}</h2><span className={`cloud-status ${imageStorageStatus === "error" ? "error" : imageStorageStatus === "ready" ? "synced" : "saving"}`}>{imageStorageStatus === "migrating" ? "Migration läuft" : imageStorageStatus === "error" ? "Migration ausstehend" : "Bereit"}</span><p className="muted">{imageStorageMessage || "Produkt- und Equipmentbilder werden getrennt vom großen App-Datensatz gespeichert. Ersetzen überschreibt die vorhandene Datei; Löschen entfernt sie."}</p>{imageStorageStatus === "error" && <button type="button" onClick={retryImageMigration}>Erneut prüfen</button>}</Card>
       <Card className="wide"><p className="eyebrow">Garmin · Historie & Backup</p><h2>Garmin-Export importieren</h2><p className="muted">Liest den vollständigen Garmin-Datenexport direkt im Browser. Vorhandene Aktivitäten werden als Duplikate erkannt und zusammengeführt.</p><input ref={garminInput} type="file" accept=".zip,.json,application/zip,application/json" hidden onChange={(event) => previewGarmin(event.target.files?.[0])} /><div className="button-row"><button onClick={() => garminInput.current?.click()} disabled={garminBusy}>{garminBusy ? "Export wird geprüft …" : "Garmin ZIP auswählen"}</button>{garminPreview && <button className="secondary" onClick={importGarmin}>Import starten</button>}</div>{garminPreview && <div className="import-preview"><div><span>Aktivitäten</span><strong>{garminPreview.total}</strong></div><div><span>Läufe</span><strong>{garminPreview.runs}</strong></div><div><span>Laufkilometer</span><strong>{garminPreview.distance.toFixed(1)} km</strong></div><div><span>Zeitraum</span><strong>{garminPreview.firstDate} – {garminPreview.lastDate}</strong></div><p className="muted import-types">{Object.entries(garminPreview.byType).sort((a, b) => b[1] - a[1]).map(([type, count]) => `${type}: ${count}`).join(" · ")}</p></div>}{state.garmin?.lastImportAt && <p className="muted">Letzter Import: {new Date(state.garmin.lastImportAt).toLocaleString("de-DE")} · {state.garmin.imported} neu · {state.garmin.duplicates} Duplikate</p>}{garminMessage && <p className="connection-message">{garminMessage}</p>}</Card>
       <Card><p className="eyebrow">Apple Kalender</p><h2>Kalender-Abo</h2><p className="muted">Die Cloud-Adresse liefert deinen aktuellen Wochenplan automatisch als Kalenderabo.</p><div className="button-row"><button onClick={() => navigator.clipboard?.writeText(calendarUrl).then(() => setCalendarMessage("Kalenderadresse kopiert."))} disabled={!calendarToken}>Abo-Adresse kopieren</button><button className="secondary" onClick={() => downloadCalendar(state.plan)}>ICS als Datei</button></div>{calendarUrl && <><label className="calendar-url-label">Abo-Adresse<input readOnly value={calendarUrl} onFocus={(event) => event.target.select()} /></label><p className="muted">Auf dem iPhone: Kalender → Kalender hinzufügen → Kalenderabonnement hinzufügen → Adresse einsetzen.</p></>}{calendarMessage && <p className="connection-message">{calendarMessage}</p>}</Card>
       <Card><p className="eyebrow">Lokale Daten</p><h2>Reset</h2><p className="muted">Entfernt Reviews, importierte Aktivitäten und lokale Einstellungen aus diesem Browser.</p><button onClick={resetState}>Daten zurücksetzen</button></Card>

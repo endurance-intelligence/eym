@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { Card, PageTitle } from "../components/UI";
+import StoredImage from "../components/StoredImage";
 import {
   lookupOpenFoodFactsProduct,
   lookupOpenFoodFactsProductByText,
@@ -13,6 +14,7 @@ import { contributeOpenFoodFactsProduct, openFoodFactsContributionReady } from "
 import { fuelCatalogKey } from "../services/fuelCatalog";
 import { lookupOpenPrices, productPriceSearchLinks } from "../services/productPrices";
 import { extractNutritionLabel } from "../services/nutritionOcr";
+import { isManagedImage, queueEntityImageDeletion, resolveImageUrl, uploadEntityImages } from "../services/imageStorage";
 
 const categories = ["Gel", "Drink Mix", "Elektrolyte", "Riegel", "Recovery", "Kapseln", "Sonstiges"];
 const stockUnits = ["Stück", "Portionen", "Tabletten", "Beutel"];
@@ -126,7 +128,7 @@ function priceLocation(item) {
 }
 
 export default function Fuel() {
-  const { state, setState } = useApp();
+  const { state, setState, session } = useApp();
   const [product, setProduct] = useState(emptyProduct);
   const [showForm, setShowForm] = useState(false);
   const [scanStatus, setScanStatus] = useState("idle");
@@ -208,9 +210,9 @@ export default function Fuel() {
       ingredientsText: result.product.ingredientsText || current.ingredientsText,
       brand: result.product.brand || current.brand,
       name: result.product.name || current.name,
-      imageUrl: result.product.imageUrl || current.imageUrl,
-      nutritionImageUrl: result.product.nutritionImageUrl || current.nutritionImageUrl,
-      ingredientsImageUrl: result.product.ingredientsImageUrl || current.ingredientsImageUrl,
+      imageUrl: current.imageUrl || result.product.imageUrl,
+      nutritionImageUrl: current.nutritionImageUrl || result.product.nutritionImageUrl,
+      ingredientsImageUrl: current.ingredientsImageUrl || result.product.ingredientsImageUrl,
       quantity: current.quantity || "1",
       catalogContributionPending: false,
     }));
@@ -254,7 +256,8 @@ export default function Fuel() {
     setNutritionScanMessage("Nährwerttabelle wird erkannt … 0 %");
     setNutritionScanResult(null);
     try {
-      const result = await extractNutritionLabel(image, (progress) => setNutritionScanMessage(`Nährwerttabelle wird erkannt … ${progress} %`));
+      const readableImage = await resolveImageUrl(image);
+      const result = await extractNutritionLabel(readableImage, (progress) => setNutritionScanMessage(`Nährwerttabelle wird erkannt … ${progress} %`));
       setNutritionScanResult(result);
       setProduct((current) => {
         const next = { ...current, catalogContributionPending: true };
@@ -384,9 +387,9 @@ export default function Fuel() {
           preparedVolumeMl: result.product.preparedVolumeMl ?? candidate.preparedVolumeMl ?? null,
           ingredientsText: result.product.ingredientsText || candidate.ingredientsText || "",
           stockUnit: candidate.stockUnit || result.product.stockUnit,
-          imageUrl: result.product.imageUrl || candidate.imageUrl,
-          nutritionImageUrl: result.product.nutritionImageUrl || candidate.nutritionImageUrl || "",
-          ingredientsImageUrl: result.product.ingredientsImageUrl || candidate.ingredientsImageUrl || "",
+          imageUrl: candidate.imageUrl || result.product.imageUrl,
+          nutritionImageUrl: candidate.nutritionImageUrl || result.product.nutritionImageUrl || "",
+          ingredientsImageUrl: candidate.ingredientsImageUrl || result.product.ingredientsImageUrl || "",
           packageSize: result.product.packageSize || candidate.packageSize,
           source: result.product.source || candidate.source,
           brandSource: result.product.brandSource || candidate.brandSource || null,
@@ -439,12 +442,17 @@ export default function Fuel() {
     };
   }
 
-  function persistProduct(data, contribution = {}) {
+  function productTarget(data) {
     const matchingItem = editingId
       ? state.fuel.find((item) => item.id === editingId)
       : data.barcode ? state.fuel.find((item) => String(item.barcode || "").replace(/\D/g, "") === data.barcode) : null;
     const targetId = matchingItem?.id || editingId || crypto.randomUUID();
     const incrementExisting = !editingId && Boolean(matchingItem);
+    return { matchingItem, targetId, incrementExisting };
+  }
+
+  function persistProduct(data, contribution = {}, target = productTarget(data)) {
+    const { targetId, incrementExisting } = target;
     setState((current) => {
       const existing = current.fuel.find((item) => item.id === targetId);
       const stored = {
@@ -458,6 +466,9 @@ export default function Fuel() {
         stockTrackedFrom: existing?.stockTrackedFrom || new Date().toISOString().slice(0, 10),
         ...contribution,
       };
+      ["imageUrl", "nutritionImageUrl", "ingredientsImageUrl"].forEach((field) => {
+        if (isManagedImage(existing?.[field]) && !isManagedImage(data[field])) stored[field] = existing[field];
+      });
       const storedKey = fuelCatalogKey(stored);
       return {
         ...current,
@@ -484,10 +495,19 @@ export default function Fuel() {
     }
 
     const wasEditing = Boolean(editingId);
-    const { targetId, incrementExisting } = persistProduct(data, {
+    const target = productTarget(data);
+    let storedData;
+    try {
+      storedData = await uploadEntityImages(session.user.id, "fuel", target.targetId, data);
+    } catch (error) {
+      setScanStatus("error");
+      setScanMessage(error instanceof Error ? error.message : String(error));
+      return;
+    }
+    const { targetId, incrementExisting } = persistProduct(storedData, {
       catalogContributionPending: contribute || data.catalogContributionPending,
       contributionStatus: contribute ? "sending" : undefined,
-    });
+    }, target);
 
     if (!contribute) {
       resetEditor();
@@ -543,6 +563,12 @@ export default function Fuel() {
     const itemToDelete = state.fuel.find((item) => item.id === id);
     if (!itemToDelete) return;
     if (!window.confirm("Dieses Fuel-Produkt endgültig löschen? Reviews behalten ihren Text, das Produkt wird daraus aber nicht erneut im Fuel Lab angelegt.")) return;
+    try {
+      queueEntityImageDeletion(session.user.id, "fuel", id, itemToDelete);
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : String(error), "bad");
+      return;
+    }
     const deletedKey = fuelCatalogKey(itemToDelete);
     setState((current) => ({
       ...current,
@@ -603,14 +629,14 @@ export default function Fuel() {
 
       <div className="fuel-photo-grid">
         <div className="fuel-photo-slot">
-          <div className="fuel-photo-preview">{product.imageUrl ? <img src={product.imageUrl} alt="Produktvorderseite" /> : <span>Vorderseite</span>}</div>
+          <div className="fuel-photo-preview">{product.imageUrl ? <StoredImage value={product.imageUrl} alt="Produktvorderseite" /> : <span>Vorderseite</span>}</div>
           <b>Vorderseite & Barcode</b>
           <small>Für Erkennung und Produktbild</small>
           <button type="button" onClick={() => photoInput.current?.click()}>{product.imageUrl ? "Foto ersetzen" : "Foto hinzufügen"}</button>
         </div>
         <div className="fuel-photo-slot fuel-nutrition-photo-slot">
           <input ref={nutritionPhotoInput} className="visually-hidden" type="file" accept="image/*" capture="environment" onChange={(event) => supportingPhoto("nutritionImageUrl", event)} />
-          <div className="fuel-photo-preview">{product.nutritionImageUrl ? <img src={product.nutritionImageUrl} alt="Nährwerttabelle" /> : <span>Nährwerte</span>}</div>
+          <div className="fuel-photo-preview">{product.nutritionImageUrl ? <StoredImage value={product.nutritionImageUrl} alt="Nährwerttabelle" /> : <span>Nährwerte</span>}</div>
           <b>Nährwerttabelle</b>
           <small>Foto aufnehmen – EYM liest Portion, Carbs, Natrium und weitere Werte aus.</small>
           <div className="fuel-photo-button-row">
@@ -620,7 +646,7 @@ export default function Fuel() {
         </div>
         <div className="fuel-photo-slot">
           <input ref={ingredientsPhotoInput} className="visually-hidden" type="file" accept="image/*" capture="environment" onChange={(event) => supportingPhoto("ingredientsImageUrl", event)} />
-          <div className="fuel-photo-preview">{product.ingredientsImageUrl ? <img src={product.ingredientsImageUrl} alt="Zutatenliste" /> : <span>Zutaten</span>}</div>
+          <div className="fuel-photo-preview">{product.ingredientsImageUrl ? <StoredImage value={product.ingredientsImageUrl} alt="Zutatenliste" /> : <span>Zutaten</span>}</div>
           <b>Zutatenliste</b>
           <small>Optional für den offenen Katalog</small>
           <button type="button" onClick={() => ingredientsPhotoInput.current?.click()}>{product.ingredientsImageUrl ? "Foto ersetzen" : "Foto hinzufügen"}</button>
@@ -704,7 +730,7 @@ export default function Fuel() {
       {active.length === 0 && <Card className="wide empty-state"><h2>Noch keine Produkte</h2><p>Lege Gel, Drink Mix, Elektrolyte, Riegel oder andere Produkte manuell oder per Barcode-Foto an.</p></Card>}
       {active.map((item) => <Card key={item.id} className="fuel-product-card fuel-product-card-compact">
         <div className="fuel-product-head">
-          {item.imageUrl && <img className="fuel-product-image" src={item.imageUrl} alt="" loading="lazy" referrerPolicy="no-referrer" />}
+          {item.imageUrl && <StoredImage className="fuel-product-image" value={item.imageUrl} alt="" loading="lazy" referrerPolicy="no-referrer" />}
           <div className="fuel-product-copy">
             <p className="eyebrow">{item.category}</p>
             <h2 title={item.brand ? `${item.brand} ${item.name}` : item.name}>{item.brand ? `${item.brand} ${item.name}` : item.name}</h2>

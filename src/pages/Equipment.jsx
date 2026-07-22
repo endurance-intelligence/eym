@@ -1,14 +1,16 @@
 import { useRef, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { Card, PageTitle } from "../components/UI";
+import StoredImage from "../components/StoredImage";
 import { fetchIntervalsGear, mapIntervalsGear, mergeIntervalsGear } from "../services/intervals";
 import { compressImageFile } from "../services/imageTools";
+import { queueEntityImageDeletion, uploadEntityImages } from "../services/imageStorage";
 
 const categories = ["Schuhe", "Fahrrad", "Laufband", "Rudergerät", "Weste", "Stirnlampe", "Sonstiges"];
 const emptyItem = { name: "", category: "Schuhe", km: "0", limit: "800", photo: "" };
 
 export default function Equipment() {
-  const { state, setState } = useApp();
+  const { state, setState, session } = useApp();
   const [showForm, setShowForm] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [item, setItem] = useState(emptyItem);
@@ -39,27 +41,34 @@ export default function Equipment() {
     }
   }
 
-  function add(event) {
+  async function add(event) {
     event.preventDefault();
     if (!item.name.trim()) return;
     const usesKilometers = ["Schuhe", "Fahrrad", "Laufband"].includes(item.category);
-    setState((current) => ({
-      ...current,
-      equipment: [...current.equipment, {
-        id: crypto.randomUUID(),
+    const id = crypto.randomUUID();
+    setStatus(item.photo ? "Foto wird im privaten Bildspeicher gesichert …" : "");
+    try {
+      const storedItem = await uploadEntityImages(session.user.id, "equipment", id, item);
+      setState((current) => ({
+        ...current,
+        equipment: [...current.equipment, {
+        id,
         name: item.name.trim(),
         category: item.category,
         km: usesKilometers ? Number(item.km || 0) : null,
         uses: usesKilometers ? null : 0,
         limit: item.limit === "" ? null : Number(item.limit),
-        photo: item.photo || "",
+        photo: storedItem.photo || "",
         archived: false,
         source: "manual",
-      }],
-    }));
-    setItem(emptyItem);
-    setShowForm(false);
-    setStatus("");
+        }],
+      }));
+      setItem(emptyItem);
+      setShowForm(false);
+      setStatus("Ausrüstung gespeichert.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    }
   }
 
   async function importIntervalsEquipment() {
@@ -86,8 +95,16 @@ export default function Equipment() {
   }
 
   function remove(id) {
+    const entry = state.equipment.find((candidate) => candidate.id === id);
+    if (!entry) return;
     if (!window.confirm("Diesen Ausrüstungsgegenstand endgültig löschen?")) return;
-    setState((current) => ({ ...current, equipment: current.equipment.filter((entry) => entry.id !== id) }));
+    try {
+      queueEntityImageDeletion(session.user.id, "equipment", id, entry);
+      setState((current) => ({ ...current, equipment: current.equipment.filter((candidate) => candidate.id !== id) }));
+      setStatus("Ausrüstung gelöscht. Das zugehörige Bild wird nach der Cloud-Synchronisation bereinigt.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    }
   }
 
   function requestPhoto(id) {
@@ -99,11 +116,21 @@ export default function Equipment() {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file || !photoTargetId) return;
-    await readPhoto(file, (photo) => setState((current) => ({
-      ...current,
-      equipment: current.equipment.map((entry) => entry.id === photoTargetId ? { ...entry, photo } : entry),
-    })));
-    setPhotoTargetId(null);
+    const targetId = photoTargetId;
+    setStatus("Foto wird gespeichert …");
+    try {
+      const photo = await compressImageFile(file);
+      const stored = await uploadEntityImages(session.user.id, "equipment", targetId, { photo });
+      setState((current) => ({
+        ...current,
+        equipment: current.equipment.map((entry) => entry.id === targetId ? { ...entry, photo: stored.photo } : entry),
+      }));
+      setStatus("Foto aktualisiert.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setPhotoTargetId(null);
+    }
   }
 
   const activeEquipment = state.equipment.filter((entry) => !entry.archived);
@@ -114,7 +141,7 @@ export default function Equipment() {
     const unit = entry.km != null ? "km" : "Einsätze";
     const progress = entry.limit ? Math.min(100, (value / entry.limit) * 100) : 0;
     return <Card key={entry.id} className="equipment-card">
-      {entry.photo && <img className="equipment-photo" src={entry.photo} alt={entry.name} />}
+      {entry.photo && <StoredImage className="equipment-photo" value={entry.photo} alt={entry.name} />}
       <p className="eyebrow">{entry.category}{entry.source === "intervals" ? " · Intervals.icu" : ""}</p>
       <h2>{entry.name}</h2>
       <strong className="big">{value} {unit}</strong>
@@ -145,11 +172,11 @@ export default function Equipment() {
         {["Schuhe", "Fahrrad", "Laufband"].includes(item.category) && <label>Bisherige Kilometer<input name="km" type="number" min="0" step="0.1" value={item.km} onChange={change} placeholder="0" /></label>}
         <label>Limit {item.category === "Schuhe" ? "(km)" : "(optional)"}<input name="limit" type="number" min="0" value={item.limit} onChange={change} placeholder="Optional" /></label>
         <label className="equipment-photo-field">Foto<input type="file" accept="image/*" capture="environment" onChange={(event) => readPhoto(event.target.files?.[0], (photo) => setItem((current) => ({ ...current, photo })))} /></label>
-        {item.photo && <div className="equipment-photo-preview"><img src={item.photo} alt="Vorschau" /><button type="button" onClick={() => setItem((current) => ({ ...current, photo: "" }))}>Entfernen</button></div>}
+        {item.photo && <div className="equipment-photo-preview"><StoredImage value={item.photo} alt="Vorschau" /><button type="button" onClick={() => setItem((current) => ({ ...current, photo: "" }))}>Entfernen</button></div>}
         <button className="primary" type="submit">Speichern</button>
         <button type="button" onClick={() => setShowForm(false)}>Abbrechen</button>
       </form>
-      <p className="muted equipment-scan-note">Ein Foto wird komprimiert und mit deinem Cloud-Datensatz gespeichert. Eine exakte automatische Modellerkennung ist noch nicht aktiv; sie würde einen zusätzlichen Vision-Dienst benötigen.</p>
+      <p className="muted equipment-scan-note">Ein Foto wird komprimiert und getrennt vom Cloud-Datensatz im privaten Bildspeicher abgelegt. Beim Ersetzen wird dieselbe Datei überschrieben.</p>
     </Card>}
 
     <div className="grid">

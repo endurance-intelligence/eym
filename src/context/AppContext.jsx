@@ -2,12 +2,13 @@
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { defaultState } from "../data/defaults";
 import { loadState, saveState } from "../services/storage";
-import { loadCloudState, saveCloudState, signOut, supabase } from "../services/supabase";
+import { CloudConflictError, loadCloudState, saveCloudState, signOut, supabase } from "../services/supabase";
 import { fetchIntervalsStatus, mapIntervalsActivities, mergeIntervalsActivities, syncIntervalsActivities } from "../services/intervals";
 import { migrateConfiguration } from "../services/configuration";
 import { applyTheme, normalizeAppearance } from "../services/theme";
 import { findFuelCatalogMatch, fuelCatalogKey, reviewFuelCategory } from "../services/fuelCatalog";
 import { consumedInventoryUnits } from "../services/fuelNutrition";
+import { applyImageMigrations, embeddedImageCount, flushQueuedImageDeletions, migrateEmbeddedImages } from "../services/imageStorage";
 
 const AppContext = createContext(null);
 
@@ -150,13 +151,25 @@ export function AppProvider({ children }) {
   const [authLoading, setAuthLoading] = useState(true);
   const [cloudStatus, setCloudStatus] = useState("local");
   const [cloudUpdatedAt, setCloudUpdatedAt] = useState(null);
+  const [cloudError, setCloudError] = useState("");
+  const [imageStorageStatus, setImageStorageStatus] = useState("idle");
+  const [imageStorageMessage, setImageStorageMessage] = useState("");
+  const [imageMigrationAttempt, setImageMigrationAttempt] = useState(0);
   const [calendarToken, setCalendarToken] = useState(null);
   const [intervalsSyncStatus, setIntervalsSyncStatus] = useState("idle");
   const cloudHydrated = useRef(false);
   const skipNextCloudSave = useRef(false);
   const intervalsAutoSyncStarted = useRef(false);
+  const cloudUpdatedAtRef = useRef(null);
+  const cloudConflict = useRef(false);
+  const cloudSaveQueue = useRef(Promise.resolve());
+  const imageMigrationStarted = useRef(false);
+  const stateRef = useRef(state);
+  const sessionUserIdRef = useRef(null);
 
   useEffect(() => saveState(state), [state]);
+  useEffect(() => { stateRef.current = state; }, [state]);
+  useEffect(() => { sessionUserIdRef.current = session?.user?.id || null; }, [session?.user?.id]);
 
   useEffect(() => {
     applyTheme(state.appearance);
@@ -175,7 +188,14 @@ export function AppProvider({ children }) {
       if (!nextSession) {
         cloudHydrated.current = false;
         setCloudStatus("local");
+        setCloudError("");
         setCalendarToken(null);
+        setCloudUpdatedAt(null);
+        cloudUpdatedAtRef.current = null;
+        cloudConflict.current = false;
+        imageMigrationStarted.current = false;
+        setImageStorageStatus("idle");
+        setImageStorageMessage("");
         intervalsAutoSyncStarted.current = false;
         setIntervalsSyncStatus("idle");
       }
@@ -191,6 +211,7 @@ export function AppProvider({ children }) {
     let cancelled = false;
     async function hydrate() {
       setCloudStatus("loading");
+      setCloudError("");
       try {
         const cloud = await loadCloudState(session.user.id);
         if (cancelled) return;
@@ -199,16 +220,23 @@ export function AppProvider({ children }) {
           setState((local) => mergeState(local, cloud.app_data));
           setCalendarToken(cloud.calendar_token);
           setCloudUpdatedAt(cloud.updated_at);
+          cloudUpdatedAtRef.current = cloud.updated_at;
+          flushQueuedImageDeletions(session.user.id, cloud.app_data).catch((error) => console.warn("Image cleanup postponed", error));
         } else {
-          const saved = await saveCloudState(session.user.id, stateForCloud(state));
+          const snapshot = stateForCloud(state);
+          const saved = await saveCloudState(session.user.id, snapshot);
           if (cancelled) return;
           setCalendarToken(saved.calendar_token);
           setCloudUpdatedAt(saved.updated_at);
+          cloudUpdatedAtRef.current = saved.updated_at;
+          flushQueuedImageDeletions(session.user.id, snapshot).catch((error) => console.warn("Image cleanup postponed", error));
         }
         cloudHydrated.current = true;
+        cloudConflict.current = false;
         setCloudStatus("synced");
       } catch (error) {
         console.error("Supabase hydration failed", error);
+        setCloudError(error instanceof Error ? error.message : String(error));
         setCloudStatus("error");
       }
     }
@@ -217,25 +245,69 @@ export function AppProvider({ children }) {
   }, [session, state]);
 
   useEffect(() => {
-    if (!session?.user?.id || !cloudHydrated.current) return;
+    if (!session?.user?.id || !cloudHydrated.current || cloudConflict.current) return;
     if (skipNextCloudSave.current) {
       skipNextCloudSave.current = false;
       return;
     }
-    setCloudStatus("saving");
     const timer = window.setTimeout(async () => {
-      try {
-        const saved = await saveCloudState(session.user.id, stateForCloud(state));
-        setCalendarToken(saved.calendar_token);
-        setCloudUpdatedAt(saved.updated_at);
-        setCloudStatus("synced");
-      } catch (error) {
-        console.error("Supabase save failed", error);
-        setCloudStatus("error");
-      }
+      const userId = session.user.id;
+      const snapshot = stateForCloud(state);
+      cloudSaveQueue.current = cloudSaveQueue.current.catch(() => {}).then(async () => {
+        if (cloudConflict.current) return;
+        setCloudStatus("saving");
+        setCloudError("");
+        try {
+          const saved = await saveCloudState(userId, snapshot, { expectedUpdatedAt: cloudUpdatedAtRef.current });
+          setCalendarToken(saved.calendar_token);
+          setCloudUpdatedAt(saved.updated_at);
+          cloudUpdatedAtRef.current = saved.updated_at;
+          setCloudStatus("synced");
+          flushQueuedImageDeletions(userId, snapshot).catch((error) => console.warn("Image cleanup postponed", error));
+        } catch (error) {
+          console.error("Supabase save failed", error);
+          if (error instanceof CloudConflictError || error?.code === "CLOUD_CONFLICT") {
+            cloudConflict.current = true;
+            setCloudStatus("conflict");
+            setCloudError("Auf einem anderen Gerät liegt ein neuerer Stand. Wähle in den Settings aus, welchen Stand du behalten möchtest.");
+          } else {
+            setCloudStatus("error");
+            setCloudError(error instanceof Error ? error.message : String(error));
+          }
+        }
+      });
     }, 1200);
     return () => window.clearTimeout(timer);
   }, [state, session]);
+
+  useEffect(() => {
+    if (!session?.user?.id || cloudStatus !== "synced" || imageMigrationStarted.current) return;
+    imageMigrationStarted.current = true;
+    const migrationState = stateRef.current;
+    const userId = session.user.id;
+    const total = embeddedImageCount(migrationState);
+    if (!total) {
+      setImageStorageStatus("ready");
+      setImageStorageMessage("Bilder werden platzsparend im privaten Bildspeicher verwaltet.");
+      return;
+    }
+
+    setImageStorageStatus("migrating");
+    setImageStorageMessage(`Vorhandene Bilder werden ausgelagert: 0 von ${total}`);
+    migrateEmbeddedImages(userId, migrationState, (done, count) => {
+      if (sessionUserIdRef.current === userId) setImageStorageMessage(`Vorhandene Bilder werden ausgelagert: ${done} von ${count}`);
+    }).then((updates) => {
+      if (sessionUserIdRef.current !== userId) return;
+      setState((current) => applyImageMigrations(current, updates));
+      setImageStorageStatus("ready");
+      setImageStorageMessage(`${updates.length} vorhandene Bilder wurden sicher und platzsparend ausgelagert.`);
+    }).catch((error) => {
+      if (sessionUserIdRef.current !== userId) return;
+      console.warn("Image migration failed", error);
+      setImageStorageStatus("error");
+      setImageStorageMessage(error instanceof Error ? error.message : String(error));
+    });
+  }, [cloudStatus, imageMigrationAttempt, session?.user?.id]);
 
 
 
@@ -305,24 +377,54 @@ export function AppProvider({ children }) {
 
   async function uploadLocalState() {
     if (!session?.user?.id) return;
+    const force = cloudConflict.current;
+    if (force && !window.confirm("Der lokale Stand überschreibt den neueren Cloud-Stand. Wirklich fortfahren?")) return;
     setCloudStatus("saving");
-    const saved = await saveCloudState(session.user.id, stateForCloud(state));
-    setCalendarToken(saved.calendar_token);
-    setCloudUpdatedAt(saved.updated_at);
-    setCloudStatus("synced");
+    setCloudError("");
+    try {
+      await cloudSaveQueue.current.catch(() => {});
+      const saved = await saveCloudState(session.user.id, stateForCloud(state), {
+        expectedUpdatedAt: cloudUpdatedAtRef.current,
+        force,
+      });
+      setCalendarToken(saved.calendar_token);
+      setCloudUpdatedAt(saved.updated_at);
+      cloudUpdatedAtRef.current = saved.updated_at;
+      cloudConflict.current = false;
+      setCloudStatus("synced");
+      flushQueuedImageDeletions(session.user.id, stateForCloud(state)).catch((error) => console.warn("Image cleanup postponed", error));
+    } catch (error) {
+      if (error instanceof CloudConflictError || error?.code === "CLOUD_CONFLICT") {
+        cloudConflict.current = true;
+        setCloudStatus("conflict");
+        setCloudError("Auf einem anderen Gerät liegt ein neuerer Stand.");
+      } else {
+        setCloudStatus("error");
+        setCloudError(error instanceof Error ? error.message : String(error));
+      }
+    }
   }
 
   async function reloadCloudState() {
     if (!session?.user?.id) return;
     setCloudStatus("loading");
-    const cloud = await loadCloudState(session.user.id);
-    if (cloud?.app_data) {
-      skipNextCloudSave.current = true;
-      setState((local) => mergeState(local, cloud.app_data));
-      setCalendarToken(cloud.calendar_token);
-      setCloudUpdatedAt(cloud.updated_at);
+    setCloudError("");
+    try {
+      const cloud = await loadCloudState(session.user.id);
+      if (cloud?.app_data) {
+        skipNextCloudSave.current = true;
+        setState((local) => mergeState(local, cloud.app_data));
+        setCalendarToken(cloud.calendar_token);
+        setCloudUpdatedAt(cloud.updated_at);
+        cloudUpdatedAtRef.current = cloud.updated_at;
+        flushQueuedImageDeletions(session.user.id, cloud.app_data).catch((error) => console.warn("Image cleanup postponed", error));
+      }
+      cloudConflict.current = false;
+      setCloudStatus("synced");
+    } catch (error) {
+      setCloudStatus("error");
+      setCloudError(error instanceof Error ? error.message : String(error));
     }
-    setCloudStatus("synced");
   }
 
   const api = {
@@ -332,6 +434,13 @@ export function AppProvider({ children }) {
     authLoading,
     cloudStatus,
     cloudUpdatedAt,
+    cloudError,
+    imageStorageStatus,
+    imageStorageMessage,
+    retryImageMigration: () => {
+      imageMigrationStarted.current = false;
+      setImageMigrationAttempt((value) => value + 1);
+    },
     calendarToken,
     intervalsSyncStatus,
     syncIntervalsNow,

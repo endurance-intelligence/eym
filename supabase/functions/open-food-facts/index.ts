@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 const jsonHeaders = { ...corsHeaders, "Content-Type": "application/json; charset=utf-8" };
 const APP_NAME = "Endurance Intelligence";
-const APP_VERSION = "2.19.0";
+const APP_VERSION = "3.2.0";
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: jsonHeaders });
