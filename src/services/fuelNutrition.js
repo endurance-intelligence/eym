@@ -17,8 +17,8 @@ export function defaultConsumptionUnit(item) {
 
 export function consumptionUnitsForFuel(item) {
   const values = [];
-  if (numeric(item?.preparedVolumeMl)) values.push("ml", "Portionen");
-  else if (item?.servingUnit === "ml" && numeric(item?.servingQuantity)) values.push("ml", "Portionen");
+  if (numeric(item?.preparedVolumeMl)) values.push("ml");
+  else if (item?.servingUnit === "ml" && numeric(item?.servingQuantity)) values.push("ml");
   else if (item?.servingUnit === "g" && numeric(item?.servingQuantity) && ["Drink Mix", "Elektrolyte", "Recovery"].includes(item?.category)) values.push("g", "Portionen");
   else values.push(defaultConsumptionUnit(item));
   return [...new Set(values)];
@@ -78,7 +78,7 @@ export function consumedInventoryUnits(item, fuel) {
 export function consumptionSummary(item, fuel) {
   const values = nutritionForConsumption(item, fuel);
   const parts = [];
-  if (item?.unit === "ml" && values.servingFactor != null) parts.push(`${values.servingFactor.toFixed(1).replace(".0", "")} Portionen`);
+  if (item?.unit === "ml" && values.servingFactor != null) parts.push(`${item.quantity} ml · entspricht ${values.servingFactor.toFixed(1).replace(".0", "")} Mischungen`);
   if (values.carbs > 0) parts.push(`${values.carbs.toFixed(1).replace(".0", "")} g Kohlenhydrate`);
   if (values.sodium > 0) parts.push(`${Math.round(values.sodium)} mg Natrium`);
   if (values.caffeine > 0) parts.push(`${Math.round(values.caffeine)} mg Koffein`);

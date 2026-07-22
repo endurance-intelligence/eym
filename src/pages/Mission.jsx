@@ -15,6 +15,13 @@ const emptyEvent = {
   targetKm: "",
   preparationStartDate: "",
   isMainTarget: false,
+  priority: "B",
+  goalType: "finish",
+  targetTime: "",
+  elevationGain: "",
+  elevationLoss: "",
+  surface: "road",
+  role: "",
 };
 
 function nextDay(dateString) {
@@ -117,6 +124,13 @@ export default function Mission() {
         targetKm: draft.targetKm === "" ? null : Number(draft.targetKm),
         preparationStartDate: draft.preparationStartDate || null,
         isMainTarget: Boolean(draft.isMainTarget),
+        priority: draft.isMainTarget ? "A" : (draft.priority || "B"),
+        goalType: draft.goalType || "finish",
+        targetTime: draft.targetTime || "",
+        elevationGain: draft.elevationGain === "" ? 0 : Number(draft.elevationGain),
+        elevationLoss: draft.elevationLoss === "" ? 0 : Number(draft.elevationLoss),
+        surface: draft.surface || "road",
+        role: draft.role || "",
         archived: false,
       };
 
@@ -157,6 +171,13 @@ export default function Mission() {
       targetKm: item.targetKm ?? "",
       preparationStartDate: item.preparationStartDate ?? "",
       isMainTarget: Boolean(item.isMainTarget),
+      priority: item.priority || (item.isMainTarget ? "A" : "B"),
+      goalType: item.goalType || (item.targetTime ? "time" : item.targetKm ? "distance" : "finish"),
+      targetTime: item.targetTime || "",
+      elevationGain: item.elevationGain ?? "",
+      elevationLoss: item.elevationLoss ?? "",
+      surface: item.surface || "road",
+      role: item.role || "",
     });
     setShowEditor(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -236,7 +257,7 @@ export default function Mission() {
         </div>
         <p>{fmtDate(item.date)} · noch {daysUntil(item.date)} Tage</p>
         <p className="muted">{item.location || "Noch kein Ort hinterlegt"}</p>
-        {item.targetKm ? <p><strong>Ziel:</strong> {item.targetKm} km</p> : null}
+        {item.targetKm ? <p><strong>Ziel:</strong> {item.targetKm} km</p> : null}{item.goalType && <p><strong>Zielart:</strong> {{ finish: "Finish", time: "Zielzeit", pb: "Bestzeit", distance: "Distanz maximieren", training: "Vorbereitung" }[item.goalType] || item.goalType}{item.targetTime ? ` · ${item.targetTime}` : ""} · Priorität {item.priority || (item.isMainTarget ? "A" : "B")}</p>}{Number(item.elevationGain || 0) > 0 && <p><strong>Profil:</strong> {item.elevationGain} hm aufwärts · {item.surface || "gemischt"}</p>}
         {item.isMainTarget && <p><strong>Vorbereitung ab:</strong> {fmtDate(item.preparationStartDate || preparationStartDate)}</p>}
         <div className="event-actions">
           {!archived && <button onClick={() => edit(item)}>Bearbeiten</button>}
@@ -275,8 +296,8 @@ export default function Mission() {
             <div className="hero-stats mission-hero-stats">
               <Metric label="Ziel" value={`${mainTarget.targetKm || state.mission.targetKm || 0} km`} />
               <Metric label="Countdown" value={`${daysUntil(mainTarget.date)} Tage`} sub={fmtDate(mainTarget.date)} />
-              <Metric label="Fulda-Vorbereitung" value={`${preparationKm.toFixed(0)} km`} sub={`seit ${fmtDate(preparationStartDate)}`} />
-              <Metric label="Laufeinheiten" value={preparationRuns.length} sub="seit Hermannslauf" />
+              <Metric label="Vorbereitungsumfang" value={`${preparationKm.toFixed(0)} km`} sub={`seit ${fmtDate(preparationStartDate)}`} />
+              <Metric label="Laufeinheiten" value={preparationRuns.length} sub="im aktuellen Aufbau" />
             </div>
           </Card>
         )}
@@ -296,6 +317,13 @@ export default function Mission() {
               {placeSuggestions.length > 0 && <div className="place-suggestions" role="listbox" aria-label="Ortsvorschläge">{placeSuggestions.map((place) => <button key={place.id} type="button" onClick={() => selectPlace(place)}><strong>{place.name}</strong><span>{place.label}</span></button>)}</div>}
             </label>
             <label>Zieldistanz (km)<input name="targetKm" type="number" min="0" step="0.1" value={draft.targetKm} onChange={change} /></label>
+            <label>Zielart<select name="goalType" value={draft.goalType} onChange={change}><option value="finish">Teilnehmen und schaffen</option><option value="time">Mit Zielzeit absolvieren</option><option value="pb">Persönliche Bestzeit</option><option value="distance">Distanz / Zeit maximieren</option><option value="training">Trainings- oder Vorbereitungsevent</option></select></label>
+            {(draft.goalType === "time" || draft.goalType === "pb") && <label>Zielzeit<input name="targetTime" type="time" step="1" value={draft.targetTime} onChange={change} /></label>}
+            <label>Priorität<select name="priority" value={draft.priority} onChange={change}><option value="A">A · Hauptevent</option><option value="B">B · wichtiges Zwischenziel</option><option value="C">C · Trainingswettkampf</option></select></label>
+            <label>Höhenmeter aufwärts<input name="elevationGain" type="number" min="0" value={draft.elevationGain} onChange={change} /></label>
+            <label>Höhenmeter abwärts<input name="elevationLoss" type="number" min="0" value={draft.elevationLoss} onChange={change} /></label>
+            <label>Untergrund<select name="surface" value={draft.surface} onChange={change}><option value="road">Straße</option><option value="trail">Trail</option><option value="mixed">Gemischt</option><option value="track">Bahn</option></select></label>
+            <label className="wide-field">Rolle im Aufbau<input name="role" value={draft.role} onChange={change} placeholder="z. B. kontrollierter Trainingswettkampf" /></label>
             {draft.isMainTarget && <label>Vorbereitung ab<input name="preparationStartDate" type="date" value={draft.preparationStartDate} onChange={change} /></label>}
             <label className="checkbox-label"><input name="isMainTarget" type="checkbox" checked={draft.isMainTarget} onChange={change} /> Als Hauptziel markieren</label>
             <button className="primary" type="submit">{editingId ? "Änderung speichern" : "Event hinzufügen"}</button>
@@ -304,7 +332,7 @@ export default function Mission() {
         </Card>}
 
         {upcomingMilestones.length > 0 && <Card className="wide mission-upcoming-section">
-          <div className="card-heading-row"><div><p className="eyebrow">Nächste Meilensteine</p><h2>Auf dem Weg nach Fulda</h2></div><span className="achievement-count">{upcomingMilestones.length}</span></div>
+          <div className="card-heading-row"><div><p className="eyebrow">Nächste Meilensteine</p><h2>Auf dem Weg zum Hauptziel</h2></div><span className="achievement-count">{upcomingMilestones.length}</span></div>
           <div className="mission-event-grid">{upcomingMilestones.map((item) => eventCard(item))}</div>
         </Card>}
 

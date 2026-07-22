@@ -90,9 +90,16 @@ export default function ReviewModal({ activity, onClose }) {
   const inventoryApplies = (fuelItem) => Boolean(fuelItem && (!fuelItem.stockTrackedFrom || !activityDay || activityDay >= fuelItem.stockTrackedFrom));
   const oldNutrition = (Array.isArray(old.nutritionItems) ? old.nutritionItems : []).filter((item) => !item.hydrationLinked).map((item) => {
     const fuelItem = state.fuel.find((fuel) => fuel.id === item.fuelItemId);
+    const preparedVolumeMl = Number(fuelItem?.preparedVolumeMl || 0);
+    const convertPortionsToMl = preparedVolumeMl > 0 && item.unit === "Portionen";
+    const portionCount = Number(item.quantity || 1);
     return {
       ...item,
       mode: item.mode || (item.fuelItemId ? "catalog" : "manual"),
+      unit: convertPortionsToMl ? "ml" : item.unit,
+      quantity: convertPortionsToMl
+        ? String(Math.round(portionCount * preparedVolumeMl))
+        : item.quantity,
       carbohydratesPerUnit: item.carbohydratesPerUnit ?? fuelItem?.carbs ?? "",
       sodiumPerUnit: item.sodiumPerUnit ?? fuelItem?.sodium ?? "",
       caffeinePerUnit: item.caffeinePerUnit ?? fuelItem?.caffeine ?? "",
@@ -371,22 +378,23 @@ export default function ReviewModal({ activity, onClose }) {
 
             <section className={`review-feature-box activity-weather-box ${weather ? "active" : ""}`}>
               <div className="activity-weather-heading">
-                <div><b>Wetter bei der Einheit</b><small>Werte am Startort und möglichst nah an der Startzeit.</small></div>
+                <div><b>Wetter bei der Einheit</b><small>Werte am Startort und möglichst nah an der Startzeit.{activity.weatherSource ? ` · Quelle: ${activity.weatherSource}` : ""}</small></div>
                 {weather?.source && <em>{weather.source}</em>}
               </div>
               {weather ? (
                 <>
-                  <div className="activity-weather-location"><small>Standort</small><strong>{weather.location || activity.location || "Startort nicht benannt"}</strong></div>
-                  <div className="activity-weather-grid">
-                  <span><small>Temperatur</small><strong>{Number(weather.temperature).toFixed(0)} °C</strong></span>
-                  <span><small>Gefühlt</small><strong>{weather.feelsLike != null ? `${Number(weather.feelsLike).toFixed(0)} °C` : "–"}</strong></span>
-                  <span><small>Wetter</small><strong>{weather.condition || "–"}</strong></span>
-                  <span><small>Wind</small><strong>{weather.windSpeed != null ? `${Number(weather.windSpeed).toFixed(0)} km/h` : "–"}</strong></span>
-                  <span><small>Böen</small><strong>{weather.windGusts != null ? `${Number(weather.windGusts).toFixed(0)} km/h` : "–"}</strong></span>
-                  <span><small>Niederschlag</small><strong>{weather.precipitation != null ? `${Number(weather.precipitation).toFixed(1)} mm` : "–"}</strong></span>
+                  {(weather.location || activity.location) && <div className="activity-weather-location"><small>Standort</small><strong>{weather.location || activity.location}</strong></div>}
+                  <div className="activity-weather-grid compact">
+                  {weather.temperature != null && <span><small>Temperatur</small><strong>{Number(weather.temperature).toFixed(0)} °C</strong></span>}
+                  {weather.feelsLike != null && <span><small>Gefühlt</small><strong>{Number(weather.feelsLike).toFixed(0)} °C</strong></span>}
+                  {weather.condition && <span><small>Wetter</small><strong>{weather.condition}</strong></span>}
+                  {weather.windSpeed != null && <span><small>Wind</small><strong>{Number(weather.windSpeed).toFixed(0)} km/h</strong></span>}
+                  {weather.windGusts != null && <span><small>Böen</small><strong>{Number(weather.windGusts).toFixed(0)} km/h</strong></span>}
+                  {weather.precipitation != null && <span><small>Niederschlag</small><strong>{Number(weather.precipitation).toFixed(1)} mm</strong></span>}
                   </div>
+                  {!weather.location && weather.feelsLike == null && !weather.condition && weather.windSpeed == null && weather.windGusts == null && weather.precipitation == null && <p className="muted">Weitere Wetterdaten wurden für diese Aktivität nicht bereitgestellt.</p>}
                 </>
-              ) : <p className="muted">{weatherStatus || "Keine Wetter- oder Standortdaten in der Aktivität vorhanden."}</p>}
+              ) : <p className="muted">{weatherStatus || "Keine Wetterdaten verfügbar."}</p>}
               {weather && weatherStatus && <p className="muted">{weatherStatus}</p>}
             </section>
 

@@ -1,5 +1,7 @@
 # Endurance Intelligence
 
+Current app version: **3.0.1**
+
 **Eat your miles.**
 
 Endurance Intelligence is a personal endurance dashboard with adaptive weekly planning, Intervals.icu activity sync, Garmin ZIP import, workout reviews, equipment tracking, Fuel Lab and a Supabase-backed calendar subscription.

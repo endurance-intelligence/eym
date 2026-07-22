@@ -70,7 +70,7 @@ export function parseNutritionLabelText(rawText) {
     .replace(/(?<![.,])\b(\d)08\b/g, "$1,0 g");
   const lines = text.split(/\r?\n/).map((line) => line.replace(/\s+/g, " ").trim()).filter(Boolean);
   const lower = text.toLowerCase();
-  const portionMatch = lower.match(/pro\s*portion[^\d]{0,16}\(?\s*(\d+(?:[.,]\d+)?)\s*(g|ml)\s*\)?/i);
+  const portionMatch = lower.match(/(?:pro|per)\s*(?:portion|serving)?[^\d]{0,16}\(?\s*(\d+(?:[.,]\d+)?)\s*(g|ml)\s*\)?/i);
   const servingQuantity = portionMatch ? decimal(portionMatch[1]) : null;
   const servingUnit = portionMatch?.[2] || null;
   const portionArea = lower.match(/pro\s*portion[\s\S]{0,90}/i)?.[0] || "";
@@ -90,6 +90,10 @@ export function parseNutritionLabelText(rawText) {
   const calcium = pairFor(lines, ["calcium", "kalzium"]);
   const vitaminB1 = pairFor(lines, ["vitamin b1", "vitamin bi", "thiamin"]);
   const caffeine = pairFor(lines, ["koffein", "caffeine"]);
+  if (caffeine.per100 == null) {
+    const caffeineMatch = lower.match(/(?:koffein|caffeine)[^\d]{0,25}(\d+(?:[.,]\d+)?)\s*mg\s*\/?\s*100\s*g/i);
+    if (caffeineMatch) { caffeine.per100 = decimal(caffeineMatch[1]); caffeine.unit = "mg"; }
+  }
 
   const factor = servingQuantity != null && servingQuantity > 0 ? servingQuantity / 100 : null;
   const completePair = (pair, convert = (value) => value) => {

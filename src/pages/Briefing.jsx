@@ -1,9 +1,11 @@
+import { Link } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { Card, Metric, PageTitle } from "../components/UI";
 import { recovery, hydration } from "../services/insights";
 import { daysUntil, pace, hours } from "../utils/format";
 import WeatherCard from "../components/WeatherCard";
 import { activityTimestamp, isRunningActivity, preferredActivities } from "../services/activityUtils";
+import { currentWeekAssessment, goalRequirements } from "../services/scienceCoach";
 
 const dayLabel = new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" });
 const todayLabel = new Intl.DateTimeFormat("de-DE", { weekday: "long", day: "2-digit", month: "long" });
@@ -217,6 +219,8 @@ export default function Briefing() {
   const today = todayOverview(state.plan, activities);
   const upcoming = nextDayOverview(state.plan);
   const copy = briefingLanguage();
+  const weekAssessment = currentWeekAssessment(state);
+  const goalProfile = goalRequirements(state);
   const name = displayName(state, session);
 
   const nextEvent = (state.mission.milestones || [])
@@ -244,6 +248,9 @@ export default function Briefing() {
             </div>
           </div>
         </Card>
+
+
+        {weekAssessment.level !== "ok" && <Card className={`wide science-coach-alert ${weekAssessment.level}`}><div><p className="eyebrow">Coach · Wochenbelastung</p><h2>{weekAssessment.level === "adjust" ? "Anpassung könnte sinnvoll sein" : "Belastung im Blick behalten"}</h2><p>{weekAssessment.reasons.join(" · ")}.</p><small>Das ist ein Vorschlag, keine automatische Änderung. Dein Ziel „{goalProfile.target?.name || state.mission.name}“ und deine individuelle Belastungsgewöhnung bleiben die Grundlage.</small></div><Link className="button-link" to="/planner">Vorschläge im Wochenplan prüfen</Link></Card>}
 
         <Card className="hero briefing-mission-card">
           <p className="eyebrow">Mission</p><h2>{state.mission.name}</h2>

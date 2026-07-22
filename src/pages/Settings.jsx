@@ -222,6 +222,8 @@ export default function Settings() {
           <label>Geburtsdatum<input type="date" value={state.profile?.birthDate || ""} onChange={(event) => updateProfile("birthDate", event.target.value)} /></label>
           <label>Größe in cm<input type="number" min="100" max="230" value={state.profile?.heightCm ?? ""} placeholder="optional" onChange={(event) => updateProfile("heightCm", numberOrBlank(event.target.value))} /></label>
           <label>Gewicht in kg<input type="number" min="30" max="250" step="0.1" value={state.profile?.weightKg ?? ""} placeholder="optional" onChange={(event) => updateProfile("weightKg", numberOrBlank(event.target.value))} /></label>
+          <label>Trainingserfahrung<select value={state.profile?.experienceLevel || "beginner"} onChange={(event) => updateProfile("experienceLevel", event.target.value)}><option value="beginner">Anfänger · neu oder Wiedereinstieg</option><option value="advanced">Fortgeschritten · meist 2–3 Läufe/Woche</option><option value="experienced">Erfahren · stabil 4+ Läufe/Woche</option><option value="individual">Individuell</option></select></label>
+          <label>Übliche Läufe pro Woche<input type="number" min="0" max="14" value={state.profile?.selfReportedRunsPerWeek ?? ""} onChange={(event) => updateProfile("selfReportedRunsPerWeek", numberOrBlank(event.target.value))} /></label>
         </div>
       </Card>
     </div>}

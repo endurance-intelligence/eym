@@ -244,7 +244,7 @@ export default function Fuel() {
       await lookupBarcode(barcode);
     } catch (error) {
       setScanStatus("error");
-      setScanMessage(`${error.message || "Der Barcode konnte nicht gelesen werden."} Das Foto bleibt erhalten; Produktname und Nährwerte kannst du manuell ergänzen.`);
+      setScanMessage(`${error.message || "Der Barcode konnte nicht gelesen werden."} Bitte direkt hier prüfen oder das Produkt manuell anlegen.`);
     }
   }
 
@@ -599,7 +599,7 @@ export default function Fuel() {
         </div>
       </div>
 
-      {scanMessage && <div className={`fuel-scan-status ${scanStatus}`}><b>{scanStatus === "found" ? "Erkannt" : scanStatus === "loading" ? "Einen Moment" : "Hinweis"}</b><span>{scanMessage}</span>{product.barcode && <a className="fuel-contribution-link" href={openFoodFactsContributionUrl(product.barcode)} target="_blank" rel="noreferrer">Produkt bei Open Food Facts öffnen ↗</a>}</div>}
+      {scanMessage && scanStatus !== "error" && <div className={`fuel-scan-status ${scanStatus}`}><b>{scanStatus === "found" ? "Erkannt" : scanStatus === "loading" ? "Einen Moment" : "Hinweis"}</b><span>{scanMessage}</span>{product.barcode && <a className="fuel-contribution-link" href={openFoodFactsContributionUrl(product.barcode)} target="_blank" rel="noreferrer">Produkt bei Open Food Facts öffnen ↗</a>}</div>}
 
       <div className="fuel-photo-grid">
         <div className="fuel-photo-slot">
@@ -629,7 +629,7 @@ export default function Fuel() {
 
       {nutritionScanMessage && <div className={`fuel-nutrition-scan ${nutritionScanStatus}`}>
         <div><b>{nutritionScanStatus === "loading" ? "Texterkennung läuft" : nutritionScanStatus === "success" ? "Nährwerte übernommen" : "Nährwerte prüfen"}</b><span>{nutritionScanMessage}</span><small>Die Erkennung läuft lokal im Browser. An Open Food Facts wird erst über „Speichern + übertragen“ gesendet.</small></div>
-        {nutritionScanResult?.rawText && <details><summary>Erkannten Text anzeigen</summary><pre>{nutritionScanResult.rawText}</pre></details>}
+        {nutritionScanResult?.rawText && <details><summary>OCR-Rohtext anzeigen (optional)</summary><pre>{nutritionScanResult.rawText}</pre></details>}
       </div>}
 
       <form className="editor-form fuel-editor-form fuel-editor-sections" onSubmit={(event) => save(event, false)}>
@@ -641,6 +641,8 @@ export default function Fuel() {
                 <input name="barcode" inputMode="numeric" value={product.barcode} onChange={change} placeholder="z. B. 7310865004712" />
                 <button type="button" onClick={() => lookupBarcode()} disabled={!product.barcode || scanStatus === "loading"}>Suchen</button>
               </div>
+              {scanStatus === "error" && scanMessage && <small className="fuel-inline-error">{scanMessage}</small>}
+              {scanStatus === "found" && scanMessage && <small className="fuel-inline-success">{scanMessage}</small>}
             </label>
             <label>Marke / Hersteller<input name="brand" value={product.brand} onChange={change} placeholder="Maurten" /></label>
             <label>Produktname<input name="name" value={product.name} onChange={change} placeholder="Gel 100" required /></label>

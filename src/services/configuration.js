@@ -173,6 +173,8 @@ export function migrateConfiguration(inputState = {}) {
       heightCm: "",
       weightKg: "",
       units: "metric",
+      experienceLevel: "beginner",
+      selfReportedRunsPerWeek: 0,
       ...(inputState.profile || {}),
     },
     planner: {

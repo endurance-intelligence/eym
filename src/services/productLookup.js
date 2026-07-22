@@ -1,3 +1,24 @@
+
+const COMMUNITY_FUEL_CATALOG = {
+  "4260278820175": {
+    product_name: "Energy Gel",
+    brands: "Squeezy",
+    categories: "energy gel, sport nutrition",
+    quantity: "33 g",
+    serving_quantity: 33,
+    serving_size: "33 g",
+    completeness: 0.75,
+    nutriments: {
+      carbohydrates_100g: 65,
+      carbohydrates_serving: 21,
+      sugars_100g: 26.7,
+      sugars_serving: 8.8,
+      caffeine_100g: 0.1,
+      caffeine_serving: 0.033
+    }
+  }
+};
+
 const PRODUCT_FIELDS = [
   "code", "product_name", "generic_name", "brands", "brand_owner", "owner", "manufacturing_places", "categories", "categories_tags", "quantity",
   "serving_quantity", "serving_size", "nutrition_data_per", "nutriments", "ingredients_text", "ingredients_text_de", "image_front_small_url", "image_front_url", "image_nutrition_url", "image_ingredients_url",
@@ -267,5 +288,7 @@ export async function lookupOpenFoodFactsProduct(rawBarcode) {
   const barcode = cleanBarcode(rawBarcode);
   if (!barcode) throw new Error("Bitte einen gültigen Barcode eingeben.");
   const result = await lookupV3(barcode) || await lookupV2(barcode);
-  return result || { found: false, barcode };
+  if (result) return result;
+  const community = COMMUNITY_FUEL_CATALOG[barcode];
+  return community ? productResult(barcode, community, "EYM Community Fuel") : { found: false, barcode };
 }
