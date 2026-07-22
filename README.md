@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **3.0.1**
+Current app version: **3.1.1**
 
 **Eat your miles.**
 
@@ -18,6 +18,12 @@ Quality checks:
 ```bash
 npm run lint
 npm run build
+```
+
+Create a clean source archive without Git history, installed dependencies or build output:
+
+```bash
+git archive --format=zip --output eym-source.zip HEAD
 ```
 
 ## Repository and deployment
@@ -70,7 +76,7 @@ The current API-key integration is for the private test account only. Before EYM
 
 ## Retired direct Strava connection
 
-The direct EYM-to-Strava OAuth integration has been removed. Existing imported activities remain in the user data. The migration `20260720150000_remove_direct_strava.sql` removes the obsolete `strava_connections` token table.
+The direct EYM-to-Strava OAuth integration has been removed. Existing imported activities remain in the user data. Fresh deployments no longer create the obsolete `strava_connections` token table; existing environments can remove that legacy table separately after its old tokens are no longer needed.
 
 ## Open Food Facts
 
@@ -163,7 +169,7 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 
 - `OPEN_FOOD_FACTS_USER_ID`
 - `OPEN_FOOD_FACTS_PASSWORD`
-- `OPEN_FOOD_FACTS_USER_AGENT` (recommended format: `EnduranceIntelligence/2.19.0 (contact@example.com)`)
+- `OPEN_FOOD_FACTS_USER_AGENT` (recommended format: `EnduranceIntelligence/3.1.1 (contact@example.com)`)
 - `OPEN_FOOD_FACTS_APP_SALT` (a random secret used to derive a stable pseudonymous app UUID per EYM user)
 
 ## Personal ambient themes (v2.16)
