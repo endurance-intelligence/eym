@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **3.2.1**
+Current app version: **3.2.2**
 
 **Eat your miles.**
 
@@ -169,7 +169,7 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 
 - `OPEN_FOOD_FACTS_USER_ID`
 - `OPEN_FOOD_FACTS_PASSWORD`
-- `OPEN_FOOD_FACTS_USER_AGENT` (recommended format: `EnduranceIntelligence/3.2.1 (contact@example.com)`)
+- `OPEN_FOOD_FACTS_USER_AGENT` (recommended format: `EnduranceIntelligence/3.2.2 (contact@example.com)`)
 - `OPEN_FOOD_FACTS_APP_SALT` (a random secret used to derive a stable pseudonymous app UUID per EYM user)
 
 ## Personal ambient themes (v2.16)
@@ -257,6 +257,12 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 - EYM prefers a variant with a different opening exercise and keeps every available personal physio priority in the workout.
 - The quiet finisher remains at the end when it fits the selected duration. Starting the workout freezes the current order.
 - Shuffling is local session state and does not create unnecessary cloud writes.
+
+## Active Stabi & Mobility duration v3.2.2
+
+- The selected duration now represents active movement time. Preparation and equipment changes no longer reduce the requested training volume.
+- EYM displays the expected total session duration separately, including preparation and transitions.
+- Completed workouts continue to store their actual total duration so the training history remains honest.
 
 Before deploying the application, apply `supabase/migrations/20260722120000_athlete_images.sql`. Afterwards run:
 

@@ -477,18 +477,18 @@ export default function Coach() {
                 <h2>{todayMobilityPlan ? `Heute geplant: ${todayMobilityPlan.title}` : workout.title}</h2>
                 <p className="muted">Physio-Übungen haben Vorrang. Danach berücksichtigt EYM deine persönlichen Schwerpunkte, Tagesform, Zeit und vorhandenes Material.</p>
               </div>
-              <strong>{workout.durationMinutes} min</strong>
+              <strong>{workout.durationMinutes} min<small>gesamt</small></strong>
             </div>
             <div className="mobility-workout-summary">
               <span><b>{workout.items.length}</b> Übungen</span>
-              <span><b>{workout.activeMinutes}</b> min Bewegung</span>
-              <span><b>{workout.pauseMinutes}</b> min Vorbereitung</span>
+              <span><b>{workout.activeMinutes}</b> min Training</span>
+              <span><b>{workout.pauseMinutes}</b> min Vorbereitung & Wechsel</span>
               <span><b>{physioExerciseIds.length}</b> Physio-Prioritäten</span>
             </div>
             <div className="mobility-controls">
-              <label>Zeit
+              <label>Reine Trainingszeit
                 <select value={durationMinutes} onChange={(event) => { updateMobility({ durationMinutes: Number(event.target.value) }); setRunner(null); }}>
-                  {[10, 15, 20, 25, 30].map((value) => <option value={value} key={value}>{value} Minuten</option>)}
+                  {[10, 15, 20, 25, 30].map((value) => <option value={value} key={value}>{value} Minuten Bewegung</option>)}
                 </select>
               </label>
               <label>Tagesform
@@ -536,7 +536,7 @@ export default function Coach() {
               <label className="mobility-timer-toggle"><input type="checkbox" checked={audioEnabled} onChange={(event) => updateMobility({ audioEnabled: event.target.checked })} /><span><b>Signaltöne im Workout</b><small>Unterschiedliche Töne für Countdown, Start, Ende, Seitenwechsel und Workout-Abschluss.</small></span></label>
               <label className="mobility-timer-toggle"><input type="checkbox" checked={voiceCues} disabled={!audioEnabled} onChange={(event) => updateMobility({ voiceCues: event.target.checked })} /><span><b>Seitenwechsel ansagen</b><small>Bei Seitstütz, Pallof Press, Sprunggelenkübungen und weiteren beidseitigen Übungen sagt EYM die nächste Seite an.</small></span></label>
               <div className="mobility-audio-actions"><button type="button" onClick={async () => { await primeWorkoutAudio(); playWorkoutCue("switch"); if (voiceCues) speakWorkoutCue("Seite wechseln"); }}>Töne testen</button><span className="mobility-audio-status">Die Auswahl gilt nur für dein Nutzerprofil.</span></div>
-              <p>Die Pausen zählen zur gewählten Gesamtdauer. Dadurch bleibt ein 25-Minuten-Workout ungefähr 25 Minuten lang. Die zuerst gewählte schwächere Seite erhält nicht automatisch mehr Belastung, sondern wird nur zuerst ausgeführt.</p>
+              <p>Die gewählte Zeit ist reine Bewegungszeit. Vorbereitung und Wechsel kommen zusätzlich hinzu; die voraussichtliche Gesamtdauer siehst du oben. Die zuerst gewählte schwächere Seite erhält nicht automatisch mehr Belastung, sondern wird nur zuerst ausgeführt.</p>
             </details>
             {workout.missingPhysio.length > 0 && <div className="mobility-warning"><strong>Physioübung aktuell nicht im Workout:</strong> {workout.missingPhysio.map((item) => `${item.name} (${(item.equipment || item.equipmentAny || []).map(equipmentLabel).join(" oder ")})`).join(", ")}</div>}
             {workout.missingFocus.length > 0 && <div className="mobility-warning"><strong>Schwerpunkt ohne passende Übung:</strong> {workout.missingFocus.map(focusAreaLabel).join(", ")}. Prüfe das ausgewählte Material.</div>}

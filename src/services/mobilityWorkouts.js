@@ -693,7 +693,7 @@ export function buildMobilityWorkout({
   longerPreparationForUnknown = true,
   rotationOffset = 0,
 } = {}) {
-  const targetSeconds = Math.max(10, Number(durationMinutes || 25)) * 60;
+  const targetActiveSeconds = Math.max(10, Number(durationMinutes || 25)) * 60;
   const selectedPhysio = (physioExerciseIds || []).map(exerciseById).filter(Boolean);
   const availablePhysio = selectedPhysio.filter((item) => hasEquipment(item, equipment));
   const missingPhysio = selectedPhysio.filter((item) => !hasEquipment(item, equipment));
@@ -710,6 +710,7 @@ export function buildMobilityWorkout({
 
   const physioIds = new Set(availablePhysio.map((item) => item.id));
   const finishers = conditionAvailable.filter((item) => item.group === "Abschluss");
+  const finisher = rotate(finishers, rotationOffset)[0];
   const finisherIds = new Set(finishers.map((item) => item.id));
   const pool = conditionAvailable.filter((item) => !physioIds.has(item.id) && !finisherIds.has(item.id));
 
@@ -737,7 +738,7 @@ export function buildMobilityWorkout({
   const items = [];
   let activeSeconds = 0;
   let totalSeconds = 0;
-  const add = (item, reason = "Standard", round = 1) => {
+  const add = (item, reason = "Standard", round = 1, activeLimitSeconds = targetActiveSeconds) => {
     if (!item) return false;
     const seconds = Number(item.seconds || 60);
     const known = knownIds.has(item.id);
@@ -749,7 +750,7 @@ export function buildMobilityWorkout({
       ? requiresMaterialChange(previous, item) ? materialTransition : normalTransition
       : 0;
     const stepTotalSeconds = seconds + stepPreparationSeconds + transitionBeforeSeconds;
-    if (totalSeconds + stepTotalSeconds > targetSeconds + 45 && items.length >= 3) return false;
+    if (activeSeconds + seconds > activeLimitSeconds + 30 && items.length >= 3) return false;
     const matchedFocus = selectedFocusIds.filter((focusId) => item.focusAreas.includes(focusId));
     items.push({
       ...item,
@@ -775,20 +776,20 @@ export function buildMobilityWorkout({
 
   const alreadySelectedIds = new Set(items.map((item) => item.id));
   const base = standardSequence.filter((item) => !alreadySelectedIds.has(item.id));
+  const mainTargetSeconds = Math.max(0, targetActiveSeconds - Number(finisher?.seconds || 0));
   let index = 0;
   let round = 1;
-  while (totalSeconds < targetSeconds - 90 && base.length) {
+  while (activeSeconds < mainTargetSeconds - 30 && base.length) {
     const candidate = base[index % base.length];
     if (!candidate) break;
-    add(candidate, "Ausgewogener Basisblock", round);
+    add(candidate, "Ausgewogener Basisblock", round, mainTargetSeconds);
     index += 1;
     if (base.length && index % base.length === 0) round += 1;
     if (round > 4 || index > 40) break;
   }
 
-  const finisher = rotate(finishers, rotationOffset)[0];
   if (finisher && !items.some((item) => item.id === finisher.id)) {
-    add(finisher, "Ruhiger Abschluss", round + 1);
+    add(finisher, "Ruhiger Abschluss", round + 1, targetActiveSeconds);
   }
 
   const focusLabels = selectedFocusIds.map(focusAreaLabel);
@@ -807,6 +808,8 @@ export function buildMobilityWorkout({
     durationMinutes: Math.max(1, Math.round(totalSeconds / 60)),
     activeMinutes: Math.max(1, Math.round(activeSeconds / 60)),
     pauseMinutes: Math.max(0, Math.round((totalSeconds - activeSeconds) / 60)),
+    activeSeconds,
+    pauseSeconds: totalSeconds - activeSeconds,
     totalSeconds,
     targetMinutes: Number(durationMinutes || 25),
     condition,

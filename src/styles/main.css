@@ -623,3 +623,6 @@ input[type="checkbox"],input[type="radio"]{accent-color:var(--accent)}
 /* v3.2.1 – controlled mobility workout shuffle */
 .mobility-workout-actions{display:flex;align-items:center;justify-content:flex-end;gap:9px;flex-wrap:wrap}.mobility-workout-actions .secondary{background:var(--bg-sidebar);white-space:nowrap}.mobility-workout-actions button:disabled{cursor:not-allowed;opacity:.45}
 @media(max-width:720px){.mobility-workout-actions{justify-content:stretch}.mobility-workout-actions button{flex:1}.mobility-workout-actions .compact-primary{min-width:0}}
+
+/* v3.2.2 – selected mobility duration is active training time */
+.mobility-workout-heading>strong small{display:block;color:var(--muted-bright);font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}

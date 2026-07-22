@@ -45,3 +45,20 @@ test("shuffle falls back safely when the random source is invalid", () => {
   assert.equal(Number.isInteger(nextOffset), true);
   assert.notEqual(nextOffset, 0);
 });
+
+test("selected workout duration represents active movement without setup time", () => {
+  const workout = buildMobilityWorkout({
+    ...workoutOptions,
+    durationMinutes: 25,
+    preparationSeconds: 10,
+    unknownPreparationSeconds: 20,
+    transitionSeconds: 10,
+    materialTransitionSeconds: 20,
+  });
+
+  assert.ok(workout.activeSeconds >= 24.5 * 60);
+  assert.ok(workout.activeSeconds <= 25.5 * 60);
+  assert.ok(workout.pauseSeconds > 0);
+  assert.equal(workout.totalSeconds, workout.activeSeconds + workout.pauseSeconds);
+  assert.ok(workout.durationMinutes > workout.activeMinutes);
+});
