@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **3.2.0**
+Current app version: **3.2.1**
 
 **Eat your miles.**
 
@@ -169,7 +169,7 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 
 - `OPEN_FOOD_FACTS_USER_ID`
 - `OPEN_FOOD_FACTS_PASSWORD`
-- `OPEN_FOOD_FACTS_USER_AGENT` (recommended format: `EnduranceIntelligence/3.2.0 (contact@example.com)`)
+- `OPEN_FOOD_FACTS_USER_AGENT` (recommended format: `EnduranceIntelligence/3.2.1 (contact@example.com)`)
 - `OPEN_FOOD_FACTS_APP_SALT` (a random secret used to derive a stable pseudonymous app UUID per EYM user)
 
 ## Personal ambient themes (v2.16)
@@ -250,6 +250,13 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 - Existing embedded Base64 photos migrate automatically after login. The app only replaces an image in the current state when it still matches the migrated source, so concurrent local edits are preserved.
 - Settings can export and restore a versioned JSON backup. Route-loading failures now show a safe reload screen.
 - Automated tests cover generic recurring commitments, activity deduplication, fuel inventory calculations and backup validation.
+
+## Controlled Stabi & Mobility shuffle v3.2.1
+
+- **Neu mischen** creates another valid exercise selection and order without changing duration, condition, equipment or selected focus areas.
+- EYM prefers a variant with a different opening exercise and keeps every available personal physio priority in the workout.
+- The quiet finisher remains at the end when it fits the selected duration. Starting the workout freezes the current order.
+- Shuffling is local session state and does not create unnecessary cloud writes.
 
 Before deploying the application, apply `supabase/migrations/20260722120000_athlete_images.sql`. Afterwards run:
 

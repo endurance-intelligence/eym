@@ -767,7 +767,7 @@ export function buildMobilityWorkout({
     return true;
   };
 
-  availablePhysio.forEach((item) => add(item, "Physio-Priorität", 1));
+  rotate(availablePhysio, rotationOffset).forEach((item) => add(item, "Physio-Priorität", 1));
   uniqueExercises(focusSequence).forEach((item) => {
     const labels = selectedFocusIds.filter((id) => item.focusAreas.includes(id)).map(focusAreaLabel);
     add(item, labels.length ? `Schwerpunkt ${labels.join(" & ")}` : "Persönlicher Schwerpunkt", 1);
@@ -825,6 +825,45 @@ export function buildMobilityWorkout({
     missingPhysio,
     missingFocus,
   };
+}
+
+function workoutSequenceSignature(workout) {
+  return (workout?.items || []).map((item) => item.id).join("|");
+}
+
+export function nextMobilityWorkoutRotation(options = {}, currentOffset = 0, random = Math.random) {
+  const baseOptions = { ...options };
+  delete baseOptions.rotationOffset;
+  const normalizedCurrentOffset = Number.isFinite(Number(currentOffset)) ? Number(currentOffset) : 0;
+  const currentWorkout = buildMobilityWorkout({ ...baseOptions, rotationOffset: normalizedCurrentOffset });
+  const currentSignature = workoutSequenceSignature(currentWorkout);
+  const currentFirstExerciseId = currentWorkout.items[0]?.id;
+  const variants = [];
+  const variantsWithDifferentStart = [];
+  const seenSignatures = new Set([currentSignature]);
+  const searchLimit = Math.max(12, MOBILITY_EXERCISES.length * 2);
+
+  for (let step = 1; step <= searchLimit; step += 1) {
+    const rotationOffset = normalizedCurrentOffset + step;
+    const workout = buildMobilityWorkout({ ...baseOptions, rotationOffset });
+    const signature = workoutSequenceSignature(workout);
+    if (!signature || seenSignatures.has(signature)) continue;
+
+    seenSignatures.add(signature);
+    variants.push(rotationOffset);
+    if (workout.items[0]?.id !== currentFirstExerciseId) {
+      variantsWithDifferentStart.push(rotationOffset);
+    }
+  }
+
+  const candidates = variantsWithDifferentStart.length ? variantsWithDifferentStart : variants;
+  if (!candidates.length) return normalizedCurrentOffset;
+
+  const randomValue = Number(random());
+  const normalizedRandom = Number.isFinite(randomValue)
+    ? Math.min(0.999999999, Math.max(0, randomValue))
+    : 0;
+  return candidates[Math.floor(normalizedRandom * candidates.length)];
 }
 
 export function equipmentLabel(id) {

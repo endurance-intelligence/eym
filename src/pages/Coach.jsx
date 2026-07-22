@@ -24,6 +24,7 @@ import {
   MOBILITY_EQUIPMENT,
   MOBILITY_EXERCISES,
   MOBILITY_FOCUS_AREAS,
+  nextMobilityWorkoutRotation,
 } from "../services/mobilityWorkouts";
 
 const monthFormatter = new Intl.DateTimeFormat("de-DE", { month: "long", year: "numeric" });
@@ -109,6 +110,7 @@ export default function Coach() {
   const [selectedGuide, setSelectedGuide] = useState(null);
   const [activeTab, setActiveTab] = useState("today");
   const [runner, setRunner] = useState(null);
+  const [workoutShuffleOffset, setWorkoutShuffleOffset] = useState(0);
   const [libraryFocus, setLibraryFocus] = useState("all");
   const [librarySearch, setLibrarySearch] = useState("");
   const previousRunnerRef = useRef(null);
@@ -151,7 +153,7 @@ export default function Coach() {
   const weakSide = ["left", "right"].includes(mobilitySettings.weakSide) ? mobilitySettings.weakSide : "none";
   const workoutHistory = Array.isArray(mobilitySettings.history) ? mobilitySettings.history : [];
   const knownExerciseCount = useMemo(() => new Set([...knownExerciseIds, ...physioExerciseIds]).size, [knownExerciseIds, physioExerciseIds]);
-  const workout = useMemo(() => buildMobilityWorkout({
+  const workoutOptions = useMemo(() => ({
     durationMinutes,
     condition,
     equipment,
@@ -163,8 +165,12 @@ export default function Coach() {
     transitionSeconds,
     materialTransitionSeconds,
     longerPreparationForUnknown,
-    rotationOffset: workoutHistory.length,
-  }), [durationMinutes, condition, equipment, physioExerciseIds, focusAreaIds, knownExerciseIds, preparationSeconds, unknownPreparationSeconds, transitionSeconds, materialTransitionSeconds, longerPreparationForUnknown, workoutHistory.length]);
+  }), [durationMinutes, condition, equipment, physioExerciseIds, focusAreaIds, knownExerciseIds, preparationSeconds, unknownPreparationSeconds, transitionSeconds, materialTransitionSeconds, longerPreparationForUnknown]);
+  const workoutRotationOffset = workoutHistory.length + workoutShuffleOffset;
+  const workout = useMemo(() => buildMobilityWorkout({
+    ...workoutOptions,
+    rotationOffset: workoutRotationOffset,
+  }), [workoutOptions, workoutRotationOffset]);
   const localToday = new Date();
   const todayKey = `${localToday.getFullYear()}-${String(localToday.getMonth() + 1).padStart(2, "0")}-${String(localToday.getDate()).padStart(2, "0")}`;
   const todayMobilityPlan = state.plan.find((item) => !item.archived && !item.completed && !item.missedReason && item.date === todayKey && /stabi|mobility|kraft/i.test(`${item.title || ""} ${item.type || ""}`));
@@ -219,6 +225,12 @@ export default function Coach() {
     setRunner(null);
   }
 
+  function shuffleWorkout() {
+    if (runner || workout.items.length < 2) return;
+    const nextRotationOffset = nextMobilityWorkoutRotation(workoutOptions, workoutRotationOffset);
+    setWorkoutShuffleOffset(nextRotationOffset - workoutHistory.length);
+  }
+
   async function startWorkout() {
     if (!workout.items.length) return;
     if (audioEnabled) await primeWorkoutAudio();
@@ -244,6 +256,7 @@ export default function Coach() {
 
   function closeFinishedWorkout() {
     if (!runner?.saved) return;
+    setWorkoutShuffleOffset(0);
     setRunner(null);
   }
 
@@ -530,7 +543,13 @@ export default function Coach() {
           </Card>
 
           <Card className="wide mobility-workout-plan">
-            <div className="settings-section-heading"><div><p className="eyebrow">Heutiger Ablauf</p><h2>{workout.items.length} Übungsschritte</h2></div>{!runner && <button type="button" className="primary compact-primary" onClick={startWorkout}>Workout starten</button>}</div>
+            <div className="settings-section-heading">
+              <div><p className="eyebrow">Heutiger Ablauf</p><h2>{workout.items.length} Übungsschritte</h2></div>
+              {!runner && <div className="mobility-workout-actions">
+                <button type="button" className="secondary" onClick={shuffleWorkout} disabled={workout.items.length < 2} title="Eine andere passende Auswahl und Reihenfolge erzeugen">↻ Neu mischen</button>
+                <button type="button" className="primary compact-primary" onClick={startWorkout}>Workout starten</button>
+              </div>}
+            </div>
             {runner && (runner.complete || activeExercise) && (
               <div className={`mobility-runner phase-${runnerPhase} ${runner.complete ? "complete" : ""} ${switchMoment ? "switch-now" : ""}`}>
                 {runner.complete ? <><p className="eyebrow">Geschafft</p><h2>Workout abgeschlossen</h2><p className="mobility-completion-note">{runner.saved ? (runner.planItemId ? "Die heutige Stabi-/Mobility-Einheit wurde automatisch als erledigt markiert." : "Das Workout wurde automatisch in deinem Verlauf gespeichert.") : "Workout wird gespeichert …"}</p><button type="button" className="primary compact-primary" onClick={closeFinishedWorkout} disabled={!runner.saved}>Workout schließen</button></> : <>
