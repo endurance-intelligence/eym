@@ -1,4 +1,4 @@
-export const CONFIGURATION_VERSION = 3;
+export const CONFIGURATION_VERSION = 4;
 
 export const WEEKDAYS = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"];
 
@@ -175,6 +175,8 @@ export function migrateConfiguration(inputState = {}) {
       units: "metric",
       experienceLevel: "beginner",
       selfReportedRunsPerWeek: 0,
+      coachProgressionEnabled: true,
+      progressionAcceptedAt: null,
       ...(inputState.profile || {}),
     },
     planner: {

@@ -532,11 +532,26 @@ function distributeEasyKilometers(plan, weekStart, target, fixedKm, config, phas
   ].filter((day) => allowed.has(day) && (!hasEnduranceSession(day) || trueDoubleDays.has(day)));
 
   const remaining = Math.max(0, target - fixedKm);
-  const desiredSessions = target >= 75 ? 3 : remaining > 12 ? 2 : 1;
-  const sessionCount = Math.min(desiredSessions, candidates.length);
+  const defaultDesiredSessions = target >= 75 ? 3 : remaining > 12 ? 2 : 1;
+  const existingRunSessions = plan.filter((entry) => /run|lauf|track|intervall|schwelle|tempo|backyard/i.test(`${entry.type || ""} ${entry.title || ""}`)).length;
+  const acceptedTargetRunCount = Math.max(0, Math.min(7, Number(config.targetRunCount || 0)));
+  const progressionSessions = acceptedTargetRunCount > 0 ? Math.max(0, acceptedTargetRunCount - existingRunSessions) : 0;
+  const desiredSessions = acceptedTargetRunCount > 0 ? progressionSessions : defaultDesiredSessions;
+  const maxSessionsByKilometers = remaining >= 4 ? Math.floor(remaining / 4) : remaining >= 3 ? 1 : 0;
+  const sessionCount = Math.min(desiredSessions, candidates.length, maxSessionsByKilometers);
   if (!sessionCount || remaining < 3) return;
 
-  const weights = sessionCount === 1 ? [1] : sessionCount === 2 ? [0.55, 0.45] : [0.4, 0.34, 0.26];
+  const weights = sessionCount === 1
+    ? [1]
+    : sessionCount === 2
+      ? [0.55, 0.45]
+      : sessionCount === 3
+        ? [0.4, 0.34, 0.26]
+        : (() => {
+            const raw = Array.from({ length: sessionCount }, (_value, index) => Math.max(0.45, 1 - index * 0.1));
+            const totalWeight = raw.reduce((sum, value) => sum + value, 0);
+            return raw.map((value) => value / totalWeight);
+          })();
   candidates.slice(0, sessionCount).forEach((day, index) => {
     const distance = Math.max(4, Math.round(remaining * weights[index]));
     const paired = hasEnduranceSession(day);

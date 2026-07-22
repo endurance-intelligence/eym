@@ -6,6 +6,7 @@ import { isRoadCyclingActivity, reviewKind, reviewKindLabel } from "../services/
 import { activityCoordinatesFor, fetchActivityWeather } from "../services/activityWeather";
 import { useModalScrollLock } from "../services/modalScrollLock";
 import { consumptionSummary, consumedInventoryUnits, consumptionUnitsForFuel, defaultConsumptionUnit, fuelDisplayName, nutritionForConsumption } from "../services/fuelNutrition";
+import { activityCoachAssessment } from "../services/activityCoach";
 
 const emptyNutritionItem = (mode = "catalog") => ({
   id: crypto.randomUUID(),
@@ -216,6 +217,7 @@ export default function ReviewModal({ activity, onClose }) {
 
   if (!kind) return null;
 
+  const coachAssessment = activityCoachAssessment(state, activity, review, weather);
   const set = (key, value) => setReview((current) => ({ ...current, [key]: value }));
   const hydrationResult = kind === "endurance" ? hydration(activity, review) : null;
 
@@ -340,6 +342,7 @@ export default function ReviewModal({ activity, onClose }) {
       carbohydrateTargetHigh: kind === "endurance" ? nutritionSummary.targetHigh : 0,
       carbohydrateStatus: kind === "endurance" ? nutritionSummary.status : null,
       weather: weather || old.weather || null,
+      coachAssessment,
       updatedAt: new Date().toISOString(),
     }, { memberIds: activity.memberActivityIds || [] });
     onClose();
@@ -412,6 +415,21 @@ export default function ReviewModal({ activity, onClose }) {
                 </div>
               </section>
             )}
+
+            <section className="review-feature-box coach-activity-assessment">
+              <div className="coach-activity-heading"><div><b>Coach-Analyse der Einheit</b><small>Datenbasierte Einordnung · getrennt von deinem persönlichen Gefühl</small></div><span className={`tone-${coachAssessment.confidence.tone}`}>Datengrundlage {coachAssessment.confidence.value}</span></div>
+              <div className="coach-activity-metrics">
+                {[
+                  ["Objektive Belastung", coachAssessment.load],
+                  ["Ausführung", coachAssessment.execution],
+                  ["Umgebung", coachAssessment.environment],
+                  ["Erholungsbedarf", coachAssessment.recovery],
+                  ["Zielrelevanz", coachAssessment.relevance],
+                ].map(([label, entry]) => <article className={`tone-${entry.tone}`} key={label}><small>{label}</small><strong>{entry.value}</strong><span>{entry.text}</span></article>)}
+              </div>
+              <p className="coach-activity-comparison"><b>Zusammenspiel mit deinem Review:</b> {coachAssessment.comparison}</p>
+              <details><summary>Welche Daten wurden berücksichtigt?</summary><div className="coach-activity-factors">{coachAssessment.factors.map((factor) => <span key={factor}>{factor}</span>)}</div><p>{coachAssessment.confidence.text} Der EYM-Load ist eine interne Vergleichsgröße und keine medizinische Bewertung oder Kopie der Garmin-Kennzahl. Deine subjektive Rückmeldung hat bei Müdigkeit, Schmerzen oder ungewöhnlich schlechtem Gefühl immer Vorrang.</p></details>
+            </section>
 
             <section className={`review-feature-box ${review.usedNutrition ? "active" : ""}`}>
               <label className="review-toggle-row">

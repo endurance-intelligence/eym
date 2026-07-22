@@ -55,6 +55,8 @@ export const defaultState = {
     units: "metric",
     experienceLevel: "advanced",
     selfReportedRunsPerWeek: 3,
+    coachProgressionEnabled: true,
+    progressionAcceptedAt: null,
   },
   activities: [],
   reviews: {},
@@ -85,6 +87,7 @@ export const defaultState = {
   planner: {
     stabiCount: 2,
     stabiDays: ["Dienstag", "Donnerstag"],
+    targetRunCount: 0,
     rowingCount: 1,
     rowingDays: ["Freitag"],
     runDays: ["Dienstag", "Mittwoch", "Freitag", "Samstag", "Sonntag"],

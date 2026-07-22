@@ -16,6 +16,7 @@ import ExerciseGuide, { ExerciseGuideButton } from "../components/ExerciseGuide"
 import { activitiesWithGroups } from "../services/activityGroups";
 import { fmtDate } from "../utils/format";
 import { playWorkoutCue, primeWorkoutAudio, speakWorkoutCue } from "../services/workoutAudio";
+import { athleteProfileAssessment } from "../services/athleteProfile";
 import {
   buildMobilityWorkout,
   equipmentLabel,
@@ -122,6 +123,7 @@ export default function Coach() {
   const openReviews = monthReviewable.filter((activity) => !state.reviews[activity.id]);
   const reviewed = monthReviewable.filter((activity) => state.reviews[activity.id]);
   const analysis = useMemo(() => coachDashboard(reviewActivities, state.reviews, now), [reviewActivities, state.reviews, now]);
+  const athleteAssessment = athleteProfileAssessment(state, now);
   const outlook = useMemo(() => buildMissionOutlook(reviewActivities, state.reviews, state.mission, now), [reviewActivities, state.reviews, state.mission, now]);
   const latestRunningActivity = useMemo(() => canonicalActivities
     .filter(isRunningActivity)
@@ -393,6 +395,11 @@ export default function Coach() {
 
       {activeTab === "development" && (
         <div className="grid coach-dashboard-grid">
+          <Card className="wide coach-athlete-model">
+            <div className="coach-athlete-model-heading"><div><p className="eyebrow">Athletenmodell</p><h2>{athleteAssessment.observedLabel} · Belastungsverträglichkeit {athleteAssessment.tolerance.label}</h2><p className="muted">EYM lernt aus deiner tatsächlichen Routine. Eine höhere Einstufung oder zusätzliche Einheit wird nur vorgeschlagen, nie automatisch übernommen.</p></div><span>{athleteAssessment.specializationLabel}</span></div>
+            <div className="coach-athlete-model-metrics"><div><small>Läufe/Woche</small><strong>{athleteAssessment.metrics.runsPerWeek.toFixed(1)}</strong></div><div><small>km/Woche</small><strong>{athleteAssessment.metrics.weeklyKm.toFixed(0)}</strong></div><div><small>Longrun</small><strong>{athleteAssessment.metrics.longestRun.toFixed(1)} km</strong></div><div><small>Höhenmeter</small><strong>{athleteAssessment.metrics.weeklyElevation.toFixed(0)} hm</strong></div></div>
+            <p><b>Progressionsrichtung:</b> {athleteAssessment.progressionFocus}</p>
+          </Card>
           <Card className="wide coach-mission-outlook">
             <div className="coach-outlook-heading">
               <div>

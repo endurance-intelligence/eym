@@ -419,6 +419,7 @@ export default function Planner() {
     setPlanningDraft({
       stabiCount: Number(config.stabiCount ?? 2),
       stabiDays: config.stabiDays?.length ? config.stabiDays : ["Dienstag", "Donnerstag"],
+      targetRunCount: Number(config.targetRunCount || state.profile?.selfReportedRunsPerWeek || 0),
       rowingCount: Number(config.rowingCount ?? 1),
       rowingDays: config.rowingDays?.length ? config.rowingDays : ["Freitag"],
       runDays: config.runDays?.length ? config.runDays : ["Dienstag", "Mittwoch", "Freitag", "Samstag", "Sonntag"],
@@ -1323,6 +1324,7 @@ export default function Planner() {
               {planningDraft.checkin.fatigue !== "none" && <label>Warum müde?<select value={planningDraft.checkin.fatigueCause} onChange={(event) => updateCheckin("fatigueCause", event.target.value)}><option value="">Bitte auswählen</option><option>Schlaf</option><option>Arbeit/Stress</option><option>Training</option><option>Familie/Alltag</option><option>Unklar</option></select></label>}
               {planningDraft.checkin.pain !== "none" && <label>Schmerzstärke<input type="number" min="0" max="10" value={planningDraft.checkin.painLevel} onChange={(event) => updateCheckin("painLevel", Number(event.target.value))} /></label>}
               {planningDraft.checkin.pain !== "none" && <label>Wo?<input value={planningDraft.checkin.painArea} onChange={(event) => updateCheckin("painArea", event.target.value)} placeholder="z. B. linke Wade" /></label>}
+              <label>Zielrahmen Lauftage<input type="number" min="0" max="7" value={planningDraft.targetRunCount || 0} onChange={(event) => setPlanningDraft({ ...planningDraft, targetRunCount: Number(event.target.value) })} /><small>Obergrenze für diese neue Woche. EYM nutzt nur verfügbare Tage und kann darunter bleiben.</small></label>
               <label>Stabi-Einheiten<input type="number" min="0" max="7" value={planningDraft.stabiCount} onChange={(event) => setPlanningDraft({ ...planningDraft, stabiCount: Number(event.target.value) })} /></label>
               <label>Ruder-Einheiten<input type="number" min="0" max="7" value={planningDraft.rowingCount} onChange={(event) => setPlanningDraft({ ...planningDraft, rowingCount: Number(event.target.value) })} /></label>
             </div>

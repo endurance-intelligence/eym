@@ -82,7 +82,7 @@ export function goalRequirements(state) {
   } else if (distance && distance <= 5.5) {
     discipline = "5k";
     focus = ["VO₂max", "Schwelle", "Laufökonomie", "Zieltempo"];
-  } else if (distance <= 10.5) {
+  } else if (distance > 0 && distance <= 10.5) {
     discipline = "10k";
     focus = ["Schwelle", "VO₂max", "Tempoausdauer"];
   } else if (distance >= 40 && distance < 50) {

@@ -216,3 +216,13 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 - Carbohydrate feedback now explains the result in relation to activity duration and stomach tolerance. Sodium is reported neutrally because an individual target depends on sweat rate, conditions and salt loss.
 - The Open Food Facts function submits the expanded nutrition values and remains responsible for optional photo uploads. Redeploy `open-food-facts` after applying this version.
 - No database migration is required; the new fields remain within the existing athlete data document.
+
+
+## Planer-Prinzipien ab v3.1
+
+- Das Hauptevent und priorisierte Zwischenziele bestimmen die Trainingsmethodik.
+- Belastung wird relativ zur individuellen Historie, Laufhäufigkeit, Erholung und Zielart bewertet.
+- Eine bereits geplante Woche bleibt stabil und wird nie automatisch neu berechnet.
+- Profilentwicklung und zusätzliche Einheiten werden nur vorgeschlagen und müssen bestätigt werden.
+- Subjektives Review und datenbasierte Coach-Analyse bleiben getrennte Perspektiven.
+- Höhenmeter, Wetter, Herzfrequenz, Dauer und Zielrelevanz fließen in die Aktivitätsanalyse ein.

@@ -7,6 +7,7 @@ import { mergeGarminActivities, readGarminExport } from "../services/garminImpor
 import { calendarSubscriptionUrl } from "../services/supabase";
 import { fetchIntervalsStatus, intervalsOnlineReady } from "../services/intervals";
 import { normalizeAppearance, resolveTheme, THEME_PRESET_LIST } from "../services/theme";
+import { athleteProfileAssessment, EXPERIENCE_OPTIONS, experienceLabel } from "../services/athleteProfile";
 import {
   CONFLICT_MODE_OPTIONS,
   DEFAULT_REPLACEMENT_SPORTS,
@@ -34,6 +35,7 @@ export default function Settings() {
   const [commitmentDraft, setCommitmentDraft] = useState(null);
   const [commitmentMessage, setCommitmentMessage] = useState("");
   const [section, setSection] = useState("overview");
+  const [profileMessage, setProfileMessage] = useState("");
   const garminInput = useRef(null);
 
   const commitments = sortCommitments(
@@ -44,6 +46,7 @@ export default function Settings() {
   const appearance = normalizeAppearance(state.appearance);
   const activeTheme = resolveTheme(appearance);
   const customTheme = resolveTheme({ ...appearance, themeId: "custom" });
+  const athleteAssessment = athleteProfileAssessment(state);
 
   function updateAppearance(patch) {
     setState((current) => ({
@@ -57,6 +60,26 @@ export default function Settings() {
       ...current,
       profile: { ...current.profile, [field]: value },
     }));
+  }
+
+  function acceptProfileAssessment({ includeRunFramework = false } = {}) {
+    setState((current) => ({
+      ...current,
+      profile: {
+        ...current.profile,
+        experienceLevel: athleteAssessment.levelSuggestion || current.profile?.experienceLevel || athleteAssessment.observedLevel,
+        selfReportedRunsPerWeek: includeRunFramework && athleteAssessment.suggestedRunsPerWeek
+          ? athleteAssessment.suggestedRunsPerWeek
+          : current.profile?.selfReportedRunsPerWeek,
+        progressionAcceptedAt: new Date().toISOString(),
+      },
+      planner: includeRunFramework && athleteAssessment.suggestedRunsPerWeek
+        ? { ...current.planner, targetRunCount: athleteAssessment.suggestedRunsPerWeek }
+        : current.planner,
+    }));
+    setProfileMessage(includeRunFramework && athleteAssessment.suggestedRunsPerWeek
+      ? `Neuer Rahmen übernommen: bis zu ${athleteAssessment.suggestedRunsPerWeek} Läufe pro Woche dürfen bei künftigen Planungen vorgeschlagen werden.`
+      : "Datenbasierte Einstufung übernommen. Bestehende Wochenpläne bleiben unverändert.");
   }
 
   function updatePlanner(patch) {
@@ -222,9 +245,27 @@ export default function Settings() {
           <label>Geburtsdatum<input type="date" value={state.profile?.birthDate || ""} onChange={(event) => updateProfile("birthDate", event.target.value)} /></label>
           <label>Größe in cm<input type="number" min="100" max="230" value={state.profile?.heightCm ?? ""} placeholder="optional" onChange={(event) => updateProfile("heightCm", numberOrBlank(event.target.value))} /></label>
           <label>Gewicht in kg<input type="number" min="30" max="250" step="0.1" value={state.profile?.weightKg ?? ""} placeholder="optional" onChange={(event) => updateProfile("weightKg", numberOrBlank(event.target.value))} /></label>
-          <label>Trainingserfahrung<select value={state.profile?.experienceLevel || "beginner"} onChange={(event) => updateProfile("experienceLevel", event.target.value)}><option value="beginner">Anfänger · neu oder Wiedereinstieg</option><option value="advanced">Fortgeschritten · meist 2–3 Läufe/Woche</option><option value="experienced">Erfahren · stabil 4+ Läufe/Woche</option><option value="individual">Individuell</option></select></label>
-          <label>Übliche Läufe pro Woche<input type="number" min="0" max="14" value={state.profile?.selfReportedRunsPerWeek ?? ""} onChange={(event) => updateProfile("selfReportedRunsPerWeek", numberOrBlank(event.target.value))} /></label>
         </div>
+
+        <section className="athlete-experience-section">
+          <div><p className="eyebrow">Selbsteinschätzung</p><h3>Wo startest du?</h3><p className="muted">Diese Auswahl ist der Startwert. EYM bewertet deine tatsächliche Gewöhnung getrennt und verändert niemals ungefragt einen Plan.</p></div>
+          <div className="athlete-experience-grid" role="radiogroup" aria-label="Trainingserfahrung">
+            {EXPERIENCE_OPTIONS.map((option) => <button type="button" role="radio" aria-checked={(state.profile?.experienceLevel || "beginner") === option.value} className={(state.profile?.experienceLevel || "beginner") === option.value ? "selected" : ""} onClick={() => { updateProfile("experienceLevel", option.value); setProfileMessage(""); }} key={option.value}><span>{option.label}</span><strong>{option.title}</strong><small>{option.description}</small></button>)}
+          </div>
+          <div className="athlete-run-framework">
+            <label>Dein aktuell üblicher Rahmen<input type="number" min="0" max="14" value={state.profile?.selfReportedRunsPerWeek ?? ""} onChange={(event) => updateProfile("selfReportedRunsPerWeek", numberOrBlank(event.target.value))} /><span>Läufe pro Woche</span></label>
+            <label className="athlete-progress-toggle"><input type="checkbox" checked={state.profile?.coachProgressionEnabled !== false} onChange={(event) => updateProfile("coachProgressionEnabled", event.target.checked)} /><span><b>Entwicklungsvorschläge erlauben</b><small>EYM darf einen höheren Rahmen vorschlagen, übernimmt ihn aber niemals automatisch.</small></span></label>
+          </div>
+        </section>
+
+        <section className={`athlete-detected-card confidence-${athleteAssessment.confidence}`}>
+          <div className="athlete-detected-heading"><div><p className="eyebrow">Von EYM erkannt</p><h3>{athleteAssessment.observedLabel} · Belastungsverträglichkeit {athleteAssessment.tolerance.label}</h3><p>{athleteAssessment.specializationLabel}-orientiert · Höhenmeter-Erfahrung {athleteAssessment.elevation.label}</p></div><span>{athleteAssessment.confidence === "high" ? "Hohe Datensicherheit" : athleteAssessment.confidence === "medium" ? "Mittlere Datensicherheit" : "Noch wenig Daten"}</span></div>
+          <div className="athlete-detected-metrics"><div><small>Lauffrequenz</small><strong>{athleteAssessment.metrics.runsPerWeek.toFixed(1)} / Woche</strong></div><div><small>Wochenumfang</small><strong>{athleteAssessment.metrics.weeklyKm.toFixed(0)} km</strong></div><div><small>Längster Lauf</small><strong>{athleteAssessment.metrics.longestRun.toFixed(1)} km</strong></div><div><small>Laufserie</small><strong>{athleteAssessment.metrics.maxStreak} Tage</strong></div><div><small>Höhenmeter</small><strong>{athleteAssessment.metrics.weeklyElevation.toFixed(0)} hm/Woche</strong></div></div>
+          <p className="athlete-progression-focus"><b>Nächster sinnvoller Fortschritt:</b> {athleteAssessment.progressionFocus}</p>
+          <details><summary>Grundlage der Einstufung</summary><ul>{athleteAssessment.evidence.map((item) => <li key={item}>{item}</li>)}</ul></details>
+          {(athleteAssessment.levelSuggestion || athleteAssessment.suggestedRunsPerWeek) && state.profile?.coachProgressionEnabled !== false && <div className="athlete-progression-suggestion"><div><strong>Dein Profil hat sich entwickelt</strong><span>{athleteAssessment.levelSuggestion ? `${experienceLabel(state.profile?.experienceLevel)} → ${experienceLabel(athleteAssessment.levelSuggestion)}. ` : ""}{athleteAssessment.suggestedRunsPerWeek ? `Künftige Planungen könnten bis zu ${athleteAssessment.suggestedRunsPerWeek} Läufe pro Woche anbieten.` : ""}</span><small>Nur neue Wochen sind betroffen. Aktive Pläne bleiben stabil.</small></div><div>{athleteAssessment.levelSuggestion && <button type="button" onClick={() => acceptProfileAssessment()}>Einstufung übernehmen</button>}{athleteAssessment.suggestedRunsPerWeek && <button type="button" className="secondary" onClick={() => acceptProfileAssessment({ includeRunFramework: true })}>Neuen Rahmen übernehmen</button>}</div></div>}
+          {profileMessage && <div className="settings-save-message">✓ {profileMessage}</div>}
+        </section>
       </Card>
     </div>}
 
@@ -261,6 +302,8 @@ export default function Settings() {
           <div className="settings-form-footer"><span>Speichert die Grundregel. Der laufende Wochenplan bleibt unangetastet.</span><button className="primary" type="submit">Fixtermin speichern</button></div>
         </form>}
       </Card>
+
+      <Card className="wide planner-principles-card"><p className="eyebrow">Planer-Kern</p><h2>Wissenschaftlich planen, menschlich entscheiden</h2><div className="planner-principle-grid"><span><b>Ziel zuerst</b><small>Hauptevent und Zwischenziele bestimmen die Trainingsmethodik.</small></span><span><b>Individuell bewerten</b><small>Belastung wird relativ zu deiner Gewöhnung, nicht zum Durchschnitt bewertet.</small></span><span><b>Aktive Woche schützen</b><small>Keine automatische Neuberechnung oder ungefragte Änderung.</small></span><span><b>Vorschläge statt Befehle</b><small>Coach-Hinweise sind begründet und immer optional.</small></span></div></Card>
 
       <Card className="wide settings-replacements-card"><p className="eyebrow">Woche anpassen</p><h2>Erlaubte Ersatzarten</h2><p className="muted">Diese Sportarten werden angeboten, wenn du eine einzelne Einheit ersetzen möchtest. Eigene Fixtermine erscheinen zusätzlich automatisch.</p><div className="settings-sport-picker">{SPORT_OPTIONS.filter((option) => option.value !== "other").map((option) => <button type="button" className={replacementSports.includes(option.value) ? "selected" : ""} onClick={() => toggleReplacementSport(option.value)} key={option.value}>{option.label}</button>)}</div></Card>
     </div>}
