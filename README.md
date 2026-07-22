@@ -226,3 +226,12 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 - Profilentwicklung und zusätzliche Einheiten werden nur vorgeschlagen und müssen bestätigt werden.
 - Subjektives Review und datenbasierte Coach-Analyse bleiben getrennte Perspektiven.
 - Höhenmeter, Wetter, Herzfrequenz, Dauer und Zielrelevanz fließen in die Aktivitätsanalyse ein.
+
+## Briefing v3.1.1
+
+- The briefing header now evaluates the weather for a fixed training time instead of only showing current conditions.
+- Flexible outdoor sessions receive a suggested two-hour weather window based on rain, temperature, humidity, wind and gusts.
+- Mission, readiness and latest activity are condensed into three compact cards so today's plan remains visible without scrolling.
+- Full weather details and the complete week stay available on demand.
+- Hydration recommendations require a sufficiently long activity and a plausible sweat-rate range. Short or implausible measurements show a validation hint instead of extreme litre-per-hour advice.
+- EYM still never changes a planned session automatically; weather and load information remain optional guidance.

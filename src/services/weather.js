@@ -74,11 +74,26 @@ export function getCurrentPosition() {
   });
 }
 
+function hourlyRows(hourly = {}) {
+  return (hourly.time || []).map((time, index) => ({
+    time,
+    temperature: Math.round(Number(hourly.temperature_2m?.[index] || 0)),
+    feelsLike: Math.round(Number(hourly.apparent_temperature?.[index] || 0)),
+    humidity: Math.round(Number(hourly.relative_humidity_2m?.[index] || 0)),
+    precipitation: Number(hourly.precipitation?.[index] || 0),
+    rainChance: Math.round(Number(hourly.precipitation_probability?.[index] || 0)),
+    windSpeed: Math.round(Number(hourly.wind_speed_10m?.[index] || 0)),
+    windGusts: Math.round(Number(hourly.wind_gusts_10m?.[index] || 0)),
+    weatherCode: Number(hourly.weather_code?.[index] || 0),
+  }));
+}
+
 export async function fetchCurrentWeather(latitude, longitude) {
   const params = new URLSearchParams({
     latitude: String(latitude), longitude: String(longitude),
     current: ["temperature_2m", "apparent_temperature", "relative_humidity_2m", "precipitation", "weather_code", "wind_speed_10m", "wind_gusts_10m", "is_day"].join(","),
-    timezone: "auto", forecast_days: "1",
+    hourly: ["temperature_2m", "apparent_temperature", "relative_humidity_2m", "precipitation_probability", "precipitation", "weather_code", "wind_speed_10m", "wind_gusts_10m"].join(","),
+    timezone: "auto", forecast_days: "2",
   });
 
   const response = await fetch(`${WEATHER_URL}?${params}`);
@@ -100,5 +115,6 @@ export async function fetchCurrentWeather(latitude, longitude) {
     condition: weatherLabel(data.current.weather_code),
     isDay: Boolean(data.current.is_day),
     updatedAt: data.current.time,
+    hourly: hourlyRows(data.hourly),
   };
 }

@@ -130,9 +130,9 @@ export default function Coach() {
     .sort((left, right) => activityTimestamp(right) - activityTimestamp(left))[0], [canonicalActivities]);
   const latestRunningReview = latestRunningActivity ? state.reviews[latestRunningActivity.id] : null;
   const hydrationLearning = latestRunningActivity ? hydration(latestRunningActivity, latestRunningReview) : null;
-  const learningPoint = hydrationLearning
+  const learningPoint = hydrationLearning?.reliable
     ? `Für ähnliche Bedingungen sind ungefähr ${hydrationLearning.recommendedLow}–${hydrationLearning.recommendedHigh} ml pro Stunde ein sinnvoller Startpunkt.`
-    : "Je genauer du Trinkmenge und Gefühl direkt nach der Einheit protokollierst, desto persönlicher werden deine Empfehlungen.";
+    : hydrationLearning?.reason || "Je genauer du Trinkmenge und Gefühl direkt nach der Einheit protokollierst, desto persönlicher werden deine Empfehlungen.";
 
   const mobilitySettings = state.mobilityCoach || {};
   const durationMinutes = Number(mobilitySettings.durationMinutes || 25);

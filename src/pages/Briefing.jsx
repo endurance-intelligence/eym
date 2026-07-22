@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { useApp } from "../context/AppContext";
-import { Card, Metric, PageTitle } from "../components/UI";
+import { Card, PageTitle } from "../components/UI";
 import { recovery, hydration } from "../services/insights";
 import { daysUntil, pace, hours } from "../utils/format";
 import WeatherCard from "../components/WeatherCard";
@@ -228,10 +228,17 @@ export default function Briefing() {
     .sort((a, b) => new Date(a.date) - new Date(b.date))[0];
 
   const weekOpenItems = rows.reduce((sum, row) => sum + row.items.filter((item) => item.tone === "planned").length, 0);
+  const todayKey = isoDate(new Date());
+  const todayPlanEntries = state.plan.filter((item) => !item.archived && item.date === todayKey);
+  const hydrationSummary = hydrationState
+    ? hydrationState.reliable
+      ? `Getrunken ${latestReview.drinkMl} ml · geschätztes Defizit ${hydrationState.deficit} ml.`
+      : hydrationState.reason
+    : "Review offen – Körpergefühl und Trinkmenge ergänzen.";
 
   return (
     <>
-      <PageTitle eyebrow={copy.eyebrow} title={`${copy.greeting}${name ? `, ${name}` : ""}.`}><span className="tagline">Eat your miles.</span></PageTitle>
+      <PageTitle eyebrow={copy.eyebrow} title={`${copy.greeting}${name ? `, ${name}` : ""}.`}><WeatherCard plannedEntries={todayPlanEntries} /></PageTitle>
       <div className="grid briefing-grid">
         <Card className="wide today-card">
           <div className="today-card-heading">
@@ -252,26 +259,34 @@ export default function Briefing() {
 
         {weekAssessment.level !== "ok" && <Card className={`wide science-coach-alert ${weekAssessment.level}`}><div><p className="eyebrow">Coach · Wochenbelastung</p><h2>{weekAssessment.level === "adjust" ? "Anpassung könnte sinnvoll sein" : "Belastung im Blick behalten"}</h2><p>{weekAssessment.reasons.join(" · ")}.</p><small>Das ist ein Vorschlag, keine automatische Änderung. Dein Ziel „{goalProfile.target?.name || state.mission.name}“ und deine individuelle Belastungsgewöhnung bleiben die Grundlage.</small></div><Link className="button-link" to="/planner">Vorschläge im Wochenplan prüfen</Link></Card>}
 
-        <Card className="hero briefing-mission-card">
-          <p className="eyebrow">Mission</p><h2>{state.mission.name}</h2>
-          <div className="hero-stats"><Metric label="Verbleibend" value={`${daysUntil(state.mission.date)} Tage`} /><Metric label="Diese Woche" value={`${weekDistance.toFixed(1)} km`} /><Metric label="Rahmen" value={calculatedTarget ? `${calculatedTarget} km` : "Noch offen"} sub={state.planner?.lastPhase || "Wochenplan erstellen"} /></div>
-          {calculatedTarget > 0 && <div className="progress"><i style={{ width: `${Math.min(100, weekDistance / calculatedTarget * 100)}%` }} /></div>}
-          {nextEvent && <div className="milestone-strip"><div><span>Nächstes Rennen</span><strong>{nextEvent.name}</strong><small>{nextEvent.location || "Ort noch offen"}</small></div><div className="milestone-count"><b>{daysUntil(nextEvent.date)}</b><span>Tage</span></div></div>}
-        </Card>
-        <WeatherCard />
+        <div className="wide briefing-summary-grid">
+          <Card className="briefing-compact-card briefing-mission-card">
+            <p className="eyebrow">Mission</p>
+            <h2>{state.mission.name}</h2>
+            <div className="briefing-compact-metrics">
+              <span><b>{daysUntil(state.mission.date)}</b> Tage</span>
+              <span><b>{weekDistance.toFixed(1)}</b> / {calculatedTarget || "–"} km</span>
+            </div>
+            {calculatedTarget > 0 && <div className="progress"><i style={{ width: `${Math.min(100, weekDistance / calculatedTarget * 100)}%` }} /></div>}
+            {nextEvent && <p className="briefing-compact-footer"><span>Nächstes Event</span><b>{nextEvent.name}</b><strong>{daysUntil(nextEvent.date)} Tage</strong></p>}
+          </Card>
 
-        <Card className="wide briefing-status-card">
-          <div className="briefing-status-block">
+          <Card className="briefing-compact-card readiness-card">
             <p className="eyebrow">Trainingsbereitschaft</p>
-            <div className="briefing-status-line"><h2 className={recoveryState.tone}>{recoveryState.label}</h2>{recoveryState.reviewed > 0 && <span>Beine {recoveryState.legs}/10 · Energie {recoveryState.energy}/10 · Belastung {recoveryState.rpe}/10</span>}</div>
-            <p>{recoveryState.text}</p>
-          </div>
-          <div className="briefing-status-divider" />
-          <div className="briefing-status-block">
+            <h2 className={recoveryState.tone}>{recoveryState.label}</h2>
+            {recoveryState.reviewed > 0 && <p className="briefing-compact-values">Beine {recoveryState.legs}/10 · Energie {recoveryState.energy}/10 · Belastung {recoveryState.rpe}/10</p>}
+            <p className="briefing-compact-text">{recoveryState.text}</p>
+          </Card>
+
+          <Card className="briefing-compact-card briefing-latest-card">
             <p className="eyebrow">Zuletzt</p>
-            {latestActivity ? <><div className="briefing-status-line"><h2>{latestActivity.name}</h2><span>{latestActivity.distance} km · {hours(latestActivity.duration)} · {pace(latestActivity.distance, latestActivity.duration)}</span></div><p>{hydrationState ? `Getrunken ${latestReview.drinkMl} ml · geschätztes Defizit ${hydrationState.deficit} ml.` : "Review offen – Körpergefühl und Trinkmenge ergänzen."}</p></> : <p>Importiere Aktivitäten, um deine echten Läufe zu sehen.</p>}
-          </div>
-        </Card>
+            {latestActivity ? <>
+              <h2>{latestActivity.name}</h2>
+              <p className="briefing-compact-values">{activityMetrics(latestActivity)}</p>
+              <p className="briefing-compact-text">{hydrationSummary}</p>
+            </> : <p className="briefing-compact-text">Importiere Aktivitäten, um deine echten Läufe zu sehen.</p>}
+          </Card>
+        </div>
 
         <details className="wide briefing-disclosure">
           <summary><div><p className="eyebrow">Wochenplan</p><strong>Komplette Woche anzeigen</strong><span>{weekOpenItems} offene Einheit{weekOpenItems === 1 ? "" : "en"} · {calculatedTarget ? `${calculatedTarget} km Rahmen` : "Rahmen noch offen"}</span></div><b>⌄</b></summary>

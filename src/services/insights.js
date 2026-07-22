@@ -87,7 +87,8 @@ export function hydration(activity, review) {
   if (!h) return null;
   const drunk = Number(review.drinkMl || 0);
   let loss;
-  if (review.weightBefore && review.weightAfter) {
+  const measured = Boolean(review.weightBefore && review.weightAfter);
+  if (measured) {
     loss = (Number(review.weightBefore) - Number(review.weightAfter)) * 1000 + drunk - Number(review.urineMl || 0);
   } else {
     const temp = Number(reviewWeather(activity, review)?.temperature ?? 18);
@@ -96,12 +97,23 @@ export function hydration(activity, review) {
   }
   const rate = Math.max(0, loss / h);
   const deficit = loss - drunk;
+  const reliableDuration = h >= 0.5;
+  const plausibleRate = rate >= 200 && rate <= 2500;
+  const reliable = reliableDuration && plausibleRate;
+  let reason = "";
+  if (!reliableDuration) reason = "Einheit zu kurz für eine belastbare Schweißraten-Empfehlung.";
+  else if (!plausibleRate) reason = "Hydrationswert unplausibel – Gewicht, Trinkmenge und Dauer bitte prüfen.";
+  const recommendedLow = reliable ? Math.min(1200, Math.round(rate * 0.75 / 50) * 50) : null;
+  const recommendedHigh = reliable ? Math.min(1500, Math.round(rate * 0.9 / 50) * 50) : null;
   return {
     loss: Math.round(loss),
     rate: Math.round(rate),
     deficit: Math.round(deficit),
-    recommendedLow: Math.round(rate * 0.75 / 50) * 50,
-    recommendedHigh: Math.round(rate * 0.9 / 50) * 50,
+    recommendedLow,
+    recommendedHigh,
+    reliable,
+    measured,
+    reason,
   };
 }
 
@@ -201,7 +213,7 @@ export function coachDashboard(activities = [], reviews = {}, now = new Date()) 
   const lowFuel = longFuelRows.filter(({ review }) => review.carbohydrateStatus === "low").length;
   const hydrationRows = reviewedRows
     .map(({ activity, review }) => hydration(activity, review))
-    .filter(Boolean);
+    .filter((item) => item?.reliable);
   const sweatRate = average(hydrationRows.map((item) => item.rate));
   const sodiumRows = longFuelRows.map(({ review }) => Number(review.sodiumPerHour || 0)).filter((value) => value > 0);
   const sodiumRate = average(sodiumRows);
