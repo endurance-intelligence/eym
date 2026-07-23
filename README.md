@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **3.2.3**
+Current app version: **3.2.4**
 
 **Eat your miles.**
 
@@ -169,7 +169,7 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 
 - `OPEN_FOOD_FACTS_USER_ID`
 - `OPEN_FOOD_FACTS_PASSWORD`
-- `OPEN_FOOD_FACTS_USER_AGENT` (recommended format: `EnduranceIntelligence/3.2.3 (contact@example.com)`)
+- `OPEN_FOOD_FACTS_USER_AGENT` (recommended format: `EnduranceIntelligence/3.2.4 (contact@example.com)`)
 - `OPEN_FOOD_FACTS_APP_SALT` (a random secret used to derive a stable pseudonymous app UUID per EYM user)
 
 ## Personal ambient themes (v2.16)
@@ -271,6 +271,12 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 - The planner uses stored activity groups, so an ORC warm-up, main set and cool-down combined in Training appear as one matched workout.
 - Planner surfaces now follow the selected user theme. Completed items remain readable with a check mark instead of strikethrough text.
 - Training rows switch to a single-column touch layout on phones with clear Review and Name-change controls.
+
+## External exercise videos v3.2.4
+
+- Every Stabi & Mobility guide offers a direct Google search for the exercise name, description and correct execution videos.
+- Search results open in a new tab and do not replace EYM's own instructions.
+- Physio exercises explicitly remind the athlete that their personally demonstrated execution takes priority over external variants.
 
 Before deploying the application, apply `supabase/migrations/20260722120000_athlete_images.sql`. Afterwards run:
 

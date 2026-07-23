@@ -872,3 +872,12 @@ export function nextMobilityWorkoutRotation(options = {}, currentOffset = 0, ran
 export function equipmentLabel(id) {
   return MOBILITY_EQUIPMENT.find((entry) => entry.id === id)?.label || id;
 }
+
+export function exerciseVideoSearchUrl(exerciseDefinition = {}) {
+  const query = [
+    exerciseDefinition.name,
+    exerciseDefinition.subtitle,
+    "Übung richtige Ausführung Video",
+  ].filter(Boolean).join(" ");
+  return `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+}

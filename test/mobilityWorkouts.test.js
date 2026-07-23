@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   buildMobilityWorkout,
+  exerciseVideoSearchUrl,
   nextMobilityWorkoutRotation,
 } from "../src/services/mobilityWorkouts.js";
 
@@ -61,4 +62,18 @@ test("selected workout duration represents active movement without setup time", 
   assert.ok(workout.pauseSeconds > 0);
   assert.equal(workout.totalSeconds, workout.activeSeconds + workout.pauseSeconds);
   assert.ok(workout.durationMinutes > workout.activeMinutes);
+});
+
+test("exercise video search uses the exercise description and a safe Google URL", () => {
+  const url = new URL(exerciseVideoSearchUrl({
+    name: "Seitstütz & Rotation",
+    subtitle: "Arm kontrolliert nach oben führen",
+  }));
+
+  assert.equal(url.origin, "https://www.google.com");
+  assert.equal(url.pathname, "/search");
+  assert.equal(
+    url.searchParams.get("q"),
+    "Seitstütz & Rotation Arm kontrolliert nach oben führen Übung richtige Ausführung Video",
+  );
 });

@@ -1,5 +1,9 @@
 import { useModalScrollLock } from "../services/modalScrollLock";
-import { equipmentLabel, focusAreaLabel } from "../services/mobilityWorkouts";
+import {
+  equipmentLabel,
+  exerciseVideoSearchUrl,
+  focusAreaLabel,
+} from "../services/mobilityWorkouts";
 
 function StickFigure({ head = [50, 25], joints = {}, className = "" }) {
   const point = (key, fallback) => joints[key] || fallback;
@@ -296,6 +300,7 @@ export function ExerciseGuideButton({ exercise, onOpen, compact = false }) {
 export default function ExerciseGuide({ exercise, onClose, known = false, knownLocked = false, onToggleKnown }) {
   useModalScrollLock(Boolean(exercise));
   if (!exercise) return null;
+  const videoSearchUrl = exerciseVideoSearchUrl(exercise);
   const material = exercise.equipment?.length
     ? exercise.equipment.map(equipmentLabel)
     : exercise.equipmentAny?.length
@@ -313,6 +318,23 @@ export default function ExerciseGuide({ exercise, onClose, known = false, knownL
 
         <div className="exercise-guide-visual"><ExerciseVisual visual={exercise.visual} /></div>
         <p className="exercise-visual-note">Die Grafik zeigt den Bewegungsablauf schematisch. Saubere, schmerzfreie Ausführung ist wichtiger als ein großer Bewegungsweg.</p>
+        <a
+          className="exercise-video-search"
+          href={videoSearchUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`Google-Suche nach Ausführungsvideos für ${exercise.name} öffnen`}
+        >
+          <span className="exercise-video-search-icon" aria-hidden="true">▶</span>
+          <span>
+            <strong>Ausführungsvideo bei Google suchen</strong>
+            <small>Öffnet passende Suchergebnisse in einem neuen Tab. Externe Videos können Übungsvarianten zeigen.</small>
+          </span>
+          <b aria-hidden="true">↗</b>
+        </a>
+        {(knownLocked || exercise.group === "Physio") && (
+          <p className="exercise-video-physio-note">Bei Physio-Übungen hat die persönlich gezeigte Ausführung Vorrang.</p>
+        )}
 
         <div className="exercise-guide-meta">
           <span><b>Zeit</b>{Math.round(exercise.seconds / 15) * 15} Sek.</span>
