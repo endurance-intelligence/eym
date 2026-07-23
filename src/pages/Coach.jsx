@@ -616,12 +616,12 @@ export default function Coach() {
                 <h2>{todayMobilityPlan ? `Heute geplant: ${todayMobilityPlan.title}` : workout.title}</h2>
                 <p className="muted">Physio-Übungen haben Vorrang. Danach berücksichtigt EYM deine persönlichen Schwerpunkte, Tagesform, Zeit und vorhandenes Material.</p>
               </div>
-              <strong>{secondsLabel(workout.totalSeconds)}<small>min gesamt</small></strong>
             </div>
             <div className="mobility-workout-summary">
               <span><b>{workout.items.length}</b> Übungen</span>
               <span><b>{secondsLabel(workout.activeSeconds)}</b> Training</span>
               <span><b>{secondsLabel(workout.pauseSeconds)}</b> Vorbereitung & Wechsel</span>
+              <span><b>{secondsLabel(workout.totalSeconds)}</b> Gesamtzeit</span>
               <span><b>{physioExerciseIds.length}</b> Physio-Prioritäten</span>
             </div>
             <div className="mobility-controls">
