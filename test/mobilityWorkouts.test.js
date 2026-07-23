@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   buildMobilityWorkout,
   exerciseVideoSearchUrl,
+  mobilityExerciseUsage,
   nextMobilityWorkoutRotation,
 } from "../src/services/mobilityWorkouts.js";
 
@@ -76,4 +77,37 @@ test("exercise video search uses the exercise description and a safe Google URL"
     url.searchParams.get("q"),
     "Seitstütz & Rotation Arm kontrolliert nach oben führen Übung richtige Ausführung Video",
   );
+});
+
+test("exercise usage counts completed sessions once and keeps the latest completion", () => {
+  const usage = mobilityExerciseUsage([
+    { completedAt: "2026-07-23T18:00:00.000Z", exerciseIds: ["dead-bug", "dead-bug", "bird-dog"] },
+    { completedAt: "2026-07-20T18:00:00.000Z", exerciseIds: ["dead-bug"] },
+    { completedAt: "2026-07-18T18:00:00.000Z", exerciseIds: ["side-plank"] },
+  ]);
+
+  assert.equal(usage["dead-bug"].count, 2);
+  assert.equal(usage["dead-bug"].recentCount, 2);
+  assert.equal(usage["dead-bug"].streak, 2);
+  assert.equal(usage["dead-bug"].lastCompletedAt, "2026-07-23T18:00:00.000Z");
+  assert.equal(usage["bird-dog"].count, 1);
+});
+
+test("frequently repeated focus exercise is deprioritized when an alternative exists", () => {
+  const exerciseHistory = Array.from({ length: 4 }, (_, index) => ({
+    completedAt: `2026-07-${23 - index}T18:00:00.000Z`,
+    exerciseIds: ["dead-bug"],
+  }));
+  const workout = buildMobilityWorkout({
+    durationMinutes: 10,
+    condition: "normal",
+    equipment: ["mat", "band"],
+    focusAreaIds: ["core"],
+    exerciseHistory,
+  });
+  const focusExercise = workout.items.find((item) => item.selectionReason.startsWith("Schwerpunkt"));
+
+  assert.ok(focusExercise);
+  assert.notEqual(focusExercise.id, "dead-bug");
+  assert.equal(workout.exerciseUsage["dead-bug"].streak, 4);
 });

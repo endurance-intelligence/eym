@@ -81,6 +81,7 @@ export const defaultState = {
     audioEnabled: true,
     voiceCues: true,
     weakSide: "none",
+    coachFocusOverride: null,
     history: [],
   },
   mission,

@@ -639,8 +639,27 @@ function rotate(items, offset = 0) {
   return [...items.slice(normalized), ...items.slice(0, normalized)];
 }
 
-function interleaveExerciseGroups(items, groupOrder, offset = 0) {
-  const grouped = groupOrder.map((group, index) => rotate(items.filter((item) => item.group === group), offset + index));
+function exerciseRotationScore(stat = {}) {
+  return Number(stat.streak || 0) * 100
+    + Number(stat.recentCount || 0) * 20
+    + Number(stat.count || 0);
+}
+
+function orderExercisesByUsage(items, usage, offset = 0) {
+  const rotated = rotate(items, offset);
+  const positions = new Map(rotated.map((item, index) => [item.id, index]));
+  return [...rotated].sort((left, right) => {
+    const usageDelta = exerciseRotationScore(usage[left.id]) - exerciseRotationScore(usage[right.id]);
+    return usageDelta || Number(positions.get(left.id) || 0) - Number(positions.get(right.id) || 0);
+  });
+}
+
+function interleaveExerciseGroups(items, groupOrder, offset = 0, usage = {}) {
+  const grouped = groupOrder.map((group, index) => orderExercisesByUsage(
+    items.filter((item) => item.group === group),
+    usage,
+    offset + index,
+  ));
   const maxLength = Math.max(0, ...grouped.map((group) => group.length));
   const result = [];
   for (let row = 0; row < maxLength; row += 1) {
@@ -665,6 +684,41 @@ export function focusAreaLabel(id) {
 
 export function exercisesForFocus(id) {
   return MOBILITY_EXERCISES.filter((item) => item.focusAreas.includes(id));
+}
+
+export function mobilityExerciseUsage(history = [], limit = 30) {
+  const recentHistory = (Array.isArray(history) ? history : []).slice(0, Math.max(1, Number(limit || 30)));
+  const usage = {};
+
+  recentHistory.forEach((entry, historyIndex) => {
+    const exerciseIds = [...new Set(Array.isArray(entry?.exerciseIds) ? entry.exerciseIds.filter(Boolean) : [])];
+    exerciseIds.forEach((exerciseId) => {
+      const current = usage[exerciseId] || {
+        count: 0,
+        recentCount: 0,
+        streak: 0,
+        lastCompletedAt: "",
+      };
+      current.count += 1;
+      if (historyIndex < 4) current.recentCount += 1;
+      if (!current.lastCompletedAt && entry?.completedAt) current.lastCompletedAt = entry.completedAt;
+      usage[exerciseId] = current;
+    });
+  });
+
+  Object.values(usage).forEach((stat) => {
+    stat.streak = 0;
+  });
+  const trackedIds = Object.keys(usage);
+  trackedIds.forEach((exerciseId) => {
+    for (const entry of recentHistory) {
+      const completedIds = new Set(Array.isArray(entry?.exerciseIds) ? entry.exerciseIds : []);
+      if (!completedIds.has(exerciseId)) break;
+      usage[exerciseId].streak += 1;
+    }
+  });
+
+  return usage;
 }
 
 function exerciseEquipmentIds(item) {
@@ -692,6 +746,7 @@ export function buildMobilityWorkout({
   materialTransitionSeconds = 20,
   longerPreparationForUnknown = true,
   rotationOffset = 0,
+  exerciseHistory = [],
 } = {}) {
   const targetActiveSeconds = Math.max(10, Number(durationMinutes || 25)) * 60;
   const selectedPhysio = (physioExerciseIds || []).map(exerciseById).filter(Boolean);
@@ -707,10 +762,11 @@ export function buildMobilityWorkout({
   const conditionAvailable = condition === "tired"
     ? available.filter((item) => item.intensity !== "high")
     : available;
+  const exerciseUsage = mobilityExerciseUsage(exerciseHistory);
 
   const physioIds = new Set(availablePhysio.map((item) => item.id));
   const finishers = conditionAvailable.filter((item) => item.group === "Abschluss");
-  const finisher = rotate(finishers, rotationOffset)[0];
+  const finisher = orderExercisesByUsage(finishers, exerciseUsage, rotationOffset)[0];
   const finisherIds = new Set(finishers.map((item) => item.id));
   const pool = conditionAvailable.filter((item) => !physioIds.has(item.id) && !finisherIds.has(item.id));
 
@@ -720,8 +776,9 @@ export function buildMobilityWorkout({
     const rotatedFocusIds = rotate(selectedFocusIds, rotationOffset);
     for (let slot = 0; slot < focusSlots; slot += 1) {
       const focusId = rotatedFocusIds[slot % rotatedFocusIds.length];
-      const candidate = rotate(
+      const candidate = orderExercisesByUsage(
         pool.filter((item) => item.focusAreas.includes(focusId) && !focusSequence.some((selected) => selected.id === item.id)),
+        exerciseUsage,
         rotationOffset + slot,
       )[0];
       if (candidate) focusSequence.push(candidate);
@@ -733,7 +790,7 @@ export function buildMobilityWorkout({
     : condition === "fresh"
       ? ["Rumpf", "Gesäß & Hüfte", "Kraft", "Rumpf & Haltung", "Beinachse", "Fuß & Sprunggelenk", "Mobilität"]
       : ["Rumpf", "Fuß & Sprunggelenk", "Gesäß & Hüfte", "Mobilität", "Balance", "Beinachse", "Kraft"];
-  const standardSequence = interleaveExerciseGroups(pool, standardPriority, rotationOffset);
+  const standardSequence = interleaveExerciseGroups(pool, standardPriority, rotationOffset, exerciseUsage);
 
   const items = [];
   let activeSeconds = 0;
@@ -827,6 +884,7 @@ export function buildMobilityWorkout({
     items,
     missingPhysio,
     missingFocus,
+    exerciseUsage,
   };
 }
 

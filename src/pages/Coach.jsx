@@ -25,8 +25,14 @@ import {
   MOBILITY_EQUIPMENT,
   MOBILITY_EXERCISES,
   MOBILITY_FOCUS_AREAS,
+  mobilityExerciseUsage,
   nextMobilityWorkoutRotation,
 } from "../services/mobilityWorkouts";
+import {
+  activeMobilityOverride,
+  mobilityCoachSuggestion,
+  mobilityOverrideExpiry,
+} from "../services/mobilityCoach";
 
 const monthFormatter = new Intl.DateTimeFormat("de-DE", { month: "long", year: "numeric" });
 const DEFAULT_MOBILITY_EQUIPMENT = ["mat", "band"];
@@ -59,6 +65,12 @@ function materialText(exercise) {
   return ids.length ? ids.map(equipmentLabel).join(" / ") : "Ohne Material";
 }
 
+function exerciseUsageLabel(stat) {
+  if (!stat?.count) return "";
+  const dateKey = String(stat.lastCompletedAt || "").slice(0, 10);
+  return `${stat.count}× absolviert${dateKey ? ` · zuletzt ${fmtDate(dateKey)}` : ""}`;
+}
+
 function runnerPhaseSeconds(items, index, phase) {
   const item = items[index];
   if (!item) return 0;
@@ -73,20 +85,48 @@ function advanceRunner(current) {
   const items = current.items || [];
   let index = current.index;
   let phase = current.phase;
+  let completedExerciseIds = Array.isArray(current.completedExerciseIds) ? current.completedExerciseIds : [];
   for (let guard = 0; guard < 5; guard += 1) {
     if (phase === "prepare") {
       phase = "work";
     } else if (phase === "work") {
-      if (index >= items.length - 1) return { ...current, remaining: 0, running: false, complete: true };
+      const completedExerciseId = items[index]?.id;
+      if (completedExerciseId && !completedExerciseIds.includes(completedExerciseId)) {
+        completedExerciseIds = [...completedExerciseIds, completedExerciseId];
+      }
+      if (index >= items.length - 1) {
+        return {
+          ...current,
+          completedExerciseIds,
+          remaining: 0,
+          running: false,
+          complete: true,
+        };
+      }
       index += 1;
       phase = "transition";
     } else {
       phase = "prepare";
     }
     const remaining = runnerPhaseSeconds(items, index, phase);
-    if (remaining > 0) return { ...current, index, phase, remaining, complete: false };
+    if (remaining > 0) {
+      return {
+        ...current,
+        completedExerciseIds,
+        index,
+        phase,
+        remaining,
+        complete: false,
+      };
+    }
   }
-  return { ...current, remaining: 0, running: false, complete: true };
+  return {
+    ...current,
+    completedExerciseIds,
+    remaining: 0,
+    running: false,
+    complete: true,
+  };
 }
 
 function sideOrder(weakSide) {
@@ -116,6 +156,9 @@ export default function Coach() {
   const [workoutShuffleOffset, setWorkoutShuffleOffset] = useState(0);
   const [libraryFocus, setLibraryFocus] = useState("all");
   const [librarySearch, setLibrarySearch] = useState("");
+  const [focusEditorOpen, setFocusEditorOpen] = useState(false);
+  const [sessionCoachOverride, setSessionCoachOverride] = useState(null);
+  const [dismissedCoachSuggestionId, setDismissedCoachSuggestionId] = useState("");
   const previousRunnerRef = useRef(null);
   const cueKeyRef = useRef("");
   const now = useMemo(() => new Date(), []);
@@ -154,21 +197,35 @@ export default function Coach() {
   const audioEnabled = mobilitySettings.audioEnabled !== false;
   const voiceCues = mobilitySettings.voiceCues !== false;
   const weakSide = ["left", "right"].includes(mobilitySettings.weakSide) ? mobilitySettings.weakSide : "none";
-  const workoutHistory = Array.isArray(mobilitySettings.history) ? mobilitySettings.history : [];
+  const workoutHistory = useMemo(
+    () => Array.isArray(mobilitySettings.history) ? mobilitySettings.history : [],
+    [mobilitySettings.history],
+  );
+  const exerciseUsage = useMemo(() => mobilityExerciseUsage(workoutHistory), [workoutHistory]);
+  const coachSuggestion = useMemo(
+    () => mobilityCoachSuggestion(reviewActivities, state.reviews, now),
+    [reviewActivities, state.reviews, now],
+  );
+  const weeklyCoachOverride = activeMobilityOverride(mobilitySettings.coachFocusOverride, now);
+  const coachOverride = sessionCoachOverride || weeklyCoachOverride;
+  const effectiveFocusAreaIds = coachOverride?.focusAreaIds || focusAreaIds;
+  const effectiveCondition = coachOverride?.condition || condition;
+  const focusPickerOpen = focusEditorOpen || focusAreaIds.length === 0;
   const knownExerciseCount = useMemo(() => new Set([...knownExerciseIds, ...physioExerciseIds]).size, [knownExerciseIds, physioExerciseIds]);
   const workoutOptions = useMemo(() => ({
     durationMinutes,
-    condition,
+    condition: effectiveCondition,
     equipment,
     physioExerciseIds,
-    focusAreaIds,
+    focusAreaIds: effectiveFocusAreaIds,
     knownExerciseIds,
     preparationSeconds,
     unknownPreparationSeconds,
     transitionSeconds,
     materialTransitionSeconds,
     longerPreparationForUnknown,
-  }), [durationMinutes, condition, equipment, physioExerciseIds, focusAreaIds, knownExerciseIds, preparationSeconds, unknownPreparationSeconds, transitionSeconds, materialTransitionSeconds, longerPreparationForUnknown]);
+    exerciseHistory: workoutHistory,
+  }), [durationMinutes, effectiveCondition, equipment, physioExerciseIds, effectiveFocusAreaIds, knownExerciseIds, preparationSeconds, unknownPreparationSeconds, transitionSeconds, materialTransitionSeconds, longerPreparationForUnknown, workoutHistory]);
   const workoutRotationOffset = workoutHistory.length + workoutShuffleOffset;
   const workout = useMemo(() => buildMobilityWorkout({
     ...workoutOptions,
@@ -224,11 +281,44 @@ export default function Coach() {
   }
 
   function toggleFocus(id) {
+    setFocusEditorOpen(true);
     if (focusAreaIds.includes(id)) {
       updateMobility({ focusAreaIds: focusAreaIds.filter((item) => item !== id) });
     } else if (focusAreaIds.length < 3) {
       updateMobility({ focusAreaIds: [...focusAreaIds, id] });
     }
+    setRunner(null);
+  }
+
+  function useCoachSuggestionForSession() {
+    if (!coachSuggestion) return;
+    setSessionCoachOverride({
+      ...coachSuggestion,
+      scope: "session",
+    });
+    setWorkoutShuffleOffset(0);
+    setRunner(null);
+  }
+
+  function useCoachSuggestionForWeek() {
+    if (!coachSuggestion) return;
+    updateMobility({
+      coachFocusOverride: {
+        ...coachSuggestion,
+        scope: "week",
+        acceptedAt: new Date().toISOString(),
+        expiresOn: mobilityOverrideExpiry(new Date()),
+      },
+    });
+    setSessionCoachOverride(null);
+    setWorkoutShuffleOffset(0);
+    setRunner(null);
+  }
+
+  function clearCoachOverride() {
+    setSessionCoachOverride(null);
+    if (weeklyCoachOverride) updateMobility({ coachFocusOverride: null });
+    setWorkoutShuffleOffset(0);
     setRunner(null);
   }
 
@@ -248,10 +338,11 @@ export default function Coach() {
     setRunner({
       sessionId: crypto.randomUUID(),
       planItemId: todayMobilityPlan?.id || null,
-      focusAreaIds: [...focusAreaIds],
+      focusAreaIds: [...effectiveFocusAreaIds],
       items,
       title: workout.title,
       durationMinutes: workout.durationMinutes,
+      completedExerciseIds: [],
       index: 0,
       phase: firstPhase,
       remaining: runnerPhaseSeconds(items, 0, firstPhase),
@@ -264,6 +355,7 @@ export default function Coach() {
   function closeFinishedWorkout() {
     if (!runner?.saved) return;
     setWorkoutShuffleOffset(0);
+    if (sessionCoachOverride) setSessionCoachOverride(null);
     setRunner(null);
   }
 
@@ -292,13 +384,16 @@ export default function Coach() {
     const saveTimer = window.setTimeout(() => {
       const completedAt = new Date().toISOString();
       const completedItems = Array.isArray(completedRunner.items) ? completedRunner.items : [];
+      const completedExerciseIds = Array.isArray(completedRunner.completedExerciseIds)
+        ? completedRunner.completedExerciseIds
+        : completedItems.map((item) => item.id);
       const historyEntry = {
         id: crypto.randomUUID(),
         sessionId: completedRunner.sessionId,
         completedAt,
         title: completedRunner.title,
         durationMinutes: completedRunner.durationMinutes,
-        exerciseIds: completedItems.map((item) => item.id),
+        exerciseIds: [...new Set(completedExerciseIds)],
         focusAreaIds: Array.isArray(completedRunner.focusAreaIds) ? completedRunner.focusAreaIds : [],
         planItemId: completedRunner.planItemId || null,
       };
@@ -454,28 +549,65 @@ export default function Coach() {
               <div>
                 <p className="eyebrow">Persönliche Trainingsschwerpunkte</p>
                 <h2>Woran möchtest du arbeiten?</h2>
-                <p className="muted">Optional und für jeden Nutzer frei einstellbar. Ohne Auswahl erzeugt EYM ein ausgewogenes Standard-Workout. Mit Schwerpunkten kommen je nach verfügbarer Zeit ein bis zwei passende Übungen zusätzlich in den Ablauf.</p>
               </div>
-              <span>{focusAreaIds.length}/3 gewählt</span>
-            </div>
-            <div className="mobility-focus-picker">
-              <button type="button" className={!focusAreaIds.length ? "selected standard" : "standard"} onClick={() => { updateMobility({ focusAreaIds: [] }); setRunner(null); }}>
-                <strong>Standard / ausgewogen</strong>
-                <span>Keine individuelle Priorität</span>
-              </button>
-              {MOBILITY_FOCUS_AREAS.map((focus) => {
-                const selectedFocus = focusAreaIds.includes(focus.id);
-                const disabled = !selectedFocus && focusAreaIds.length >= 3;
-                return (
-                  <button type="button" disabled={disabled} className={selectedFocus ? "selected" : ""} onClick={() => toggleFocus(focus.id)} key={focus.id}>
-                    <strong>{focus.label}</strong>
-                    <span>{focus.description}</span>
+              <div className="mobility-focus-heading-actions">
+                <span>{focusAreaIds.length}/3 gewählt</span>
+                {focusAreaIds.length > 0 && (
+                  <button type="button" onClick={() => setFocusEditorOpen((current) => !current)}>
+                    {focusPickerOpen ? "Auswahl schließen" : "Ändern"}
                   </button>
-                );
-              })}
+                )}
+              </div>
             </div>
-            {focusAreaIds.length > 0 && <p className="mobility-focus-summary"><b>Aktiv:</b> {focusAreaIds.map(focusAreaLabel).join(" · ")} <span>Die Auswahl wird in deiner Cloud-Konfiguration gespeichert.</span></p>}
+            <p className="mobility-focus-summary"><b>Aktiv:</b> {focusAreaIds.length ? focusAreaIds.map(focusAreaLabel).join(" · ") : "Standard / ausgewogen"} <span>Die Auswahl wird in deiner Cloud-Konfiguration gespeichert.</span></p>
+            {focusPickerOpen && (
+              <div className="mobility-focus-editor">
+                <p className="muted">Optional und für jeden Nutzer frei einstellbar. Ohne Auswahl erzeugt EYM ein ausgewogenes Standard-Workout. Mit Schwerpunkten kommen je nach verfügbarer Zeit ein bis zwei passende Übungen zusätzlich in den Ablauf.</p>
+                <div className="mobility-focus-picker">
+                  <button type="button" className={!focusAreaIds.length ? "selected standard" : "standard"} onClick={() => { setFocusEditorOpen(true); updateMobility({ focusAreaIds: [] }); setRunner(null); }}>
+                    <strong>Standard / ausgewogen</strong>
+                    <span>Keine individuelle Priorität</span>
+                  </button>
+                  {MOBILITY_FOCUS_AREAS.map((focus) => {
+                    const selectedFocus = focusAreaIds.includes(focus.id);
+                    const disabled = !selectedFocus && focusAreaIds.length >= 3;
+                    return (
+                      <button type="button" disabled={disabled} className={selectedFocus ? "selected" : ""} onClick={() => toggleFocus(focus.id)} key={focus.id}>
+                        <strong>{focus.label}</strong>
+                        <span>{focus.description}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </Card>
+
+          {coachOverride ? (
+            <Card className="wide mobility-coach-suggestion active">
+              <div>
+                <p className="eyebrow">Coach-Fokus aktiv · {coachOverride.scope === "week" ? "diese Woche" : "dieses Workout"}</p>
+                <h2>{coachOverride.title}</h2>
+                <p>{coachOverride.reason}</p>
+                <small>Temporär aktiv: {coachOverride.focusAreaIds.map(focusAreaLabel).join(" · ")}. Deine persönlichen Schwerpunkte bleiben unverändert.</small>
+              </div>
+              <button type="button" onClick={clearCoachOverride}>Coach-Fokus zurücksetzen</button>
+            </Card>
+          ) : coachSuggestion && dismissedCoachSuggestionId !== coachSuggestion.id ? (
+            <Card className="wide mobility-coach-suggestion">
+              <div>
+                <p className="eyebrow">Vorschlag vom Coach</p>
+                <h2>{coachSuggestion.title}</h2>
+                <p>{coachSuggestion.reason}</p>
+                <small>{coachSuggestion.detail}</small>
+              </div>
+              <div className="mobility-coach-suggestion-actions">
+                <button type="button" className="primary" onClick={useCoachSuggestionForSession}>Für dieses Workout</button>
+                <button type="button" onClick={useCoachSuggestionForWeek}>Diese Woche priorisieren</button>
+                <button type="button" className="secondary" onClick={() => setDismissedCoachSuggestionId(coachSuggestion.id)}>Nicht jetzt</button>
+              </div>
+            </Card>
+          ) : null}
 
           <Card className="wide mobility-workout-hero">
             <div className="mobility-workout-heading">
@@ -484,12 +616,12 @@ export default function Coach() {
                 <h2>{todayMobilityPlan ? `Heute geplant: ${todayMobilityPlan.title}` : workout.title}</h2>
                 <p className="muted">Physio-Übungen haben Vorrang. Danach berücksichtigt EYM deine persönlichen Schwerpunkte, Tagesform, Zeit und vorhandenes Material.</p>
               </div>
-              <strong>{workout.durationMinutes} min<small>gesamt</small></strong>
+              <strong>{secondsLabel(workout.totalSeconds)}<small>min gesamt</small></strong>
             </div>
             <div className="mobility-workout-summary">
               <span><b>{workout.items.length}</b> Übungen</span>
-              <span><b>{workout.activeMinutes}</b> min Training</span>
-              <span><b>{workout.pauseMinutes}</b> min Vorbereitung & Wechsel</span>
+              <span><b>{secondsLabel(workout.activeSeconds)}</b> Training</span>
+              <span><b>{secondsLabel(workout.pauseSeconds)}</b> Vorbereitung & Wechsel</span>
               <span><b>{physioExerciseIds.length}</b> Physio-Prioritäten</span>
             </div>
             <div className="mobility-controls">
@@ -499,7 +631,7 @@ export default function Coach() {
                 </select>
               </label>
               <label>Tagesform
-                <select value={condition} onChange={(event) => { updateMobility({ condition: event.target.value }); setRunner(null); }}>
+                <select value={effectiveCondition} onChange={(event) => { if (coachOverride) clearCoachOverride(); updateMobility({ condition: event.target.value }); setRunner(null); }}>
                   <option value="fresh">Erholt</option><option value="normal">Normal</option><option value="tired">Müde / Regeneration</option>
                 </select>
               </label>
@@ -612,9 +744,9 @@ export default function Coach() {
             <div className="exercise-library-grid">
               {visibleLibraryExercises.map((exercise) => (
                 <article key={exercise.id}>
-                  <div className="exercise-library-card-heading"><div><span>{exercise.group}</span><h3>{exercise.name}</h3>{exercise.subtitle && <small className="mobility-exercise-subtitle">{exercise.subtitle}</small>}</div><div className="exercise-library-badges">{physioExerciseIds.includes(exercise.id) && <b>Physio</b>}{knownExerciseIds.includes(exercise.id) && !physioExerciseIds.includes(exercise.id) && <b className="known">Bekannt</b>}</div></div>
+                  <div className="exercise-library-card-heading"><div><span>{exercise.group}</span><h3>{exercise.name}</h3>{exercise.subtitle && <small className="mobility-exercise-subtitle">{exercise.subtitle}</small>}</div><div className="exercise-library-badges">{physioExerciseIds.includes(exercise.id) && <b>Physio</b>}{knownExerciseIds.includes(exercise.id) && !physioExerciseIds.includes(exercise.id) && <b className="known">Bekannt</b>}{exerciseUsage[exercise.id]?.count > 0 && <b className="usage">{exerciseUsage[exercise.id].count}×</b>}</div></div>
                   <p>{exercise.purpose}</p>
-                  <small>{materialText(exercise)} · {exercise.focusAreas.map(focusAreaLabel).join(" · ") || "Allgemein"}</small>
+                  <small>{materialText(exercise)} · {exercise.focusAreas.map(focusAreaLabel).join(" · ") || "Allgemein"}{exerciseUsageLabel(exerciseUsage[exercise.id]) ? ` · ${exerciseUsageLabel(exerciseUsage[exercise.id])}` : ""}</small>
                   <ExerciseGuideButton exercise={exercise} onOpen={openExerciseGuide} />
                 </article>
               ))}

@@ -5,6 +5,33 @@ import {
   focusAreaLabel,
 } from "../services/mobilityWorkouts";
 
+let exerciseSearchWindow = null;
+
+function openOrReuseExerciseSearch(event, url) {
+  if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+  event.preventDefault();
+
+  try {
+    if (exerciseSearchWindow && !exerciseSearchWindow.closed) {
+      exerciseSearchWindow.location.href = url;
+      exerciseSearchWindow.focus();
+      return;
+    }
+  } catch {
+    exerciseSearchWindow = null;
+  }
+
+  const nextWindow = window.open("about:blank", "_blank");
+  if (!nextWindow) {
+    window.location.assign(url);
+    return;
+  }
+  nextWindow.opener = null;
+  nextWindow.location.href = url;
+  nextWindow.focus();
+  exerciseSearchWindow = nextWindow;
+}
+
 function StickFigure({ head = [50, 25], joints = {}, className = "" }) {
   const point = (key, fallback) => joints[key] || fallback;
   const neck = point("neck", [50, 43]);
@@ -324,11 +351,12 @@ export default function ExerciseGuide({ exercise, onClose, known = false, knownL
           target="_blank"
           rel="noopener noreferrer"
           aria-label={`Google-Suche nach Ausführungsvideos für ${exercise.name} öffnen`}
+          onClick={(event) => openOrReuseExerciseSearch(event, videoSearchUrl)}
         >
           <span className="exercise-video-search-icon" aria-hidden="true">▶</span>
           <span>
             <strong>Ausführungsvideo bei Google suchen</strong>
-            <small>Öffnet passende Suchergebnisse in einem neuen Tab. Externe Videos können Übungsvarianten zeigen.</small>
+            <small>Öffnet einmalig einen Suchtab und verwendet ihn danach weiter. Externe Videos können Übungsvarianten zeigen.</small>
           </span>
           <b aria-hidden="true">↗</b>
         </a>

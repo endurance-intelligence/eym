@@ -272,11 +272,15 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 - Planner surfaces now follow the selected user theme. Completed items remain readable with a check mark instead of strikethrough text.
 - Training rows switch to a single-column touch layout on phones with clear Review and Name-change controls.
 
-## External exercise videos v3.2.4
+## Adaptive Stabi & Mobility v3.2.4
 
 - Every Stabi & Mobility guide offers a direct Google search for the exercise name, description and correct execution videos.
-- Search results open in a new tab and do not replace EYM's own instructions.
+- The first search opens a dedicated tab; later searches reuse it instead of creating tab clutter. EYM's own instructions remain available.
 - Physio exercises explicitly remind the athlete that their personally demonstrated execution takes priority over external variants.
+- Completed exercises are counted across the latest 30 stored workouts. Frequently repeated non-physio exercises are deprioritized when a suitable alternative exists, while personal physio priorities remain fixed.
+- The personal focus selector collapses to a compact active summary after configuration.
+- Rule-based coach suggestions can temporarily prioritize active recovery after back-to-back running or repeated low recovery reviews. They only affect the current workout or the current week after explicit acceptance.
+- Planned training, preparation and total duration use the same second-accurate display so their values remain consistent.
 
 Before deploying the application, apply `supabase/migrations/20260722120000_athlete_images.sql`. Afterwards run:
 
