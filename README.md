@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **3.2.4**
+Current app version: **3.2.5**
 
 **Eat your miles.**
 
@@ -169,7 +169,7 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 
 - `OPEN_FOOD_FACTS_USER_ID`
 - `OPEN_FOOD_FACTS_PASSWORD`
-- `OPEN_FOOD_FACTS_USER_AGENT` (recommended format: `EnduranceIntelligence/3.2.4 (contact@example.com)`)
+- `OPEN_FOOD_FACTS_USER_AGENT` (recommended format: `EnduranceIntelligence/3.2.5 (contact@example.com)`)
 - `OPEN_FOOD_FACTS_APP_SALT` (a random secret used to derive a stable pseudonymous app UUID per EYM user)
 
 ## Personal ambient themes (v2.16)
@@ -281,6 +281,14 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 - The personal focus selector collapses to a compact active summary after configuration.
 - Rule-based coach suggestions can temporarily prioritize active recovery after back-to-back running or repeated low recovery reviews. They only affect the current workout or the current week after explicit acceptance.
 - Planned training, preparation and total duration use the same second-accurate display so their values remain consistent.
+
+## Mobility audio cues v3.2.5
+
+- A clearly audible three-tone countdown marks the final three seconds before an exercise starts and before it ends.
+- Distinct ascending and descending signals separate exercise start from exercise completion.
+- Existing spoken side-change cues remain active for bilateral exercises.
+- Transition and preparation phases no longer produce duplicate countdowns.
+- The timer settings include a combined countdown, start and end-signal preview.
 
 Before deploying the application, apply `supabase/migrations/20260722120000_athlete_images.sql`. Afterwards run:
 

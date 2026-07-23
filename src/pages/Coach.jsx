@@ -16,7 +16,7 @@ import ReviewModal from "../components/ReviewModal";
 import ExerciseGuide, { ExerciseGuideButton } from "../components/ExerciseGuide";
 import { activitiesWithGroups } from "../services/activityGroups";
 import { fmtDate } from "../utils/format";
-import { playWorkoutCue, primeWorkoutAudio, speakWorkoutCue } from "../services/workoutAudio";
+import { playWorkoutAudioDemo, playWorkoutCue, primeWorkoutAudio, speakWorkoutCue } from "../services/workoutAudio";
 import { athleteProfileAssessment } from "../services/athleteProfile";
 import {
   buildMobilityWorkout,
@@ -447,11 +447,20 @@ export default function Coach() {
       }
     }
 
-    if (runner.running && !runner.complete && runner.remaining > 0 && runner.remaining <= 3) {
+    const countdownBeforeStart = runner.phase === "prepare"
+      || (runner.phase === "transition" && Number(activeExercise?.preparationSeconds || 0) <= 0);
+    const countdownBeforeEnd = runner.phase === "work";
+    if (
+      runner.running
+      && !runner.complete
+      && runner.remaining > 0
+      && runner.remaining <= 3
+      && (countdownBeforeStart || countdownBeforeEnd)
+    ) {
       const countdownKey = `${runner.index}-${runner.phase}-${runner.remaining}`;
       if (cueKeyRef.current !== countdownKey) {
         cueKeyRef.current = countdownKey;
-        playWorkoutCue("countdown");
+        playWorkoutCue(`countdown${runner.remaining}`);
       }
     }
 
@@ -672,9 +681,9 @@ export default function Coach() {
                 </label>
               </div>
               <label className="mobility-timer-toggle"><input type="checkbox" checked={longerPreparationForUnknown} onChange={(event) => { updateMobility({ longerPreparationForUnknown: event.target.checked }); setRunner(null); }} /><span><b>Unbekannte Übungen länger vorbereiten</b><small>Markierte Physio-Übungen gelten automatisch als bekannt. Weitere Übungen kannst du in der Anleitung als bekannt markieren.</small></span></label>
-              <label className="mobility-timer-toggle"><input type="checkbox" checked={audioEnabled} onChange={(event) => updateMobility({ audioEnabled: event.target.checked })} /><span><b>Signaltöne im Workout</b><small>Unterschiedliche Töne für Countdown, Start, Ende, Seitenwechsel und Workout-Abschluss.</small></span></label>
+              <label className="mobility-timer-toggle"><input type="checkbox" checked={audioEnabled} onChange={(event) => updateMobility({ audioEnabled: event.target.checked })} /><span><b>Signaltöne im Workout</b><small>Deutlich hörbarer 3–2–1-Countdown vor Start und Ende sowie eigene Töne für Seitenwechsel und Workout-Abschluss.</small></span></label>
               <label className="mobility-timer-toggle"><input type="checkbox" checked={voiceCues} disabled={!audioEnabled} onChange={(event) => updateMobility({ voiceCues: event.target.checked })} /><span><b>Seitenwechsel ansagen</b><small>Bei Seitstütz, Pallof Press, Sprunggelenkübungen und weiteren beidseitigen Übungen sagt EYM die nächste Seite an.</small></span></label>
-              <div className="mobility-audio-actions"><button type="button" onClick={async () => { await primeWorkoutAudio(); playWorkoutCue("switch"); if (voiceCues) speakWorkoutCue("Seite wechseln"); }}>Töne testen</button><span className="mobility-audio-status">Die Auswahl gilt nur für dein Nutzerprofil.</span></div>
+              <div className="mobility-audio-actions"><button type="button" onClick={() => playWorkoutAudioDemo()}>Countdown & Ende testen</button><span className="mobility-audio-status">Spielt 3–2–1, Start und Abschluss einmal vor. Die Seitenansage bleibt im Workout aktiv.</span></div>
               <p>Die gewählte Zeit ist reine Bewegungszeit. Vorbereitung und Wechsel kommen zusätzlich hinzu; die voraussichtliche Gesamtdauer siehst du oben. Die zuerst gewählte schwächere Seite erhält nicht automatisch mehr Belastung, sondern wird nur zuerst ausgeführt.</p>
             </details>
             {workout.missingPhysio.length > 0 && <div className="mobility-warning"><strong>Physioübung aktuell nicht im Workout:</strong> {workout.missingPhysio.map((item) => `${item.name} (${(item.equipment || item.equipmentAny || []).map(equipmentLabel).join(" oder ")})`).join(", ")}</div>}
