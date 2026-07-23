@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { Card, PageTitle } from "../components/UI";
 import { coachDashboard, hydration } from "../services/insights";
@@ -106,9 +107,11 @@ function nextSideLabel(weakSide) {
 
 export default function Coach() {
   const { state, setState } = useApp();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedTab = searchParams.get("tab");
+  const activeTab = coachTabs.some(([key]) => key === requestedTab) ? requestedTab : "today";
   const [selected, setSelected] = useState(null);
   const [selectedGuide, setSelectedGuide] = useState(null);
-  const [activeTab, setActiveTab] = useState("today");
   const [runner, setRunner] = useState(null);
   const [workoutShuffleOffset, setWorkoutShuffleOffset] = useState(0);
   const [libraryFocus, setLibraryFocus] = useState("all");
@@ -184,6 +187,10 @@ export default function Coach() {
       return haystack.includes(query);
     });
   }, [libraryFocus, librarySearch]);
+
+  function selectCoachTab(key) {
+    setSearchParams(key === "today" ? {} : { tab: key }, { replace: true });
+  }
 
   function updateMobility(patch) {
     setState((current) => ({
@@ -375,7 +382,7 @@ export default function Coach() {
     <>
       <PageTitle eyebrow="Coach Engine" title="Dein Coach" />
       <div className="section-tabs coach-tabs" role="tablist" aria-label="Coach-Bereiche">
-        {coachTabs.map(([key, label]) => <button type="button" className={activeTab === key ? "selected" : ""} onClick={() => setActiveTab(key)} key={key}>{label}</button>)}
+        {coachTabs.map(([key, label]) => <button type="button" className={activeTab === key ? "selected" : ""} onClick={() => selectCoachTab(key)} key={key}>{label}</button>)}
       </div>
 
       {activeTab === "today" && (
@@ -432,7 +439,7 @@ export default function Coach() {
               <div><p className="eyebrow">Nächster spezifischer Block</p><h3>{outlook.loop.title}</h3><p>{outlook.loop.text}</p></div>
               <p className="coach-readiness-copy">{outlook.readiness.text} {outlook.expectedHard ? `${outlook.expectedHard} harte Schlüsseleinheit${outlook.expectedHard === 1 ? " wurde" : "en wurden"} als erwarteter Trainingsreiz erkannt.` : ""}</p>
             </div>
-            {outlook.roadmap.length > 0 && <div className="coach-roadmap">{outlook.roadmap.map((step) => <article key={`${step.label}-${step.title}`}><span>{step.label}</span><h3>{step.title}</h3><p>{step.text}</p></article>)}</div>}
+            {outlook.roadmap.length > 0 && <div className="coach-roadmap">{outlook.roadmap.map((step) => <article className={step.current ? "current" : ""} key={`${step.label}-${step.title}`}><span>{step.label}</span><h3>{step.title}</h3><p>{step.text}</p></article>)}</div>}
             {outlook.mainTarget && outlook.nextTarget && outlook.mainTarget.id !== outlook.nextTarget.id && <p className="coach-main-target-note"><strong>Danach:</strong> {outlook.mainTarget.name} in {outlook.mainDays} Tagen.</p>}
           </Card>
           <SignalCard eyebrow="Schlüsseleinheiten" signal={analysis.keySessions} />

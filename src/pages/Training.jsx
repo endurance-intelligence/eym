@@ -319,8 +319,8 @@ export default function Training() {
                                     <em>{kind ? (state.reviews[activity.id] ? "✓ Review" : month.key === currentMonth ? "Review öffnen" : "Review optional") : "Kein Review nötig"}</em>
                                   </button>
                                   <div className="activity-row-actions">
-                                    <button className="activity-edit-button" onClick={() => setEditingName(activity)} aria-label={`${activity.name} umbenennen`} title="Trainingsname ändern">✎</button>
-                                    {activity.isActivityGroup && !state.reviews[activity.id] && <button className="activity-edit-button activity-unmerge-button" onClick={() => dissolveGroup(activity)} aria-label="Zusammenfassung aufheben" title="Zusammenfassung aufheben">↩</button>}
+                                    <button className="activity-edit-button" onClick={() => setEditingName(activity)} aria-label={`${activity.name} umbenennen`} title="Trainingsname ändern"><span aria-hidden="true">✎</span><b>Name ändern</b></button>
+                                    {activity.isActivityGroup && !state.reviews[activity.id] && <button className="activity-edit-button activity-unmerge-button" onClick={() => dissolveGroup(activity)} aria-label="Zusammenfassung aufheben" title="Zusammenfassung aufheben"><span aria-hidden="true">↩</span><b>Aufheben</b></button>}
                                   </div>
                                 </article>
                               );

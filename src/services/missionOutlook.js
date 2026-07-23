@@ -1,4 +1,4 @@
-import { activityTimestamp, isRunningActivity } from "./activityUtils";
+import { activityTimestamp, isRunningActivity } from "./activityUtils.js";
 
 const DAY_MS = 86400000;
 
@@ -170,20 +170,24 @@ export function buildMissionOutlook(activities = [], reviews = {}, mission = {},
 
   const roadmap = [];
   if (nextTarget && range.kind === "backyard") {
+    const currentPhase = nextDays <= 21 ? "taper" : nextDays <= 56 ? "specific" : "base";
     roadmap.push({
-      label: nextDays > 56 ? "Jetzt" : "Aktuelle Phase",
+      label: currentPhase === "base" ? "Aktuelle Phase" : "Grundlage",
       title: "Basis stabilisieren",
       text: "Wochenumfang kontrolliert entwickeln, Höhenmeter und ORC-Qualität verarbeiten, Longrun nicht jede Woche maximal ausreizen.",
+      current: currentPhase === "base",
     });
     roadmap.push({
-      label: nextDays > 35 ? "In den nächsten Wochen" : "Jetzt",
+      label: currentPhase === "specific" ? "Aktuelle Phase" : "In den nächsten Wochen",
       title: "Backyard-spezifische Loops",
       text: "Alle 1–2 Belastungswochen ein Loop-Block mit Pace-, Pausen-, Geh- und Fuel-Routine. Der Umfang wächst nur bei stabilen Reviews.",
+      current: currentPhase === "specific",
     });
     roadmap.push({
-      label: "Letzte 14–21 Tage",
+      label: currentPhase === "taper" ? "Aktuelle Phase" : "Letzte 14–21 Tage",
       title: "Taper & Frische",
       text: "Umfang deutlich reduzieren, Rhythmus behalten und keine 60–80-km-Generalprobe mehr erzwingen.",
+      current: currentPhase === "taper",
     });
   }
   if (mainTarget && (!nextTarget || mainTarget.id !== nextTarget.id)) {
@@ -191,6 +195,7 @@ export function buildMissionOutlook(activities = [], reviews = {}, mission = {},
       label: "Nach dem Backyard",
       title: `Übergang zu ${mainTarget.name}`,
       text: "Der Backyard ist ein wichtiger Ultra-Reiz. Danach folgen reviewgesteuerte Erholung und anschließend Fulda-spezifische 6-km-Loop-Blöcke.",
+      current: false,
     });
   }
 

@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **3.2.2**
+Current app version: **3.2.3**
 
 **Eat your miles.**
 
@@ -169,7 +169,7 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 
 - `OPEN_FOOD_FACTS_USER_ID`
 - `OPEN_FOOD_FACTS_PASSWORD`
-- `OPEN_FOOD_FACTS_USER_AGENT` (recommended format: `EnduranceIntelligence/3.2.2 (contact@example.com)`)
+- `OPEN_FOOD_FACTS_USER_AGENT` (recommended format: `EnduranceIntelligence/3.2.3 (contact@example.com)`)
 - `OPEN_FOOD_FACTS_APP_SALT` (a random secret used to derive a stable pseudonymous app UUID per EYM user)
 
 ## Personal ambient themes (v2.16)
@@ -263,6 +263,14 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 - The selected duration now represents active movement time. Preparation and equipment changes no longer reduce the requested training volume.
 - EYM displays the expected total session duration separately, including preparation and transitions.
 - Completed workouts continue to store their actual total duration so the training history remains honest.
+
+## Navigation and training clarity v3.2.3
+
+- Briefing summary cards link directly to Mission, Coach development and Training; the daily and weekly summaries link to the planner.
+- Coach development marks exactly one current mission phase with a stronger visual treatment.
+- The planner uses stored activity groups, so an ORC warm-up, main set and cool-down combined in Training appear as one matched workout.
+- Planner surfaces now follow the selected user theme. Completed items remain readable with a check mark instead of strikethrough text.
+- Training rows switch to a single-column touch layout on phones with clear Review and Name-change controls.
 
 Before deploying the application, apply `supabase/migrations/20260722120000_athlete_images.sql`. Afterwards run:
 

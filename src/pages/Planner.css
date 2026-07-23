@@ -226,3 +226,27 @@
   .planner-cancel-fields .setup-note{grid-column:auto}
   .planner-adjustment-units{max-height:300px;padding-right:4px}
 }
+
+/* v3.2.3 – planner follows the selected theme and keeps completed rows readable */
+.planner-week-nav span,.planner-summary span,.planner-workout-main p,.planner-workout-main small,.planner-empty,.planner-day header small{color:var(--muted)}
+.planner-status{border-color:var(--accent-border-strong);background:var(--accent-surface)}
+.planner-summary>div,.planner-summary>button{border-color:var(--border);background:var(--bg-card-alt)}
+.planner-day{border-color:var(--border);background:linear-gradient(145deg,var(--bg-card),var(--bg-card-alt))}
+.planner-day>header{border-color:var(--border);background:var(--bg-sidebar)}
+.planner-day header span,.planner-workout-main span{color:var(--accent)}
+.planner-workout+.planner-workout{border-color:var(--border)}
+.planner-workout.completed{opacity:1;background:color-mix(in srgb,var(--accent) 4%,transparent)}
+.planner-workout.completed h3{text-decoration:none;color:var(--text)}
+.planner-actual{border-color:var(--accent-border-strong);background:var(--accent-surface)}
+.planner-reasons button,.planner-choice-actions button,.planner-actions button{border-color:var(--border);background:var(--bg-sidebar)}
+.planner-reasons button.selected,.planner-day-picker button.selected,.planner-live-buttons button.selected,.planner-adjustment-actions button.selected{border-color:var(--accent);background:var(--accent);color:var(--accent-text)}
+.planner-modal select,.planner-modal input,.planner-modal textarea{border-color:var(--border);background:var(--bg-input);color:var(--text)}
+.planner-fixed-appointments,.planner-live-appointment-grid section,.planner-adjustment-layout>section,.planner-adjustment-day,.planner-adjustment-unit{border-color:var(--border);background:var(--bg-sidebar)}
+.planner-live-appointments,.planner-commitments-disclosure{border-color:var(--accent-border-strong);background:linear-gradient(145deg,var(--accent-surface),var(--bg-card-alt))}
+.planner-commitments-disclosure>summary>b{color:var(--accent-bright)}
+.planner-live-appointment-grid section span,.planner-adjustment-day-heading{color:var(--accent-bright)}
+.planner-adjustment-unit:has(input:checked){border-color:var(--accent);background:var(--accent-surface)}
+.planner-adjustment-preview{border-color:var(--accent-border-strong);background:var(--accent-surface)}
+.planner-adjustment-preview-list article{border-color:var(--border);background:var(--bg-input)}
+.planner-adjustment-preview-list article>b{color:var(--accent)}
+.planner-adjustment-scope-note{background:var(--accent-surface-strong);color:var(--accent-bright)}

@@ -1,4 +1,4 @@
-import { activityTimestamp, reviewKind } from "./activityUtils";
+import { activityTimestamp, reviewKind } from "./activityUtils.js";
 
 function number(value) {
   const parsed = Number(value);

@@ -272,7 +272,8 @@ export default function Planner() {
   const weekStart = useMemo(() => startOfWeek(new Date(), offsetWeeks), [offsetWeeks]);
   const weekEnd = dateForDay(weekStart, 6);
   const canonicalActivities = useMemo(() => preferredActivities(state.activities, { hideStrava: Boolean(state.intervals?.connected) }), [state.activities, state.intervals?.connected]);
-  const activityById = useMemo(() => new Map(canonicalActivities.map((activity) => [activity.id, activity])), [canonicalActivities]);
+  const groupedActivities = useMemo(() => activitiesWithGroups(canonicalActivities, state.activityGroups), [canonicalActivities, state.activityGroups]);
+  const activityById = useMemo(() => new Map([...canonicalActivities, ...groupedActivities].map((activity) => [activity.id, activity])), [canonicalActivities, groupedActivities]);
   const weekPlan = useMemo(() => state.plan.filter((item) => {
     const value = item.date || "";
     return value >= isoDate(weekStart) && value <= isoDate(weekEnd) && !item.archived;
@@ -286,10 +287,10 @@ export default function Planner() {
   const orcRunMode = liveAppointmentMode(orcRunSlot, "orcRun");
   const saturdaySlot = weekPlan.find((item) => isSaturdayPlannerSlot(item, saturdayDate)) || null;
   const saturdayPlanMode = saturdayModeOf(saturdaySlot);
-  const weekActivities = useMemo(() => canonicalActivities.filter((activity) => {
+  const weekActivities = useMemo(() => groupedActivities.filter((activity) => {
     const value = activityDate(activity);
     return value >= isoDate(weekStart) && value <= isoDate(weekEnd);
-  }).sort((a, b) => String(a.startDateLocal || a.date).localeCompare(String(b.startDateLocal || b.date))), [canonicalActivities, weekStart, weekEnd]);
+  }).sort((a, b) => String(a.startDateLocal || a.date).localeCompare(String(b.startDateLocal || b.date))), [groupedActivities, weekStart, weekEnd]);
   const matches = useMemo(() => findMatches(weekPlan, weekActivities), [weekPlan, weekActivities]);
   const previousWeekClosure = useMemo(() => {
     if (offsetWeeks !== 1) return null;
