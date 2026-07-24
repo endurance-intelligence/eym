@@ -128,7 +128,7 @@ function nextLoopPrescription(target, daysLeft, metrics) {
     title: `${loops} × ${String(range.loopKm).replace(".", ",")} km · ${String(km).replace(".", ",")} km`,
     text: range.kind === "backyard"
       ? "Als kontrollierter Loop-Block mit Geh-/Verpflegungsroutine. Nicht die komplette Zielstrecke im Training erzwingen."
-      : "Als Fulda-spezifischer Loop-Block mit gleichmäßiger Pace, kurzen Stopps und vollständigem Fuel-Test.",
+      : `Als ${target?.name ? `${target.name}-spezifischer ` : ""}Loop-Block mit gleichmäßiger Pace, kurzen Stopps und vollständigem Fuel-Test.`,
   };
 }
 
@@ -169,18 +169,20 @@ export function buildMissionOutlook(activities = [], reviews = {}, mission = {},
   const loop = nextLoopPrescription(nextTarget, nextDays, { averageKm, peakKm, activeWeeks, longestRun, keySessions });
 
   const roadmap = [];
-  if (nextTarget && range.kind === "backyard") {
+  if (nextTarget && (range.kind === "backyard" || Number(nextTarget.targetKm || 0) >= 50)) {
     const currentPhase = nextDays <= 21 ? "taper" : nextDays <= 56 ? "specific" : "base";
     roadmap.push({
       label: currentPhase === "base" ? "Aktuelle Phase" : "Grundlage",
       title: "Basis stabilisieren",
-      text: "Wochenumfang kontrolliert entwickeln, Höhenmeter und ORC-Qualität verarbeiten, Longrun nicht jede Woche maximal ausreizen.",
+      text: "Wochenumfang kontrolliert entwickeln, Qualitätseinheiten verarbeiten und den Longrun nicht jede Woche maximal ausreizen.",
       current: currentPhase === "base",
     });
     roadmap.push({
       label: currentPhase === "specific" ? "Aktuelle Phase" : "In den nächsten Wochen",
-      title: "Backyard-spezifische Loops",
-      text: "Alle 1–2 Belastungswochen ein Loop-Block mit Pace-, Pausen-, Geh- und Fuel-Routine. Der Umfang wächst nur bei stabilen Reviews.",
+      title: range.loopKm ? `${nextTarget.name}-spezifische Loops` : `${nextTarget.name}-spezifischer Aufbau`,
+      text: range.loopKm
+        ? "Alle 1–2 Belastungswochen ein Loop-Block mit Pace-, Pausen-, Geh- und Fuel-Routine. Der Umfang wächst nur bei stabilen Reviews."
+        : "Lange Einheiten, mögliche Back-to-Back-Blöcke und die Wettkampfverpflegung werden schrittweise spezifischer. Der Umfang wächst nur bei stabilen Reviews.",
       current: currentPhase === "specific",
     });
     roadmap.push({
@@ -192,9 +194,9 @@ export function buildMissionOutlook(activities = [], reviews = {}, mission = {},
   }
   if (mainTarget && (!nextTarget || mainTarget.id !== nextTarget.id)) {
     roadmap.push({
-      label: "Nach dem Backyard",
+      label: `Nach ${nextTarget?.name || "dem Zwischenziel"}`,
       title: `Übergang zu ${mainTarget.name}`,
-      text: "Der Backyard ist ein wichtiger Ultra-Reiz. Danach folgen reviewgesteuerte Erholung und anschließend Fulda-spezifische 6-km-Loop-Blöcke.",
+      text: `${nextTarget?.name || "Das Zwischenziel"} ist ein wichtiger Trainingsreiz. Danach folgen reviewgesteuerte Erholung und anschließend ein spezifischer Aufbau für ${mainTarget.name}.`,
       current: false,
     });
   }

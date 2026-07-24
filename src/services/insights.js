@@ -2,7 +2,7 @@ import {
   activityTimestamp,
   isRoadCyclingActivity,
   isRunningActivity,
-} from "./activityUtils";
+} from "./activityUtils.js";
 
 function durationHours(activity) {
   const seconds = Number(activity?.durationSeconds || 0);

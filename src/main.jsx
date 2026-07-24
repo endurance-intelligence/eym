@@ -11,3 +11,10 @@ ReactDOM.createRoot(document.getElementById("root")).render(
     </AppProvider>
   </React.StrictMode>,
 );
+
+if ("serviceWorker" in navigator && import.meta.env.PROD) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`, { scope: import.meta.env.BASE_URL })
+      .catch((error) => console.warn("Offline-Unterstützung konnte nicht aktiviert werden.", error));
+  });
+}

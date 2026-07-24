@@ -17,7 +17,8 @@ import { preferredActivities } from "../services/activityUtils";
 import { activitiesWithGroups } from "../services/activityGroups";
 import { publishIntervalsWeek } from "../services/intervals";
 import { DEFAULT_REPLACEMENT_SPORTS, SPORT_OPTIONS, sortCommitments, sportLabel } from "../services/configuration";
-import { athleteBaseline, currentWeekAssessment, goalRequirements } from "../services/scienceCoach";
+import { athleteBaseline, goalRequirements } from "../services/scienceCoach";
+import { buildCoachState } from "../services/coachState";
 import "./Planner.css";
 
 const dayFormatter = new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" });
@@ -42,7 +43,6 @@ function adjustmentReplacementOptions(planner = {}) {
   const options = [];
   if (allowed.has("running")) {
     options.push({ key: "preset:easy-run", label: "Alternativer lockerer Lauf", sport: "running", type: "Easy Run", preserveDistance: true });
-    options.push({ key: "preset:orc-track", label: "ORC Track", sport: "running", type: "ORC Track", preserveDistance: true });
   }
   SPORT_OPTIONS.filter((entry) => allowed.has(entry.value) && entry.value !== "running" && entry.value !== "other").forEach((entry) => {
     options.push({ key: `sport:${entry.value}`, label: entry.label, sport: entry.value, type: replacementWorkoutType(entry.value), preserveDistance: false });
@@ -317,13 +317,20 @@ export default function Planner() {
     return state.plan.some((item) => !item.archived && item.date >= isoDate(previousStart) && item.date <= isoDate(previousEnd));
   }, [state.plan, offsetWeeks]);
   const config = useMemo(() => state.planner || {}, [state.planner]);
-  const scienceAssessment = useMemo(() => currentWeekAssessment(state), [state]);
+  const unifiedCoach = useMemo(() => buildCoachState(state), [state]);
+  const scienceAssessment = unifiedCoach.week;
   const baseline = useMemo(() => athleteBaseline(state), [state]);
   const goalProfile = useMemo(() => goalRequirements(state), [state]);
   const recurringCommitments = sortCommitments(
     Array.isArray(config.recurringCommitments)
       ? config.recurringCommitments.filter((entry) => entry.enabled !== false)
       : [],
+  );
+  const hasLegacyPersonalSlots = Boolean(
+    config.fixedAppointments?.football
+    || config.fixedAppointments?.orcRun
+    || !["", "off"].includes(config.fixedAppointments?.saturdayMode || "off")
+    || weekPlan.some((item) => ["football", "orcRun", "saturday"].includes(item.fixedSlot)),
   );
   const replacementOptions = useMemo(() => adjustmentReplacementOptions(config), [config]);
   const reasonCounts = useMemo(() => recentReasonCounts(state.plan, weekStart), [state.plan, weekStart]);
@@ -969,7 +976,7 @@ export default function Planner() {
           </details>
         </div>
       </PageTitle>
-      {offsetWeeks === 0 && scienceAssessment.level !== "ok" && <Card className={`wide planner-science-card ${scienceAssessment.level}`}><div className="planner-science-heading"><div><p className="eyebrow">Science Coach</p><h2>{scienceAssessment.level === "adjust" ? "Diese Woche bietet Anpassungspotenzial" : "Belastung beobachten"}</h2></div><span>EYM schlägt vor · du entscheidest</span></div><p>{scienceAssessment.reasons.join(" · ")}.</p><div className="planner-science-context"><span>Gewöhnung: {baseline.runDays.toFixed(1)} Lauftage/Woche · {baseline.weeklyKm.toFixed(0)} km/Woche</span><span>Zielprofil: {goalProfile.focus.join(" · ")}</span><span>Projizierter Load: {scienceAssessment.projected} · jüngster Rahmen: {scienceAssessment.average || "noch offen"}</span></div>{scienceAssessment.candidates.length > 0 && <div className="planner-science-suggestions">{scienceAssessment.candidates.map((item) => <article key={item.id}><b>{item.title}</b><span>{item.date}</span><p>{item.suggestion}</p><button type="button" onClick={() => openAdjustment(item.id, "replace")}>Diese Einheit anpassen</button></article>)}</div>}<small>Kein Vorschlag wird automatisch übernommen. Auch spezifische Belastungsblöcke und Back-to-Back-Einheiten können bewusst richtig sein.</small></Card>}
+      {offsetWeeks === 0 && ["adjust", "watch"].includes(unifiedCoach.level) && <Card className={`wide planner-science-card ${unifiedCoach.level}`}><div className="planner-science-heading"><div><p className="eyebrow">Gemeinsame Coach-Bewertung</p><h2>{unifiedCoach.recommendation.title}</h2></div><span>EYM schlägt vor · du entscheidest</span></div><p>{unifiedCoach.recommendation.text}</p><div className="planner-science-context"><span>Gewöhnung: {baseline.runDays.toFixed(1)} Lauftage/Woche · {baseline.weeklyKm.toFixed(0)} km/Woche</span><span>Zielprofil: {goalProfile.focus.join(" · ")}</span><span>Projizierter Load: {scienceAssessment.projected} · jüngster Rahmen: {scienceAssessment.average || "noch offen"}</span></div>{scienceAssessment.candidates.length > 0 && <div className="planner-science-suggestions">{scienceAssessment.candidates.map((item) => <article key={item.id}><b>{item.title}</b><span>{item.date}</span><p>{item.suggestion}</p><button type="button" onClick={() => openAdjustment(item.id, "replace")}>Diese Einheit anpassen</button></article>)}</div>}<small>{unifiedCoach.protectionNote} Auch spezifische Belastungsblöcke und Back-to-Back-Einheiten können bewusst richtig sein.</small></Card>}
 
       <div className="planner-week-nav">
         <button disabled={offsetWeeks === 0 && !previousWeekHasPlan} title={offsetWeeks === 0 && !previousWeekHasPlan ? "Keine ältere geplante Woche vorhanden" : "Vorherige Woche"} onClick={() => { setOffsetWeeks((value) => value - 1); setForecast([]); setStatus(""); }}>←</button>
@@ -1007,7 +1014,7 @@ export default function Planner() {
         </Card>
       ) : <>
 
-      {offsetWeeks >= 0 && (recurringCommitments.length ? (
+      {offsetWeeks >= 0 && recurringCommitments.length > 0 && (
         <details className="card wide planner-commitments-disclosure planner-generic-appointments">
           <summary>
             <div><p className="eyebrow">Feste Termine dieser Woche</p><h2>{recurringCommitments.length} Termine</h2><span>{recurringCommitments.map((item) => `${item.weekday.slice(0, 2)} · ${item.name}`).join(" · ")}</span></div>
@@ -1031,7 +1038,9 @@ export default function Planner() {
             {publishedWeek && planChangedAfterPublish && <small className="planner-saturday-dirty">Fixtermin geändert – anschließend „Garmin aktualisieren“ drücken.</small>}
           </div>
         </details>
-      ) : (
+      )}
+
+      {offsetWeeks >= 0 && !recurringCommitments.length && hasLegacyPersonalSlots && (
         <Card className="wide planner-live-appointments">
           <div className="planner-live-appointments-copy">
             <p className="eyebrow">Fixtermine anpassen</p>
@@ -1050,9 +1059,9 @@ export default function Planner() {
           </div>
           {publishedWeek && planChangedAfterPublish && <small className="planner-saturday-dirty">Fixtermin geändert – anschließend „Garmin aktualisieren“ drücken.</small>}
         </Card>
-      ))}
+      )}
 
-      {offsetWeeks >= 0 && !recurringCommitments.length && (
+      {offsetWeeks >= 0 && !recurringCommitments.length && hasLegacyPersonalSlots && (
         <Card className="wide planner-saturday-control">
           <div>
             <p className="eyebrow">Samstagsentscheidung</p>

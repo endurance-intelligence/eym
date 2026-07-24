@@ -1,48 +1,14 @@
-import { DEFAULT_APPEARANCE } from "../services/theme";
+import { DEFAULT_APPEARANCE } from "../services/theme.js";
 
 export const mission = {
-  id: "hbu-2026",
-  name: "Heartbeat Ultra Fulda",
-  date: "2026-11-21",
-  location: "Sportpark Johannisau, Fulda, Deutschland",
-  targetKm: 112,
-  preparationStartDate: "2026-04-27",
-  milestone: {
-    id: "backyard-2026",
-    name: "Backyard Ultra",
-    date: "2026-09-26",
-    location: "",
-  },
-  milestones: [
-    {
-      id: "backyard-2026",
-      name: "Backyard Ultra",
-      date: "2026-09-26",
-      location: "",
-      targetMinKm: 60,
-      targetMaxKm: 80,
-      isMainTarget: false,
-      priority: "B",
-      goalType: "distance",
-      elevationGain: 0,
-      surface: "mixed",
-      archived: false,
-    },
-    {
-      id: "hbu-2026",
-      name: "Heartbeat Ultra Fulda",
-      date: "2026-11-21",
-      location: "Sportpark Johannisau, Fulda, Deutschland",
-      targetKm: 112,
-      preparationStartDate: "2026-04-27",
-      isMainTarget: true,
-      priority: "A",
-      goalType: "distance",
-      elevationGain: 0,
-      surface: "mixed",
-      archived: false,
-    },
-  ],
+  id: "",
+  name: "",
+  date: "",
+  location: "",
+  targetKm: 0,
+  preparationStartDate: "",
+  milestone: null,
+  milestones: [],
 };
 
 export const defaultState = {
@@ -53,8 +19,8 @@ export const defaultState = {
     heightCm: "",
     weightKg: "",
     units: "metric",
-    experienceLevel: "advanced",
-    selfReportedRunsPerWeek: 3,
+    experienceLevel: "beginner",
+    selfReportedRunsPerWeek: 0,
     coachProgressionEnabled: true,
     progressionAcceptedAt: null,
   },
@@ -66,6 +32,7 @@ export const defaultState = {
   fuel: [],
   fuelCatalogExclusions: [],
   healthCheckins: [],
+  coachRecommendationHistory: [],
   mobilityCoach: {
     durationMinutes: 25,
     condition: "normal",

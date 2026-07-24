@@ -1,6 +1,6 @@
-import { activityDate, activityTimestamp, isRunningActivity, preferredActivities, sportFamily } from "./activityUtils";
-import { activityLoad, goalRequirements } from "./scienceCoach";
-import { athleteProfileAssessment } from "./athleteProfile";
+import { activityDate, activityTimestamp, isRunningActivity, preferredActivities, sportFamily } from "./activityUtils.js";
+import { activityLoad, goalRequirements } from "./scienceCoach.js";
+import { athleteProfileAssessment } from "./athleteProfile.js";
 
 const DAY = 86400000;
 

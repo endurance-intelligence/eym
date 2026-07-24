@@ -1,4 +1,4 @@
-import { supabase, supabaseConfigured } from "./supabase";
+import { supabase, supabaseConfigured } from "./supabase.js";
 
 async function functionError(error, fallback) {
   let detail = error?.message || fallback;

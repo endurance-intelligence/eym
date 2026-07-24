@@ -10,6 +10,7 @@ export const workoutTypes = [
   "Schwellenlauf",
   "Intervalle",
   "Backyard Training",
+  "Loop-Training",
   "ORC Run",
   "ORC Track",
   "Samstagsoption",
@@ -122,23 +123,22 @@ function loopTrainingPrescription(goal, daysLeft, longRun, cycle, recoveryWeek) 
   const availableLoops = Math.max(2, Math.floor(longRun / loopKm));
   const loops = Math.max(2, Math.min(desiredLoops, availableLoops, goal.goalKind === "backyard" ? 6 : 7));
   const distance = Math.round(loops * loopKm * 10) / 10;
+  const loopLabel = String(loopKm).replace(".", ",");
   return {
     loops,
     loopKm,
     distance,
-    title: goal.goalKind === "backyard"
-      ? `${loops} × 6,7 km Backyard-Loops`
-      : `${loops} × 6 km Fulda-Loops`,
+    title: `${loops} × ${loopLabel} km${goal?.name ? ` · ${goal.name}` : " Loop-Training"}`,
     notes: goal.goalKind === "backyard"
       ? "Spezifischer Loop-Block: jede Runde kontrolliert, Pausen-, Geh- und Fuel-Routine testen. Keine komplette 60–80-km-Generalprobe im Training erzwingen."
-      : "Fulda-spezifischer Loop-Block: gleichmäßige Pace, kurze Stopps und vollständigen Fuel-/Materialablauf testen.",
+      : `Spezifischer Loop-Block für ${goal?.name || "das Hauptziel"}: gleichmäßige Pace, kurze Stopps und den vollständigen Fuel-/Materialablauf testen.`,
   };
 }
 
 function trainingPhase(daysLeft) {
   if (daysLeft <= 14) return { key: "taper", label: "Taper", factor: 0.62, longShare: 0.24 };
   if (daysLeft <= 35) return { key: "peak", label: "Peak & Absicherung", factor: 0.94, longShare: 0.31 };
-  if (daysLeft <= 84) return { key: "specific", label: "Ultra-spezifisch", factor: 1.03, longShare: 0.36 };
+  if (daysLeft <= 84) return { key: "specific", label: "Zielspezifisch", factor: 1.03, longShare: 0.36 };
   if (daysLeft <= 140) return { key: "build", label: "Aufbau", factor: 1.02, longShare: 0.33 };
   return { key: "base", label: "Grundlage", factor: 1, longShare: 0.3 };
 }
@@ -411,12 +411,12 @@ function applyExtraOrcTrack(plan, weekStart, dayName, config) {
   const dayIndex = DAY_INDEX[dayName];
   if (dayIndex === undefined) return;
   const date = isoDate(dateForDay(weekStart, dayIndex));
-  const replaceableTypes = new Set(["Easy Run", "Schwellenlauf", "Intervalle", "Laufband", "Backyard Training", "Long Run"]);
+  const replaceableTypes = new Set(["Easy Run", "Schwellenlauf", "Intervalle", "Laufband", "Backyard Training", "Loop-Training", "Long Run"]);
   const candidates = plan
     .map((entry, index) => ({ entry, index }))
     .filter(({ entry }) => entry.date === date && replaceableTypes.has(entry.type))
     .sort((left, right) => {
-      const priority = (entry) => ["Easy Run", "Schwellenlauf", "Intervalle", "Laufband", "Backyard Training", "Long Run"].indexOf(entry.type);
+      const priority = (entry) => ["Easy Run", "Schwellenlauf", "Intervalle", "Laufband", "Backyard Training", "Loop-Training", "Long Run"].indexOf(entry.type);
       return priority(left.entry) - priority(right.entry);
     });
   const target = candidates[0];
@@ -585,7 +585,7 @@ export function generateWeekPlan({
   reviews = {},
   today = new Date(),
 }) {
-  const weekStart = startOfWeek(new Date(), offsetWeeks);
+  const weekStart = startOfWeek(today, offsetWeeks);
   const nextWeekStart = startOfWeek(today, 1);
   const historyCutoff = weekStart > nextWeekStart ? nextWeekStart : weekStart;
   const history = runningWeeks(activities, historyCutoff, 8);
@@ -728,7 +728,7 @@ export function generateWeekPlan({
     plan.push(item(weekStart, 6, {
       time: sundayWeather?.tooHot ? "07:00" : "09:00",
       title: loopPrescription?.title || `${longRun} km Longrun`,
-      type: sundayWeather?.indoor ? "Laufband" : loopPrescription ? "Backyard Training" : phase.key === "specific" && saturdayKm > 0 ? "Backyard Training" : "Long Run",
+      type: sundayWeather?.indoor ? "Laufband" : loopPrescription ? "Loop-Training" : "Long Run",
       distance: plannedLongDistance,
       notes: sundayWeather?.indoor
         ? `Wetteranpassung: ${sundayWeather.tooHot ? "früh starten oder Laufband" : "bei Sturm/Gewitter nach innen wechseln"}. Fuel und Trinken testen.`
@@ -770,7 +770,7 @@ export function generateWeekPlan({
 
   if (config.checkin?.illness === "recovering") {
     plan = plan
-      .filter((entry) => !["Fußball", "ORC Track", "Samstagsoption", "Backyard Training", "Long Run"].includes(entry.type))
+      .filter((entry) => !["Fußball", "ORC Track", "Samstagsoption", "Backyard Training", "Loop-Training", "Long Run"].includes(entry.type))
       .map((entry) => {
         if (["ORC Run", "Easy Run", "Laufband", "Schwellenlauf"].includes(entry.type)) {
           const distance = Math.min(6, Math.max(3, Number(entry.distance || 4)));

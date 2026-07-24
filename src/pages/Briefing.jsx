@@ -1,12 +1,13 @@
 import { Link } from "react-router-dom";
+import { useMemo } from "react";
 import { useApp } from "../context/AppContext";
 import { Card, PageTitle } from "../components/UI";
-import { recovery, hydration } from "../services/insights";
+import { hydration } from "../services/insights";
 import { daysUntil, pace, hours } from "../utils/format";
 import WeatherCard from "../components/WeatherCard";
 import { activityTimestamp, isRunningActivity, preferredActivities } from "../services/activityUtils";
 import { activitiesWithGroups } from "../services/activityGroups";
-import { currentWeekAssessment, goalRequirements } from "../services/scienceCoach";
+import { buildCoachState } from "../services/coachState";
 
 const dayLabel = new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" });
 const todayLabel = new Intl.DateTimeFormat("de-DE", { weekday: "long", day: "2-digit", month: "long" });
@@ -221,7 +222,10 @@ export default function Briefing() {
   const runningActivities = activities.filter(isRunningActivity);
   const latestActivity = runningActivities[0];
   const latestReview = latestActivity && state.reviews[latestActivity.id];
-  const recoveryState = recovery(state.reviews, runningActivities);
+  const coach = useMemo(() => buildCoachState(state), [state]);
+  const recoveryState = coach.recovery;
+  const missionTarget = (state.mission?.milestones || []).find((item) => item.isMainTarget && !item.archived)
+    || (state.mission?.name && state.mission?.date ? state.mission : null);
   const hydrationState = latestActivity && hydration(latestActivity, latestReview);
   const weekStart = startOfCurrentWeek();
   const weekDistance = runningActivities
@@ -232,8 +236,6 @@ export default function Briefing() {
   const today = todayOverview(state.plan, activities);
   const upcoming = nextDayOverview(state.plan);
   const copy = briefingLanguage();
-  const weekAssessment = currentWeekAssessment(state);
-  const goalProfile = goalRequirements(state);
   const name = displayName(state, session);
 
   const nextEvent = (state.mission.milestones || [])
@@ -270,16 +272,16 @@ export default function Briefing() {
         </Card>
 
 
-        {weekAssessment.level !== "ok" && <Card className={`wide science-coach-alert ${weekAssessment.level}`}><div><p className="eyebrow">Coach · Wochenbelastung</p><h2>{weekAssessment.level === "adjust" ? "Anpassung könnte sinnvoll sein" : "Belastung im Blick behalten"}</h2><p>{weekAssessment.reasons.join(" · ")}.</p><small>Das ist ein Vorschlag, keine automatische Änderung. Dein Ziel „{goalProfile.target?.name || state.mission.name}“ und deine individuelle Belastungsgewöhnung bleiben die Grundlage.</small></div><Link className="button-link" to="/planner">Vorschläge im Wochenplan prüfen</Link></Card>}
+        {["adjust", "watch"].includes(coach.level) && <Card className={`wide science-coach-alert ${coach.level}`}><div><p className="eyebrow">Coach · gemeinsame Bewertung</p><h2>{coach.recommendation.title}</h2><p>{coach.recommendation.text}</p><small>{coach.protectionNote}</small></div><Link className="button-link" to="/planner">Vorschläge im Wochenplan prüfen</Link></Card>}
 
         <div className="wide briefing-summary-grid">
           <Link className="briefing-card-link" to="/mission" aria-label="Mission öffnen">
             <Card className="briefing-compact-card briefing-mission-card">
               <span className="briefing-card-arrow" aria-hidden="true">→</span>
               <p className="eyebrow">Mission</p>
-              <h2>{state.mission.name}</h2>
+              <h2>{missionTarget?.name || "Hauptziel festlegen"}</h2>
               <div className="briefing-compact-metrics">
-                <span><b>{daysUntil(state.mission.date)}</b> Tage</span>
+                <span><b>{missionTarget?.date ? daysUntil(missionTarget.date) : "–"}</b> Tage</span>
                 <span><b>{weekDistance.toFixed(1)}</b> / {calculatedTarget || "–"} km</span>
               </div>
               {calculatedTarget > 0 && <div className="progress"><i style={{ width: `${Math.min(100, weekDistance / calculatedTarget * 100)}%` }} /></div>}
@@ -291,7 +293,7 @@ export default function Briefing() {
             <Card className="briefing-compact-card readiness-card">
               <span className="briefing-card-arrow" aria-hidden="true">→</span>
               <p className="eyebrow">Trainingsbereitschaft</p>
-              <h2 className={recoveryState.tone}>{recoveryState.label}</h2>
+              <h2 className={coach.tone}>{coach.label}</h2>
               {recoveryState.reviewed > 0 && <p className="briefing-compact-values">Beine {recoveryState.legs}/10 · Energie {recoveryState.energy}/10 · Belastung {recoveryState.rpe}/10</p>}
               <p className="briefing-compact-text">{recoveryState.text}</p>
             </Card>

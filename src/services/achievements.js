@@ -1,4 +1,4 @@
-import { activityDate, durationClock, isRunningActivity } from "./activityUtils";
+import { activityDate, durationClock, isRunningActivity } from "./activityUtils.js";
 
 const KNOWN_EVENTS = [
   { pattern: /baukastenlauf/i, title: "Baukastenlauf" },

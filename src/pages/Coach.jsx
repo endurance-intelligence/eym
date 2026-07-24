@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { Card, PageTitle } from "../components/UI";
-import { coachDashboard, hydration } from "../services/insights";
-import { buildMissionOutlook } from "../services/missionOutlook";
+import { hydration } from "../services/insights";
 import {
   activityDate,
   activityTimestamp,
@@ -17,7 +16,13 @@ import ExerciseGuide, { ExerciseGuideButton } from "../components/ExerciseGuide"
 import { activitiesWithGroups } from "../services/activityGroups";
 import { fmtDate } from "../utils/format";
 import { playWorkoutAudioDemo, playWorkoutCue, primeWorkoutAudio, speakWorkoutCue } from "../services/workoutAudio";
-import { athleteProfileAssessment } from "../services/athleteProfile";
+import { releaseScreenWakeLock, requestScreenWakeLock } from "../services/wakeLock";
+import {
+  buildCoachState,
+  recommendationFeedbackEntry,
+  recommendationOutcome,
+} from "../services/coachState";
+import { answerCoachQuestion, COACH_QUESTION_OPTIONS } from "../services/coachExplainer";
 import {
   buildMobilityWorkout,
   equipmentLabel,
@@ -159,8 +164,11 @@ export default function Coach() {
   const [focusEditorOpen, setFocusEditorOpen] = useState(false);
   const [sessionCoachOverride, setSessionCoachOverride] = useState(null);
   const [dismissedCoachSuggestionId, setDismissedCoachSuggestionId] = useState("");
+  const [wakeLockStatus, setWakeLockStatus] = useState("idle");
+  const [coachQuestionKey, setCoachQuestionKey] = useState("why");
   const previousRunnerRef = useRef(null);
   const cueKeyRef = useRef("");
+  const wakeLockRef = useRef(null);
   const now = useMemo(() => new Date(), []);
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   const canonicalActivities = useMemo(() => preferredActivities(state.activities), [state.activities]);
@@ -170,9 +178,13 @@ export default function Coach() {
     .sort((a, b) => activityTimestamp(b) - activityTimestamp(a)), [reviewActivities, currentMonth]);
   const openReviews = monthReviewable.filter((activity) => !state.reviews[activity.id]);
   const reviewed = monthReviewable.filter((activity) => state.reviews[activity.id]);
-  const analysis = useMemo(() => coachDashboard(reviewActivities, state.reviews, now), [reviewActivities, state.reviews, now]);
-  const athleteAssessment = athleteProfileAssessment(state, now);
-  const outlook = useMemo(() => buildMissionOutlook(reviewActivities, state.reviews, state.mission, now), [reviewActivities, state.reviews, state.mission, now]);
+  const unifiedCoach = useMemo(() => buildCoachState(state, now), [state, now]);
+  const analysis = unifiedCoach.dashboard;
+  const athleteAssessment = unifiedCoach.athlete;
+  const outlook = unifiedCoach.outlook;
+  const recommendationHistory = Array.isArray(state.coachRecommendationHistory) ? state.coachRecommendationHistory : [];
+  const currentRecommendationFeedback = recommendationHistory.find((entry) => entry.recommendationId === unifiedCoach.recommendation.id);
+  const coachAnswer = useMemo(() => answerCoachQuestion(unifiedCoach, coachQuestionKey), [unifiedCoach, coachQuestionKey]);
   const latestRunningActivity = useMemo(() => canonicalActivities
     .filter(isRunningActivity)
     .sort((left, right) => activityTimestamp(right) - activityTimestamp(left))[0], [canonicalActivities]);
@@ -254,6 +266,21 @@ export default function Coach() {
       ...current,
       mobilityCoach: { ...current.mobilityCoach, ...patch },
     }));
+  }
+
+  function saveRecommendationFeedback(status) {
+    const entry = recommendationFeedbackEntry(unifiedCoach.recommendation, status);
+    if (!entry) return;
+    setState((current) => {
+      const history = Array.isArray(current.coachRecommendationHistory) ? current.coachRecommendationHistory : [];
+      return {
+        ...current,
+        coachRecommendationHistory: [
+          entry,
+          ...history.filter((item) => item.recommendationId !== entry.recommendationId),
+        ].slice(0, 50),
+      };
+    });
   }
 
   function isExerciseKnown(id) {
@@ -376,6 +403,54 @@ export default function Coach() {
     return () => window.clearInterval(timer);
   }, [runner?.running]);
 
+  useEffect(() => {
+    const workoutActive = Boolean(runner?.running && !runner?.complete);
+    if (!workoutActive) {
+      const lock = wakeLockRef.current;
+      wakeLockRef.current = null;
+      releaseScreenWakeLock(lock);
+      return undefined;
+    }
+
+    let cancelled = false;
+    async function acquire() {
+      if (cancelled || document.visibilityState !== "visible" || wakeLockRef.current) return;
+      const result = await requestScreenWakeLock();
+      if (cancelled) {
+        await releaseScreenWakeLock(result.lock);
+        return;
+      }
+      if (!result.supported) {
+        setWakeLockStatus("unsupported");
+        return;
+      }
+      if (!result.lock) {
+        setWakeLockStatus("error");
+        return;
+      }
+      wakeLockRef.current = result.lock;
+      setWakeLockStatus("active");
+      result.lock.addEventListener?.("release", () => {
+        if (cancelled || wakeLockRef.current !== result.lock) return;
+        wakeLockRef.current = null;
+        setWakeLockStatus(document.visibilityState === "visible" ? "error" : "waiting");
+      });
+    }
+    function handleVisibility() {
+      if (document.visibilityState === "visible") acquire();
+    }
+
+    acquire();
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", handleVisibility);
+      const lock = wakeLockRef.current;
+      wakeLockRef.current = null;
+      releaseScreenWakeLock(lock);
+    };
+  }, [runner?.running, runner?.complete]);
+
   const activeExercise = runner ? runner.items?.[runner.index] : null;
 
   useEffect(() => {
@@ -491,10 +566,49 @@ export default function Coach() {
 
       {activeTab === "today" && (
         <div className="grid coach-dashboard-grid">
-          <Card className="wide insight coach-recommendation">
-            <p className="eyebrow">Aktuelle Empfehlung</p>
-            <h2>{analysis.recommendation}</h2>
+          <Card className={`wide insight coach-recommendation unified-${unifiedCoach.level}`}>
+            <div className="coach-recommendation-heading">
+              <div>
+                <p className="eyebrow">Gemeinsame Coach-Bewertung</p>
+                <h2>{unifiedCoach.recommendation.title}</h2>
+              </div>
+              <span className={unifiedCoach.tone}>{unifiedCoach.label}</span>
+            </div>
+            <p className="coach-recommendation-copy">{unifiedCoach.recommendation.text}</p>
+            <details className="coach-evidence">
+              <summary>Warum sagt EYM das?</summary>
+              <ul>{unifiedCoach.recommendation.evidence.map((item) => <li key={item}>{item}.</li>)}</ul>
+              <small>{unifiedCoach.protectionNote}</small>
+            </details>
+            <div className="coach-recommendation-actions">
+              {unifiedCoach.level !== "ok" && <Link className="button-link" to={unifiedCoach.recommendation.action.href}>{unifiedCoach.recommendation.action.label}</Link>}
+              <div>
+                <span>{currentRecommendationFeedback ? "Dein Feedback ist gespeichert:" : "War diese Einordnung hilfreich?"}</span>
+                <button type="button" className={currentRecommendationFeedback?.status === "helpful" ? "selected" : ""} onClick={() => saveRecommendationFeedback("helpful")}>Hilfreich</button>
+                <button type="button" className={currentRecommendationFeedback?.status === "not_helpful" ? "selected" : ""} onClick={() => saveRecommendationFeedback("not_helpful")}>Nicht passend</button>
+              </div>
+            </div>
           </Card>
+          <details className="wide card coach-question-beta">
+            <summary>
+              <div><p className="eyebrow">Coach-Fragen · Beta</p><strong>Eine Einordnung aus deinen EYM-Fakten öffnen</strong><span>Keine externe Datenübertragung · keine automatische Planänderung</span></div>
+              <b>⌄</b>
+            </summary>
+            <div className="coach-question-body">
+              <div className="coach-question-options">
+                {COACH_QUESTION_OPTIONS.map((option) => <button type="button" className={coachQuestionKey === option.key ? "selected" : ""} onClick={() => setCoachQuestionKey(option.key)} key={option.key}>{option.label}</button>)}
+              </div>
+              <article className="coach-question-answer">
+                <span>Faktengebundene Antwort</span>
+                <h2>{coachAnswer.title}</h2>
+                <p>{coachAnswer.answer}</p>
+                <div className="coach-answer-evidence">
+                  {coachAnswer.evidence.map((item) => <div key={item.id}><small>{item.label} · {item.source}</small><strong>{item.value}</strong>{item.detail && <p>{item.detail}</p>}</div>)}
+                </div>
+                <small className="coach-answer-protection">{coachAnswer.protection}</small>
+              </article>
+            </div>
+          </details>
           <Card className="coach-review-summary">
             <p className="eyebrow">Reviews im Monat</p>
             <h2>{reviewed.length}/{monthReviewable.length} bewertet</h2>
@@ -545,6 +659,29 @@ export default function Coach() {
             </div>
             {outlook.roadmap.length > 0 && <div className="coach-roadmap">{outlook.roadmap.map((step) => <article className={step.current ? "current" : ""} key={`${step.label}-${step.title}`}><span>{step.label}</span><h3>{step.title}</h3><p>{step.text}</p></article>)}</div>}
             {outlook.mainTarget && outlook.nextTarget && outlook.mainTarget.id !== outlook.nextTarget.id && <p className="coach-main-target-note"><strong>Danach:</strong> {outlook.mainTarget.name} in {outlook.mainDays} Tagen.</p>}
+          </Card>
+          <Card className="wide coach-feedback-history">
+            <div className="card-heading-row">
+              <div><p className="eyebrow">Empfehlungsverlauf</p><h2>Was EYM vorgeschlagen hat – und was danach geschah</h2></div>
+              <span>{recommendationHistory.length}</span>
+            </div>
+            {recommendationHistory.length ? (
+              <div className="coach-feedback-list">
+                {recommendationHistory.slice(0, 6).map((entry) => {
+                  const outcome = recommendationOutcome(entry, canonicalActivities, state.reviews);
+                  return (
+                    <article key={entry.id}>
+                      <div>
+                        <strong>{entry.title}</strong>
+                        <span>{new Date(entry.respondedAt).toLocaleDateString("de-DE")} · {entry.status === "helpful" ? "hilfreich" : "nicht passend"}</span>
+                      </div>
+                      <p>{entry.text}</p>
+                      <b className={outcome.status}>{outcome.label}</b>
+                    </article>
+                  );
+                })}
+              </div>
+            ) : <p className="muted">Sobald du eine Coach-Einordnung als hilfreich oder nicht passend markierst, erscheint sie hier. EYM verändert dadurch keinen Plan automatisch.</p>}
           </Card>
           <SignalCard eyebrow="Schlüsseleinheiten" signal={analysis.keySessions} />
           <SignalCard eyebrow="Fuel & Hydration" signal={analysis.fuel} />
@@ -702,6 +839,7 @@ export default function Coach() {
               <div className={`mobility-runner phase-${runnerPhase} ${runner.complete ? "complete" : ""} ${switchMoment ? "switch-now" : ""}`}>
                 {runner.complete ? <><p className="eyebrow">Geschafft</p><h2>Workout abgeschlossen</h2><p className="mobility-completion-note">{runner.saved ? (runner.planItemId ? "Die heutige Stabi-/Mobility-Einheit wurde automatisch als erledigt markiert." : "Das Workout wurde automatisch in deinem Verlauf gespeichert.") : "Workout wird gespeichert …"}</p><button type="button" className="primary compact-primary" onClick={closeFinishedWorkout} disabled={!runner.saved}>Workout schließen</button></> : <>
                   <div className="mobility-runner-topline"><span>{runnerPhaseLabel} · Schritt {runner.index + 1} von {runner.items.length}</span><small>{isExerciseKnown(activeExercise.id) ? "Bekannte Übung" : "Neue Übung"}</small></div>
+                  {runner.running && wakeLockStatus === "active" && <span className="mobility-wake-status">Bildschirm bleibt während des Workouts aktiv</span>}
                   <h2>{runnerPhase === "transition" ? `Als Nächstes: ${activeExercise.name}` : activeExercise.name}</h2>
                   {activeExercise.subtitle && <small className="mobility-exercise-subtitle">{activeExercise.subtitle}</small>}
                   <strong>{secondsLabel(runner.remaining)}</strong>

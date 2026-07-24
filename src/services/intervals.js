@@ -1,5 +1,5 @@
-import { activitiesLikelySame } from "./activityUtils";
-import { supabase, supabaseConfigured } from "./supabase";
+import { activitiesLikelySame } from "./activityUtils.js";
+import { supabase, supabaseConfigured } from "./supabase.js";
 
 async function invokeIntervals(action, payload = {}) {
   const { data, error } = await supabase.functions.invoke("intervals", {

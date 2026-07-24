@@ -44,13 +44,16 @@ export default function Mission() {
   const activities = useMemo(() => preferredActivities(state.activities), [state.activities]);
   const achievements = useMemo(() => deriveAchievements(activities, state.reviews), [activities, state.reviews]);
   const hermann2026 = achievements.find((item) => /hermannslauf/i.test(item.title) && item.date.startsWith("2026"));
-  const preparationStartDate = state.mission.preparationStartDate || (hermann2026 ? nextDay(hermann2026.date) : "2026-04-27");
-  const preparationRuns = useMemo(() => activities.filter((activity) => isRunningActivity(activity) && activityDate(activity) >= preparationStartDate), [activities, preparationStartDate]);
+  const preparationStartDate = state.mission.preparationStartDate || (hermann2026 ? nextDay(hermann2026.date) : "");
+  const preparationRuns = useMemo(() => preparationStartDate
+    ? activities.filter((activity) => isRunningActivity(activity) && activityDate(activity) >= preparationStartDate)
+    : [], [activities, preparationStartDate]);
   const preparationKm = preparationRuns.reduce((sum, activity) => sum + Number(activity.distance || 0), 0);
 
   const milestones = useMemo(() => {
     const values = Array.isArray(state.mission.milestones) ? state.mission.milestones : [];
     if (values.some((item) => item.id === state.mission.id || item.isMainTarget)) return values;
+    if (!state.mission?.name || !state.mission?.date) return values;
     return [...values, {
       id: state.mission.id,
       name: state.mission.name,
@@ -302,16 +305,25 @@ export default function Mission() {
           </Card>
         )}
 
+        {!mainTarget && !showEditor && (
+          <Card className="hero wide mission-empty-state">
+            <p className="eyebrow">Deine Mission</p>
+            <h2>Noch kein Hauptziel hinterlegt</h2>
+            <p className="muted">Lege dein persönliches Ziel, das Datum und optional eine Distanz fest. EYM richtet Coach, Analytics und künftige Wochenplanungen danach aus.</p>
+            <button type="button" className="primary compact-primary" onClick={() => { setEditingId(null); setDraft({ ...emptyEvent, isMainTarget: true, priority: "A" }); setShowEditor(true); }}>Hauptziel anlegen</button>
+          </Card>
+        )}
+
         {showEditor && <Card className="wide mission-editor-card">
           <div className="card-heading-row">
             <div><p className="eyebrow">Meilenstein & Event</p><h2>{editingId ? "Eintrag bearbeiten" : "Neuen Eintrag hinzufügen"}</h2></div>
             <button type="button" onClick={() => { setShowEditor(false); setEditingId(null); setDraft(emptyEvent); }}>Schließen</button>
           </div>
           <form className="editor-form mission-editor" onSubmit={save}>
-            <label>Event<input name="name" value={draft.name} onChange={change} placeholder="Backyard Ultra" required /></label>
+            <label>Event<input name="name" value={draft.name} onChange={change} placeholder="z. B. erster Marathon" required /></label>
             <label>Datum<input name="date" type="date" value={draft.date} onChange={change} required /></label>
             <label className="place-field">Ort
-              <input name="location" value={draft.location} onChange={change} placeholder="Sportpark Johannisau, Fulda" autoComplete="off" />
+              <input name="location" value={draft.location} onChange={change} placeholder="Ort oder Veranstaltungsstätte" autoComplete="off" />
               {draft.place && <small className="place-confirmed">✓ Ort aus OpenStreetMap übernommen</small>}
               {placeStatus && <small className="muted">{placeStatus}</small>}
               {placeSuggestions.length > 0 && <div className="place-suggestions" role="listbox" aria-label="Ortsvorschläge">{placeSuggestions.map((place) => <button key={place.id} type="button" onClick={() => selectPlace(place)}><strong>{place.name}</strong><span>{place.label}</span></button>)}</div>}

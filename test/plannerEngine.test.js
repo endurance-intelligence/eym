@@ -35,3 +35,30 @@ test("planner respects a generic stored commitment without personal defaults", (
   assert.equal(commitment.conflictMode, "exclusive");
   assert.equal(result.plan.some((item) => ["Fußball", "ORC Run", "ORC Track"].includes(item.title)), false);
 });
+
+test("planner uses the supplied reference date and produces stable training content", () => {
+  const today = new Date("2026-07-24T12:00:00");
+  const input = {
+    mission: { id: "generic-goal", name: "50 km Lauf", date: "2026-11-21", targetKm: 50, milestones: [] },
+    offsetWeeks: 1,
+    today,
+    config: {
+      recurringCommitments: [],
+      fixedAppointments: { football: false, orcRun: false, saturdayMode: "off" },
+      stabiCount: 1,
+      rowingCount: 0,
+      runDays: ["Dienstag", "Donnerstag", "Sonntag"],
+      maxLongRun: 30,
+    },
+  };
+  const normalize = (result) => result.plan.map((item) => {
+    const comparable = { ...item };
+    delete comparable.id;
+    return comparable;
+  });
+  const first = generateWeekPlan(input);
+  const second = generateWeekPlan(input);
+  assert.equal(first.weekStart, "2026-07-27");
+  assert.deepEqual(normalize(first), normalize(second));
+  assert.equal(first.plan.some((item) => /ORC|Fußball/.test(`${item.title} ${item.type}`)), false);
+});

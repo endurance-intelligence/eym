@@ -1,0 +1,21 @@
+{
+  "name": "Endurance Intelligence",
+  "short_name": "EYM",
+  "description": "Persönliche Ausdauerplanung mit nachvollziehbarem Coach.",
+  "lang": "de",
+  "start_url": "./#/",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#07130d",
+  "theme_color": "#07130d",
+  "categories": ["health", "fitness", "sports"],
+  "icons": [
+    {
+      "src": "./favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

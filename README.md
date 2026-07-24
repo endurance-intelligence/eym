@@ -290,6 +290,28 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 - Transition and preparation phases no longer produce duplicate countdowns.
 - The timer settings include a combined countdown, start and end-signal preview.
 
+## Training insights and one Coach state v3.3.0
+
+- Analytics now evaluates rolling weekly volume, consistency, planned-versus-completed running, training mix, long runs, back-to-back blocks, review coverage, Fuel practice and data confidence.
+- Goal specificity is derived from the configured target instead of presenting one opaque readiness number as absolute truth.
+- Briefing, Coach and Planner consume one shared Coach state. Recovery warnings take precedence over neutral planning signals, so the three areas no longer issue contradictory headlines.
+- Every recommendation exposes its evidence and keeps the existing plan protected. Helpful/not-helpful feedback is stored with the recommendation and linked to the next available run review.
+
+## Reliability, mobile workout and generic defaults v3.4.0
+
+- Fresh accounts no longer receive Heartbeat Ultra, Backyard, ORC or football data. Existing personal missions, appointments, history and reviews remain untouched during local, cloud and backup migrations.
+- Legacy ORC/football controls are visible only while a legacy personal configuration or matching weekly entry still exists. Generic recurring commitments remain the standard workflow.
+- Guided Stabi & Mobility uses the Screen Wake Lock API where supported and becomes a full-screen, touch-friendly workout view on phones.
+- A relative-scope web app manifest and service worker prepare EYM for installation and provide a cached application shell on GitHub Pages.
+- Regression tests cover stable generated content, supplied reference dates, generic defaults, backups, wake lock behavior and the PWA shell.
+
+## Fact-grounded Coach questions v3.5.0
+
+- Coach questions answer four narrow topics: current recommendation, training trend, goal relevance and data confidence.
+- Answers are assembled only from the shared Coach state and expose the supporting EYM facts directly below the text.
+- The grounded context explicitly forbids invented measurements, medical diagnosis and automatic plan changes.
+- No activity or health data is sent to an external AI provider. The fact packet is a safe integration boundary for a later optional language model.
+
 Before deploying the application, apply `supabase/migrations/20260722120000_athlete_images.sql`. Afterwards run:
 
 ```bash

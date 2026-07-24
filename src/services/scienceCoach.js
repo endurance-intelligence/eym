@@ -1,4 +1,4 @@
-import { activityTimestamp, isRunningActivity, preferredActivities } from "./activityUtils";
+import { activityTimestamp, isRunningActivity, preferredActivities } from "./activityUtils.js";
 
 const DAY = 86400000;
 
@@ -92,8 +92,9 @@ export function goalRequirements(state) {
   return { target, discipline, focus, goalType };
 }
 
-export function currentWeekAssessment(state) {
-  const start = startOfWeek();
+export function currentWeekAssessment(state, now = new Date()) {
+  const reference = new Date(now);
+  const start = startOfWeek(reference);
   const end = new Date(start); end.setDate(end.getDate() + 7);
   const previousStart = new Date(start); previousStart.setDate(previousStart.getDate() - 42);
   const activities = preferredActivities(state.activities || []);
@@ -105,7 +106,7 @@ export function currentWeekAssessment(state) {
   });
   const average = recentLoads.reduce((a,b)=>a+b,0) / Math.max(1,recentLoads.filter(Boolean).length);
   const completed = activities.filter(a => activityTimestamp(a)>=start && activityTimestamp(a)<end).reduce((sum,a)=>sum+activityLoad(a,reviewFor(state.reviews,a)),0);
-  const todayKey = new Date().toISOString().slice(0,10);
+  const todayKey = `${reference.getFullYear()}-${String(reference.getMonth() + 1).padStart(2, "0")}-${String(reference.getDate()).padStart(2, "0")}`;
   const open = (state.plan || []).filter(i => !i.archived && i.date>=todayKey && i.date<end.toISOString().slice(0,10) && !i.completed && !i.missedReason);
   const remaining = open.reduce((sum,i)=>sum+plannedLoad(i),0);
   const projected = completed + remaining;

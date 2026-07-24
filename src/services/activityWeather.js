@@ -1,5 +1,5 @@
-import { weatherLabel } from "./weather";
-import { reverseGeocode } from "./placeSearch";
+import { weatherLabel } from "./weather.js";
+import { reverseGeocode } from "./placeSearch.js";
 
 const FORECAST_URL = "https://api.open-meteo.com/v1/forecast";
 const ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive";
@@ -127,4 +127,3 @@ export async function fetchActivityWeather(activity) {
     longitude: coordinates.longitude,
   };
 }
-

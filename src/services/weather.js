@@ -1,4 +1,4 @@
-import { reverseGeocode } from "./placeSearch";
+import { reverseGeocode } from "./placeSearch.js";
 
 const WEATHER_URL = "https://api.open-meteo.com/v1/forecast";
 const POSITION_KEY = "endurance-intelligence.weather-position";

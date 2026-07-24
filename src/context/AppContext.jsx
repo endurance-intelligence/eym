@@ -110,6 +110,10 @@ function mergeState(localState = {}, cloudState = {}) {
       ...asArray(cloud.fuelCatalogExclusions),
     ])],
     healthCheckins: asArray(cloud.healthCheckins, asArray(local.healthCheckins)),
+    coachRecommendationHistory: asArray(
+      cloud.coachRecommendationHistory,
+      asArray(local.coachRecommendationHistory),
+    ),
     mobilityCoach: {
       ...defaultState.mobilityCoach,
       ...(local.mobilityCoach || {}),

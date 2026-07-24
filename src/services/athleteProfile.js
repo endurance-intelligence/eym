@@ -1,5 +1,5 @@
-import { activityDate, activityTimestamp, isRunningActivity, preferredActivities } from "./activityUtils";
-import { goalRequirements } from "./scienceCoach";
+import { activityDate, activityTimestamp, isRunningActivity, preferredActivities } from "./activityUtils.js";
+import { goalRequirements } from "./scienceCoach.js";
 
 const DAY = 86400000;
 const EXPERIENCE_ORDER = { beginner: 0, advanced: 1, experienced: 2, individual: 1 };

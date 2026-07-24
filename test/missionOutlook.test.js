@@ -12,7 +12,7 @@ const mission = {
 test("mission roadmap marks exactly one current backyard phase", () => {
   const cases = [
     ["2026-07-23T12:00:00", "Basis stabilisieren"],
-    ["2026-08-20T12:00:00", "Backyard-spezifische Loops"],
+    ["2026-08-20T12:00:00", "Backyard Ultra-spezifische Loops"],
     ["2026-09-10T12:00:00", "Taper & Frische"],
   ];
 
