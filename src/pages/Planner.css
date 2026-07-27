@@ -274,3 +274,40 @@
 .planner-track-builder>.form-grid{margin:0}
 .planner-track-summary{display:block;padding:11px 13px;border:1px solid var(--border);border-radius:11px;background:var(--bg-input);color:var(--accent-bright)}
 .planner-track-builder>small{color:var(--muted);line-height:1.45}
+
+/* v3.5.3 – mixed track blocks and LAP-controlled warm-up/cool-down */
+.planner-track-lap-flow{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr) auto minmax(0,1fr);gap:9px;align-items:center}
+.planner-track-lap-flow span{display:grid;gap:3px;min-width:0;padding:11px 12px;border:1px solid var(--border);border-radius:11px;background:var(--bg-input)}
+.planner-track-lap-flow small{color:var(--muted);line-height:1.35}
+.planner-track-lap-flow>strong{color:var(--accent)}
+.planner-track-settings label small{color:var(--muted);font-size:11px;line-height:1.35}
+.planner-track-sequence{display:grid;gap:9px}
+.planner-track-sequence-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:12px}
+.planner-track-sequence-heading>div{display:grid;gap:3px}
+.planner-track-sequence-heading small{color:var(--muted)}
+.planner-track-sequence-heading>span{color:var(--accent);font-size:12px}
+.planner-track-sequence article{display:grid;grid-template-columns:32px minmax(130px,1.1fr) minmax(105px,.8fr) minmax(90px,.7fr) auto;gap:9px;align-items:end;padding:11px;border:1px solid var(--border);border-radius:12px;background:var(--bg-input)}
+.planner-track-sequence article.recovery{border-color:color-mix(in srgb,var(--accent) 35%,var(--border));background:color-mix(in srgb,var(--accent-surface) 45%,var(--bg-input))}
+.planner-track-sequence article>b{display:grid;place-items:center;align-self:center;width:30px;height:30px;border-radius:50%;background:var(--accent-surface-strong);color:var(--accent-bright)}
+.planner-track-sequence article label{min-width:0;font-size:12px}
+.planner-track-sequence article select,.planner-track-sequence article input{width:100%;min-width:0}
+.planner-track-step-actions,.planner-track-add-actions{display:flex;gap:6px}
+.planner-track-step-actions button{width:36px;height:39px;padding:0}
+.planner-track-step-actions .danger{color:#ff9a90}
+.planner-track-add-actions{flex-wrap:wrap}
+.planner-track-add-actions button{flex:1 1 150px}
+@media(max-width:760px){
+  .planner-track-lap-flow{grid-template-columns:1fr}
+  .planner-track-lap-flow>strong{transform:rotate(90deg);justify-self:center}
+  .planner-track-sequence article{grid-template-columns:32px minmax(0,1fr) minmax(0,1fr)}
+  .planner-track-sequence article>b{grid-row:1/3}
+  .planner-track-step-actions{grid-column:2/-1}
+  .planner-track-step-actions button{flex:1}
+}
+@media(max-width:460px){
+  .planner-track-builder{padding:14px}
+  .planner-track-sequence article{grid-template-columns:32px minmax(0,1fr)}
+  .planner-track-sequence article>b{grid-row:1/4}
+  .planner-track-step-actions{grid-column:2}
+  .planner-track-add-actions{display:grid;grid-template-columns:1fr}
+}

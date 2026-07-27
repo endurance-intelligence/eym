@@ -1,12 +1,12 @@
 export const DEFAULT_TRACK_WORKOUT = Object.freeze({
   kind: "intervals",
-  workUnit: "distance",
-  workValue: 400,
-  repeats: 8,
-  recoveryUnit: "distance",
-  recoveryValue: 200,
-  warmupMinutes: 15,
-  cooldownMinutes: 10,
+  rounds: 8,
+  steps: Object.freeze([
+    Object.freeze({ kind: "work", unit: "distance", value: 400 }),
+    Object.freeze({ kind: "recovery", unit: "distance", value: 200 }),
+  ]),
+  warmupMode: "lap",
+  cooldownMode: "lap",
 });
 
 function clamp(value, minimum, maximum, fallback) {
@@ -19,29 +19,47 @@ export function isTrackWorkout(item = {}) {
   return /orc\s*track|intervall|interval|sprint/i.test(`${item.type || ""} ${item.title || ""}`);
 }
 
-export function normalizeTrackWorkout(input = {}) {
-  const kind = input.kind === "sprints" ? "sprints" : "intervals";
-  const workUnit = input.workUnit === "time" ? "time" : "distance";
-  const recoveryUnit = input.recoveryUnit === "time" ? "time" : "distance";
+function normalizeStep(input = {}, fallbackKind = "work") {
+  const kind = input.kind === "recovery" ? "recovery" : fallbackKind === "recovery" ? "recovery" : "work";
+  const unit = input.unit === "time" ? "time" : "distance";
   return {
     kind,
-    workUnit,
-    workValue: clamp(
-      input.workValue,
-      workUnit === "distance" ? 20 : 5,
-      workUnit === "distance" ? 5000 : 3600,
-      DEFAULT_TRACK_WORKOUT.workValue,
+    unit,
+    value: clamp(
+      input.value,
+      unit === "distance" ? 20 : 5,
+      unit === "distance" ? 5000 : 3600,
+      kind === "recovery" ? 200 : 400,
     ),
-    repeats: clamp(input.repeats, 1, 50, DEFAULT_TRACK_WORKOUT.repeats),
-    recoveryUnit,
-    recoveryValue: clamp(
-      input.recoveryValue,
-      recoveryUnit === "distance" ? 20 : 5,
-      recoveryUnit === "distance" ? 5000 : 3600,
-      DEFAULT_TRACK_WORKOUT.recoveryValue,
-    ),
-    warmupMinutes: clamp(input.warmupMinutes, 0, 90, DEFAULT_TRACK_WORKOUT.warmupMinutes),
-    cooldownMinutes: clamp(input.cooldownMinutes, 0, 90, DEFAULT_TRACK_WORKOUT.cooldownMinutes),
+  };
+}
+
+function legacySteps(input = {}) {
+  return [
+    normalizeStep({
+      kind: "work",
+      unit: input.workUnit,
+      value: input.workValue,
+    }),
+    normalizeStep({
+      kind: "recovery",
+      unit: input.recoveryUnit,
+      value: input.recoveryValue,
+    }, "recovery"),
+  ];
+}
+
+export function normalizeTrackWorkout(input = {}) {
+  const kind = input.kind === "sprints" ? "sprints" : "intervals";
+  const suppliedSteps = Array.isArray(input.steps) ? input.steps.slice(0, 16) : [];
+  const steps = (suppliedSteps.length ? suppliedSteps : legacySteps(input))
+    .map((step, index) => normalizeStep(step, index % 2 ? "recovery" : "work"));
+  return {
+    kind,
+    rounds: clamp(input.rounds ?? input.repeats, 1, 30, DEFAULT_TRACK_WORKOUT.rounds),
+    steps,
+    warmupMode: "lap",
+    cooldownMode: "lap",
   };
 }
 
@@ -51,9 +69,8 @@ function unitLabel(unit, value) {
 
 export function trackWorkoutSummary(input = {}) {
   const workout = normalizeTrackWorkout(input);
-  return [
-    workout.warmupMinutes ? `${workout.warmupMinutes} min Warm-up` : "",
-    `${workout.repeats} × ${unitLabel(workout.workUnit, workout.workValue)} mit ${unitLabel(workout.recoveryUnit, workout.recoveryValue)} Pause`,
-    workout.cooldownMinutes ? `${workout.cooldownMinutes} min Cool-down` : "",
-  ].filter(Boolean).join(" · ");
+  const sequence = workout.steps
+    .map((step) => `${unitLabel(step.unit, step.value)} ${step.kind === "recovery" ? "Pause" : "Belastung"}`)
+    .join(" → ");
+  return `Warm-up bis LAP · ${workout.rounds} ${workout.rounds === 1 ? "Durchgang" : "Durchgänge"}: ${sequence} · Cool-down bis LAP`;
 }

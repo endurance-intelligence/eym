@@ -326,6 +326,13 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 - ORC Track sessions can be configured as intervals or sprints with distance- or time-based work and recovery, repetitions, warm-up and cool-down.
 - The Intervals.icu edge function converts the stored track definition into native repeat steps for Garmin. After deploying this version, redeploy the `intervals` Supabase function.
 
+## Mixed track blocks and LAP control v3.5.3
+
+- A track round can contain up to 16 freely ordered work and recovery steps. This supports mixed blocks such as 1200 m work, 400 m recovery, 800 m work and 400 m recovery.
+- The complete sequence can be repeated for a configurable number of rounds. Individual steps can use distance in meters or duration in seconds.
+- Warm-up and cool-down are advanced with the Garmin LAP button instead of ending after a fixed duration. Intervals.icu still receives internal estimates solely for load calculation.
+- Existing v3.5.2 interval settings are migrated automatically into the new two-step sequence when the workout is opened or saved.
+
 Before deploying the application, apply `supabase/migrations/20260722120000_athlete_images.sql`. Afterwards run:
 
 ```bash

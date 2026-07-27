@@ -963,6 +963,61 @@ export default function Planner() {
     }));
   }
 
+  function updateTrackStep(index, field, value) {
+    setEditing((current) => {
+      const workout = normalizeTrackWorkout(current?.structuredWorkout);
+      return {
+        ...current,
+        structuredWorkout: {
+          ...workout,
+          steps: workout.steps.map((step, stepIndex) => stepIndex === index ? { ...step, [field]: value } : step),
+        },
+      };
+    });
+  }
+
+  function addTrackStep(kind) {
+    setEditing((current) => {
+      const workout = normalizeTrackWorkout(current?.structuredWorkout);
+      if (workout.steps.length >= 16) return current;
+      return {
+        ...current,
+        structuredWorkout: {
+          ...workout,
+          steps: [
+            ...workout.steps,
+            { kind, unit: "distance", value: kind === "recovery" ? 200 : 400 },
+          ],
+        },
+      };
+    });
+  }
+
+  function removeTrackStep(index) {
+    setEditing((current) => {
+      const workout = normalizeTrackWorkout(current?.structuredWorkout);
+      if (workout.steps.length <= 1) return current;
+      return {
+        ...current,
+        structuredWorkout: {
+          ...workout,
+          steps: workout.steps.filter((_, stepIndex) => stepIndex !== index),
+        },
+      };
+    });
+  }
+
+  function moveTrackStep(index, direction) {
+    setEditing((current) => {
+      const workout = normalizeTrackWorkout(current?.structuredWorkout);
+      const target = index + direction;
+      if (target < 0 || target >= workout.steps.length) return current;
+      const steps = [...workout.steps];
+      [steps[index], steps[target]] = [steps[target], steps[index]];
+      return { ...current, structuredWorkout: { ...workout, steps } };
+    });
+  }
+
   function saveMissed(event) {
     event.preventDefault();
     if (!missedEditing?.reason) return;
@@ -1334,21 +1389,45 @@ export default function Planner() {
               <section className="planner-track-builder">
                 <div>
                   <p className="eyebrow">Geführtes Garmin-Workout</p>
-                  <h3>Track-Inhalt festlegen</h3>
-                  <p>Diese Schritte werden als strukturiertes Workout an Intervals.icu übergeben.</p>
+                  <h3>Track-Abfolge festlegen</h3>
+                  <p>Warm-up und Cool-down bleiben offen. Auf Garmin wechselst du jeweils mit der LAP-Taste zum nächsten Abschnitt.</p>
                 </div>
-                <div className="form-grid">
+                <div className="planner-track-lap-flow" aria-label="LAP-gesteuerter Ablauf">
+                  <span><b>1 · Warm-up</b><small>locker laufen · dann LAP drücken</small></span>
+                  <strong>→</strong>
+                  <span><b>2 · Hauptteil</b><small>Schritte laufen automatisch ab</small></span>
+                  <strong>→</strong>
+                  <span><b>3 · Cool-down</b><small>offen · zum Beenden LAP drücken</small></span>
+                </div>
+                <div className="form-grid planner-track-settings">
                   <label>Art<select value={editingTrackWorkout.kind} onChange={(event) => updateTrackWorkout("kind", event.target.value)}><option value="intervals">Intervalle</option><option value="sprints">Sprints</option></select></label>
-                  <label>Wiederholungen<input type="number" min="1" max="50" value={editingTrackWorkout.repeats} onChange={(event) => updateTrackWorkout("repeats", event.target.value)} /></label>
-                  <label>Belastung messen in<select value={editingTrackWorkout.workUnit} onChange={(event) => updateTrackWorkout("workUnit", event.target.value)}><option value="distance">Metern</option><option value="time">Sekunden</option></select></label>
-                  <label>{editingTrackWorkout.workUnit === "distance" ? "Belastung in Metern" : "Belastung in Sekunden"}<input type="number" min={editingTrackWorkout.workUnit === "distance" ? "20" : "5"} value={editingTrackWorkout.workValue} onChange={(event) => updateTrackWorkout("workValue", event.target.value)} /></label>
-                  <label>Pause messen in<select value={editingTrackWorkout.recoveryUnit} onChange={(event) => updateTrackWorkout("recoveryUnit", event.target.value)}><option value="distance">Metern</option><option value="time">Sekunden</option></select></label>
-                  <label>{editingTrackWorkout.recoveryUnit === "distance" ? "Pause in Metern" : "Pause in Sekunden"}<input type="number" min={editingTrackWorkout.recoveryUnit === "distance" ? "20" : "5"} value={editingTrackWorkout.recoveryValue} onChange={(event) => updateTrackWorkout("recoveryValue", event.target.value)} /></label>
-                  <label>Warm-up in Minuten<input type="number" min="0" max="90" value={editingTrackWorkout.warmupMinutes} onChange={(event) => updateTrackWorkout("warmupMinutes", event.target.value)} /></label>
-                  <label>Cool-down in Minuten<input type="number" min="0" max="90" value={editingTrackWorkout.cooldownMinutes} onChange={(event) => updateTrackWorkout("cooldownMinutes", event.target.value)} /></label>
+                  <label>Durchgänge<input type="number" min="1" max="30" value={editingTrackWorkout.rounds} onChange={(event) => updateTrackWorkout("rounds", event.target.value)} /><small>Ein Durchgang enthält die komplette Reihenfolge unten.</small></label>
+                </div>
+                <div className="planner-track-sequence">
+                  <div className="planner-track-sequence-heading">
+                    <div><strong>Schritte je Durchgang</strong><small>Die Reihenfolge wird genauso an Garmin übergeben.</small></div>
+                    <span>{editingTrackWorkout.steps.length}/16</span>
+                  </div>
+                  {editingTrackWorkout.steps.map((step, index) => (
+                    <article className={step.kind} key={`${index}-${step.kind}`}>
+                      <b>{index + 1}</b>
+                      <label>Abschnitt<select value={step.kind} onChange={(event) => updateTrackStep(index, "kind", event.target.value)}><option value="work">Belastung</option><option value="recovery">Pause</option></select></label>
+                      <label>Einheit<select value={step.unit} onChange={(event) => updateTrackStep(index, "unit", event.target.value)}><option value="distance">Meter</option><option value="time">Sekunden</option></select></label>
+                      <label>Wert<input type="number" min={step.unit === "distance" ? "20" : "5"} max={step.unit === "distance" ? "5000" : "3600"} value={step.value} onChange={(event) => updateTrackStep(index, "value", event.target.value)} /></label>
+                      <div className="planner-track-step-actions">
+                        <button type="button" onClick={() => moveTrackStep(index, -1)} disabled={index === 0} aria-label={`Schritt ${index + 1} nach oben`}>↑</button>
+                        <button type="button" onClick={() => moveTrackStep(index, 1)} disabled={index === editingTrackWorkout.steps.length - 1} aria-label={`Schritt ${index + 1} nach unten`}>↓</button>
+                        <button type="button" className="danger" onClick={() => removeTrackStep(index)} disabled={editingTrackWorkout.steps.length === 1} aria-label={`Schritt ${index + 1} entfernen`}>×</button>
+                      </div>
+                    </article>
+                  ))}
+                  <div className="planner-track-add-actions">
+                    <button type="button" onClick={() => addTrackStep("work")} disabled={editingTrackWorkout.steps.length >= 16}>+ Belastung</button>
+                    <button type="button" onClick={() => addTrackStep("recovery")} disabled={editingTrackWorkout.steps.length >= 16}>+ Pause</button>
+                  </div>
                 </div>
                 <strong className="planner-track-summary">{trackWorkoutSummary(editingTrackWorkout)}</strong>
-                <small>Für Pace-Hinweise auf der Uhr muss in Intervals.icu unter Running eine Threshold Pace gesetzt und „Upload planned workouts“ für Garmin aktiviert sein.</small>
+                <small>Intervals.icu benötigt intern Schätzwerte für die Trainingslast; sie begrenzen Warm-up und Cool-down auf Garmin nicht. Für Pace-Hinweise muss unter Running eine Threshold Pace gesetzt und „Upload planned workouts“ für Garmin aktiviert sein.</small>
               </section>
             )}
             <label>Notiz<textarea value={editing.notes} onChange={(event) => setEditing({ ...editing, notes: event.target.value })} /></label>
