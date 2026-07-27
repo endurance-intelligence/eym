@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { Card, PageTitle } from "../components/UI";
 import { hydration } from "../services/insights";
@@ -8,6 +8,7 @@ import WeatherCard from "../components/WeatherCard";
 import { activityTimestamp, isRunningActivity, preferredActivities } from "../services/activityUtils";
 import { activitiesWithGroups } from "../services/activityGroups";
 import { buildCoachState } from "../services/coachState";
+import { workoutSortTime, workoutTimingLabel } from "../services/plannerTime";
 
 const dayLabel = new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" });
 const todayLabel = new Intl.DateTimeFormat("de-DE", { weekday: "long", day: "2-digit", month: "long" });
@@ -56,7 +57,7 @@ function activityMetrics(activity) {
 
 function plannedMetrics(item) {
   return [
-    item.time ? `${item.time} Uhr` : "",
+    workoutTimingLabel(item),
     Number(item.distance || 0) > 0 ? `${compactNumber(item.distance)} km` : "",
     Number(item.duration || 0) > 0 ? `${Math.round(Number(item.duration))} min` : "",
     item.optional ? "optional" : "",
@@ -127,7 +128,7 @@ function nextDayOverview(plan) {
   const dateKey = isoDate(date);
   const entries = plan
     .filter((item) => !item.archived && item.date === dateKey)
-    .sort((a, b) => `${a.time || "99:99"}${a.title || ""}`.localeCompare(`${b.time || "99:99"}${b.title || ""}`));
+    .sort((a, b) => `${workoutSortTime(a)}${a.title || ""}`.localeCompare(`${workoutSortTime(b)}${b.title || ""}`));
   const items = entries.map((item) => ({
     id: `upcoming-${item.id}`,
     title: item.title,
@@ -214,6 +215,7 @@ function displayName(state, session) {
 
 export default function Briefing() {
   const { state, session } = useApp();
+  const [weatherInsight, setWeatherInsight] = useState(null);
   const activities = activitiesWithGroups(
     preferredActivities(state.activities, { hideStrava: Boolean(state.intervals?.connected) }),
     state.activityGroups,
@@ -244,7 +246,10 @@ export default function Briefing() {
 
   const weekOpenItems = rows.reduce((sum, row) => sum + row.items.filter((item) => item.tone === "planned").length, 0);
   const todayKey = isoDate(new Date());
-  const todayPlanEntries = state.plan.filter((item) => !item.archived && item.date === todayKey);
+  const todayPlanEntries = useMemo(
+    () => state.plan.filter((item) => !item.archived && item.date === todayKey),
+    [state.plan, todayKey],
+  );
   const hydrationSummary = hydrationState
     ? hydrationState.reliable
       ? `Getrunken ${latestReview.drinkMl} ml · geschätztes Defizit ${hydrationState.deficit} ml.`
@@ -253,7 +258,18 @@ export default function Briefing() {
 
   return (
     <>
-      <PageTitle eyebrow={copy.eyebrow} title={`${copy.greeting}${name ? `, ${name}` : ""}.`}><WeatherCard plannedEntries={todayPlanEntries} /></PageTitle>
+      <PageTitle eyebrow={copy.eyebrow} title={`${copy.greeting}${name ? `, ${name}` : ""}.`}><WeatherCard plannedEntries={todayPlanEntries} onInsight={setWeatherInsight} /></PageTitle>
+      {weatherInsight?.mode === "flexible" && (
+        <section className="briefing-best-slot" aria-label={`Bestes Wetterfenster für ${weatherInsight.title}`}>
+          <span className="briefing-best-slot-icon" aria-hidden="true">◷</span>
+          <div>
+            <p>Wetterfenster · {weatherInsight.title}</p>
+            <strong>Bester Slot für {weatherInsight.slotObject} ist {weatherInsight.windowLabel}.</strong>
+            <small>{weatherInsight.temperatureLabel} · {weatherInsight.condition} · {weatherInsight.advice}</small>
+          </div>
+          <span className="briefing-best-slot-state">Spontan</span>
+        </section>
+      )}
       <div className="grid briefing-grid">
         <Card className="wide today-card">
           <div className="today-card-heading">

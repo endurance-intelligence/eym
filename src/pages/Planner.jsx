@@ -38,6 +38,12 @@ import {
   trackWorkoutSummary,
   workoutFromTrackTemplate,
 } from "../services/trackWorkout";
+import {
+  isSpontaneousWorkout,
+  normalizeWorkoutTiming,
+  workoutSortTime,
+  workoutTimingLabel,
+} from "../services/plannerTime";
 import "./Planner.css";
 
 const dayFormatter = new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" });
@@ -75,6 +81,7 @@ function adjustmentReplacementOptions(planner = {}) {
       title: entry.name,
       duration: Number(entry.durationMinutes || 0),
       distance: Number(entry.distanceKm || 0),
+      time: entry.time || "18:00",
       preserveDistance: entry.sport === "running" && !Number(entry.distanceKm || 0),
       commitmentId: entry.id,
     });
@@ -92,7 +99,8 @@ function planFingerprint(plan) {
   return JSON.stringify(plan.map((item) => ({
     id: item.id,
     date: item.date,
-    time: item.time,
+    time: isSpontaneousWorkout(item) ? "" : item.time,
+    spontaneous: isSpontaneousWorkout(item),
     title: item.title,
     type: item.type,
     distance: Number(item.distance || 0),
@@ -109,7 +117,8 @@ function createBlank(weekStart) {
     id: crypto.randomUUID(),
     date: isoDate(date),
     day: "Dienstag",
-    time: "18:00",
+    time: "",
+    spontaneous: true,
     title: "",
     type: "Easy Run",
     distance: 0,
@@ -120,6 +129,12 @@ function createBlank(weekStart) {
     source: "planner",
     archived: false,
   };
+}
+
+function adjustmentMoveTimingLabel(item, draft = {}) {
+  if (!item.fixed && !item.commitmentId && draft.moveSpontaneous) return "Spontan";
+  const time = draft.moveTime || item.time;
+  return time ? `${time} Uhr` : "Uhrzeit offen";
 }
 
 function isSaturdayPlannerSlot(item, saturdayDate) {
@@ -291,7 +306,7 @@ export default function Planner() {
   const weekPlan = useMemo(() => state.plan.filter((item) => {
     const value = item.date || "";
     return value >= isoDate(weekStart) && value <= isoDate(weekEnd) && !item.archived;
-  }).sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`)), [state.plan, weekStart, weekEnd]);
+  }).sort((a, b) => `${a.date}${workoutSortTime(a)}${a.title || ""}`.localeCompare(`${b.date}${workoutSortTime(b)}${b.title || ""}`)), [state.plan, weekStart, weekEnd]);
   const mondayDate = isoDate(dateForDay(weekStart, 0));
   const wednesdayDate = isoDate(dateForDay(weekStart, 2));
   const saturdayDate = isoDate(dateForDay(weekStart, 5));
@@ -444,6 +459,7 @@ export default function Planner() {
       replacementKey,
       moveDate: initial?.date || isoDate(weekStart),
       moveTime: initial?.time || "18:00",
+      moveSpontaneous: initial ? isSpontaneousWorkout(initial) : true,
       cancelReason: initial?.missedReason || "Termin fiel aus",
       cancelNote: initial?.missedNote || "",
     });
@@ -515,11 +531,13 @@ export default function Planner() {
         }
         if (adjustmentDraft.action === "move") {
           const movedDate = new Date(`${adjustmentDraft.moveDate}T12:00:00`);
+          const spontaneous = item.fixed || item.commitmentId ? false : Boolean(adjustmentDraft.moveSpontaneous);
           return {
             ...item,
             date: adjustmentDraft.moveDate,
             day: plannerDays[movedDate.getDay() === 0 ? 6 : movedDate.getDay() - 1],
-            time: adjustmentDraft.moveTime || item.time,
+            spontaneous,
+            time: spontaneous ? "" : adjustmentDraft.moveTime || item.time || "18:00",
             missedReason: "",
             missedNote: "",
             missedMeta: {},
@@ -535,6 +553,7 @@ export default function Planner() {
         const title = option.key === "preset:easy-run"
           ? `${nextDistance || originalDistance || 5} km locker`
           : option.title || option.label;
+        const fixed = Boolean(option.commitmentId);
         return {
           ...item,
           title,
@@ -542,7 +561,9 @@ export default function Planner() {
           distance: nextDistance,
           duration: nextDuration,
           optional: false,
-          fixed: Boolean(option.commitmentId),
+          fixed,
+          spontaneous: !fixed,
+          time: fixed ? option.time || item.time || "18:00" : "",
           commitmentId: option.commitmentId || null,
           choicePending: false,
           choiceOptions: null,
@@ -628,6 +649,7 @@ export default function Planner() {
         distance: 0,
         duration: 90,
         fixed: true,
+        spontaneous: false,
         notes: "Bestätigter Fixtermin. Wird als intensive Belastung berücksichtigt, aber nicht als Laufkilometer.",
       } : {
         ...common,
@@ -636,6 +658,7 @@ export default function Planner() {
         distance: baseDistance,
         duration: Math.round(baseDistance * 6.2),
         fixed: true,
+        spontaneous: false,
         notes: "Bestätigter Gruppenlauf. Intensität kontrolliert und passend zur Gesamtwoche halten.",
       };
     } else if (mode === "replacement") {
@@ -651,6 +674,8 @@ export default function Planner() {
         distance: replacementDistance,
         duration: Math.round(replacementDistance * (cautious ? 7 : 6.3)),
         fixed: false,
+        spontaneous: true,
+        time: "",
         replacementFor: key,
         notes: cautious
           ? "Intelligenter Ersatz: Die Reviews zeigen aktuell ein Belastungssignal. Nur locker laufen und bei schweren Beinen kürzen."
@@ -666,6 +691,8 @@ export default function Planner() {
         distance: 0,
         duration: 0,
         fixed: false,
+        spontaneous: true,
+        time: "",
         restFor: key,
         notes: isFootball
           ? "Fußball ist abgesagt. Der Coach nutzt den Tag bewusst zur Erholung; keine Einheit muss nachgeholt werden."
@@ -722,6 +749,8 @@ export default function Planner() {
         title: `ORC Track oder ${distance} km locker`,
         type: "Samstagsoption",
         fixed: false,
+        spontaneous: true,
+        time: "",
         saturdayMode: "open",
         choicePending: true,
         selectedChoice: null,
@@ -737,6 +766,8 @@ export default function Planner() {
         title: "ORC Track",
         type: "ORC Track",
         fixed: true,
+        spontaneous: false,
+        time: config.orcTrackTime || existing?.time || "09:00",
         saturdayMode: "orc",
         choicePending: false,
         selectedChoice: "orc",
@@ -749,6 +780,8 @@ export default function Planner() {
         title: `${distance} km locker`,
         type: "Easy Run",
         fixed: false,
+        spontaneous: true,
+        time: "",
         saturdayMode: "alternative",
         choicePending: false,
         selectedChoice: "alternative",
@@ -937,7 +970,7 @@ export default function Planner() {
     event.preventDefault();
     if (!editing?.title.trim()) return;
     const date = new Date(`${editing.date}T12:00:00`);
-    const next = {
+    const next = normalizeWorkoutTiming({
       ...editing,
       day: new Intl.DateTimeFormat("de-DE", { weekday: "long" }).format(date),
       distance: Number(editing.distance || 0),
@@ -946,7 +979,7 @@ export default function Planner() {
       structuredWorkout: isTrackWorkout(editing)
         ? normalizeTrackWorkout(editing.structuredWorkout)
         : null,
-    };
+    });
     setState((current) => ({
       ...current,
       plan: current.plan.some((item) => item.id === next.id)
@@ -1328,7 +1361,7 @@ export default function Planner() {
                     <button className="planner-check" title={isCancelled ? "Ausfall zurücknehmen" : "Erledigt markieren"} onClick={() => isCancelled ? restoreCancelledWorkout(item) : updateWorkout(item.id, { completed: !item.completed, missedReason: "", missedNote: "", missedMeta: {}, plannedCancellation: false })}>{item.completed || matched ? "✓" : isCancelled ? "×" : isMissed ? "!" : ""}</button>
                     <div className="planner-workout-main">
                       <div>
-                        <span>{item.time} · {matched ? "ERLEDIGT" : isCancelled ? "AUSGEFALLEN" : isMissed ? "NICHT ERLEDIGT" : item.optional ? "OPTIONAL" : "PFLICHT"}</span>
+                        <span>{workoutTimingLabel(item)} · {matched ? "ERLEDIGT" : isCancelled ? "AUSGEFALLEN" : isMissed ? "NICHT ERLEDIGT" : item.optional ? "OPTIONAL" : "PFLICHT"}</span>
                         {item.weatherAdjusted && <em>WETTER</em>}
                         {item.comboSession && <em>KOMBI-TAG</em>}
                         {item.doubleSession && <em>DOPPELTRAINING</em>}
@@ -1403,7 +1436,7 @@ export default function Planner() {
                     if (!entries.length) return null;
                     return <div className="planner-adjustment-day" key={date}>
                       <div className="planner-adjustment-day-heading">{day} · {new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit" }).format(new Date(`${date}T12:00:00`))}</div>
-                      {entries.map((item) => <label className="planner-adjustment-unit" key={item.id}><input type="checkbox" checked={adjustmentDraft.selectedIds.includes(item.id)} onChange={() => toggleAdjustmentItem(item.id)} /><span><b>{item.time ? `${item.time} · ` : ""}{item.title}</b><small>{item.plannedCancellation ? `Aktuell ausgefallen · ${item.missedReason}` : `${item.type}${Number(item.distance || 0) ? ` · ${Number(item.distance).toFixed(1).replace(".0", "")} km` : ""} · ${item.duration || 0} min`}</small></span></label>)}
+                      {entries.map((item) => <label className="planner-adjustment-unit" key={item.id}><input type="checkbox" checked={adjustmentDraft.selectedIds.includes(item.id)} onChange={() => toggleAdjustmentItem(item.id)} /><span><b>{workoutTimingLabel(item)} · {item.title}</b><small>{item.plannedCancellation ? `Aktuell ausgefallen · ${item.missedReason}` : `${item.type}${Number(item.distance || 0) ? ` · ${Number(item.distance).toFixed(1).replace(".0", "")} km` : ""} · ${item.duration || 0} min`}</small></span></label>)}
                     </div>;
                   })}
                 </div>
@@ -1417,7 +1450,7 @@ export default function Planner() {
                   <button type="button" className={adjustmentDraft.action === "cancel" ? "selected" : ""} onClick={() => setAdjustmentDraft({ ...adjustmentDraft, action: "cancel" })}>Fällt aus</button>
                 </div>
                 {adjustmentDraft.action === "replace" && <label>Ersatz<select value={adjustmentDraft.replacementKey} onChange={(event) => setAdjustmentDraft({ ...adjustmentDraft, replacementKey: event.target.value })}>{replacementOptions.map((option) => <option value={option.key} key={option.key}>{option.label}</option>)}</select></label>}
-                {adjustmentDraft.action === "move" && <div className="form-grid"><label>Neues Datum<input type="date" min={todayKey} value={adjustmentDraft.moveDate} onChange={(event) => setAdjustmentDraft({ ...adjustmentDraft, moveDate: event.target.value })} /></label><label>Neue Uhrzeit<input type="time" value={adjustmentDraft.moveTime} onChange={(event) => setAdjustmentDraft({ ...adjustmentDraft, moveTime: event.target.value })} /></label></div>}
+                {adjustmentDraft.action === "move" && <div className="form-grid planner-move-timing"><label>Neues Datum<input type="date" min={todayKey} value={adjustmentDraft.moveDate} onChange={(event) => setAdjustmentDraft({ ...adjustmentDraft, moveDate: event.target.value })} /></label><label className="planner-spontaneous-toggle"><input type="checkbox" checked={Boolean(adjustmentDraft.moveSpontaneous)} disabled={adjustmentSelectedItems.some((item) => item.fixed || item.commitmentId)} onChange={(event) => setAdjustmentDraft({ ...adjustmentDraft, moveSpontaneous: event.target.checked, moveTime: event.target.checked ? "" : adjustmentDraft.moveTime || "18:00" })} /><span><b>Spontan</b><small>Ohne feste Uhrzeit; der Wetter-Slot bleibt nur eine Empfehlung.</small></span></label>{!adjustmentDraft.moveSpontaneous && <label>Neue Uhrzeit<input type="time" value={adjustmentDraft.moveTime} onChange={(event) => setAdjustmentDraft({ ...adjustmentDraft, moveTime: event.target.value })} /></label>}</div>}
                 {adjustmentDraft.action === "cancel" && <div className="planner-cancel-fields"><label>Warum fällt die Einheit aus?<select value={adjustmentDraft.cancelReason} onChange={(event) => setAdjustmentDraft({ ...adjustmentDraft, cancelReason: event.target.value })}>{cancellationReasonOptions.map((reason) => <option key={reason}>{reason}</option>)}</select></label><label>Notiz (optional)<textarea value={adjustmentDraft.cancelNote} onChange={(event) => setAdjustmentDraft({ ...adjustmentDraft, cancelNote: event.target.value })} placeholder="z. B. Training vom Verein abgesagt" /></label><div className="setup-note"><strong>Die Einheit bleibt in der Historie.</strong> So erkennt der Coach, ob ein externer Termin ausfiel oder ob Belastung, Krankheit oder Beschwerden der Grund waren.</div></div>}
                 <button className="primary" type="submit" disabled={!adjustmentDraft.selectedIds.length}>{adjustmentDraft.action === "replace" ? "Ausgewählte Einheit ersetzen" : adjustmentDraft.action === "move" ? "Ausgewählte Einheit verschieben" : "Als ausgefallen markieren"}</button>
               </section>
@@ -1425,7 +1458,7 @@ export default function Planner() {
 
             <section className="planner-adjustment-preview">
               <div><p className="eyebrow">3. Änderung prüfen</p><h3>Das wird geändert</h3></div>
-              {adjustmentSelectedItems.length ? <div className="planner-adjustment-preview-list">{adjustmentSelectedItems.map((item) => <article key={item.id}><div><strong>{item.day || new Intl.DateTimeFormat("de-DE", { weekday: "long" }).format(new Date(`${item.date}T12:00:00`))} · {item.time || "flexibel"}</strong><span>{item.title}</span></div><b>→</b><div><strong>{adjustmentDraft.action === "replace" ? adjustmentReplacement?.label || "Ersatz auswählen" : adjustmentDraft.action === "move" ? `${adjustmentDraft.moveDate || "Datum wählen"} · ${adjustmentDraft.moveTime || item.time || "flexibel"}` : "Wird als ausgefallen markiert"}</strong><span>{adjustmentDraft.action === "replace" ? "Andere Einheiten des Tages bleiben erhalten" : adjustmentDraft.action === "move" ? "Inhalt der Einheit bleibt gleich" : adjustmentDraft.cancelReason || "Grund auswählen"}</span></div></article>)}</div> : <p className="muted">Wähle links mindestens eine Einheit aus. Danach siehst du hier die konkrete Auswirkung.</p>}
+              {adjustmentSelectedItems.length ? <div className="planner-adjustment-preview-list">{adjustmentSelectedItems.map((item) => <article key={item.id}><div><strong>{item.day || new Intl.DateTimeFormat("de-DE", { weekday: "long" }).format(new Date(`${item.date}T12:00:00`))} · {workoutTimingLabel(item)}</strong><span>{item.title}</span></div><b>→</b><div><strong>{adjustmentDraft.action === "replace" ? adjustmentReplacement?.label || "Ersatz auswählen" : adjustmentDraft.action === "move" ? `${adjustmentDraft.moveDate || "Datum wählen"} · ${adjustmentMoveTimingLabel(item, adjustmentDraft)}` : "Wird als ausgefallen markiert"}</strong><span>{adjustmentDraft.action === "replace" ? "Andere Einheiten des Tages bleiben erhalten" : adjustmentDraft.action === "move" ? "Inhalt der Einheit bleibt gleich" : adjustmentDraft.cancelReason || "Grund auswählen"}</span></div></article>)}</div> : <p className="muted">Wähle links mindestens eine Einheit aus. Danach siehst du hier die konkrete Auswirkung.</p>}
               <div className="planner-adjustment-scope-note">Nicht ausgewählte Einheiten und Tage bleiben unverändert. Die Woche wird nicht neu berechnet.</div>
             </section>
           </form>
@@ -1464,7 +1497,12 @@ export default function Planner() {
             <h2>{state.plan.some((item) => item.id === editing.id) ? "Training bearbeiten" : "Training hinzufügen"}</h2>
             <div className="form-grid">
               <label>Datum<input type="date" value={editing.date} onChange={(event) => setEditing({ ...editing, date: event.target.value })} /></label>
-              <label>Uhrzeit<input type="time" value={editing.time} onChange={(event) => setEditing({ ...editing, time: event.target.value })} /></label>
+              {editing.fixed || editing.commitmentId
+                ? <label>Uhrzeit des Fixtermins<input type="time" value={editing.time || "18:00"} onChange={(event) => setEditing({ ...editing, spontaneous: false, time: event.target.value })} /></label>
+                : <>
+                  <label className="planner-spontaneous-toggle"><input type="checkbox" checked={isSpontaneousWorkout(editing)} onChange={(event) => setEditing({ ...editing, spontaneous: event.target.checked, time: event.target.checked ? "" : editing.time || "18:00" })} /><span><b>Spontan</b><small>Keine feste Uhrzeit. Das Briefing empfiehlt bei Outdoor-Einheiten den besten Wetter-Slot.</small></span></label>
+                  {!isSpontaneousWorkout(editing) && <label>Uhrzeit<input type="time" value={editing.time || "18:00"} onChange={(event) => setEditing({ ...editing, time: event.target.value })} /></label>}
+                </>}
               <label>Titel<input value={editing.title} onChange={(event) => setEditing({ ...editing, title: event.target.value })} required /></label>
               <label>Typ<select value={editing.type} onChange={(event) => setEditing({ ...editing, type: event.target.value })}>{workoutTypes.map((type) => <option key={type}>{type}</option>)}</select></label>
               <label>Distanz in km<input type="number" min="0" step="0.1" value={editing.distance} onChange={(event) => setEditing({ ...editing, distance: event.target.value })} /></label>

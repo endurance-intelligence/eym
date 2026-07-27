@@ -62,6 +62,7 @@ export function buildCommitmentPlanEntry(commitment = {}, date = "", id = "") {
     source: "planner-engine",
     archived: false,
     fixed: true,
+    spontaneous: false,
     commitmentId: commitment.id || null,
     commitmentLoad: commitment.load || "medium",
     conflictMode: commitment.conflictMode || "combine",

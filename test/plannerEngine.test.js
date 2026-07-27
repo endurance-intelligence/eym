@@ -61,4 +61,14 @@ test("planner uses the supplied reference date and produces stable training cont
   assert.equal(first.weekStart, "2026-07-27");
   assert.deepEqual(normalize(first), normalize(second));
   assert.equal(first.plan.some((item) => /ORC|Fußball/.test(`${item.title} ${item.type}`)), false);
+  assert.ok(first.plan.length > 0);
+  first.plan.forEach((item) => {
+    if (item.fixed) {
+      assert.equal(item.spontaneous, false);
+      assert.match(item.time, /^\d{2}:\d{2}$/);
+    } else {
+      assert.equal(item.spontaneous, true);
+      assert.equal(item.time, "");
+    }
+  });
 });

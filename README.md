@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **3.2.5**
+Current app version: **3.5.5**
 
 **Eat your miles.**
 
@@ -340,6 +340,15 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 - Existing templates can be updated explicitly, saved as a separate copy or removed without changing the workout currently being edited.
 - Templates are stored in the existing cloud configuration and included in normal EYM backups.
 - The track editor uses a wider desktop modal and keeps the archive and step controls in a single-column touch layout on phones.
+
+## Spontaneous sessions and weather slots v3.5.5
+
+- Automatically planned runs, rides, strength and mobility sessions no longer receive invented clock times. Only configured fixed appointments keep their time by default.
+- The workout editor offers a clear `Spontan` switch. Turning it off reveals a time field for the rare session that should receive an explicit start time.
+- Existing active weeks are not rewritten. Legacy non-fixed sessions are interpreted as spontaneous in Planner, Briefing and the Intervals.icu publication fingerprint.
+- The Briefing places a prominent two-hour recommendation below the greeting for today's spontaneous run or road ride. Cycling windows apply a stronger rain and wind penalty.
+- Weather remains advisory: EYM never moves or changes the active week automatically.
+- Intervals.icu receives spontaneous sessions as date-based midnight calendar events, while fixed appointments keep their real start time. Redeploy the `intervals` Supabase function after installing this version.
 
 Before deploying the application, apply `supabase/migrations/20260722120000_athlete_images.sql`. Afterwards run:
 

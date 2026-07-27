@@ -339,6 +339,8 @@ function weatherDecision(weather, config) {
 
 function item(weekStart, dayIndex, values) {
   const date = dateForDay(weekStart, dayIndex);
+  const fixed = Boolean(values.fixed);
+  const spontaneous = fixed ? false : values.spontaneous !== false;
   return {
     id: crypto.randomUUID(),
     date: isoDate(date),
@@ -348,6 +350,9 @@ function item(weekStart, dayIndex, values) {
     source: "planner-engine",
     archived: false,
     ...values,
+    fixed,
+    spontaneous,
+    time: spontaneous ? "" : values.time || "",
   };
 }
 
@@ -429,6 +434,7 @@ function applyExtraOrcTrack(plan, weekStart, dayName, config) {
     title: "ORC Track",
     type: "ORC Track",
     fixed: true,
+    spontaneous: false,
     fixedSlot: "extraOrcTrack",
     optional: false,
     choicePending: false,
@@ -489,6 +495,7 @@ function applyRecurringCommitments(plan, weekStart, config, mode = "all") {
       notes: `Konfigurierter Fixtermin (${commitment.weekday}). Belastung: ${commitment.load === "high" ? "hoch" : commitment.load === "low" ? "niedrig" : "mittel"}.`,
       optional: false,
       fixed: true,
+      spontaneous: false,
       commitmentId: commitment.id,
       commitmentLoad: commitment.load || "medium",
       conflictMode,
@@ -780,6 +787,10 @@ export function generateWeekPlan({
             title: `${distance} km Wiedereinstieg`,
             distance,
             optional: true,
+            fixed: false,
+            spontaneous: true,
+            time: "",
+            fixedSlot: null,
             notes: "Nur locker und nur, wenn du dich im Alltag wieder normal fühlst. Bei Verschlechterung abbrechen.",
           };
         }

@@ -617,6 +617,20 @@ input[type="checkbox"],input[type="radio"]{accent-color:var(--accent)}
 @media(max-width:800px){.weather-briefing{width:100%}.page-title-actions:has(.weather-briefing){width:100%}.briefing-summary-grid{grid-template-columns:1fr}.briefing-latest-card{grid-column:auto}.briefing-compact-card{min-height:0}.weather-briefing-details>div{right:-8px}}
 @media(max-width:540px){.weather-briefing{grid-template-columns:auto minmax(0,1fr);padding:12px}.weather-briefing-details{grid-column:1/-1;padding-left:42px}.weather-briefing-details>div{position:static;margin-top:9px;min-width:0}.weather-briefing-copy strong{white-space:normal}.today-card{padding:16px}.today-upcoming-heading>span{display:none}.briefing-compact-footer{grid-template-columns:1fr auto}.briefing-compact-footer>span{grid-column:1/-1}.briefing-compact-metrics{justify-content:space-between}.briefing-summary-grid{gap:10px}}
 
+/* v3.5.5 – prominent weather recommendation for spontaneous outdoor sessions */
+.briefing-best-slot{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:13px;margin:-7px 0 18px;padding:14px 16px;border:1px solid var(--accent-border-strong);border-radius:16px;background:linear-gradient(135deg,var(--accent-surface-strong),var(--bg-card-alt));box-shadow:var(--ambient-glow-subtle)}
+.briefing-best-slot-icon{display:grid;place-items:center;width:38px;height:38px;border:1px solid var(--accent-border);border-radius:50%;color:var(--accent-bright);font-size:23px}
+.briefing-best-slot>div{display:grid;gap:3px;min-width:0}
+.briefing-best-slot p{margin:0;color:var(--accent);font-size:9px;font-weight:900;letter-spacing:.13em;text-transform:uppercase}
+.briefing-best-slot strong{font-size:18px;line-height:1.25}
+.briefing-best-slot small{color:var(--muted-bright);line-height:1.4}
+.briefing-best-slot-state{padding:6px 10px;border:1px solid var(--accent-border);border-radius:999px;color:var(--accent-bright);font-size:11px;font-weight:850}
+@media(max-width:620px){
+  .briefing-best-slot{grid-template-columns:auto minmax(0,1fr);align-items:start;padding:13px}
+  .briefing-best-slot-state{grid-column:2;justify-self:start}
+  .briefing-best-slot strong{font-size:16px}
+}
+
 /* v3.2 – cloud trust, private images and resilient route loading */
 .aside-cloud-status{display:flex;align-items:center;gap:7px;width:max-content;margin:0 0 14px;padding:5px 8px;border:1px solid var(--border);border-radius:999px;color:var(--muted-bright);font-size:10px;letter-spacing:.05em;text-decoration:none}.aside-cloud-status i{width:7px;height:7px;border-radius:50%;background:var(--warning)}.aside-cloud-status.synced i{background:var(--success)}.aside-cloud-status.error i,.aside-cloud-status.conflict i{background:#ff7777}.aside-cloud-status.error,.aside-cloud-status.conflict{border-color:#754040;color:#ffadad}.cloud-status.conflict::before{background:#ff7777}.cloud-status.saving::before,.cloud-status.loading::before{background:var(--warning)}.cloud-error-message{padding:11px 13px;border:1px solid #754040;border-radius:11px;background:#251313;color:#ffadad}.route-loading{padding:30px;color:var(--muted);text-align:center}.route-error-shell{min-height:100vh;display:grid;place-items:center;padding:24px}.route-error-card{width:min(620px,100%)}.route-error-card h1{margin:8px 0 14px;font-size:clamp(30px,6vw,50px);letter-spacing:-.045em}.route-error-card .primary{margin-top:12px}
 

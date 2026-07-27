@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { intervalDescription } from "../_shared/structuredWorkout.ts";
+import { intervalsStartDateLocal } from "../_shared/plannerTiming.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -62,10 +63,6 @@ function validDate(value: unknown) {
   return /^\d{4}-\d{2}-\d{2}$/.test(String(value || ""));
 }
 
-function validTime(value: unknown) {
-  return /^\d{2}:\d{2}$/.test(String(value || ""));
-}
-
 function safeMinutes(value: unknown, fallback = 60) {
   const parsed = Math.round(Number(value || fallback));
   return Math.max(1, Math.min(24 * 60, Number.isFinite(parsed) ? parsed : fallback));
@@ -85,14 +82,12 @@ function isGuidedWorkout(item: Record<string, unknown>) {
 }
 
 function planEvent(item: Record<string, unknown>, existingId?: unknown) {
-  const date = String(item.date || "");
-  const time = validTime(item.time) ? String(item.time) : "18:00";
   const guided = isGuidedWorkout(item);
   const externalId = `${PLAN_PREFIX}${String(item.id || crypto.randomUUID())}`;
   const base: Record<string, unknown> = {
     ...(existingId ? { id: existingId } : {}),
     category: guided ? "WORKOUT" : "NOTE",
-    start_date_local: `${date}T${time}:00`,
+    start_date_local: intervalsStartDateLocal(item),
     name: String(item.title || item.type || "Training"),
     external_id: externalId,
   };
