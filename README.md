@@ -333,6 +333,14 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 - Warm-up and cool-down are advanced with the Garmin LAP button instead of ending after a fixed duration. Intervals.icu still receives internal estimates solely for load calculation.
 - Existing v3.5.2 interval settings are migrated automatically into the new two-step sequence when the workout is opened or saved.
 
+## Track workout template archive v3.5.4
+
+- Interval and sprint definitions can be saved under a personal name and reused from the planner.
+- Loading a template copies its current content into the selected appointment. Small appointment-specific changes do not silently overwrite the archived template.
+- Existing templates can be updated explicitly, saved as a separate copy or removed without changing the workout currently being edited.
+- Templates are stored in the existing cloud configuration and included in normal EYM backups.
+- The track editor uses a wider desktop modal and keeps the archive and step controls in a single-column touch layout on phones.
+
 Before deploying the application, apply `supabase/migrations/20260722120000_athlete_images.sql`. Afterwards run:
 
 ```bash

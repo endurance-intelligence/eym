@@ -1,4 +1,6 @@
-export const CONFIGURATION_VERSION = 4;
+import { normalizeTrackWorkoutTemplates } from "./trackWorkout.js";
+
+export const CONFIGURATION_VERSION = 5;
 
 export const WEEKDAYS = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"];
 
@@ -185,6 +187,7 @@ export function migrateConfiguration(inputState = {}) {
       legacyMigrationComplete: true,
       recurringCommitments: existingCommitments.map(normalizeCommitment),
       replacementSports: [...new Set(replacementSports)],
+      trackWorkoutTemplates: normalizeTrackWorkoutTemplates(planner.trackWorkoutTemplates),
     },
   };
 }

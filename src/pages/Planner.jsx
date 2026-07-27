@@ -31,9 +31,12 @@ import {
   requiresWeeklyReview,
 } from "../services/reviewCoverage";
 import {
+  buildTrackWorkoutTemplate,
   isTrackWorkout,
   normalizeTrackWorkout,
+  normalizeTrackWorkoutTemplates,
   trackWorkoutSummary,
+  workoutFromTrackTemplate,
 } from "../services/trackWorkout";
 import "./Planner.css";
 
@@ -330,6 +333,10 @@ export default function Planner() {
     return state.plan.some((item) => !item.archived && item.date >= isoDate(previousStart) && item.date <= isoDate(previousEnd));
   }, [state.plan, offsetWeeks]);
   const config = useMemo(() => state.planner || {}, [state.planner]);
+  const trackWorkoutTemplates = useMemo(
+    () => normalizeTrackWorkoutTemplates(config.trackWorkoutTemplates),
+    [config.trackWorkoutTemplates],
+  );
   const unifiedCoach = useMemo(() => buildCoachState(state), [state]);
   const scienceAssessment = unifiedCoach.week;
   const baseline = useMemo(() => athleteBaseline(state), [state]);
@@ -1018,6 +1025,84 @@ export default function Planner() {
     });
   }
 
+  function selectTrackTemplate(templateId) {
+    const template = trackWorkoutTemplates.find((entry) => entry.id === templateId);
+    setEditing((current) => {
+      if (template) return { ...current, structuredWorkout: workoutFromTrackTemplate(template) };
+      const workout = normalizeTrackWorkout(current?.structuredWorkout);
+      return {
+        ...current,
+        structuredWorkout: {
+          kind: workout.kind,
+          rounds: workout.rounds,
+          steps: workout.steps,
+          warmupMode: "lap",
+          cooldownMode: "lap",
+        },
+      };
+    });
+  }
+
+  function saveTrackTemplate(createCopy = false) {
+    const workout = normalizeTrackWorkout(editing?.structuredWorkout);
+    const name = String(workout.templateName || "").trim();
+    if (!name) return;
+    const existing = !createCopy && workout.templateId
+      ? trackWorkoutTemplates.find((entry) => entry.id === workout.templateId)
+      : null;
+    const id = existing?.id || crypto.randomUUID();
+    const now = new Date().toISOString();
+    const template = buildTrackWorkoutTemplate({
+      id,
+      name,
+      workout,
+      createdAt: existing?.createdAt || now,
+      updatedAt: now,
+    });
+    setState((current) => {
+      const templates = normalizeTrackWorkoutTemplates(current.planner?.trackWorkoutTemplates);
+      return {
+        ...current,
+        planner: {
+          ...current.planner,
+          trackWorkoutTemplates: existing
+            ? templates.map((entry) => entry.id === id ? template : entry)
+            : [template, ...templates],
+        },
+      };
+    });
+    setEditing((current) => ({
+      ...current,
+      structuredWorkout: {
+        ...normalizeTrackWorkout(current?.structuredWorkout),
+        templateId: id,
+        templateName: name,
+      },
+    }));
+  }
+
+  function deleteTrackTemplate() {
+    const workout = normalizeTrackWorkout(editing?.structuredWorkout);
+    const template = trackWorkoutTemplates.find((entry) => entry.id === workout.templateId);
+    if (!template || !window.confirm(`„${template.name}“ wirklich aus dem Vorlagenarchiv entfernen? Das aktuelle Training bleibt erhalten.`)) return;
+    setState((current) => ({
+      ...current,
+      planner: {
+        ...current.planner,
+        trackWorkoutTemplates: normalizeTrackWorkoutTemplates(current.planner?.trackWorkoutTemplates)
+          .filter((entry) => entry.id !== template.id),
+      },
+    }));
+    setEditing((current) => ({
+      ...current,
+      structuredWorkout: {
+        ...normalizeTrackWorkout(current?.structuredWorkout),
+        templateId: "",
+        templateName: template.name,
+      },
+    }));
+  }
+
   function saveMissed(event) {
     event.preventDefault();
     if (!missedEditing?.reason) return;
@@ -1373,7 +1458,7 @@ export default function Planner() {
 
       {editing && (
         <div className="modal-backdrop">
-          <form className="modal planner-modal" onSubmit={saveWorkout}>
+          <form className={`modal planner-modal ${editingTrackWorkout ? "planner-track-modal" : ""}`} onSubmit={saveWorkout}>
             <button type="button" className="close" onClick={() => setEditing(null)}>×</button>
             <p className="eyebrow">Einheit</p>
             <h2>{state.plan.some((item) => item.id === editing.id) ? "Training bearbeiten" : "Training hinzufügen"}</h2>
@@ -1392,6 +1477,29 @@ export default function Planner() {
                   <h3>Track-Abfolge festlegen</h3>
                   <p>Warm-up und Cool-down bleiben offen. Auf Garmin wechselst du jeweils mit der LAP-Taste zum nächsten Abschnitt.</p>
                 </div>
+                <section className="planner-track-archive">
+                  <div className="planner-track-archive-heading">
+                    <div><p className="eyebrow">Vorlagenarchiv</p><h4>Bewährte Einheiten wiederverwenden</h4></div>
+                    <span>{trackWorkoutTemplates.length} gespeichert</span>
+                  </div>
+                  <div className="form-grid">
+                    <label>Vorlage auswählen
+                      <select value={editingTrackWorkout.templateId || ""} onChange={(event) => selectTrackTemplate(event.target.value)}>
+                        <option value="">Neues Workout / keine Vorlage</option>
+                        {trackWorkoutTemplates.map((template) => <option value={template.id} key={template.id}>{template.name} · {template.kind === "sprints" ? "Sprints" : "Intervalle"}</option>)}
+                      </select>
+                    </label>
+                    <label>Name der Vorlage
+                      <input maxLength="80" value={editingTrackWorkout.templateName || ""} onChange={(event) => updateTrackWorkout("templateName", event.target.value)} placeholder="z. B. 1200/800 Mix" />
+                    </label>
+                  </div>
+                  <div className="planner-track-archive-actions">
+                    {editingTrackWorkout.templateId
+                      ? <><button type="button" onClick={() => saveTrackTemplate(false)} disabled={!editingTrackWorkout.templateName?.trim()}>Vorlage aktualisieren</button><button type="button" onClick={() => saveTrackTemplate(true)} disabled={!editingTrackWorkout.templateName?.trim()}>Als neue Vorlage speichern</button><button type="button" className="danger" onClick={deleteTrackTemplate}>Aus Archiv entfernen</button></>
+                      : <button type="button" onClick={() => saveTrackTemplate(true)} disabled={!editingTrackWorkout.templateName?.trim()}>Im Archiv speichern</button>}
+                  </div>
+                  <small>Auswählen kopiert die Vorlage in diesen Termin. Änderungen am Termin bleiben lokal, bis du ausdrücklich „Vorlage aktualisieren“ wählst.</small>
+                </section>
                 <div className="planner-track-lap-flow" aria-label="LAP-gesteuerter Ablauf">
                   <span><b>1 · Warm-up</b><small>locker laufen · dann LAP drücken</small></span>
                   <strong>→</strong>

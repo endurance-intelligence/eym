@@ -7,6 +7,7 @@ test("fresh state contains no athlete-specific mission or appointments", () => {
   assert.equal(defaultState.mission.date, "");
   assert.deepEqual(defaultState.mission.milestones, []);
   assert.deepEqual(defaultState.planner.recurringCommitments, []);
+  assert.deepEqual(defaultState.planner.trackWorkoutTemplates, []);
   assert.equal(defaultState.planner.fixedAppointments.football, false);
   assert.equal(defaultState.planner.fixedAppointments.orcRun, false);
   assert.equal(defaultState.profile.experienceLevel, "beginner");

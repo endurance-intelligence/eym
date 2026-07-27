@@ -72,6 +72,7 @@ export const defaultState = {
     orcTime: "19:00",
     orcTrackTime: "09:00",
     intervalSync: {},
+    trackWorkoutTemplates: [],
   },
   calendar: {
     id: crypto.randomUUID(),

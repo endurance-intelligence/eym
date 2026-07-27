@@ -1,9 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  buildTrackWorkoutTemplate,
   isTrackWorkout,
   normalizeTrackWorkout,
+  normalizeTrackWorkoutTemplates,
   trackWorkoutSummary,
+  workoutFromTrackTemplate,
 } from "../src/services/trackWorkout.js";
 import { intervalDescription } from "../supabase/functions/_shared/structuredWorkout.ts";
 
@@ -76,4 +79,30 @@ test("Intervals description contains an ordered Garmin block and LAP-controlled 
   assert.equal(description.match(/press lap/g)?.length, 2);
   assert.match(description, /intensity=warmup/);
   assert.match(description, /intensity=cooldown/);
+});
+
+test("named templates survive archive normalization and can be copied into a workout", () => {
+  const template = buildTrackWorkoutTemplate({
+    id: "mix-1200-800",
+    name: "  1200/800   Mix  ",
+    workout: {
+      kind: "intervals",
+      rounds: 3,
+      steps: [
+        { kind: "work", unit: "distance", value: 1200 },
+        { kind: "recovery", unit: "distance", value: 400 },
+        { kind: "work", unit: "distance", value: 800 },
+        { kind: "recovery", unit: "distance", value: 400 },
+      ],
+    },
+    createdAt: "2026-07-27T08:00:00.000Z",
+    updatedAt: "2026-07-27T09:00:00.000Z",
+  });
+  const archive = normalizeTrackWorkoutTemplates([template, template, { id: "", name: "Ungültig" }]);
+  assert.equal(archive.length, 1);
+  assert.equal(archive[0].name, "1200/800 Mix");
+  const workout = workoutFromTrackTemplate(archive[0]);
+  assert.equal(workout.templateId, "mix-1200-800");
+  assert.equal(workout.templateName, "1200/800 Mix");
+  assert.equal(workout.steps[2].value, 800);
 });

@@ -16,6 +16,16 @@ test("backup roundtrip keeps relevant athlete data", () => {
     activities: [{ id: "activity-1", source: "intervals" }],
     profile: { displayName: "Athlet" },
     mission: { id: "personal-goal", name: "Mein Ultra", date: "2026-11-21", milestones: [] },
+    planner: {
+      ...defaults.planner,
+      trackWorkoutTemplates: [{
+        id: "track-template-1",
+        name: "1200/800 Mix",
+        kind: "intervals",
+        rounds: 3,
+        steps: [{ kind: "work", unit: "distance", value: 1200 }],
+      }],
+    },
     coachRecommendationHistory: [{ id: "feedback-1", recommendationId: "coach-1", status: "helpful" }],
   };
   const backup = createStateBackup(original);
@@ -23,6 +33,7 @@ test("backup roundtrip keeps relevant athlete data", () => {
   assert.equal(restored.state.activities[0].id, "activity-1");
   assert.equal(restored.state.profile.displayName, "Athlet");
   assert.equal(restored.state.mission.name, "Mein Ultra");
+  assert.equal(restored.state.planner.trackWorkoutTemplates[0].name, "1200/800 Mix");
   assert.equal(restored.state.coachRecommendationHistory[0].id, "feedback-1");
   assert.ok(restored.createdAt);
 });

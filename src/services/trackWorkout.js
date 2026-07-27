@@ -15,6 +15,10 @@ function clamp(value, minimum, maximum, fallback) {
   return Math.max(minimum, Math.min(maximum, parsed));
 }
 
+function cleanText(value, maximum = 80) {
+  return String(value || "").trim().replace(/\s+/g, " ").slice(0, maximum);
+}
+
 export function isTrackWorkout(item = {}) {
   return /orc\s*track|intervall|interval|sprint/i.test(`${item.type || ""} ${item.title || ""}`);
 }
@@ -54,12 +58,63 @@ export function normalizeTrackWorkout(input = {}) {
   const suppliedSteps = Array.isArray(input.steps) ? input.steps.slice(0, 16) : [];
   const steps = (suppliedSteps.length ? suppliedSteps : legacySteps(input))
     .map((step, index) => normalizeStep(step, index % 2 ? "recovery" : "work"));
+  const templateId = cleanText(input.templateId, 120);
+  const templateName = String(input.templateName || "").slice(0, 80);
   return {
     kind,
     rounds: clamp(input.rounds ?? input.repeats, 1, 30, DEFAULT_TRACK_WORKOUT.rounds),
     steps,
     warmupMode: "lap",
     cooldownMode: "lap",
+    ...(templateId ? { templateId } : {}),
+    ...(templateName ? { templateName } : {}),
+  };
+}
+
+export function buildTrackWorkoutTemplate({ id, name, workout, createdAt, updatedAt }) {
+  const normalized = normalizeTrackWorkout(workout);
+  return {
+    id: cleanText(id, 120),
+    name: cleanText(name),
+    kind: normalized.kind,
+    rounds: normalized.rounds,
+    steps: normalized.steps,
+    warmupMode: "lap",
+    cooldownMode: "lap",
+    createdAt: String(createdAt || updatedAt || ""),
+    updatedAt: String(updatedAt || createdAt || ""),
+  };
+}
+
+export function normalizeTrackWorkoutTemplates(input = []) {
+  const seen = new Set();
+  return (Array.isArray(input) ? input : []).map((template) => (
+    buildTrackWorkoutTemplate({
+      id: template?.id,
+      name: template?.name,
+      workout: template,
+      createdAt: template?.createdAt,
+      updatedAt: template?.updatedAt,
+    })
+  )).filter((template) => {
+    if (!template.id || !template.name || seen.has(template.id)) return false;
+    seen.add(template.id);
+    return true;
+  });
+}
+
+export function workoutFromTrackTemplate(input = {}) {
+  const template = buildTrackWorkoutTemplate({
+    id: input.id,
+    name: input.name,
+    workout: input,
+    createdAt: input.createdAt,
+    updatedAt: input.updatedAt,
+  });
+  return {
+    ...normalizeTrackWorkout(template),
+    templateId: template.id,
+    templateName: template.name,
   };
 }
 

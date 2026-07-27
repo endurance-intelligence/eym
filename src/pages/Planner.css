@@ -311,3 +311,22 @@
   .planner-track-step-actions{grid-column:2}
   .planner-track-add-actions{display:grid;grid-template-columns:1fr}
 }
+
+/* v3.5.4 – named track archive and a roomier editor */
+.planner-track-modal{width:min(1040px,calc(100vw - 24px));max-width:1040px}
+.planner-track-archive{display:grid;gap:12px;padding:15px;border:1px solid var(--border);border-radius:14px;background:var(--bg-sidebar)}
+.planner-track-archive-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:15px}
+.planner-track-archive-heading h4{margin:0;font-size:18px}
+.planner-track-archive-heading>span{flex:none;padding:6px 9px;border:1px solid var(--accent-border);border-radius:999px;color:var(--accent-bright);font-size:11px}
+.planner-track-archive>.form-grid{margin:0}
+.planner-track-archive-actions{display:flex;flex-wrap:wrap;gap:8px}
+.planner-track-archive-actions button{min-height:41px}
+.planner-track-archive-actions .danger{margin-left:auto;color:#ff9a90;border-color:#75443f}
+.planner-track-archive>small{color:var(--muted);line-height:1.45}
+@media(max-width:700px){
+  .planner-track-modal{width:100%;max-width:100%}
+  .planner-track-archive-heading{display:grid}
+  .planner-track-archive-heading>span{justify-self:start}
+  .planner-track-archive-actions{display:grid;grid-template-columns:1fr}
+  .planner-track-archive-actions .danger{margin-left:0}
+}
