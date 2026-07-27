@@ -7,6 +7,7 @@ import {
   normalizeTrackRounds,
   normalizeTrackWorkout,
   normalizeTrackWorkoutTemplates,
+  trackWorkoutDistance,
   trackWorkoutForEditing,
   trackWorkoutSummary,
   updateTrackStepDraft,
@@ -41,6 +42,38 @@ test("track summary supports an ordered mixed block", () => {
     ],
   });
   assert.equal(summary, "Warm-up bis LAP · 3 Durchgänge: 1200 m Belastung → 400 m Pause → 800 m Belastung → 400 m Pause · Cool-down bis LAP");
+});
+
+test("track distance separates work, recovery and the estimated LAP-controlled edges", () => {
+  const distance = trackWorkoutDistance({
+    rounds: 3,
+    steps: [
+      { kind: "work", unit: "distance", value: 1200 },
+      { kind: "recovery", unit: "distance", value: 400 },
+      { kind: "work", unit: "distance", value: 800 },
+      { kind: "recovery", unit: "distance", value: 400 },
+    ],
+  });
+  assert.deepEqual(distance, {
+    workDistanceKm: 6,
+    recoveryDistanceKm: 2.4,
+    mainDistanceKm: 8.4,
+    timedSeconds: 0,
+    hasTimedSteps: false,
+    estimatedTotalMinKm: 12.4,
+    estimatedTotalMaxKm: 14.4,
+  });
+
+  const timed = trackWorkoutDistance({
+    rounds: 3,
+    steps: [
+      { kind: "work", unit: "distance", value: 800 },
+      { kind: "recovery", unit: "time", value: 90 },
+    ],
+  });
+  assert.equal(timed.mainDistanceKm, 2.4);
+  assert.equal(timed.timedSeconds, 270);
+  assert.equal(timed.hasTimedSteps, true);
 });
 
 test("old v3.5.2 track settings migrate into the new step model", () => {

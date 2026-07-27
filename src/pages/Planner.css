@@ -273,6 +273,11 @@
 .planner-track-builder p:last-child{margin:0;color:var(--muted)}
 .planner-track-builder>.form-grid{margin:0}
 .planner-track-summary{display:block;padding:11px 13px;border:1px solid var(--border);border-radius:11px;background:var(--bg-input);color:var(--accent-bright)}
+.planner-track-distance{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.planner-track-distance>div{display:grid;align-content:start;gap:4px;min-width:0;padding:12px 13px;border:1px solid var(--border);border-radius:11px;background:var(--bg-input)}
+.planner-track-distance small{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.06em}
+.planner-track-distance strong{color:var(--accent-bright);font-size:18px}
+.planner-track-distance span{color:var(--muted);font-size:12px;line-height:1.4}
 .planner-track-builder>small{color:var(--muted);line-height:1.45}
 
 /* v3.5.3 – mixed track blocks and LAP-controlled warm-up/cool-down */
@@ -359,7 +364,13 @@
 .planner-rowing-setup h3{margin:3px 0 5px}
 .planner-rowing-setup p:last-child{margin:0}
 .planner-rowing-setup>.form-grid{margin:0}
+.planner-workout-open{margin:-8px;padding:8px;border-radius:11px;cursor:pointer;transition:background .16s ease,box-shadow .16s ease}
+.planner-workout-open:hover{background:var(--accent-surface)}
+.planner-workout-open:focus-visible{outline:2px solid var(--accent);outline-offset:2px;background:var(--accent-surface)}
+.planner-workout-open h3{transition:color .16s ease}
+.planner-workout-open:hover h3,.planner-workout-open:focus-visible h3{color:var(--accent-bright)}
 @media(max-width:620px){
+  .planner-track-distance{grid-template-columns:1fr}
   .planner-track-planning-status{align-items:stretch;flex-direction:column}
   .planner-track-planning-status>div:last-child{width:100%}
   .planner-track-planning-status button{min-width:0}

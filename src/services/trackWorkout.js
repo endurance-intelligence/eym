@@ -163,3 +163,31 @@ export function trackWorkoutSummary(input = {}) {
     .join(" → ");
   return `Warm-up bis LAP · ${workout.rounds} ${workout.rounds === 1 ? "Durchgang" : "Durchgänge"}: ${sequence} · Cool-down bis LAP`;
 }
+
+function roundedKm(meters) {
+  return Number((meters / 1000).toFixed(2));
+}
+
+export function trackWorkoutDistance(input = {}) {
+  const workout = normalizeTrackWorkout(input);
+  const totals = workout.steps.reduce((result, step) => {
+    if (step.unit === "time") {
+      result.timedSeconds += step.value * workout.rounds;
+    } else if (step.kind === "recovery") {
+      result.recoveryMeters += step.value * workout.rounds;
+    } else {
+      result.workMeters += step.value * workout.rounds;
+    }
+    return result;
+  }, { workMeters: 0, recoveryMeters: 0, timedSeconds: 0 });
+  const mainDistanceKm = roundedKm(totals.workMeters + totals.recoveryMeters);
+  return {
+    workDistanceKm: roundedKm(totals.workMeters),
+    recoveryDistanceKm: roundedKm(totals.recoveryMeters),
+    mainDistanceKm,
+    timedSeconds: totals.timedSeconds,
+    hasTimedSteps: totals.timedSeconds > 0,
+    estimatedTotalMinKm: Number((mainDistanceKm + 4).toFixed(2)),
+    estimatedTotalMaxKm: Number((mainDistanceKm + 6).toFixed(2)),
+  };
+}

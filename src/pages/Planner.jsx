@@ -38,6 +38,7 @@ import {
   normalizeTrackStep,
   normalizeTrackWorkout,
   normalizeTrackWorkoutTemplates,
+  trackWorkoutDistance,
   trackWorkoutForEditing,
   trackWorkoutSummary,
   updateTrackStepDraft,
@@ -53,6 +54,7 @@ import {
 import "./Planner.css";
 
 const dayFormatter = new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" });
+const trackDistanceFormatter = new Intl.NumberFormat("de-DE", { maximumFractionDigits: 2 });
 const reasonOptions = ["Termin fiel aus", "Keine Zeit", "Müde", "Schmerzen", "Krankheit", "Wetter", "Verschoben", "Bewusst ausgelassen", "Aktivität nicht erkannt", "Sonstiges"];
 const cancellationReasonOptions = ["Termin fiel aus", "Keine Zeit", "Müde", "Schmerzen", "Krankheit", "Wetter", "Bewusst ausgelassen", "Sonstiges"];
 const plannerDays = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"];
@@ -143,6 +145,13 @@ function prepareWorkoutForEditing(item) {
     ...item,
     structuredWorkout: trackWorkoutForEditing(item.structuredWorkout),
   };
+}
+
+function trackDurationLabel(seconds) {
+  const minutes = Math.floor(Number(seconds || 0) / 60);
+  const remainder = Number(seconds || 0) % 60;
+  if (!minutes) return `${remainder} Sek.`;
+  return remainder ? `${minutes}:${String(remainder).padStart(2, "0")} Min.` : `${minutes} Min.`;
 }
 
 function adjustmentMoveTimingLabel(item, draft = {}) {
@@ -420,6 +429,9 @@ export default function Planner() {
   const modalVisible = Boolean(editing || missedEditing || planningOpen || adjustmentOpen || planningInfoOpen || publishConfirmOpen);
   const editingTrackWorkout = editing && isTrackWorkout(editing)
     ? editing.structuredWorkout
+    : null;
+  const editingTrackDistance = editingTrackWorkout
+    ? trackWorkoutDistance(editingTrackWorkout)
     : null;
 
   useEffect(() => {
@@ -1046,6 +1058,21 @@ export default function Planner() {
     setState((current) => ({ ...current, plan: current.plan.map((item) => item.id === id ? { ...item, ...patch } : item) }));
   }
 
+  function openWorkoutEditor(item) {
+    setEditing(prepareWorkoutForEditing(item));
+  }
+
+  function openWorkoutFromRow(item, event) {
+    if (event.target.closest?.("button, a, input, select, textarea")) return;
+    openWorkoutEditor(item);
+  }
+
+  function openWorkoutFromKeyboard(item, event) {
+    if (event.target !== event.currentTarget || !["Enter", " "].includes(event.key)) return;
+    event.preventDefault();
+    openWorkoutEditor(item);
+  }
+
   function updateEditingType(type) {
     setEditing((current) => {
       const next = { ...current, type };
@@ -1450,7 +1477,15 @@ export default function Planner() {
                 return (
                   <div className={className} key={item.id}>
                     <button className="planner-check" title={isCancelled ? "Ausfall zurücknehmen" : "Erledigt markieren"} onClick={() => isCancelled ? restoreCancelledWorkout(item) : updateWorkout(item.id, { completed: !item.completed, missedReason: "", missedNote: "", missedMeta: {}, plannedCancellation: false })}>{item.completed || matched ? "✓" : isCancelled ? "×" : isMissed ? "!" : ""}</button>
-                    <div className="planner-workout-main">
+                    <div
+                      className={`planner-workout-main ${!isCancelled ? "planner-workout-open" : ""}`}
+                      role={!isCancelled ? "button" : undefined}
+                      tabIndex={!isCancelled ? 0 : undefined}
+                      title={!isCancelled ? "Training öffnen" : undefined}
+                      aria-label={!isCancelled ? `${item.title} öffnen` : undefined}
+                      onClick={!isCancelled ? (event) => openWorkoutFromRow(item, event) : undefined}
+                      onKeyDown={!isCancelled ? (event) => openWorkoutFromKeyboard(item, event) : undefined}
+                    >
                       <div>
                         <span>{workoutTimingLabel(item)} · {matched ? "ERLEDIGT" : isCancelled ? "AUSGEFALLEN" : isMissed ? "NICHT ERLEDIGT" : item.optional ? "OPTIONAL" : "PFLICHT"}</span>
                         {item.weatherAdjusted && <em>WETTER</em>}
@@ -1473,7 +1508,7 @@ export default function Planner() {
                     </div>
                     <div className="planner-actions">
                       {isMissed && <button className="danger" onClick={() => openMissed(item)}>Grund angeben</button>}
-                      {isCancelled ? <button onClick={() => restoreCancelledWorkout(item)}>Wieder einplanen</button> : <button onClick={() => setEditing(prepareWorkoutForEditing(item))}>Bearbeiten</button>}
+                      {isCancelled ? <button onClick={() => restoreCancelledWorkout(item)}>Wieder einplanen</button> : <button onClick={() => openWorkoutEditor(item)}>Bearbeiten</button>}
                       {!isPastWeek && !isCancelled && <button onClick={() => openAdjustment(item.id, "cancel")}>Fällt aus</button>}
                       <button onClick={() => updateWorkout(item.id, { archived: true })}>Archiv</button>
                     </div>
@@ -1678,6 +1713,23 @@ export default function Planner() {
                   </div>
                 </div>
                 <strong className="planner-track-summary">{trackWorkoutSummary(editingTrackWorkout)}</strong>
+                <div className="planner-track-distance" aria-label="Berechnete Track-Distanz">
+                  <div>
+                    <small>Hauptteil</small>
+                    <strong>{trackDistanceFormatter.format(editingTrackDistance.mainDistanceKm)} km{editingTrackDistance.hasTimedSteps ? " + Zeit" : ""}</strong>
+                    <span>{trackDistanceFormatter.format(editingTrackDistance.workDistanceKm)} km Belastung · {trackDistanceFormatter.format(editingTrackDistance.recoveryDistanceKm)} km Pausen</span>
+                  </div>
+                  <div>
+                    <small>Warm-up & Cool-down</small>
+                    <strong>je ca. 2–3 km</strong>
+                    <span>bleiben auf Garmin per LAP offen</span>
+                  </div>
+                  <div>
+                    <small>{editingTrackDistance.hasTimedSteps ? "Bekannte Mindestdistanz" : "Gesamt geschätzt"}</small>
+                    <strong>{editingTrackDistance.hasTimedSteps ? "ab " : ""}{trackDistanceFormatter.format(editingTrackDistance.estimatedTotalMinKm)}{editingTrackDistance.hasTimedSteps ? "" : `–${trackDistanceFormatter.format(editingTrackDistance.estimatedTotalMaxKm)}`} km</strong>
+                    <span>{editingTrackDistance.hasTimedSteps ? `plus ${trackDurationLabel(editingTrackDistance.timedSeconds)} zeitgesteuerte Abschnitte` : "inklusive Ein- und Auslaufen"}</span>
+                  </div>
+                </div>
                 <small>Intervals.icu benötigt intern Schätzwerte für die Trainingslast; sie begrenzen Warm-up und Cool-down auf Garmin nicht. Für Pace-Hinweise muss unter Running eine Threshold Pace gesetzt und „Upload planned workouts“ für Garmin aktiviert sein.</small>
               </section>
             )}

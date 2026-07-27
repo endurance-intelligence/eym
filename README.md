@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **3.5.6**
+Current app version: **3.5.7**
 
 **Eat your miles.**
 
@@ -359,6 +359,13 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 - Easy rowing defaults to a configurable 5,000 m in 35 minutes with a 24–26 SPM guidance range. It remains a steady aerobic calendar session rather than an automatically generated rowing interval workout.
 - Rowing distance is no longer counted toward the weekly running-kilometre target.
 - No database migration is required. Redeploy the `intervals` Supabase function so the server also rejects provisional track workouts from older or cached clients.
+
+## Planner quick edit and track totals v3.5.7
+
+- Clicking the content of a planned workout opens it directly; the completion, cancellation and archive controls keep their separate actions.
+- Track planning totals work and distance-based recovery kilometres separately, then shows an estimated overall range with 2–3 km each for the LAP-controlled warm-up and cool-down.
+- Time-based steps remain clearly marked because their distance can only be known after the workout.
+- No database migration or Supabase function deployment is required for this update.
 
 For fresh installations that have not yet applied the athlete-image cleanup, run `supabase/migrations/20260722120000_athlete_images.sql` once. Afterwards run:
 
