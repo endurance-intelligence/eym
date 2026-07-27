@@ -19,6 +19,12 @@ import { publishIntervalsWeek } from "../services/intervals";
 import { DEFAULT_REPLACEMENT_SPORTS, SPORT_OPTIONS, sortCommitments, sportLabel } from "../services/configuration";
 import { athleteBaseline, goalRequirements } from "../services/scienceCoach";
 import { buildCoachState } from "../services/coachState";
+import {
+  buildCancelledCommitmentPlanEntry,
+  buildCommitmentPlanEntry,
+  findCommitmentReplacementCandidate,
+  findCommitmentSlot,
+} from "../services/plannerCommitments";
 import "./Planner.css";
 
 const dayFormatter = new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" });
@@ -406,14 +412,17 @@ export default function Planner() {
     openPlanning();
   }
 
-  function openAdjustment(preselectedId = "", preferredAction = "replace") {
+  function openAdjustment(preselectedId = "", preferredAction = "replace", preferredReplacementKey = "") {
     const adjustable = weekPlan.filter((item) => !item.completed && (!item.missedReason || item.plannedCancellation) && (offsetWeeks > 0 || item.date >= todayKey));
     const initialId = preselectedId || adjustable.find((item) => normalizedType(`${item.type} ${item.title}`) === "running")?.id || adjustable[0]?.id || "";
     const initial = adjustable.find((item) => item.id === initialId);
+    const replacementKey = replacementOptions.some((entry) => entry.key === preferredReplacementKey)
+      ? preferredReplacementKey
+      : replacementOptions[0]?.key || "";
     setAdjustmentDraft({
       action: preferredAction,
       selectedIds: initialId ? [initialId] : [],
-      replacementKey: replacementOptions[0]?.key || "",
+      replacementKey,
       moveDate: initial?.date || isoDate(weekStart),
       moveTime: initial?.time || "18:00",
       cancelReason: initial?.missedReason || "Termin fiel aus",
@@ -752,10 +761,29 @@ export default function Planner() {
           : "Die Laufoption am Samstag wurde aus dem Wochenplan entfernt.");
   }
 
-  function skipCommitmentThisWeek(item, name) {
-    if (!item) return;
-    openAdjustment(item.id, "cancel");
-    setStatus(`${name} wird nur für diese Woche angepasst. Die feste Konfiguration bleibt erhalten.`);
+  function editCommitmentThisWeek(commitment, date, slot, replacementCandidate) {
+    if (slot) {
+      openAdjustment(slot.id);
+      return;
+    }
+    if (replacementCandidate) {
+      openAdjustment(replacementCandidate.id, "replace", `commitment:${commitment.id}`);
+      setStatus(`${commitment.name} ist als gezielter Ersatz vorausgewählt. Geändert wird erst nach deiner Bestätigung; der übrige Wochenplan bleibt unverändert.`);
+      return;
+    }
+    setEditing(buildCommitmentPlanEntry(commitment, date, crypto.randomUUID()));
+    setStatus(`${commitment.name} ist noch nicht in dieser Woche eingeplant und kann jetzt ergänzt werden.`);
+  }
+
+  function skipCommitmentThisWeek(item, commitment, date) {
+    if (item) {
+      openAdjustment(item.id, "cancel");
+    } else {
+      const cancelledAt = new Date().toISOString();
+      const placeholder = buildCancelledCommitmentPlanEntry(commitment, date, crypto.randomUUID(), cancelledAt);
+      setState((current) => ({ ...current, plan: [...current.plan, placeholder] }));
+    }
+    setStatus(`${commitment.name} wird nur für diese Woche ausgesetzt. Die feste Konfiguration bleibt erhalten.`);
   }
 
   function resolveSaturdayChoice(_item, choice) {
@@ -1025,13 +1053,13 @@ export default function Planner() {
             <div className="planner-live-appointment-grid">
               {recurringCommitments.map((commitment) => {
                 const date = commitmentDate(weekStart, commitment);
-                const slot = weekPlan.find((item) => item.commitmentId === commitment.id)
-                  || weekPlan.find((item) => item.date === date && `${item.title} ${item.type}`.toLowerCase().includes(String(commitment.name || "").toLowerCase()));
-                const editable = Boolean(slot && !slot.completed && (offsetWeeks > 0 || slot.date >= todayKey));
+                const slot = findCommitmentSlot(weekPlan, commitment, date);
+                const replacementCandidate = slot ? null : findCommitmentReplacementCandidate(weekPlan, commitment, date);
+                const editable = Boolean(!slot?.completed && (offsetWeeks > 0 || date >= todayKey));
                 const cancelled = Boolean(slot?.plannedCancellation);
                 return <section className={cancelled ? "cancelled" : ""} key={commitment.id}>
-                  <div><span>{commitment.weekday} · {commitment.time}</span><strong>{slot?.title || commitment.name}</strong><small>{cancelled ? `Ausgefallen · ${slot.missedReason}` : `${sportLabel(commitment.sport)} · ${commitment.durationMinutes || slot?.duration || 0} min${commitment.distanceKm ? ` · ${commitment.distanceKm} km` : ""}`}</small></div>
-                  <div className="planner-live-buttons">{cancelled ? <><button type="button" onClick={() => restoreCancelledWorkout(slot)} disabled={!editable}>Wieder einplanen</button><button type="button" onClick={() => openAdjustment(slot.id, "cancel")} disabled={!editable}>Grund ändern</button></> : <><button type="button" onClick={() => slot && openAdjustment(slot.id)} disabled={!editable}>Einheit anpassen</button><button type="button" onClick={() => skipCommitmentThisWeek(slot, commitment.name)} disabled={!editable}>Diese Woche aussetzen</button></>}</div>
+                  <div><span>{commitment.weekday} · {commitment.time}</span><strong>{slot?.title || commitment.name}</strong><small>{cancelled ? `Ausgefallen · ${slot.missedReason}` : `${!slot ? "Noch nicht im Wochenplan · " : ""}${sportLabel(commitment.sport)} · ${commitment.durationMinutes || slot?.duration || 0} min${commitment.distanceKm ? ` · ${commitment.distanceKm} km` : ""}`}</small></div>
+                  <div className="planner-live-buttons">{cancelled ? <><button type="button" onClick={() => restoreCancelledWorkout(slot)} disabled={!editable}>Wieder einplanen</button><button type="button" onClick={() => openAdjustment(slot.id, "cancel")} disabled={!editable}>Grund ändern</button></> : <><button type="button" onClick={() => editCommitmentThisWeek(commitment, date, slot, replacementCandidate)} disabled={!editable}>Einheit anpassen</button><button type="button" onClick={() => skipCommitmentThisWeek(slot, commitment, date)} disabled={!editable}>Diese Woche aussetzen</button></>}</div>
                 </section>;
               })}
             </div>

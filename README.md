@@ -312,6 +312,12 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 - The grounded context explicitly forbids invented measurements, medical diagnosis and automatic plan changes.
 - No activity or health data is sent to an external AI provider. The fact packet is a safe integration boundary for a later optional language model.
 
+## Planner commitment hotfix v3.5.1
+
+- Stored recurring appointments remain actionable even when the active week was created before the appointment was added.
+- A missing appointment can replace only a compatible automatically planned unit on the same day; mobility, strength work and the rest of the week remain unchanged.
+- “Diese Woche aussetzen” records a week-only cancellation while preserving the recurring appointment in Settings.
+
 Before deploying the application, apply `supabase/migrations/20260722120000_athlete_images.sql`. Afterwards run:
 
 ```bash
