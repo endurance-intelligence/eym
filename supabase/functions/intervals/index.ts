@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { intervalDescription } from "../_shared/structuredWorkout.ts";
+import { intervalDescription, isProvisionalTrackPlanItem } from "../_shared/structuredWorkout.ts";
 import { intervalsStartDateLocal } from "../_shared/plannerTiming.ts";
 
 const corsHeaders = {
@@ -174,7 +174,13 @@ Deno.serve(async (request) => {
         if (!item || typeof item !== "object") return false;
         const row = item as Record<string, unknown>;
         const date = String(row.date || "");
-        return validDate(date) && date >= weekStart && date <= weekEnd && !row.archived && !row.completed && !row.missedReason;
+        return validDate(date)
+          && date >= weekStart
+          && date <= weekEnd
+          && !row.archived
+          && !row.completed
+          && !row.missedReason
+          && !isProvisionalTrackPlanItem(row);
       }) as Record<string, unknown>[];
 
       const query = new URLSearchParams({ oldest: weekStart, newest: weekEnd });

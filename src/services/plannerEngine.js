@@ -76,6 +76,19 @@ function weightedAverage(values) {
   return weightSum ? available.reduce((sum, value, index) => sum + value * weights[index], 0) / weightSum : 0;
 }
 
+function boundedNumber(value, minimum, maximum, fallback) {
+  if (value === "" || value == null) return fallback;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(minimum, Math.min(maximum, parsed));
+}
+
+function isRunningPlanEntry(entry) {
+  const value = `${entry?.type || ""} ${entry?.title || ""}`.toLowerCase();
+  if (/rudern|rowing|rad|ride|bike|cycling|schwimm|swim|fußball|football|soccer|stabi|mobility|mobilität/.test(value)) return false;
+  return /run|lauf|orc|interval|schwelle|backyard|track|treadmill/.test(value);
+}
+
 function recentLongestRun(activities, weekStart) {
   const start = new Date(weekStart);
   start.setDate(start.getDate() - 56);
@@ -361,6 +374,12 @@ function addStrengthSessions(plan, weekStart, config, readiness) {
   const strengthFactor = Number(readiness.strengthFactor || 1);
   const stabiDays = (config.stabiDays?.length ? config.stabiDays : ["Dienstag", "Donnerstag"]).slice(0, Number(config.stabiCount ?? 2));
   const rowingDays = (config.rowingDays?.length ? config.rowingDays : ["Freitag"]).slice(0, Number(config.rowingCount ?? 1));
+  const rowingDistanceKm = boundedNumber(config.rowingDistanceKm, 0.5, 50, 5);
+  const rowingDuration = boundedNumber(config.rowingDuration, 5, 180, 35);
+  const firstSpm = Math.round(boundedNumber(config.rowingSpmMin, 14, 40, 24));
+  const secondSpm = Math.round(boundedNumber(config.rowingSpmMax, 14, 40, 26));
+  const rowingSpmMin = Math.min(firstSpm, secondSpm);
+  const rowingSpmMax = Math.max(firstSpm, secondSpm);
 
   function sessionsOnDay(day) {
     const dayIndex = DAY_INDEX[day];
@@ -397,13 +416,25 @@ function addStrengthSessions(plan, weekStart, config, readiness) {
     }
     const finalPaired = sessionsOnDay(day).length > 0;
     const finalDouble = finalPaired && trueDoubleDays.has(day) && !readiness.avoidDoubleStrength;
+    const adjustedDistanceKm = Number((rowingDistanceKm * strengthFactor).toFixed(1));
+    const adjustedMeters = Math.round(adjustedDistanceKm * 1000);
+    const adjustedDuration = Math.max(15, Math.round(rowingDuration * strengthFactor));
     plan.push(item(weekStart, DAY_INDEX[day], {
       time: finalDouble ? "07:00" : "18:30",
-      title: strengthFactor < 0.8 ? "Rudern sehr locker" : "Rudern locker",
+      title: `${adjustedMeters.toLocaleString("de-DE")} m Rudern ${strengthFactor < 0.8 ? "sehr locker" : "locker"}`,
       type: "Rudern",
-      distance: 0,
-      duration: Math.max(15, Math.round(Number(config.rowingDuration || 40) * strengthFactor)),
-      notes: strengthFactor < 0.8 ? "Review-Anpassung: niedriger Widerstand, kein Druck auf Rücken und Schultern." : "Ruhige Grundlageneinheit ohne zusätzliche Stoßbelastung.",
+      distance: adjustedDistanceKm,
+      duration: adjustedDuration,
+      notes: strengthFactor < 0.8
+        ? `Review-Anpassung: ${adjustedMeters.toLocaleString("de-DE")} m sehr locker, niedriger Widerstand, ${rowingSpmMin}–${rowingSpmMax} SPM und kein Druck auf Rücken oder Schultern.`
+        : `${adjustedMeters.toLocaleString("de-DE")} m ruhige Grundlageneinheit in etwa ${adjustedDuration} min · gleichmäßig ${rowingSpmMin}–${rowingSpmMax} SPM · kein Pace-Druck.`,
+      rowingTarget: {
+        distanceMeters: adjustedMeters,
+        durationMinutes: adjustedDuration,
+        spmMin: rowingSpmMin,
+        spmMax: rowingSpmMax,
+        intensity: "easy",
+      },
       optional: strengthFactor < 0.65,
       comboSession: false,
       doubleSession: finalDouble,
@@ -794,7 +825,24 @@ export function generateWeekPlan({
             notes: "Nur locker und nur, wenn du dich im Alltag wieder normal fühlst. Bei Verschlechterung abbrechen.",
           };
         }
-        if (entry.type === "Rudern") return { ...entry, duration: Math.min(25, entry.duration || 25), optional: true, notes: "Sehr locker als Wiedereinstieg; kein Druck." };
+        if (entry.type === "Rudern") {
+          const distance = Math.min(3.5, Number(entry.distance || 3.5));
+          const distanceMeters = Math.round(distance * 1000);
+          return {
+            ...entry,
+            title: `${distanceMeters.toLocaleString("de-DE")} m Rudern sehr locker`,
+            distance,
+            duration: Math.min(25, entry.duration || 25),
+            optional: true,
+            rowingTarget: {
+              ...(entry.rowingTarget || {}),
+              distanceMeters,
+              durationMinutes: Math.min(25, entry.duration || 25),
+              intensity: "recovery",
+            },
+            notes: "Sehr locker als Wiedereinstieg; niedriger Widerstand und kein Druck.",
+          };
+        }
         if (entry.type === "Stabi") return { ...entry, title: "Leichte Mobilität", duration: Math.min(20, entry.duration || 20), optional: true, notes: "Nur Mobilität und Aktivierung, kein anstrengendes Krafttraining." };
         return entry;
       });
@@ -823,7 +871,7 @@ export function generateWeekPlan({
   if (offsetWeeks === 0) {
     plan = plan.filter((entry) => entry.date >= todayKey);
     const remainingTarget = Math.max(0, target - Number(completedRunningKm || 0));
-    const runEntries = plan.filter((entry) => Number(entry.distance || 0) > 0 && entry.type !== "Fußball");
+    const runEntries = plan.filter((entry) => Number(entry.distance || 0) > 0 && isRunningPlanEntry(entry));
     const generatedRunKm = runEntries.reduce((sum, entry) => sum + Number(entry.distance || 0), 0);
     if (generatedRunKm > 0 && remainingTarget < generatedRunKm) {
       const factor = remainingTarget / generatedRunKm;

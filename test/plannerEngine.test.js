@@ -72,3 +72,33 @@ test("planner uses the supplied reference date and produces stable training cont
     }
   });
 });
+
+test("planner creates the configurable 5000 m easy rowing baseline without SPM intervals", () => {
+  const result = generateWeekPlan({
+    mission: { id: "generic-goal", name: "50 km Lauf", date: "2026-11-21", targetKm: 50, milestones: [] },
+    offsetWeeks: 1,
+    today: new Date("2026-07-24T12:00:00"),
+    config: {
+      recurringCommitments: [],
+      fixedAppointments: { football: false, orcRun: false, saturdayMode: "off" },
+      stabiCount: 0,
+      rowingCount: 1,
+      rowingDays: ["Freitag"],
+      rowingDistanceKm: 5,
+      rowingDuration: 35,
+      rowingSpmMin: 24,
+      rowingSpmMax: 26,
+      runDays: ["Dienstag", "Donnerstag", "Sonntag"],
+      maxLongRun: 30,
+    },
+  });
+
+  const rowing = result.plan.find((item) => item.type === "Rudern");
+  assert.ok(rowing);
+  assert.equal(rowing.distance, 5);
+  assert.equal(rowing.duration, 35);
+  assert.equal(rowing.rowingTarget.distanceMeters, 5000);
+  assert.deepEqual([rowing.rowingTarget.spmMin, rowing.rowingTarget.spmMax], [24, 26]);
+  assert.match(rowing.notes, /keine? Pace-Druck|kein Pace-Druck/i);
+  assert.doesNotMatch(rowing.notes, /Intervall/i);
+});

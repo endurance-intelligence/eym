@@ -7,6 +7,7 @@ export const DEFAULT_TRACK_WORKOUT = Object.freeze({
   ]),
   warmupMode: "lap",
   cooldownMode: "lap",
+  planningStatus: "final",
 });
 
 function clamp(value, minimum, maximum, fallback) {
@@ -23,7 +24,11 @@ export function isTrackWorkout(item = {}) {
   return /orc\s*track|intervall|interval|sprint/i.test(`${item.type || ""} ${item.title || ""}`);
 }
 
-function normalizeStep(input = {}, fallbackKind = "work") {
+export function normalizeTrackRounds(value) {
+  return clamp(value, 1, 30, DEFAULT_TRACK_WORKOUT.rounds);
+}
+
+export function normalizeTrackStep(input = {}, fallbackKind = "work") {
   const kind = input.kind === "recovery" ? "recovery" : fallbackKind === "recovery" ? "recovery" : "work";
   const unit = input.unit === "time" ? "time" : "distance";
   return {
@@ -40,12 +45,12 @@ function normalizeStep(input = {}, fallbackKind = "work") {
 
 function legacySteps(input = {}) {
   return [
-    normalizeStep({
+    normalizeTrackStep({
       kind: "work",
       unit: input.workUnit,
       value: input.workValue,
     }),
-    normalizeStep({
+    normalizeTrackStep({
       kind: "recovery",
       unit: input.recoveryUnit,
       value: input.recoveryValue,
@@ -57,18 +62,47 @@ export function normalizeTrackWorkout(input = {}) {
   const kind = input.kind === "sprints" ? "sprints" : "intervals";
   const suppliedSteps = Array.isArray(input.steps) ? input.steps.slice(0, 16) : [];
   const steps = (suppliedSteps.length ? suppliedSteps : legacySteps(input))
-    .map((step, index) => normalizeStep(step, index % 2 ? "recovery" : "work"));
+    .map((step, index) => normalizeTrackStep(step, index % 2 ? "recovery" : "work"));
   const templateId = cleanText(input.templateId, 120);
   const templateName = String(input.templateName || "").slice(0, 80);
   return {
     kind,
-    rounds: clamp(input.rounds ?? input.repeats, 1, 30, DEFAULT_TRACK_WORKOUT.rounds),
+    rounds: normalizeTrackRounds(input.rounds ?? input.repeats),
     steps,
     warmupMode: "lap",
     cooldownMode: "lap",
+    planningStatus: input.planningStatus === "draft" ? "draft" : "final",
     ...(templateId ? { templateId } : {}),
     ...(templateName ? { templateName } : {}),
   };
+}
+
+export function trackWorkoutForEditing(input) {
+  return {
+    ...normalizeTrackWorkout(input || {}),
+    planningStatus: input && typeof input === "object" ? (input.planningStatus === "draft" ? "draft" : "final") : "draft",
+  };
+}
+
+export function updateTrackWorkoutDraft(input, field, value) {
+  return {
+    ...(input || trackWorkoutForEditing()),
+    [field]: value,
+  };
+}
+
+export function updateTrackStepDraft(input, index, field, value) {
+  const workout = input || trackWorkoutForEditing();
+  return {
+    ...workout,
+    steps: workout.steps.map((step, stepIndex) => (
+      stepIndex === index ? { ...step, [field]: value } : step
+    )),
+  };
+}
+
+export function isProvisionalTrackWorkout(item = {}) {
+  return isTrackWorkout(item) && item.structuredWorkout?.planningStatus === "draft";
 }
 
 export function buildTrackWorkoutTemplate({ id, name, workout, createdAt, updatedAt }) {

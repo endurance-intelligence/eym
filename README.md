@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **3.5.5**
+Current app version: **3.5.6**
 
 **Eat your miles.**
 
@@ -350,7 +350,17 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 - Weather remains advisory: EYM never moves or changes the active week automatically.
 - Intervals.icu receives spontaneous sessions as date-based midnight calendar events, while fixed appointments keep their real start time. Redeploy the `intervals` Supabase function after installing this version.
 
-Before deploying the application, apply `supabase/migrations/20260722120000_athlete_images.sql`. Afterwards run:
+## Provisional track workouts and easy rowing baseline v3.5.6
+
+- Track numbers remain editable while a field is empty and are validated only on blur or save, preventing fallback values from being appended while typing.
+- New track definitions start as `Vorläufig`. They are stored in the selected EYM appointment but excluded from Garmin publication until explicitly changed to `Final`.
+- Existing structured track workouts remain final for backward compatibility. Appointment edits do not alter the named template archive unless `Vorlage aktualisieren` is selected.
+- The weekly planner shows provisional track badges and clearly lists skipped provisional workouts before an Intervals.icu/Garmin update.
+- Easy rowing defaults to a configurable 5,000 m in 35 minutes with a 24–26 SPM guidance range. It remains a steady aerobic calendar session rather than an automatically generated rowing interval workout.
+- Rowing distance is no longer counted toward the weekly running-kilometre target.
+- No database migration is required. Redeploy the `intervals` Supabase function so the server also rejects provisional track workouts from older or cached clients.
+
+For fresh installations that have not yet applied the athlete-image cleanup, run `supabase/migrations/20260722120000_athlete_images.sql` once. Afterwards run:
 
 ```bash
 npm test

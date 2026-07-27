@@ -32,10 +32,16 @@ import {
 } from "../services/reviewCoverage";
 import {
   buildTrackWorkoutTemplate,
+  isProvisionalTrackWorkout,
   isTrackWorkout,
+  normalizeTrackRounds,
+  normalizeTrackStep,
   normalizeTrackWorkout,
   normalizeTrackWorkoutTemplates,
+  trackWorkoutForEditing,
   trackWorkoutSummary,
+  updateTrackStepDraft,
+  updateTrackWorkoutDraft,
   workoutFromTrackTemplate,
 } from "../services/trackWorkout";
 import {
@@ -128,6 +134,14 @@ function createBlank(weekStart) {
     completed: false,
     source: "planner",
     archived: false,
+  };
+}
+
+function prepareWorkoutForEditing(item) {
+  if (!isTrackWorkout(item)) return item;
+  return {
+    ...item,
+    structuredWorkout: trackWorkoutForEditing(item.structuredWorkout),
   };
 }
 
@@ -340,8 +354,12 @@ export default function Planner() {
   const saturdayEditable = saturdayDate >= todayKey && !saturdaySlot?.completed;
   const missed = weekPlan.filter((item) => item.date < todayKey && !item.completed && !matches.has(item.id) && !item.missedReason);
   const actualRunningKm = weekActivities.filter(isRunningActivity).reduce((sum, activity) => sum + Number(activity.distance || 0), 0);
-  const plannedKm = weekPlan.filter((item) => !item.completed && !item.missedReason).reduce((sum, item) => sum + Number(item.distance || 0), 0);
-  const completedKm = actualRunningKm || weekPlan.filter((item) => item.completed).reduce((sum, item) => sum + Number(item.distance || 0), 0);
+  const plannedKm = weekPlan
+    .filter((item) => !item.completed && !item.missedReason && normalizedType(`${item.type || ""} ${item.title || ""}`) === "running")
+    .reduce((sum, item) => sum + Number(item.distance || 0), 0);
+  const completedKm = actualRunningKm || weekPlan
+    .filter((item) => item.completed && normalizedType(`${item.type || ""} ${item.title || ""}`) === "running")
+    .reduce((sum, item) => sum + Number(item.distance || 0), 0);
   const previousWeekHasPlan = useMemo(() => {
     const previousStart = startOfWeek(new Date(), offsetWeeks - 1);
     const previousEnd = dateForDay(previousStart, 6);
@@ -376,7 +394,18 @@ export default function Planner() {
     return reference;
   }, [offsetWeeks, weekStart, todayKey]);
   const coachGuidance = useMemo(() => reviewGuidance(canonicalActivities, state.reviews, coachReviewReference), [canonicalActivities, state.reviews, coachReviewReference]);
-  const publishablePlan = useMemo(() => weekPlan.filter((item) => !item.completed && !item.missedReason && (offsetWeeks > 0 || item.date >= todayKey)), [weekPlan, offsetWeeks, todayKey]);
+  const futurePlan = useMemo(
+    () => weekPlan.filter((item) => !item.completed && !item.missedReason && (offsetWeeks > 0 || item.date >= todayKey)),
+    [weekPlan, offsetWeeks, todayKey],
+  );
+  const provisionalTrackPlan = useMemo(
+    () => futurePlan.filter(isProvisionalTrackWorkout),
+    [futurePlan],
+  );
+  const publishablePlan = useMemo(
+    () => futurePlan.filter((item) => !isProvisionalTrackWorkout(item)),
+    [futurePlan],
+  );
   const weekKey = isoDate(weekStart);
   const currentPlanFingerprint = useMemo(() => planFingerprint(publishablePlan), [publishablePlan]);
   const publishedWeek = config.intervalSync?.[weekKey] || null;
@@ -390,7 +419,7 @@ export default function Planner() {
   const isPastWeek = offsetWeeks < 0;
   const modalVisible = Boolean(editing || missedEditing || planningOpen || adjustmentOpen || planningInfoOpen || publishConfirmOpen);
   const editingTrackWorkout = editing && isTrackWorkout(editing)
-    ? normalizeTrackWorkout(editing.structuredWorkout)
+    ? editing.structuredWorkout
     : null;
 
   useEffect(() => {
@@ -474,6 +503,10 @@ export default function Planner() {
       targetRunCount: Number(config.targetRunCount || state.profile?.selfReportedRunsPerWeek || 0),
       rowingCount: Number(config.rowingCount ?? 1),
       rowingDays: config.rowingDays?.length ? config.rowingDays : ["Freitag"],
+      rowingDistanceKm: Number(config.rowingDistanceKm ?? 5),
+      rowingDuration: Number(config.rowingDuration ?? 35),
+      rowingSpmMin: Number(config.rowingSpmMin ?? 24),
+      rowingSpmMax: Number(config.rowingSpmMax ?? 26),
       runDays: config.runDays?.length ? config.runDays : ["Dienstag", "Mittwoch", "Freitag", "Samstag", "Sonntag"],
       doubleTrainingDays: config.doubleTrainingDays || ["Dienstag", "Freitag"],
       recurringCommitments: (config.recurringCommitments || []).map((entry) => ({ ...entry, activeThisWeek: entry.enabled !== false })),
@@ -606,6 +639,15 @@ export default function Planner() {
 
   function updateCheckin(field, value) {
     setPlanningDraft((current) => ({ ...current, checkin: { ...current.checkin, [field]: value } }));
+  }
+
+  function commitPlanningNumber(field, minimum, maximum, fallback) {
+    setPlanningDraft((current) => {
+      const raw = current?.[field];
+      const parsed = raw === "" || raw == null ? Number.NaN : Number(raw);
+      const value = Number.isFinite(parsed) ? Math.max(minimum, Math.min(maximum, parsed)) : fallback;
+      return { ...current, [field]: value };
+    });
   }
 
   function updateWeeklyCommitment(id, activeThisWeek) {
@@ -816,7 +858,7 @@ export default function Planner() {
   function editCommitmentThisWeek(commitment, date, slot, replacementCandidate) {
     if (slot) {
       if (isTrackWorkout(slot)) {
-        setEditing({ ...slot, structuredWorkout: normalizeTrackWorkout(slot.structuredWorkout) });
+        setEditing(prepareWorkoutForEditing(slot));
         return;
       }
       openAdjustment(slot.id);
@@ -827,7 +869,7 @@ export default function Planner() {
       setStatus(`${commitment.name} ist als gezielter Ersatz vorausgewählt. Geändert wird erst nach deiner Bestätigung; der übrige Wochenplan bleibt unverändert.`);
       return;
     }
-    setEditing(buildCommitmentPlanEntry(commitment, date, crypto.randomUUID()));
+    setEditing(prepareWorkoutForEditing(buildCommitmentPlanEntry(commitment, date, crypto.randomUUID())));
     setStatus(`${commitment.name} ist noch nicht in dieser Woche eingeplant und kann jetzt ergänzt werden.`);
   }
 
@@ -932,9 +974,15 @@ export default function Planner() {
       const publishedAt = result.publishedAt || new Date().toISOString();
       setState((current) => ({
         ...current,
-        plan: current.plan.map((item) => publishablePlan.some((entry) => entry.id === item.id)
-          ? { ...item, intervalsPublishedAt: publishedAt }
-          : item),
+        plan: current.plan.map((item) => {
+          if (publishablePlan.some((entry) => entry.id === item.id)) {
+            return { ...item, intervalsPublishedAt: publishedAt };
+          }
+          if (item.date >= isoDate(weekStart) && item.date <= isoDate(weekEnd) && isProvisionalTrackWorkout(item)) {
+            return { ...item, intervalsPublishedAt: null };
+          }
+          return item;
+        }),
         planner: {
           ...current.planner,
           intervalSync: {
@@ -949,7 +997,7 @@ export default function Planner() {
           },
         },
       }));
-      setStatus(`${Number(result.uploaded || publishablePlan.length)} Einheiten an Intervals.icu gesendet · ${Number(result.guided || 0)} geführte Garmin-Workouts · ${Number(result.notes || 0)} Kalendereinträge.`);
+      setStatus(`${Number(result.uploaded || publishablePlan.length)} Einheiten an Intervals.icu gesendet · ${Number(result.guided || 0)} geführte Garmin-Workouts · ${Number(result.notes || 0)} Kalendereinträge.${provisionalTrackPlan.length ? ` ${provisionalTrackPlan.length} vorläufige Track-Einheit${provisionalTrackPlan.length === 1 ? "" : "en"} blieb${provisionalTrackPlan.length === 1 ? "" : "en"} nur in EYM.` : ""}`);
       setPublishConfirmOpen(false);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
@@ -986,6 +1034,11 @@ export default function Planner() {
         ? current.plan.map((item) => item.id === next.id ? next : item)
         : [...current.plan, next],
     }));
+    if (isProvisionalTrackWorkout(next)) {
+      setStatus("Track-Workout vorläufig gespeichert. Es bleibt in EYM und wird erst nach „Final“ an Garmin gesendet.");
+    } else if (isTrackWorkout(next)) {
+      setStatus("Track-Workout final gespeichert. Falls die Woche schon gesendet wurde, anschließend „Garmin aktualisieren“ drücken.");
+    }
     setEditing(null);
   }
 
@@ -993,24 +1046,52 @@ export default function Planner() {
     setState((current) => ({ ...current, plan: current.plan.map((item) => item.id === id ? { ...item, ...patch } : item) }));
   }
 
+  function updateEditingType(type) {
+    setEditing((current) => {
+      const next = { ...current, type };
+      return isTrackWorkout(next)
+        ? { ...next, structuredWorkout: current?.structuredWorkout || trackWorkoutForEditing() }
+        : { ...next, structuredWorkout: null };
+    });
+  }
+
   function updateTrackWorkout(field, value) {
     setEditing((current) => ({
       ...current,
-      structuredWorkout: {
-        ...normalizeTrackWorkout(current?.structuredWorkout),
-        [field]: value,
-      },
+      structuredWorkout: updateTrackWorkoutDraft(current?.structuredWorkout, field, value),
     }));
   }
 
   function updateTrackStep(index, field, value) {
+    setEditing((current) => ({
+      ...current,
+      structuredWorkout: updateTrackStepDraft(current?.structuredWorkout, index, field, value),
+    }));
+  }
+
+  function commitTrackRounds() {
     setEditing((current) => {
-      const workout = normalizeTrackWorkout(current?.structuredWorkout);
+      const workout = current?.structuredWorkout || trackWorkoutForEditing();
       return {
         ...current,
         structuredWorkout: {
           ...workout,
-          steps: workout.steps.map((step, stepIndex) => stepIndex === index ? { ...step, [field]: value } : step),
+          rounds: normalizeTrackRounds(workout.rounds),
+        },
+      };
+    });
+  }
+
+  function commitTrackStep(index) {
+    setEditing((current) => {
+      const workout = current?.structuredWorkout || trackWorkoutForEditing();
+      return {
+        ...current,
+        structuredWorkout: {
+          ...workout,
+          steps: workout.steps.map((step, stepIndex) => (
+            stepIndex === index ? normalizeTrackStep(step, step.kind) : step
+          )),
         },
       };
     });
@@ -1018,7 +1099,7 @@ export default function Planner() {
 
   function addTrackStep(kind) {
     setEditing((current) => {
-      const workout = normalizeTrackWorkout(current?.structuredWorkout);
+      const workout = current?.structuredWorkout || trackWorkoutForEditing();
       if (workout.steps.length >= 16) return current;
       return {
         ...current,
@@ -1035,7 +1116,7 @@ export default function Planner() {
 
   function removeTrackStep(index) {
     setEditing((current) => {
-      const workout = normalizeTrackWorkout(current?.structuredWorkout);
+      const workout = current?.structuredWorkout || trackWorkoutForEditing();
       if (workout.steps.length <= 1) return current;
       return {
         ...current,
@@ -1049,7 +1130,7 @@ export default function Planner() {
 
   function moveTrackStep(index, direction) {
     setEditing((current) => {
-      const workout = normalizeTrackWorkout(current?.structuredWorkout);
+      const workout = current?.structuredWorkout || trackWorkoutForEditing();
       const target = index + direction;
       if (target < 0 || target >= workout.steps.length) return current;
       const steps = [...workout.steps];
@@ -1061,8 +1142,17 @@ export default function Planner() {
   function selectTrackTemplate(templateId) {
     const template = trackWorkoutTemplates.find((entry) => entry.id === templateId);
     setEditing((current) => {
-      if (template) return { ...current, structuredWorkout: workoutFromTrackTemplate(template) };
-      const workout = normalizeTrackWorkout(current?.structuredWorkout);
+      const currentWorkout = current?.structuredWorkout || trackWorkoutForEditing();
+      if (template) {
+        return {
+          ...current,
+          structuredWorkout: {
+            ...workoutFromTrackTemplate(template),
+            planningStatus: currentWorkout.planningStatus,
+          },
+        };
+      }
+      const workout = normalizeTrackWorkout(currentWorkout);
       return {
         ...current,
         structuredWorkout: {
@@ -1071,6 +1161,7 @@ export default function Planner() {
           steps: workout.steps,
           warmupMode: "lap",
           cooldownMode: "lap",
+          planningStatus: currentWorkout.planningStatus,
         },
       };
     });
@@ -1365,7 +1456,7 @@ export default function Planner() {
                         {item.weatherAdjusted && <em>WETTER</em>}
                         {item.comboSession && <em>KOMBI-TAG</em>}
                         {item.doubleSession && <em>DOPPELTRAINING</em>}
-                        {item.intervalsPublishedAt && <em>INTERVALS</em>}
+                        {isProvisionalTrackWorkout(item) ? <em>VORLÄUFIG</em> : item.intervalsPublishedAt && <em>INTERVALS</em>}
                         {matched && <em>{String(matched.source || item.actualSource || "Garmin").toUpperCase()}</em>}
                       </div>
                       <h3>{item.title}</h3>
@@ -1382,7 +1473,7 @@ export default function Planner() {
                     </div>
                     <div className="planner-actions">
                       {isMissed && <button className="danger" onClick={() => openMissed(item)}>Grund angeben</button>}
-                      {isCancelled ? <button onClick={() => restoreCancelledWorkout(item)}>Wieder einplanen</button> : <button onClick={() => setEditing(item)}>Bearbeiten</button>}
+                      {isCancelled ? <button onClick={() => restoreCancelledWorkout(item)}>Wieder einplanen</button> : <button onClick={() => setEditing(prepareWorkoutForEditing(item))}>Bearbeiten</button>}
                       {!isPastWeek && !isCancelled && <button onClick={() => openAdjustment(item.id, "cancel")}>Fällt aus</button>}
                       <button onClick={() => updateWorkout(item.id, { archived: true })}>Archiv</button>
                     </div>
@@ -1402,8 +1493,10 @@ export default function Planner() {
             <p className="eyebrow">Woche bestätigen</p>
             <h2>Plan an Intervals.icu senden?</h2>
             <p><strong>{publishablePlan.length}</strong> zukünftige Einheit{publishablePlan.length === 1 ? "" : "en"} werden für {dayFormatter.format(weekStart)} bis {dayFormatter.format(weekEnd)} veröffentlicht.</p>
+            {provisionalTrackPlan.length > 0 && <p className="planner-publish-draft-note"><strong>{provisionalTrackPlan.length} vorläufige Track-Einheit{provisionalTrackPlan.length === 1 ? "" : "en"}</strong> bleibt{provisionalTrackPlan.length === 1 ? "" : "en"} in EYM und wird{provisionalTrackPlan.length === 1 ? "" : "werden"} nicht an Garmin gesendet. Eine früher gesendete Fassung wird beim Aktualisieren entfernt.</p>}
             <div className="planner-protection-list">
               <span>✓ Lauf- und Radeinheiten werden als strukturierte Workouts angelegt</span>
+              <span>✓ Vorläufige Track-Workouts bleiben in EYM, bis du sie ausdrücklich auf „Final“ stellst</span>
               <span>✓ Eine noch offene Samstagswahl bleibt zunächst als Kalendereintrag und wird nach deiner Entscheidung aktualisiert</span>
               <span>✓ Fußball, Stabi, Mobility und Rudern bleiben reine Kalendereinträge</span>
               <span>✓ Erneutes Senden aktualisiert bestehende Einträge statt Duplikate anzulegen</span>
@@ -1504,7 +1597,7 @@ export default function Planner() {
                   {!isSpontaneousWorkout(editing) && <label>Uhrzeit<input type="time" value={editing.time || "18:00"} onChange={(event) => setEditing({ ...editing, time: event.target.value })} /></label>}
                 </>}
               <label>Titel<input value={editing.title} onChange={(event) => setEditing({ ...editing, title: event.target.value })} required /></label>
-              <label>Typ<select value={editing.type} onChange={(event) => setEditing({ ...editing, type: event.target.value })}>{workoutTypes.map((type) => <option key={type}>{type}</option>)}</select></label>
+              <label>Typ<select value={editing.type} onChange={(event) => updateEditingType(event.target.value)}>{workoutTypes.map((type) => <option key={type}>{type}</option>)}</select></label>
               <label>Distanz in km<input type="number" min="0" step="0.1" value={editing.distance} onChange={(event) => setEditing({ ...editing, distance: event.target.value })} /></label>
               <label>Dauer in Minuten<input type="number" min="0" value={editing.duration} onChange={(event) => setEditing({ ...editing, duration: event.target.value })} /></label>
             </div>
@@ -1514,6 +1607,18 @@ export default function Planner() {
                   <p className="eyebrow">Geführtes Garmin-Workout</p>
                   <h3>Track-Abfolge festlegen</h3>
                   <p>Warm-up und Cool-down bleiben offen. Auf Garmin wechselst du jeweils mit der LAP-Taste zum nächsten Abschnitt.</p>
+                </div>
+                <div className={`planner-track-planning-status ${editingTrackWorkout.planningStatus === "draft" ? "draft" : "final"}`}>
+                  <div>
+                    <strong>Planungsstand</strong>
+                    <small>{editingTrackWorkout.planningStatus === "draft"
+                      ? "In EYM speichern, aber noch nicht an Garmin senden. Ideal, wenn Runden oder Pausen erst am Trainingstag feststehen."
+                      : "Die Abfolge ist bestätigt und wird beim nächsten Senden bzw. Aktualisieren an Garmin übergeben."}</small>
+                  </div>
+                  <div role="group" aria-label="Planungsstand des Track-Workouts">
+                    <button type="button" className={editingTrackWorkout.planningStatus === "draft" ? "selected" : ""} onClick={() => updateTrackWorkout("planningStatus", "draft")}>Vorläufig</button>
+                    <button type="button" className={editingTrackWorkout.planningStatus === "final" ? "selected" : ""} onClick={() => updateTrackWorkout("planningStatus", "final")}>Final</button>
+                  </div>
                 </div>
                 <section className="planner-track-archive">
                   <div className="planner-track-archive-heading">
@@ -1547,7 +1652,7 @@ export default function Planner() {
                 </div>
                 <div className="form-grid planner-track-settings">
                   <label>Art<select value={editingTrackWorkout.kind} onChange={(event) => updateTrackWorkout("kind", event.target.value)}><option value="intervals">Intervalle</option><option value="sprints">Sprints</option></select></label>
-                  <label>Durchgänge<input type="number" min="1" max="30" value={editingTrackWorkout.rounds} onChange={(event) => updateTrackWorkout("rounds", event.target.value)} /><small>Ein Durchgang enthält die komplette Reihenfolge unten.</small></label>
+                  <label>Durchgänge<input type="number" min="1" max="30" value={editingTrackWorkout.rounds} onChange={(event) => updateTrackWorkout("rounds", event.target.value)} onBlur={commitTrackRounds} /><small>Ein Durchgang enthält die komplette Reihenfolge unten.</small></label>
                 </div>
                 <div className="planner-track-sequence">
                   <div className="planner-track-sequence-heading">
@@ -1559,7 +1664,7 @@ export default function Planner() {
                       <b>{index + 1}</b>
                       <label>Abschnitt<select value={step.kind} onChange={(event) => updateTrackStep(index, "kind", event.target.value)}><option value="work">Belastung</option><option value="recovery">Pause</option></select></label>
                       <label>Einheit<select value={step.unit} onChange={(event) => updateTrackStep(index, "unit", event.target.value)}><option value="distance">Meter</option><option value="time">Sekunden</option></select></label>
-                      <label>Wert<input type="number" min={step.unit === "distance" ? "20" : "5"} max={step.unit === "distance" ? "5000" : "3600"} value={step.value} onChange={(event) => updateTrackStep(index, "value", event.target.value)} /></label>
+                      <label>Wert<input type="number" min={step.unit === "distance" ? "20" : "5"} max={step.unit === "distance" ? "5000" : "3600"} value={step.value} onChange={(event) => updateTrackStep(index, "value", event.target.value)} onBlur={() => commitTrackStep(index)} /></label>
                       <div className="planner-track-step-actions">
                         <button type="button" onClick={() => moveTrackStep(index, -1)} disabled={index === 0} aria-label={`Schritt ${index + 1} nach oben`}>↑</button>
                         <button type="button" onClick={() => moveTrackStep(index, 1)} disabled={index === editingTrackWorkout.steps.length - 1} aria-label={`Schritt ${index + 1} nach unten`}>↓</button>
@@ -1642,6 +1747,22 @@ export default function Planner() {
               <label>Stabi-Einheiten<input type="number" min="0" max="7" value={planningDraft.stabiCount} onChange={(event) => setPlanningDraft({ ...planningDraft, stabiCount: Number(event.target.value) })} /></label>
               <label>Ruder-Einheiten<input type="number" min="0" max="7" value={planningDraft.rowingCount} onChange={(event) => setPlanningDraft({ ...planningDraft, rowingCount: Number(event.target.value) })} /></label>
             </div>
+
+            {Number(planningDraft.rowingCount || 0) > 0 && (
+              <section className="planner-rowing-setup">
+                <div>
+                  <p className="eyebrow">Lockeres Rudern</p>
+                  <h3>Ruhige Grundlageneinheit konfigurieren</h3>
+                  <p className="muted">Standard sind 5.000 m in 35 Minuten. Der SPM-Korridor dient nur als Technik- und Rhythmushilfe; EYM macht daraus keine zusätzliche harte Intervalleinheit.</p>
+                </div>
+                <div className="form-grid">
+                  <label>Ziel in km<input type="number" min="0.5" max="50" step="0.5" value={planningDraft.rowingDistanceKm} onChange={(event) => setPlanningDraft({ ...planningDraft, rowingDistanceKm: event.target.value })} onBlur={() => commitPlanningNumber("rowingDistanceKm", 0.5, 50, 5)} /></label>
+                  <label>Zeitansatz in Minuten<input type="number" min="5" max="180" value={planningDraft.rowingDuration} onChange={(event) => setPlanningDraft({ ...planningDraft, rowingDuration: event.target.value })} onBlur={() => commitPlanningNumber("rowingDuration", 5, 180, 35)} /></label>
+                  <label>SPM von<input type="number" min="14" max="40" value={planningDraft.rowingSpmMin} onChange={(event) => setPlanningDraft({ ...planningDraft, rowingSpmMin: event.target.value })} onBlur={() => commitPlanningNumber("rowingSpmMin", 14, 40, 24)} /></label>
+                  <label>SPM bis<input type="number" min="14" max="40" value={planningDraft.rowingSpmMax} onChange={(event) => setPlanningDraft({ ...planningDraft, rowingSpmMax: event.target.value })} onBlur={() => commitPlanningNumber("rowingSpmMax", 14, 40, 26)} /></label>
+                </div>
+              </section>
+            )}
 
             <div className="planner-day-picker"><strong>An welchen Tagen kannst du laufen?</strong><div>{plannerDays.map((day) => <button type="button" className={planningDraft.runDays.includes(day) ? "selected" : ""} onClick={() => toggleDay("runDays", day)} key={`run-${day}`}>{day.slice(0, 2)}</button>)}</div></div>
             <div className="planner-day-picker"><strong>Stabi an welchen Tagen?</strong><div>{plannerDays.map((day) => <button type="button" className={planningDraft.stabiDays.includes(day) ? "selected" : ""} onClick={() => toggleDay("stabiDays", day)} key={`stabi-${day}`}>{day.slice(0, 2)}</button>)}</div></div>

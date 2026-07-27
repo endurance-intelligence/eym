@@ -2,13 +2,18 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   buildTrackWorkoutTemplate,
+  isProvisionalTrackWorkout,
   isTrackWorkout,
+  normalizeTrackRounds,
   normalizeTrackWorkout,
   normalizeTrackWorkoutTemplates,
+  trackWorkoutForEditing,
   trackWorkoutSummary,
+  updateTrackStepDraft,
+  updateTrackWorkoutDraft,
   workoutFromTrackTemplate,
 } from "../src/services/trackWorkout.js";
-import { intervalDescription } from "../supabase/functions/_shared/structuredWorkout.ts";
+import { intervalDescription, isProvisionalTrackPlanItem } from "../supabase/functions/_shared/structuredWorkout.ts";
 
 test("ORC Track receives a safe structured workout default", () => {
   assert.equal(isTrackWorkout({ type: "ORC Track" }), true);
@@ -21,6 +26,7 @@ test("ORC Track receives a safe structured workout default", () => {
     ],
     warmupMode: "lap",
     cooldownMode: "lap",
+    planningStatus: "final",
   });
 });
 
@@ -53,7 +59,44 @@ test("old v3.5.2 track settings migrate into the new step model", () => {
     ],
     warmupMode: "lap",
     cooldownMode: "lap",
+    planningStatus: "final",
   });
+});
+
+test("numeric track drafts stay empty while typing and normalize only when committed", () => {
+  const initial = trackWorkoutForEditing();
+  const emptyRounds = updateTrackWorkoutDraft(initial, "rounds", "");
+  const typedRounds = updateTrackWorkoutDraft(emptyRounds, "rounds", "10");
+  assert.equal(emptyRounds.rounds, "");
+  assert.equal(typedRounds.rounds, "10");
+  assert.equal(normalizeTrackRounds(typedRounds.rounds), 10);
+
+  const emptyStep = updateTrackStepDraft(initial, 0, "value", "");
+  const typedStep = updateTrackStepDraft(emptyStep, 0, "value", "1200");
+  assert.equal(emptyStep.steps[0].value, "");
+  assert.equal(typedStep.steps[0].value, "1200");
+  assert.equal(normalizeTrackWorkout(typedStep).steps[0].value, 1200);
+});
+
+test("new track definitions start provisional while legacy saved workouts remain final", () => {
+  assert.equal(trackWorkoutForEditing().planningStatus, "draft");
+  assert.equal(trackWorkoutForEditing({ rounds: 4 }).planningStatus, "final");
+  assert.equal(isProvisionalTrackWorkout({
+    type: "ORC Track",
+    structuredWorkout: trackWorkoutForEditing(),
+  }), true);
+  assert.equal(isProvisionalTrackWorkout({
+    type: "ORC Track",
+    structuredWorkout: normalizeTrackWorkout({ rounds: 4 }),
+  }), false);
+  assert.equal(isProvisionalTrackPlanItem({
+    type: "ORC Track",
+    structuredWorkout: { planningStatus: "draft" },
+  }), true);
+  assert.equal(isProvisionalTrackPlanItem({
+    type: "ORC Track",
+    structuredWorkout: { planningStatus: "final" },
+  }), false);
 });
 
 test("Intervals description contains an ordered Garmin block and LAP-controlled edges", () => {

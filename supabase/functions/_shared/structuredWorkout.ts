@@ -57,6 +57,14 @@ function structuredTrackDescription(input: Record<string, unknown>) {
   return lines.join("\n");
 }
 
+export function isProvisionalTrackPlanItem(item: Record<string, unknown>) {
+  const text = `${item.type || ""} ${item.title || ""}`.toLowerCase();
+  const structuredWorkout = item.structuredWorkout;
+  return /orc\s*track|intervall|interval|sprint/.test(text)
+    && Boolean(structuredWorkout && typeof structuredWorkout === "object"
+      && (structuredWorkout as Record<string, unknown>).planningStatus === "draft");
+}
+
 export function intervalDescription(item: Record<string, unknown>) {
   const title = String(item.title || "");
   const type = String(item.type || "");
