@@ -25,6 +25,16 @@ import {
   findCommitmentReplacementCandidate,
   findCommitmentSlot,
 } from "../services/plannerCommitments";
+import {
+  hasReviewCoverage,
+  planningClosureOffset,
+  requiresWeeklyReview,
+} from "../services/reviewCoverage";
+import {
+  isTrackWorkout,
+  normalizeTrackWorkout,
+  trackWorkoutSummary,
+} from "../services/trackWorkout";
 import "./Planner.css";
 
 const dayFormatter = new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" });
@@ -86,6 +96,7 @@ function planFingerprint(plan) {
     duration: Number(item.duration || 0),
     optional: Boolean(item.optional),
     notes: item.notes || "",
+    structuredWorkout: item.structuredWorkout || null,
   })).sort((a, b) => `${a.date}${a.time}${a.id}`.localeCompare(`${b.date}${b.time}${b.id}`)));
 }
 
@@ -164,15 +175,7 @@ function normalizedType(value = "") {
   return type;
 }
 
-function requiresWeeklyReview(activity) {
-  const type = normalizedType(`${activity.type || ""} ${activity.sportType || ""} ${activity.name || ""}`);
-  if (["running", "football", "cycling", "rowing", "swimming"].includes(type)) return true;
-  if (["strength", "mobility"].includes(type)) return Number(activity.duration || 0) >= 20;
-  if (type === "walking" || type === "rest") return false;
-  return Number(activity.duration || 0) >= 45;
-}
-
-function weeklyClosureSummary({ weekStart, plan, activities, reviews, activityGroups }) {
+function weeklyClosureSummary({ weekStart, plan, activities, allActivities, reviews, activityGroups }) {
   const weekEnd = dateForDay(weekStart, 6);
   const startKey = isoDate(weekStart);
   const endKey = isoDate(weekEnd);
@@ -185,7 +188,9 @@ function weeklyClosureSummary({ weekStart, plan, activities, reviews, activityGr
     activityGroups || [],
   );
   const matches = findMatches(planEntries, weekActivities);
-  const missingReviews = weekActivities.filter(requiresWeeklyReview).filter((activity) => !reviews?.[activity.id]);
+  const missingReviews = weekActivities
+    .filter(requiresWeeklyReview)
+    .filter((activity) => !hasReviewCoverage(activity, reviews, allActivities));
   const unresolvedItems = planEntries.filter((item) => {
     const type = normalizedType(`${item.type || ""} ${item.title || ""}`);
     if (item.optional || type === "rest") return false;
@@ -298,16 +303,18 @@ export default function Planner() {
     return value >= isoDate(weekStart) && value <= isoDate(weekEnd);
   }).sort((a, b) => String(a.startDateLocal || a.date).localeCompare(String(b.startDateLocal || b.date))), [groupedActivities, weekStart, weekEnd]);
   const matches = useMemo(() => findMatches(weekPlan, weekActivities), [weekPlan, weekActivities]);
+  const closureOffset = planningClosureOffset(offsetWeeks, weekPlan.length > 0);
   const previousWeekClosure = useMemo(() => {
-    if (offsetWeeks !== 1) return null;
+    if (closureOffset == null) return null;
     return weeklyClosureSummary({
-      weekStart: startOfWeek(new Date(), 0),
+      weekStart: startOfWeek(new Date(), closureOffset),
       plan: state.plan,
       activities: canonicalActivities,
+      allActivities: state.activities,
       reviews: state.reviews,
       activityGroups: state.activityGroups,
     });
-  }, [offsetWeeks, state.plan, canonicalActivities, state.reviews, state.activityGroups]);
+  }, [closureOffset, state.plan, state.activities, canonicalActivities, state.reviews, state.activityGroups]);
   const matchedActivityIds = useMemo(() => new Set([...matches.values()].map((activity) => activity.id)), [matches]);
   const todayKey = isoDate(new Date());
   const footballEditable = mondayDate >= todayKey && !footballSlot?.completed;
@@ -354,10 +361,15 @@ export default function Planner() {
   const planChangedAfterPublish = Boolean(publishedWeek && publishedWeek.fingerprint !== currentPlanFingerprint);
   const adjustmentSelectedItems = adjustmentDraft?.selectedIds?.map((id) => weekPlan.find((item) => item.id === id)).filter(Boolean) || [];
   const adjustmentReplacement = replacementOptions.find((entry) => entry.key === adjustmentDraft?.replacementKey);
-  const nextWeekPlanningPending = offsetWeeks === 1 && weekPlan.length === 0;
-  const nextWeekPlanningLocked = Boolean(nextWeekPlanningPending && previousWeekClosure && !previousWeekClosure.ready);
+  const planningWeekPending = offsetWeeks >= 0 && weekPlan.length === 0;
+  const planningWeekLocked = Boolean(planningWeekPending && previousWeekClosure && !previousWeekClosure.ready);
+  const planningTargetLabel = offsetWeeks === 1 ? "Nächste Woche" : "Aktuelle Woche";
+  const closurePeriodLabel = offsetWeeks === 1 ? "aktuelle Woche" : "Vorwoche";
   const isPastWeek = offsetWeeks < 0;
   const modalVisible = Boolean(editing || missedEditing || planningOpen || adjustmentOpen || planningInfoOpen || publishConfirmOpen);
+  const editingTrackWorkout = editing && isTrackWorkout(editing)
+    ? normalizeTrackWorkout(editing.structuredWorkout)
+    : null;
 
   useEffect(() => {
     if (!modalVisible) return undefined;
@@ -405,8 +417,8 @@ export default function Planner() {
       openAdjustment();
       return;
     }
-    if (nextWeekPlanningLocked) {
-      setStatus("Die nächste Woche wird freigeschaltet, sobald alle erforderlichen Reviews vorliegen und offene Einheiten der aktuellen Woche geklärt sind.");
+    if (planningWeekLocked) {
+      setStatus(`${planningTargetLabel} wird freigeschaltet, sobald alle tatsächlich erforderlichen Reviews vorliegen und offene Einheiten der ${closurePeriodLabel} geklärt sind.`);
       return;
     }
     openPlanning();
@@ -763,6 +775,10 @@ export default function Planner() {
 
   function editCommitmentThisWeek(commitment, date, slot, replacementCandidate) {
     if (slot) {
+      if (isTrackWorkout(slot)) {
+        setEditing({ ...slot, structuredWorkout: normalizeTrackWorkout(slot.structuredWorkout) });
+        return;
+      }
       openAdjustment(slot.id);
       return;
     }
@@ -920,6 +936,9 @@ export default function Planner() {
       distance: Number(editing.distance || 0),
       duration: Number(editing.duration || 60),
       title: editing.title.trim(),
+      structuredWorkout: isTrackWorkout(editing)
+        ? normalizeTrackWorkout(editing.structuredWorkout)
+        : null,
     };
     setState((current) => ({
       ...current,
@@ -932,6 +951,16 @@ export default function Planner() {
 
   function updateWorkout(id, patch) {
     setState((current) => ({ ...current, plan: current.plan.map((item) => item.id === id ? { ...item, ...patch } : item) }));
+  }
+
+  function updateTrackWorkout(field, value) {
+    setEditing((current) => ({
+      ...current,
+      structuredWorkout: {
+        ...normalizeTrackWorkout(current?.structuredWorkout),
+        [field]: value,
+      },
+    }));
   }
 
   function saveMissed(event) {
@@ -986,8 +1015,8 @@ export default function Planner() {
     <>
       <PageTitle eyebrow="Wochenplaner" title="Deine Woche">
         <div className="page-actions planner-page-actions">
-          <button className="primary planner-generate" onClick={requestPlanning} disabled={isPastWeek || nextWeekPlanningLocked}>
-            ✦ {isPastWeek ? "Woche abgeschlossen" : weekPlan.length ? "Woche anpassen" : nextWeekPlanningLocked ? "Noch nicht planbar" : offsetWeeks === 1 ? "Nächste Woche planen" : "Woche planen"}
+          <button className="primary planner-generate" onClick={requestPlanning} disabled={isPastWeek || planningWeekLocked}>
+            ✦ {isPastWeek ? "Woche abgeschlossen" : weekPlan.length ? "Woche anpassen" : planningWeekLocked ? "Noch nicht planbar" : offsetWeeks === 1 ? "Nächste Woche planen" : "Woche planen"}
           </button>
           <button className={`planner-publish-button ${publishedWeek && !planChangedAfterPublish ? "intervals-published-button" : ""}`} onClick={requestPublish} disabled={publishBusy || (!publishedWeek && publishablePlan.length === 0)}>
             {publishBusy ? "Senden …" : publishedWeek ? (planChangedAfterPublish ? "Garmin aktualisieren" : "✓ Garmin") : "An Garmin senden"}
@@ -1016,26 +1045,26 @@ export default function Planner() {
         <div><span>Noch geplant</span><strong>{plannedKm.toFixed(1).replace(".0", "")} km</strong></div>
         <div><span>Gelaufen</span><strong>{completedKm.toFixed(1)} km</strong></div>
         <div><span>Erledigt</span><strong>{weekActivities.length} Einheiten</strong></div>
-        <div className="planner-overview-state"><span>Status</span><strong>{isPastWeek ? "Abgeschlossen" : weekPlan.length ? "Plan aktiv · nur gezielte Änderungen" : nextWeekPlanningLocked ? "Wochenabschluss fehlt" : "Bereit zur Planung"}</strong></div>
-        <button onClick={() => setEditing(createBlank(weekStart))} disabled={isPastWeek || nextWeekPlanningPending}>+ Einheit</button>
+        <div className="planner-overview-state"><span>Status</span><strong>{isPastWeek ? "Abgeschlossen" : weekPlan.length ? "Plan aktiv · nur gezielte Änderungen" : planningWeekLocked ? "Wochenabschluss fehlt" : "Bereit zur Planung"}</strong></div>
+        <button onClick={() => setEditing(createBlank(weekStart))} disabled={isPastWeek || planningWeekPending}>+ Einheit</button>
       </section>
 
-      {nextWeekPlanningPending ? (
-        <Card className={`wide planner-week-gate ${nextWeekPlanningLocked ? "locked" : "ready"}`}>
+      {planningWeekPending ? (
+        <Card className={`wide planner-week-gate ${planningWeekLocked ? "locked" : "ready"}`}>
           <div>
             <p className="eyebrow">Wochenabschluss</p>
-            <h2>{nextWeekPlanningLocked ? "Nächste Woche ist noch nicht planbar" : "Aktuelle Woche ist ausgewertet"}</h2>
-            <p className="muted">{nextWeekPlanningLocked ? "EYM wartet auf die Rückmeldungen der aktuellen Woche, bevor die nächste Belastung berechnet wird." : "Alle erforderlichen Reviews liegen vor und jede geplante Einheit ist erledigt oder nachvollziehbar geklärt."}</p>
+            <h2>{planningWeekLocked ? `${planningTargetLabel} ist noch nicht planbar` : `${closurePeriodLabel === "Vorwoche" ? "Vorwoche" : "Aktuelle Woche"} ist ausgewertet`}</h2>
+            <p className="muted">{planningWeekLocked ? `EYM wartet auf die erforderlichen Rückmeldungen der ${closurePeriodLabel}, bevor die nächste Belastung berechnet wird.` : "Alle tatsächlich erforderlichen Reviews liegen vor und jede geplante Einheit ist erledigt oder nachvollziehbar geklärt."}</p>
           </div>
           <div className="planner-gate-checks">
             <div className={previousWeekClosure?.missingReviews.length ? "open" : "done"}><b>{previousWeekClosure?.missingReviews.length ? "!" : "✓"}</b><span><strong>Reviews</strong><small>{previousWeekClosure?.missingReviews.length ? `${previousWeekClosure.missingReviews.length} Rückmeldung${previousWeekClosure.missingReviews.length === 1 ? " fehlt" : "en fehlen"}` : "Alle erforderlichen Reviews vorhanden"}</small></span></div>
             <div className={previousWeekClosure?.unresolvedItems.length ? "open" : "done"}><b>{previousWeekClosure?.unresolvedItems.length ? "!" : "✓"}</b><span><strong>Geplante Einheiten</strong><small>{previousWeekClosure?.unresolvedItems.length ? `${previousWeekClosure.unresolvedItems.length} Einheit${previousWeekClosure.unresolvedItems.length === 1 ? " ist" : "en sind"} noch offen` : "Alles erledigt, verschoben oder als ausgefallen markiert"}</small></span></div>
-            <div className="done"><b>✓</b><span><strong>Trainingsdaten</strong><small>{previousWeekClosure?.activityCount || 0} Aktivitäten der aktuellen Woche berücksichtigt</small></span></div>
+            <div className="done"><b>✓</b><span><strong>Trainingsdaten</strong><small>{previousWeekClosure?.activityCount || 0} Aktivitäten der {closurePeriodLabel} berücksichtigt</small></span></div>
           </div>
           <div className="planner-gate-actions">
             {previousWeekClosure?.missingReviews.length > 0 && <Link className="secondary" to="/training">Reviews abschließen</Link>}
-            {previousWeekClosure?.unresolvedItems.length > 0 && <button type="button" onClick={() => setOffsetWeeks(0)}>Aktuelle Woche öffnen</button>}
-            {!nextWeekPlanningLocked && <button type="button" className="primary" onClick={requestPlanning}>Nächste Woche planen</button>}
+            {previousWeekClosure?.unresolvedItems.length > 0 && closureOffset != null && <button type="button" onClick={() => setOffsetWeeks(closureOffset)}>{closurePeriodLabel === "Vorwoche" ? "Vorwoche öffnen" : "Aktuelle Woche öffnen"}</button>}
+            {!planningWeekLocked && <button type="button" className="primary" onClick={requestPlanning}>{planningTargetLabel} planen</button>}
           </div>
           {previousWeekClosure?.missingReviews.length > 0 && <div className="planner-gate-list"><strong>Fehlende Reviews</strong>{previousWeekClosure.missingReviews.slice(0, 4).map((activity) => <span key={activity.id}>{activityDate(activity)} · {activity.name || activity.type || "Training"}</span>)}</div>}
           {previousWeekClosure?.unresolvedItems.length > 0 && <div className="planner-gate-list"><strong>Offene Einheiten</strong>{previousWeekClosure.unresolvedItems.slice(0, 4).map((item) => <span key={item.id}>{item.date} · {item.title}</span>)}</div>}
@@ -1057,9 +1086,10 @@ export default function Planner() {
                 const replacementCandidate = slot ? null : findCommitmentReplacementCandidate(weekPlan, commitment, date);
                 const editable = Boolean(!slot?.completed && (offsetWeeks > 0 || date >= todayKey));
                 const cancelled = Boolean(slot?.plannedCancellation);
+                const trackConfigurable = Boolean(slot && isTrackWorkout(slot));
                 return <section className={cancelled ? "cancelled" : ""} key={commitment.id}>
                   <div><span>{commitment.weekday} · {commitment.time}</span><strong>{slot?.title || commitment.name}</strong><small>{cancelled ? `Ausgefallen · ${slot.missedReason}` : `${!slot ? "Noch nicht im Wochenplan · " : ""}${sportLabel(commitment.sport)} · ${commitment.durationMinutes || slot?.duration || 0} min${commitment.distanceKm ? ` · ${commitment.distanceKm} km` : ""}`}</small></div>
-                  <div className="planner-live-buttons">{cancelled ? <><button type="button" onClick={() => restoreCancelledWorkout(slot)} disabled={!editable}>Wieder einplanen</button><button type="button" onClick={() => openAdjustment(slot.id, "cancel")} disabled={!editable}>Grund ändern</button></> : <><button type="button" onClick={() => editCommitmentThisWeek(commitment, date, slot, replacementCandidate)} disabled={!editable}>Einheit anpassen</button><button type="button" onClick={() => skipCommitmentThisWeek(slot, commitment, date)} disabled={!editable}>Diese Woche aussetzen</button></>}</div>
+                  <div className="planner-live-buttons">{cancelled ? <><button type="button" onClick={() => restoreCancelledWorkout(slot)} disabled={!editable}>Wieder einplanen</button><button type="button" onClick={() => openAdjustment(slot.id, "cancel")} disabled={!editable}>Grund ändern</button></> : <><button type="button" onClick={() => editCommitmentThisWeek(commitment, date, slot, replacementCandidate)} disabled={!editable}>{trackConfigurable ? "Track konfigurieren" : "Einheit anpassen"}</button><button type="button" onClick={() => skipCommitmentThisWeek(slot, commitment, date)} disabled={!editable}>Diese Woche aussetzen</button></>}</div>
                 </section>;
               })}
             </div>
@@ -1300,6 +1330,27 @@ export default function Planner() {
               <label>Distanz in km<input type="number" min="0" step="0.1" value={editing.distance} onChange={(event) => setEditing({ ...editing, distance: event.target.value })} /></label>
               <label>Dauer in Minuten<input type="number" min="0" value={editing.duration} onChange={(event) => setEditing({ ...editing, duration: event.target.value })} /></label>
             </div>
+            {editingTrackWorkout && (
+              <section className="planner-track-builder">
+                <div>
+                  <p className="eyebrow">Geführtes Garmin-Workout</p>
+                  <h3>Track-Inhalt festlegen</h3>
+                  <p>Diese Schritte werden als strukturiertes Workout an Intervals.icu übergeben.</p>
+                </div>
+                <div className="form-grid">
+                  <label>Art<select value={editingTrackWorkout.kind} onChange={(event) => updateTrackWorkout("kind", event.target.value)}><option value="intervals">Intervalle</option><option value="sprints">Sprints</option></select></label>
+                  <label>Wiederholungen<input type="number" min="1" max="50" value={editingTrackWorkout.repeats} onChange={(event) => updateTrackWorkout("repeats", event.target.value)} /></label>
+                  <label>Belastung messen in<select value={editingTrackWorkout.workUnit} onChange={(event) => updateTrackWorkout("workUnit", event.target.value)}><option value="distance">Metern</option><option value="time">Sekunden</option></select></label>
+                  <label>{editingTrackWorkout.workUnit === "distance" ? "Belastung in Metern" : "Belastung in Sekunden"}<input type="number" min={editingTrackWorkout.workUnit === "distance" ? "20" : "5"} value={editingTrackWorkout.workValue} onChange={(event) => updateTrackWorkout("workValue", event.target.value)} /></label>
+                  <label>Pause messen in<select value={editingTrackWorkout.recoveryUnit} onChange={(event) => updateTrackWorkout("recoveryUnit", event.target.value)}><option value="distance">Metern</option><option value="time">Sekunden</option></select></label>
+                  <label>{editingTrackWorkout.recoveryUnit === "distance" ? "Pause in Metern" : "Pause in Sekunden"}<input type="number" min={editingTrackWorkout.recoveryUnit === "distance" ? "20" : "5"} value={editingTrackWorkout.recoveryValue} onChange={(event) => updateTrackWorkout("recoveryValue", event.target.value)} /></label>
+                  <label>Warm-up in Minuten<input type="number" min="0" max="90" value={editingTrackWorkout.warmupMinutes} onChange={(event) => updateTrackWorkout("warmupMinutes", event.target.value)} /></label>
+                  <label>Cool-down in Minuten<input type="number" min="0" max="90" value={editingTrackWorkout.cooldownMinutes} onChange={(event) => updateTrackWorkout("cooldownMinutes", event.target.value)} /></label>
+                </div>
+                <strong className="planner-track-summary">{trackWorkoutSummary(editingTrackWorkout)}</strong>
+                <small>Für Pace-Hinweise auf der Uhr muss in Intervals.icu unter Running eine Threshold Pace gesetzt und „Upload planned workouts“ für Garmin aktiviert sein.</small>
+              </section>
+            )}
             <label>Notiz<textarea value={editing.notes} onChange={(event) => setEditing({ ...editing, notes: event.target.value })} /></label>
             <label className="planner-optional"><input type="checkbox" checked={editing.optional} onChange={(event) => setEditing({ ...editing, optional: event.target.checked })} /> Einheit ist optional</label>
             <button className="primary" type="submit">Speichern</button>

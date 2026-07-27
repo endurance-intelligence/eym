@@ -250,3 +250,27 @@
 .planner-adjustment-preview-list article{border-color:var(--border);background:var(--bg-input)}
 .planner-adjustment-preview-list article>b{color:var(--accent)}
 .planner-adjustment-scope-note{background:var(--accent-surface-strong);color:var(--accent-bright)}
+
+/* v3.5.2 – roomy coach recommendations and stable week navigation */
+.planner-science-card{min-width:0;margin-bottom:20px}
+.planner-science-heading>div,.planner-science-suggestions article{min-width:0}
+.planner-science-suggestions{grid-template-columns:repeat(2,minmax(0,1fr))}
+.planner-science-suggestions article{display:grid;align-content:start}
+.planner-science-suggestions article button{justify-self:start}
+.planner-week-nav{margin:0 0 22px}
+@media(max-width:900px){
+  .planner-science-suggestions{grid-template-columns:1fr}
+}
+@media(max-width:620px){
+  .planner-science-card{padding:18px 15px;margin-bottom:16px}
+  .planner-science-heading{display:grid;gap:5px}
+  .planner-science-context{display:grid;grid-template-columns:1fr}
+  .planner-science-context span{min-width:0;overflow-wrap:anywhere}
+  .planner-science-suggestions article button{width:100%;justify-self:stretch}
+}
+.planner-track-builder{display:grid;gap:14px;margin:18px 0;padding:17px;border:1px solid var(--accent-border-strong);border-radius:15px;background:var(--accent-surface)}
+.planner-track-builder h3{margin:3px 0 5px}
+.planner-track-builder p:last-child{margin:0;color:var(--muted)}
+.planner-track-builder>.form-grid{margin:0}
+.planner-track-summary{display:block;padding:11px 13px;border:1px solid var(--border);border-radius:11px;background:var(--bg-input);color:var(--accent-bright)}
+.planner-track-builder>small{color:var(--muted);line-height:1.45}

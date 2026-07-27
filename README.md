@@ -318,6 +318,14 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 - A missing appointment can replace only a compatible automatically planned unit on the same day; mobility, strength work and the rest of the week remain unchanged.
 - “Diese Woche aussetzen” records a week-only cancellation while preserving the recurring appointment in Settings.
 
+## Stable planner reviews and structured track workouts v3.5.2
+
+- Coach suggestions use at most two roomy columns on desktop and one column on narrower screens. Week navigation keeps its own space instead of overlapping the Coach card.
+- The weekly planning gate only waits for activities that can actually receive a review. Football and unsupported activity types can no longer create an impossible review requirement.
+- Reviews on stored ORC groups and equivalent Garmin/Intervals.icu imports count as the same completed feedback. Sunday preview and Monday planning evaluate the same completed week.
+- ORC Track sessions can be configured as intervals or sprints with distance- or time-based work and recovery, repetitions, warm-up and cool-down.
+- The Intervals.icu edge function converts the stored track definition into native repeat steps for Garmin. After deploying this version, redeploy the `intervals` Supabase function.
+
 Before deploying the application, apply `supabase/migrations/20260722120000_athlete_images.sql`. Afterwards run:
 
 ```bash

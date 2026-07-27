@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { intervalDescription } from "../_shared/structuredWorkout.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -81,69 +82,6 @@ function isGuidedWorkout(item: Record<string, unknown>) {
   if (item.choicePending || /samstagsoption/.test(value)) return false;
   return /run|lauf|orc|interval|schwelle|backyard|laufband|treadmill|rad|ride|bike|cycling/.test(value)
     && !/fußball|football|soccer|stabi|mobility|mobilität|rudern|row|ruhetag|rest/.test(value);
-}
-
-function intervalDescription(item: Record<string, unknown>) {
-  const title = String(item.title || "");
-  const type = String(item.type || "");
-  const text = `${type} ${title}`.toLowerCase();
-  const duration = safeMinutes(item.duration, Math.max(30, Math.round(Number(item.distance || 0) * 6.3)));
-  const distance = Math.max(0, Number(item.distance || 0));
-
-  const repeatMatch = title.match(/(\d+)\s*[x×]\s*(\d+(?:[.,]\d+)?)\s*(?:m|meter)/i);
-  if (/intervall/.test(text) && repeatMatch) {
-    const repeats = Math.max(1, Math.min(40, Number(repeatMatch[1])));
-    const meters = Math.max(50, Math.min(5000, Math.round(Number(repeatMatch[2].replace(",", ".")))));
-    return [
-      "Warm-up",
-      "- 15m Z1-Z2 Pace intensity=warmup",
-      "",
-      `${repeats}x`,
-      `- ${meters}mtr Z5 Pace intensity=interval`,
-      `- ${meters}mtr Z1 Pace intensity=recovery`,
-      "",
-      "Cool-down",
-      "- 10m Z1 Pace intensity=cooldown",
-    ].join("\n");
-  }
-
-  if (/intervall/.test(text)) {
-    return [
-      "Warm-up",
-      "- 15m Z1-Z2 Pace intensity=warmup",
-      "",
-      "6x",
-      "- 2m Z5 Pace intensity=interval",
-      "- 2m Z1 Pace intensity=recovery",
-      "",
-      "Cool-down",
-      "- 10m Z1 Pace intensity=cooldown",
-    ].join("\n");
-  }
-
-  if (/schwelle|threshold|tempo/.test(text)) {
-    const main = Math.max(8, duration - 25);
-    return [
-      "Warm-up",
-      "- 15m Z1-Z2 Pace intensity=warmup",
-      "",
-      "Schwelle",
-      `- ${main}m Z4 Pace intensity=interval`,
-      "",
-      "Cool-down",
-      "- 10m Z1 Pace intensity=cooldown",
-    ].join("\n");
-  }
-
-  if (workoutType(item) === "Ride") {
-    return `- ${duration}m Z2 HR`;
-  }
-
-  if (distance > 0) {
-    const roundedDistance = Number(distance.toFixed(1));
-    return `- ${roundedDistance}km Z2 Pace`;
-  }
-  return `- ${duration}m Z2 Pace`;
 }
 
 function planEvent(item: Record<string, unknown>, existingId?: unknown) {
