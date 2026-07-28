@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **3.5.7**
+Current app version: **3.6.0**
 
 **Eat your miles.**
 
@@ -366,6 +366,17 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 - Track planning totals work and distance-based recovery kilometres separately, then shows an estimated overall range with 2–3 km each for the LAP-controlled warm-up and cool-down.
 - Time-based steps remain clearly marked because their distance can only be known after the workout.
 - No database migration or Supabase function deployment is required for this update.
+
+## Guided first-run onboarding v3.6.0
+
+- New accounts start with a five-step onboarding for personal details, current training baseline, mission, weekly availability and optional recurring commitments.
+- Only the information required for a safe initial planning frame is mandatory. Birth date, height, weight and a concrete event remain optional.
+- Current runs per week, recent weekly kilometres and the recent longest run form the initial athlete baseline until imported activity history becomes available.
+- The first generated week uses that declared baseline instead of falling back to a generic 25 km minimum. A new runner starting at zero with two selected run days therefore receives an 8 km entry frame rather than an unsafe endurance default.
+- Fresh accounts no longer inherit personal running, rowing, mobility or double-session weekdays. These are chosen during onboarding.
+- Completing onboarding stores configuration only. It does not generate a week, publish a workout or change a calendar.
+- Existing cloud data, local state and pre-onboarding backups are recognized as established accounts and bypass the flow automatically. Plans, activities, reviews, goals, equipment, fuel, recurring commitments and tokens remain untouched.
+- No database migration or Supabase function deployment is required. Onboarding state and the additional profile baseline fields remain inside the existing `athlete_data.app_data` document.
 
 For fresh installations that have not yet applied the athlete-image cleanup, run `supabase/migrations/20260722120000_athlete_images.sql` once. Afterwards run:
 

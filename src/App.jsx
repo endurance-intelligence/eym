@@ -3,6 +3,7 @@ import { HashRouter, Routes, Route } from "react-router-dom";
 import Layout from "./components/Layout";
 import Briefing from "./pages/Briefing";
 import Auth from "./pages/Auth";
+import Onboarding from "./pages/Onboarding";
 import { useApp } from "./context/AppContext";
 import ErrorBoundary from "./components/ErrorBoundary";
 
@@ -24,8 +25,10 @@ function deferredPage(Component) {
 }
 
 export default function App() {
-  const { session, authLoading } = useApp();
+  const { state, session, authLoading, cloudStatus } = useApp();
   if (authLoading) return <main className="auth-shell"><section className="auth-card"><p className="eyebrow">Endurance Intelligence</p><h1>Cloud wird verbunden …</h1></section></main>;
   if (!session) return <Auth />;
+  if (cloudStatus === "local" || cloudStatus === "loading") return <main className="auth-shell"><section className="auth-card"><p className="eyebrow">Endurance Intelligence</p><h1>Dein Profil wird geladen …</h1><p className="muted">EYM prüft zuerst deinen vorhandenen Stand, damit nichts überschrieben wird.</p></section></main>;
+  if (state.onboarding?.status !== "completed") return <ErrorBoundary><Onboarding /></ErrorBoundary>;
   return <ErrorBoundary><HashRouter><Routes><Route element={<Layout />}><Route index element={<Briefing />} /><Route path="mission" element={deferredPage(Mission)} /><Route path="training" element={deferredPage(Training)} /><Route path="planner" element={deferredPage(Planner)} /><Route path="coach" element={deferredPage(Coach)} /><Route path="fuel" element={deferredPage(Fuel)} /><Route path="equipment" element={deferredPage(Equipment)} /><Route path="analytics" element={deferredPage(Analytics)} /><Route path="settings" element={deferredPage(Settings)} /></Route></Routes></HashRouter></ErrorBoundary>;
 }

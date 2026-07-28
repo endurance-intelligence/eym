@@ -9,6 +9,7 @@ import { applyTheme, normalizeAppearance } from "../services/theme";
 import { findFuelCatalogMatch, fuelCatalogKey, reviewFuelCategory } from "../services/fuelCatalog";
 import { consumedInventoryUnits } from "../services/fuelNutrition";
 import { applyImageMigrations, embeddedImageCount, flushQueuedImageDeletions, migrateEmbeddedImages } from "../services/imageStorage";
+import { completedLegacyOnboarding } from "../services/onboarding";
 
 const AppContext = createContext(null);
 
@@ -93,6 +94,8 @@ function migrateReviewFuelCatalog(inputState = {}) {
 function mergeState(localState = {}, cloudState = {}) {
   const local = localState || {};
   const cloud = cloudState || {};
+  const cloudHasData = Object.keys(cloud).length > 0;
+  const cloudHasOnboarding = Object.prototype.hasOwnProperty.call(cloud, "onboarding");
   const activities = asArray(cloud.activities, asArray(local.activities));
   const reviews = { ...(local.reviews || {}), ...(cloud.reviews || {}) };
   const inventory = normalizeInventory(activities, cloud.fuel ?? local.fuel, reviews);
@@ -100,6 +103,9 @@ function mergeState(localState = {}, cloudState = {}) {
     ...defaultState,
     ...local,
     ...cloud,
+    onboarding: cloudHasData && !cloudHasOnboarding
+      ? completedLegacyOnboarding()
+      : cloudHasOnboarding ? cloud.onboarding : local.onboarding,
     activities,
     activityGroups: asArray(cloud.activityGroups, asArray(local.activityGroups)),
     plan: asArray(cloud.plan, asArray(local.plan)),
@@ -351,7 +357,7 @@ export function AppProvider({ children }) {
   }
 
   useEffect(() => {
-    if (!session?.user?.id || cloudStatus !== "synced" || intervalsAutoSyncStarted.current) return;
+    if (!session?.user?.id || cloudStatus !== "synced" || state.onboarding?.status !== "completed" || intervalsAutoSyncStarted.current) return;
     intervalsAutoSyncStarted.current = true;
     let cancelled = false;
     async function checkAndSync() {
@@ -376,7 +382,7 @@ export function AppProvider({ children }) {
     checkAndSync();
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.user?.id, cloudStatus]);
+  }, [session?.user?.id, cloudStatus, state.onboarding?.status]);
 
 
   async function uploadLocalState() {

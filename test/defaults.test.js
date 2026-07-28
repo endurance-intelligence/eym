@@ -8,6 +8,11 @@ test("fresh state contains no athlete-specific mission or appointments", () => {
   assert.deepEqual(defaultState.mission.milestones, []);
   assert.deepEqual(defaultState.planner.recurringCommitments, []);
   assert.deepEqual(defaultState.planner.trackWorkoutTemplates, []);
+  assert.equal(defaultState.onboarding, null);
+  assert.equal(defaultState.planner.stabiCount, 0);
+  assert.equal(defaultState.planner.rowingCount, 0);
+  assert.deepEqual(defaultState.planner.runDays, []);
+  assert.deepEqual(defaultState.planner.doubleTrainingDays, []);
   assert.equal(defaultState.planner.rowingDistanceKm, 5);
   assert.equal(defaultState.planner.rowingDuration, 35);
   assert.deepEqual([defaultState.planner.rowingSpmMin, defaultState.planner.rowingSpmMax], [24, 26]);

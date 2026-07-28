@@ -564,10 +564,11 @@ input[type="checkbox"],input[type="radio"]{accent-color:var(--accent)}
 .athlete-experience-grid button>span{color:var(--accent-bright);font-size:11px;font-weight:900;letter-spacing:.12em;text-transform:uppercase}
 .athlete-experience-grid button strong{font-size:17px;line-height:1.2}
 .athlete-experience-grid button small{color:var(--muted);line-height:1.45}
-.athlete-run-framework{display:grid;grid-template-columns:minmax(260px,.65fr) minmax(320px,1.35fr);gap:12px;align-items:stretch}
-.athlete-run-framework>label:first-child{display:grid;grid-template-columns:minmax(0,1fr) 90px auto;align-items:center;gap:10px;padding:13px 14px;border:1px solid var(--border);border-radius:13px;background:var(--bg-input);color:var(--muted-bright);font-weight:700}
-.athlete-run-framework input[type="number"]{width:90px;min-height:42px}
-.athlete-run-framework>label:first-child span{color:var(--muted);font-size:13px}
+.athlete-self-report-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.athlete-self-report-grid>label{display:grid;gap:7px;padding:13px 14px;border:1px solid var(--border);border-radius:13px;background:var(--bg-input);color:var(--muted-bright);font-weight:700}
+.athlete-self-report-grid input{width:100%;min-height:42px;padding:9px 10px;border:1px solid var(--border-strong);border-radius:9px;background:var(--bg-card-alt);color:var(--text);outline:none}
+.athlete-self-report-grid input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.athlete-self-report-grid small{color:var(--muted);font-weight:500}
 .athlete-progress-toggle{display:flex;align-items:center;gap:12px;padding:13px 14px;border:1px solid var(--border);border-radius:13px;background:var(--bg-input);cursor:pointer}
 .athlete-progress-toggle input{width:22px;height:22px;accent-color:var(--accent);flex:0 0 auto}
 .athlete-progress-toggle span{display:grid;gap:3px}.athlete-progress-toggle small{color:var(--muted);font-weight:500}
@@ -605,8 +606,8 @@ input[type="checkbox"],input[type="radio"]{accent-color:var(--accent)}
 .coach-activity-assessment summary{cursor:pointer;font-weight:800}.coach-activity-assessment details p{margin:10px 0 0;color:var(--muted)}
 .coach-activity-factors{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}.coach-activity-factors span{padding:6px 8px;border:1px solid var(--border);border-radius:999px;color:var(--muted-bright);font-size:11px}
 @media(max-width:1050px){.athlete-experience-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.athlete-detected-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.planner-principle-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.coach-activity-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.coach-activity-metrics article:last-child{grid-column:span 2}}
-@media(max-width:700px){.athlete-run-framework{grid-template-columns:1fr}.athlete-run-framework>label:first-child{grid-template-columns:1fr 80px auto}.athlete-detected-heading,.athlete-progression-suggestion,.coach-athlete-model-heading,.coach-activity-heading{display:grid}.athlete-detected-heading>span,.coach-athlete-model-heading>span,.coach-activity-heading>span{justify-self:start}.athlete-detected-metrics,.coach-athlete-model-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.athlete-progression-suggestion>div:last-child{justify-content:flex-start}.coach-activity-metrics{grid-template-columns:1fr}.coach-activity-metrics article:last-child{grid-column:auto}.coach-activity-metrics article{min-height:0}}
-@media(max-width:460px){.athlete-experience-grid,.planner-principle-grid{grid-template-columns:1fr}.athlete-detected-metrics,.coach-athlete-model-metrics{grid-template-columns:1fr}.athlete-run-framework>label:first-child{grid-template-columns:1fr}.athlete-run-framework input[type="number"]{width:100%}}
+@media(max-width:700px){.athlete-self-report-grid{grid-template-columns:1fr}.athlete-detected-heading,.athlete-progression-suggestion,.coach-athlete-model-heading,.coach-activity-heading{display:grid}.athlete-detected-heading>span,.coach-athlete-model-heading>span,.coach-activity-heading>span{justify-self:start}.athlete-detected-metrics,.coach-athlete-model-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.athlete-progression-suggestion>div:last-child{justify-content:flex-start}.coach-activity-metrics{grid-template-columns:1fr}.coach-activity-metrics article:last-child{grid-column:auto}.coach-activity-metrics article{min-height:0}}
+@media(max-width:460px){.athlete-experience-grid,.planner-principle-grid{grid-template-columns:1fr}.athlete-detected-metrics,.coach-athlete-model-metrics{grid-template-columns:1fr}}
 
 /* v3.1.1 – compact briefing and weather-aware training window */
 .weather-briefing{position:relative;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:12px;width:min(520px,48vw);padding:13px 14px;border:1px solid var(--accent-border);border-radius:16px;background:linear-gradient(135deg,var(--surface),var(--bg-card-alt));box-shadow:var(--ambient-glow-subtle);text-align:left}

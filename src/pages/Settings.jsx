@@ -272,10 +272,12 @@ export default function Settings() {
           <div className="athlete-experience-grid" role="radiogroup" aria-label="Trainingserfahrung">
             {EXPERIENCE_OPTIONS.map((option) => <button type="button" role="radio" aria-checked={(state.profile?.experienceLevel || "beginner") === option.value} className={(state.profile?.experienceLevel || "beginner") === option.value ? "selected" : ""} onClick={() => { updateProfile("experienceLevel", option.value); setProfileMessage(""); }} key={option.value}><span>{option.label}</span><strong>{option.title}</strong><small>{option.description}</small></button>)}
           </div>
-          <div className="athlete-run-framework">
-            <label>Dein aktuell üblicher Rahmen<input type="number" min="0" max="14" value={state.profile?.selfReportedRunsPerWeek ?? ""} onChange={(event) => updateProfile("selfReportedRunsPerWeek", numberOrBlank(event.target.value))} /><span>Läufe pro Woche</span></label>
-            <label className="athlete-progress-toggle"><input type="checkbox" checked={state.profile?.coachProgressionEnabled !== false} onChange={(event) => updateProfile("coachProgressionEnabled", event.target.checked)} /><span><b>Entwicklungsvorschläge erlauben</b><small>EYM darf einen höheren Rahmen vorschlagen, übernimmt ihn aber niemals automatisch.</small></span></label>
+          <div className="athlete-self-report-grid">
+            <label><span>Läufe pro Woche</span><input type="number" min="0" max="7" step="0.5" value={state.profile?.selfReportedRunsPerWeek ?? ""} onChange={(event) => updateProfile("selfReportedRunsPerWeek", numberOrBlank(event.target.value))} /><small>Aktueller Durchschnitt</small></label>
+            <label><span>Kilometer pro Woche</span><input type="number" min="0" max="300" step="0.1" value={state.profile?.selfReportedWeeklyKm ?? ""} onChange={(event) => updateProfile("selfReportedWeeklyKm", numberOrBlank(event.target.value))} /><small>Ungefährer 6-Wochen-Schnitt</small></label>
+            <label><span>Längster aktueller Lauf</span><input type="number" min="0" max="250" step="0.1" value={state.profile?.selfReportedLongestRunKm ?? ""} onChange={(event) => updateProfile("selfReportedLongestRunKm", numberOrBlank(event.target.value))} /><small>Innerhalb der letzten 8 Wochen</small></label>
           </div>
+          <label className="athlete-progress-toggle"><input type="checkbox" checked={state.profile?.coachProgressionEnabled !== false} onChange={(event) => updateProfile("coachProgressionEnabled", event.target.checked)} /><span><b>Entwicklungsvorschläge erlauben</b><small>EYM darf einen höheren Rahmen vorschlagen, übernimmt ihn aber niemals automatisch.</small></span></label>
         </section>
 
         <section className={`athlete-detected-card confidence-${athleteAssessment.confidence}`}>

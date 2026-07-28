@@ -102,3 +102,63 @@ test("planner creates the configurable 5000 m easy rowing baseline without SPM i
   assert.match(rowing.notes, /keine? Pace-Druck|kein Pace-Druck/i);
   assert.doesNotMatch(rowing.notes, /Intervall/i);
 });
+
+test("first plan uses the onboarding baseline instead of a generic 25 km minimum", () => {
+  const result = generateWeekPlan({
+    mission: { id: "", name: "", date: "", targetKm: 0, milestones: [] },
+    profile: {
+      experienceLevel: "beginner",
+      selfReportedRunsPerWeek: 0,
+      selfReportedWeeklyKm: 0,
+      selfReportedLongestRunKm: 0,
+    },
+    offsetWeeks: 1,
+    today: new Date("2026-07-24T12:00:00"),
+    config: {
+      targetRunCount: 2,
+      recurringCommitments: [],
+      fixedAppointments: { football: false, orcRun: false, saturdayMode: "off" },
+      stabiCount: 0,
+      rowingCount: 0,
+      runDays: ["Mittwoch", "Sonntag"],
+      maxLongRun: 20,
+    },
+  });
+
+  const runningKm = result.plan
+    .filter((item) => /run|lauf/i.test(`${item.type} ${item.title}`))
+    .reduce((sum, item) => sum + Number(item.distance || 0), 0);
+  assert.equal(result.target, 8);
+  assert.equal(runningKm, 8);
+  assert.ok(Math.max(...result.plan.map((item) => Number(item.distance || 0))) <= 4);
+});
+
+test("planner uses the weekdays selected during onboarding, including a weekend-only frame", () => {
+  const result = generateWeekPlan({
+    mission: { id: "", name: "", date: "", targetKm: 0, milestones: [] },
+    profile: {
+      experienceLevel: "advanced",
+      selfReportedRunsPerWeek: 2,
+      selfReportedWeeklyKm: 18,
+      selfReportedLongestRunKm: 10,
+    },
+    offsetWeeks: 1,
+    today: new Date("2026-07-24T12:00:00"),
+    config: {
+      targetRunCount: 2,
+      recurringCommitments: [],
+      fixedAppointments: { football: false, orcRun: false, saturdayMode: "off" },
+      stabiCount: 0,
+      rowingCount: 0,
+      runDays: ["Samstag", "Sonntag"],
+      doubleTrainingDays: [],
+      maxLongRun: 20,
+    },
+  });
+
+  const runDays = result.plan
+    .filter((item) => /run|lauf/i.test(`${item.type} ${item.title}`))
+    .map((item) => item.day)
+    .sort();
+  assert.deepEqual(runDays, ["Samstag", "Sonntag"]);
+});

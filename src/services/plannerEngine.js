@@ -372,8 +372,8 @@ function item(weekStart, dayIndex, values) {
 function addStrengthSessions(plan, weekStart, config, readiness) {
   const trueDoubleDays = new Set(config.doubleTrainingDays || []);
   const strengthFactor = Number(readiness.strengthFactor || 1);
-  const stabiDays = (config.stabiDays?.length ? config.stabiDays : ["Dienstag", "Donnerstag"]).slice(0, Number(config.stabiCount ?? 2));
-  const rowingDays = (config.rowingDays?.length ? config.rowingDays : ["Freitag"]).slice(0, Number(config.rowingCount ?? 1));
+  const stabiDays = (Array.isArray(config.stabiDays) ? config.stabiDays : []).slice(0, Number(config.stabiCount ?? 0));
+  const rowingDays = (Array.isArray(config.rowingDays) ? config.rowingDays : []).slice(0, Number(config.rowingCount ?? 0));
   const rowingDistanceKm = boundedNumber(config.rowingDistanceKm, 0.5, 50, 5);
   const rowingDuration = boundedNumber(config.rowingDuration, 5, 180, 35);
   const firstSpm = Math.round(boundedNumber(config.rowingSpmMin, 14, 40, 24));
@@ -551,9 +551,7 @@ function applyRecurringCommitments(plan, weekStart, config, mode = "all") {
 }
 
 function distributeEasyKilometers(plan, weekStart, target, fixedKm, config, phase, readiness, cycle) {
-  const allowed = new Set(config.runDays?.length ? config.runDays : ["Dienstag", "Mittwoch", "Freitag", "Samstag", "Sonntag"]);
-  const hasRecurringCommitments = Array.isArray(config.recurringCommitments) && config.recurringCommitments.length > 0;
-  const fixedAppointments = hasRecurringCommitments ? { football: false, orcRun: false } : (config.fixedAppointments || {});
+  const allowed = new Set(Array.isArray(config.runDays) ? config.runDays : []);
   const trueDoubleDays = new Set(config.doubleTrainingDays || []);
 
   function hasEnduranceSession(day) {
@@ -563,10 +561,12 @@ function distributeEasyKilometers(plan, weekStart, target, fixedKm, config, phas
 
   const candidates = [
     "Dienstag",
-    "Freitag",
     "Donnerstag",
-    ...(!fixedAppointments.orcRun ? ["Mittwoch"] : []),
-    ...(!fixedAppointments.football || trueDoubleDays.has("Montag") ? ["Montag"] : []),
+    "Freitag",
+    "Mittwoch",
+    "Samstag",
+    "Sonntag",
+    "Montag",
   ].filter((day) => allowed.has(day) && (!hasEnduranceSession(day) || trueDoubleDays.has(day)));
 
   const remaining = Math.max(0, target - fixedKm);
@@ -616,6 +616,7 @@ export function generateWeekPlan({
   activities = [],
   planHistory = [],
   mission,
+  profile = {},
   config = {},
   forecast = [],
   offsetWeeks = 0,
@@ -630,7 +631,10 @@ export function generateWeekPlan({
   const recentAverage = weightedAverage(history.map((week) => week.km));
   const recentPeak = Math.max(...history.slice(0, 4).map((week) => week.km), recentAverage, 0);
   const lastWeek = history[0]?.km || recentAverage;
-  const longestRecent = recentLongestRun(activities, historyCutoff);
+  const reportedWeeklyKmAvailable = profile.selfReportedWeeklyKm !== "" && profile.selfReportedWeeklyKm !== null && profile.selfReportedWeeklyKm !== undefined;
+  const reportedWeeklyKm = boundedNumber(profile.selfReportedWeeklyKm, 0, 300, 0);
+  const reportedLongestRun = boundedNumber(profile.selfReportedLongestRunKm, 0, 250, 0);
+  const longestRecent = recentLongestRun(activities, historyCutoff) || reportedLongestRun;
   const goal = planningTarget(mission, weekStart);
   const daysLeft = daysToMission(goal, weekStart);
   const phase = trainingPhase(daysLeft);
@@ -656,15 +660,21 @@ export function generateWeekPlan({
     extraOrcTrackDay: hasRecurringCommitments ? "" : config.fixedAppointments?.extraOrcTrackDay || "",
   };
 
-  const base = recentAverage || Math.max(25, Math.min(45, Number(goal?.targetKm || mission?.targetKm || 50) * 0.4));
+  const startingRunCount = Math.max(1, Math.min(7, Number(config.targetRunCount || profile.selfReportedRunsPerWeek || 2)));
+  const starterFallback = Math.max(6, Math.min(28, startingRunCount * 4));
+  const goalFallback = Math.max(25, Math.min(45, Number(goal?.targetKm || mission?.targetKm || 50) * 0.4));
+  const base = recentAverage || (reportedWeeklyKmAvailable ? (reportedWeeklyKm || starterFallback) : goalFallback);
   const cycleFactor = recoveryWeek ? (scheduledRecoveryWeek ? 0.75 : 0.82) : [1, 1.04, 1.08][cycle - 1] || 1;
   let target = base * cycleFactor * phase.factor * readiness.factor;
 
   if (!recoveryWeek && phase.key !== "taper" && lastWeek > 0) target = Math.min(target, lastWeek * 1.1);
   if (recentPeak > 0 && !recoveryWeek && phase.key !== "taper") target = Math.min(target, recentPeak * 1.1);
-  target = Math.max(readiness.longRunAllowed ? 22 : 12, Math.round(target));
+  const minimumTarget = recentAverage || reportedWeeklyKmAvailable
+    ? Math.max(6, Math.min(22, Math.round(base * (readiness.longRunAllowed ? 0.8 : 0.65))))
+    : readiness.longRunAllowed ? 22 : 12;
+  target = Math.max(minimumTarget, Math.round(target));
 
-  const allowedRuns = new Set(config.runDays?.length ? config.runDays : ["Dienstag", "Mittwoch", "Freitag", "Samstag", "Sonntag"]);
+  const allowedRuns = new Set(Array.isArray(config.runDays) ? config.runDays : []);
   (config.recurringCommitments || [])
     .filter((entry) => entry?.enabled !== false && entry.sport === "running" && DAY_INDEX[entry.weekday] !== undefined)
     .forEach((entry) => allowedRuns.add(entry.weekday));
@@ -673,15 +683,19 @@ export function generateWeekPlan({
     ? Math.min(10, Math.max(recoveryWeek ? 5 : 6, Math.round(target * 0.13)))
     : 0;
   const desiredLong = Math.round(target * phase.longShare * (recoveryWeek ? 0.82 : 1));
-  const progressionCap = longestRecent > 0 ? Math.max(14, Math.round(longestRecent * 1.12)) : desiredLong;
+  const starterBaseline = !recentAverage && reportedWeeklyKmAvailable && reportedWeeklyKm < 20;
+  const minimumLongRun = starterBaseline ? (base >= 14 ? 6 : 4) : 12;
+  const progressionCap = longestRecent > 0
+    ? Math.max(minimumLongRun, Math.round(longestRecent * 1.12))
+    : starterBaseline
+      ? Math.max(minimumLongRun, Math.round(base * 0.55))
+      : desiredLong;
   const longRun = readiness.longRunAllowed
-    ? Math.max(12, Math.min(desiredLong, progressionCap, Number(config.maxLongRun || 38)))
+    ? Math.max(minimumLongRun, Math.min(desiredLong, progressionCap, Number(config.maxLongRun || 38)))
     : 0;
   const loopPrescription = loopTrainingPrescription(goal, daysLeft, longRun, cycle, recoveryWeek);
 
   const fridayWeather = weatherDecision(weatherForDate(forecast, dateForDay(weekStart, 4)), config);
-  const sundayWeather = weatherDecision(weatherForDate(forecast, dateForDay(weekStart, 6)), config);
-
   let plan = [];
 
   if (fixedAppointments.football) {
@@ -761,24 +775,36 @@ export function generateWeekPlan({
     }
   }
 
-  if (longRun > 0 && allowedRuns.has("Sonntag")) {
+  applyRecurringCommitments(plan, weekStart, config, "running");
+
+  const trueDoubleDays = new Set(config.doubleTrainingDays || []);
+  const longRunDay = ["Sonntag", "Samstag", "Freitag", "Donnerstag", "Mittwoch", "Dienstag", "Montag"]
+    .find((day) => {
+      if (!allowedRuns.has(day)) return false;
+      const date = isoDate(dateForDay(weekStart, DAY_INDEX[day]));
+      const occupied = plan.some((entry) => entry.date === date && !["Stabi", "Mobility", "Ruhetag"].includes(entry.type));
+      return !occupied || trueDoubleDays.has(day);
+    });
+
+  if (longRun > 0 && longRunDay) {
+    const longRunDayIndex = DAY_INDEX[longRunDay];
+    const longRunWeather = weatherDecision(weatherForDate(forecast, dateForDay(weekStart, longRunDayIndex)), config);
     const plannedLongDistance = loopPrescription?.distance || longRun;
-    plan.push(item(weekStart, 6, {
-      time: sundayWeather?.tooHot ? "07:00" : "09:00",
+    plan.push(item(weekStart, longRunDayIndex, {
+      time: longRunWeather?.tooHot ? "07:00" : "09:00",
       title: loopPrescription?.title || `${longRun} km Longrun`,
-      type: sundayWeather?.indoor ? "Laufband" : loopPrescription ? "Loop-Training" : "Long Run",
+      type: longRunWeather?.indoor ? "Laufband" : loopPrescription ? "Loop-Training" : "Long Run",
       distance: plannedLongDistance,
-      notes: sundayWeather?.indoor
-        ? `Wetteranpassung: ${sundayWeather.tooHot ? "früh starten oder Laufband" : "bei Sturm/Gewitter nach innen wechseln"}. Fuel und Trinken testen.`
+      notes: longRunWeather?.indoor
+        ? `Wetteranpassung: ${longRunWeather.tooHot ? "früh starten oder Laufband" : "bei Sturm/Gewitter nach innen wechseln"}. Fuel und Trinken testen.`
         : loopPrescription?.notes || "Ruhig und kontrolliert. Fuel, Trinken und Zeit auf den Beinen testen.",
       optional: false,
-      weatherAdjusted: Boolean(sundayWeather?.indoor),
+      weatherAdjusted: Boolean(longRunWeather?.indoor),
       loopTraining: loopPrescription || null,
       targetEventId: goal?.id || null,
     }));
   }
 
-  applyRecurringCommitments(plan, weekStart, config, "running");
   const fixedKm = plan.reduce((sum, entry) => sum + Number(entry.distance || 0), 0);
   distributeEasyKilometers(plan, weekStart, target, fixedKm, config, phase, readiness, cycle);
   applyExtraOrcTrack(plan, weekStart, fixedAppointments.extraOrcTrackDay, config);

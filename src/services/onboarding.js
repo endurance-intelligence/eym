@@ -1,0 +1,259 @@
+export const ONBOARDING_VERSION = 1;
+export const ONBOARDING_STEPS = [
+  { key: "profile", label: "Über dich" },
+  { key: "baseline", label: "Ausgangslage" },
+  { key: "mission", label: "Dein Ziel" },
+  { key: "week", label: "Deine Woche" },
+  { key: "summary", label: "Startklar" },
+];
+
+const WEEKDAYS = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"];
+
+function hasValue(value) {
+  return value !== "" && value !== null && value !== undefined;
+}
+
+function numeric(value, fallback = 0) {
+  if (!hasValue(value)) return fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function bounded(value, minimum, maximum, fallback = minimum) {
+  return Math.max(minimum, Math.min(maximum, numeric(value, fallback)));
+}
+
+function populatedArray(value) {
+  return Array.isArray(value) && value.length > 0;
+}
+
+function localDateKey(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+export function hasEstablishedAthleteData(state = {}) {
+  const profile = state.profile || {};
+  const mission = state.mission || {};
+  const mobility = state.mobilityCoach || {};
+  const planner = state.planner || {};
+
+  return Boolean(
+    String(profile.displayName || "").trim()
+    || profile.birthDate
+    || hasValue(profile.heightCm)
+    || hasValue(profile.weightKg)
+    || numeric(profile.selfReportedRunsPerWeek) > 0
+    || hasValue(profile.selfReportedWeeklyKm)
+    || populatedArray(state.activities)
+    || populatedArray(state.plan)
+    || populatedArray(state.equipment)
+    || populatedArray(state.fuel)
+    || populatedArray(state.healthCheckins)
+    || populatedArray(state.coachRecommendationHistory)
+    || populatedArray(mobility.history)
+    || populatedArray(planner.recurringCommitments)
+    || Object.keys(state.reviews || {}).length > 0
+    || String(mission.name || "").trim()
+    || populatedArray(mission.milestones)
+    || state.intervals?.connected
+    || state.garmin?.lastImportAt
+  );
+}
+
+export function normalizeOnboarding(state = {}) {
+  const current = state.onboarding && typeof state.onboarding === "object"
+    ? state.onboarding
+    : {};
+
+  if (current.status === "completed" || current.completedAt) {
+    return {
+      version: Math.max(ONBOARDING_VERSION, numeric(current.version)),
+      status: "completed",
+      completedAt: current.completedAt || null,
+      migratedFromExistingData: Boolean(current.migratedFromExistingData),
+    };
+  }
+
+  if (hasEstablishedAthleteData(state)) {
+    return {
+      version: ONBOARDING_VERSION,
+      status: "completed",
+      completedAt: null,
+      migratedFromExistingData: true,
+    };
+  }
+
+  return {
+    version: ONBOARDING_VERSION,
+    status: "pending",
+    completedAt: null,
+    migratedFromExistingData: false,
+  };
+}
+
+export function completedLegacyOnboarding() {
+  return {
+    version: ONBOARDING_VERSION,
+    status: "completed",
+    completedAt: null,
+    migratedFromExistingData: true,
+  };
+}
+
+export function createOnboardingDraft(state = {}) {
+  const profile = state.profile || {};
+  return {
+    displayName: String(profile.displayName || ""),
+    birthDate: profile.birthDate || "",
+    heightCm: profile.heightCm ?? "",
+    weightKg: profile.weightKg ?? "",
+    experienceLevel: "",
+    currentRunsPerWeek: "",
+    weeklyKm: "",
+    longestRunKm: "",
+    missionMode: "general",
+    missionName: "",
+    missionDate: "",
+    missionDistanceKm: "",
+    targetRunCount: 2,
+    runDays: [],
+    stabiCount: 1,
+    stabiDays: [],
+    recurringCommitments: [],
+    coachProgressionEnabled: true,
+  };
+}
+
+export function onboardingStepError(stepKey, draft = {}) {
+  if (stepKey === "profile" && !String(draft.displayName || "").trim()) {
+    return "Bitte sag EYM, wie es dich ansprechen darf.";
+  }
+
+  if (stepKey === "baseline") {
+    if (!["beginner", "advanced", "experienced", "individual"].includes(draft.experienceLevel)) {
+      return "Bitte wähle die Ausgangslage, die aktuell am besten passt.";
+    }
+    if (!hasValue(draft.currentRunsPerWeek) || !hasValue(draft.weeklyKm) || !hasValue(draft.longestRunKm)) {
+      return "Bitte ergänze alle drei Trainingswerte. Eine 0 ist völlig in Ordnung.";
+    }
+    if (numeric(draft.currentRunsPerWeek, -1) < 0 || numeric(draft.currentRunsPerWeek) > 7) {
+      return "Die aktuelle Lauffrequenz muss zwischen 0 und 7 liegen.";
+    }
+    if (numeric(draft.weeklyKm, -1) < 0 || numeric(draft.weeklyKm) > 300) {
+      return "Der aktuelle Wochenumfang muss zwischen 0 und 300 km liegen.";
+    }
+    if (numeric(draft.longestRunKm, -1) < 0 || numeric(draft.longestRunKm) > 250) {
+      return "Der längste Lauf muss zwischen 0 und 250 km liegen.";
+    }
+  }
+
+  if (stepKey === "mission" && draft.missionMode === "event") {
+    if (!String(draft.missionName || "").trim() || !draft.missionDate || numeric(draft.missionDistanceKm) <= 0) {
+      return "Für ein konkretes Ziel braucht EYM Name, Datum und Distanz.";
+    }
+  }
+
+  if (stepKey === "week") {
+    const target = Math.round(bounded(draft.targetRunCount, 1, 7, 2));
+    const runDays = Array.isArray(draft.runDays) ? draft.runDays.filter((day) => WEEKDAYS.includes(day)) : [];
+    if (runDays.length < target) {
+      return `Wähle mindestens ${target} mögliche Lauftag${target === 1 ? "" : "e"} aus.`;
+    }
+    const stabiCount = Math.round(bounded(draft.stabiCount, 0, 7, 0));
+    const stabiDays = Array.isArray(draft.stabiDays) ? draft.stabiDays.filter((day) => WEEKDAYS.includes(day)) : [];
+    if (stabiCount > 0 && stabiDays.length < stabiCount) {
+      return `Wähle mindestens ${stabiCount} mögliche Stabi- oder Mobility-Tag${stabiCount === 1 ? "" : "e"} aus.`;
+    }
+  }
+
+  return "";
+}
+
+function goalFromDraft(draft, preparationStartDate, idFactory) {
+  if (draft.missionMode !== "event") return null;
+  const event = {
+    id: idFactory(),
+    name: String(draft.missionName || "").trim(),
+    date: draft.missionDate,
+    location: "",
+    place: null,
+    targetKm: bounded(draft.missionDistanceKm, 1, 500, 1),
+    preparationStartDate,
+    isMainTarget: true,
+    priority: "A",
+    goalType: "finish",
+    targetTime: "",
+    elevationGain: 0,
+    elevationLoss: 0,
+    surface: "road",
+    role: "",
+    archived: false,
+  };
+  return event;
+}
+
+export function completeOnboardingState(
+  state,
+  draft,
+  { now = new Date(), idFactory = () => crypto.randomUUID() } = {},
+) {
+  const completedAt = now.toISOString();
+  const targetRunCount = Math.round(bounded(draft.targetRunCount, 1, 7, 2));
+  const stabiCount = Math.round(bounded(draft.stabiCount, 0, 7, 0));
+  const goal = goalFromDraft(draft, localDateKey(now), idFactory);
+  const existingMilestones = Array.isArray(state.mission?.milestones) ? state.mission.milestones : [];
+  const commitments = (Array.isArray(draft.recurringCommitments) ? draft.recurringCommitments : [])
+    .map((commitment) => ({ ...commitment }));
+
+  return {
+    ...state,
+    onboarding: {
+      version: ONBOARDING_VERSION,
+      status: "completed",
+      completedAt,
+      migratedFromExistingData: false,
+    },
+    profile: {
+      ...state.profile,
+      displayName: String(draft.displayName || "").trim(),
+      birthDate: draft.birthDate || "",
+      heightCm: hasValue(draft.heightCm) ? bounded(draft.heightCm, 100, 230, 170) : "",
+      weightKg: hasValue(draft.weightKg) ? bounded(draft.weightKg, 30, 250, 70) : "",
+      experienceLevel: draft.experienceLevel,
+      selfReportedRunsPerWeek: bounded(draft.currentRunsPerWeek, 0, 7, 0),
+      selfReportedWeeklyKm: bounded(draft.weeklyKm, 0, 300, 0),
+      selfReportedLongestRunKm: bounded(draft.longestRunKm, 0, 250, 0),
+      coachProgressionEnabled: draft.coachProgressionEnabled !== false,
+      progressionAcceptedAt: null,
+    },
+    mission: goal && !existingMilestones.length
+      ? {
+          ...state.mission,
+          id: goal.id,
+          name: goal.name,
+          date: goal.date,
+          location: "",
+          targetKm: goal.targetKm,
+          preparationStartDate: goal.preparationStartDate,
+          milestones: [goal],
+        }
+      : state.mission,
+    planner: {
+      ...state.planner,
+      targetRunCount,
+      runDays: [...new Set(draft.runDays)].filter((day) => WEEKDAYS.includes(day)),
+      stabiCount,
+      stabiDays: stabiCount > 0
+        ? [...new Set(draft.stabiDays)].filter((day) => WEEKDAYS.includes(day))
+        : [],
+      rowingCount: 0,
+      rowingDays: [],
+      doubleTrainingDays: [],
+      recurringCommitments: commitments,
+      legacyMigrationComplete: true,
+    },
+  };
+}

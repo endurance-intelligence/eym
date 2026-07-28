@@ -55,13 +55,20 @@ export function athleteBaseline(state) {
   const now = Date.now();
   const activities = preferredActivities(state.activities || []).filter((item) => now - activityTimestamp(item) <= 42 * DAY);
   const runs = activities.filter(isRunningActivity);
-  const weeklyKm = runs.reduce((sum, item) => sum + numeric(item.distance), 0) / 6;
-  const runDays = new Set(runs.map(activityDate)).size / 6;
-  const longest = Math.max(0, ...runs.map((item) => numeric(item.distance)));
+  const hasRunData = runs.length > 0;
+  const weeklyKm = hasRunData
+    ? runs.reduce((sum, item) => sum + numeric(item.distance), 0) / 6
+    : numeric(state.profile?.selfReportedWeeklyKm);
+  const runDays = hasRunData
+    ? new Set(runs.map(activityDate)).size / 6
+    : numeric(state.profile?.selfReportedRunsPerWeek);
+  const longest = hasRunData
+    ? Math.max(0, ...runs.map((item) => numeric(item.distance)))
+    : numeric(state.profile?.selfReportedLongestRunKm);
   const elevationWeekly = runs.reduce((sum, item) => sum + numeric(item.elevationGain || item.totalElevationGain), 0) / 6;
   const selected = state.profile?.experienceLevel || "beginner";
   const observed = runDays >= 4 ? "experienced" : runDays >= 2 ? "advanced" : "beginner";
-  return { selected, observed, weeklyKm, runDays, longest, elevationWeekly };
+  return { selected, observed, weeklyKm, runDays, longest, elevationWeekly, source: hasRunData ? "activities" : "profile" };
 }
 
 export function goalRequirements(state) {

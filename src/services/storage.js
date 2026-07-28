@@ -1,5 +1,6 @@
 import { migrateConfiguration } from "./configuration.js";
 import { normalizeAppearance } from "./theme.js";
+import { completedLegacyOnboarding } from "./onboarding.js";
 
 const KEY = "endurance-intelligence.v1";
 
@@ -8,9 +9,11 @@ function isDemoEntry(entry) {
 }
 
 function sanitizeState(state, defaults) {
+  const hasStoredOnboarding = Object.prototype.hasOwnProperty.call(state || {}, "onboarding");
   const sanitized = {
     ...defaults,
     ...state,
+    onboarding: hasStoredOnboarding ? state.onboarding : completedLegacyOnboarding(),
     activities: Array.isArray(state?.activities)
       ? state.activities.filter((activity) => !isDemoEntry(activity))
       : [],

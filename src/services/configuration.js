@@ -1,6 +1,7 @@
 import { normalizeTrackWorkoutTemplates } from "./trackWorkout.js";
+import { normalizeOnboarding } from "./onboarding.js";
 
-export const CONFIGURATION_VERSION = 5;
+export const CONFIGURATION_VERSION = 6;
 
 export const WEEKDAYS = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"];
 
@@ -167,7 +168,7 @@ export function migrateConfiguration(inputState = {}) {
     ? planner.replacementSports
     : DEFAULT_REPLACEMENT_SPORTS;
 
-  return {
+  const migrated = {
     ...inputState,
     profile: {
       displayName: "",
@@ -177,6 +178,8 @@ export function migrateConfiguration(inputState = {}) {
       units: "metric",
       experienceLevel: "beginner",
       selfReportedRunsPerWeek: 0,
+      selfReportedWeeklyKm: "",
+      selfReportedLongestRunKm: "",
       coachProgressionEnabled: true,
       progressionAcceptedAt: null,
       ...(inputState.profile || {}),
@@ -190,6 +193,7 @@ export function migrateConfiguration(inputState = {}) {
       trackWorkoutTemplates: normalizeTrackWorkoutTemplates(planner.trackWorkoutTemplates),
     },
   };
+  return { ...migrated, onboarding: normalizeOnboarding(migrated) };
 }
 
 export function sportLabel(value) {

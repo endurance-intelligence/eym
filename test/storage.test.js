@@ -41,3 +41,15 @@ test("backup roundtrip keeps relevant athlete data", () => {
 test("unrelated JSON is rejected as a backup", () => {
   assert.throws(() => parseStateBackup('{"hello":"world"}', defaults), /keine gültige EYM-Sicherung/);
 });
+
+test("a pre-onboarding backup is treated as an existing account", () => {
+  const legacy = {
+    ...defaults,
+    profile: {},
+    activities: [],
+    plan: [],
+  };
+  const restored = parseStateBackup(JSON.stringify(legacy), defaults);
+  assert.equal(restored.state.onboarding.status, "completed");
+  assert.equal(restored.state.onboarding.migratedFromExistingData, true);
+});
