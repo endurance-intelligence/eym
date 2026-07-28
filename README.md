@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **3.6.0**
+Current app version: **3.6.1**
 
 **Eat your miles.**
 
@@ -62,6 +62,7 @@ Required Supabase secrets for the current private Intervals.icu test connection:
 ```text
 INTERVALS_ATHLETE_ID
 INTERVALS_API_KEY
+INTERVALS_OWNER_USER_ID
 ```
 
 The standard Supabase secrets (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`) are supplied by Supabase to Edge Functions.
@@ -73,6 +74,10 @@ Intervals.icu is the central activity hub. Users connect Garmin, Strava, Polar o
 For Garmin planned workouts, enable **Upload planned workouts** in the Garmin connection inside Intervals.icu.
 
 The current API-key integration is for the private test account only. Before EYM is opened to multiple users, it must be replaced by a user-specific Intervals.icu OAuth flow.
+
+`INTERVALS_OWNER_USER_ID` must contain the UUID of the Supabase Auth user who owns the private Intervals.icu credentials. Other authenticated EYM accounts receive no access to this connection.
+
+For a controlled onboarding test, keep public registration disabled and create the tester under **Supabase → Authentication → Users → Add user**. On first confirmed login, EYM creates a separate `athlete_data` row for that UUID. Existing rows are not updated, and RLS limits every account to its own athlete document and image folder.
 
 ## Retired direct Strava connection
 
@@ -377,6 +382,15 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 - Completing onboarding stores configuration only. It does not generate a week, publish a workout or change a calendar.
 - Existing cloud data, local state and pre-onboarding backups are recognized as established accounts and bypass the flow automatically. Plans, activities, reviews, goals, equipment, fuel, recurring commitments and tokens remain untouched.
 - No database migration or Supabase function deployment is required. Onboarding state and the additional profile baseline fields remain inside the existing `athlete_data.app_data` document.
+
+## Account isolation and Garmin pace targets v3.6.1
+
+- Browser state and the cached weather position are stored under the authenticated Supabase user ID. Signing out and using another account in the same browser can no longer copy the previous athlete's local state or location into a fresh account.
+- Existing `athlete_data` rows, plans, activities, reviews, calendar tokens and private images remain unchanged. No database migration is required.
+- The private Intervals.icu API-key connection is accepted only for the Supabase UUID configured in `INTERVALS_OWNER_USER_ID`. Other accounts remain disconnected until a user-specific OAuth flow is added.
+- Every structured track step can carry an absolute target pace and a tolerance. A target of `4:40/km` with `±5 s` is exported as `4:35-4:45/km Pace`, allowing Garmin to guide and alert during that step.
+- Existing track workouts without a target pace continue to use the previous Z5 work and Z1 recovery targets. Saved templates retain new pace targets.
+- Set a Running Threshold Pace in Intervals.icu and enable **Upload planned workouts** in its Garmin connection. Redeploy the `intervals` function after applying this version.
 
 For fresh installations that have not yet applied the athlete-image cleanup, run `supabase/migrations/20260722120000_athlete_images.sql` once. Afterwards run:
 

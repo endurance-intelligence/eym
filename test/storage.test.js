@@ -1,6 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createStateBackup, parseStateBackup } from "../src/services/storage.js";
+import {
+  createStateBackup,
+  hasStoredState,
+  loadState,
+  parseStateBackup,
+  saveState,
+} from "../src/services/storage.js";
 
 const defaults = {
   activities: [], activityGroups: [], plan: [], equipment: [], fuel: [], fuelCatalogExclusions: [], reviews: {}, healthCheckins: [],
@@ -52,4 +58,30 @@ test("a pre-onboarding backup is treated as an existing account", () => {
   const restored = parseStateBackup(JSON.stringify(legacy), defaults);
   assert.equal(restored.state.onboarding.status, "completed");
   assert.equal(restored.state.onboarding.migratedFromExistingData, true);
+});
+
+test("browser state is isolated per authenticated account", () => {
+  const previousStorage = globalThis.localStorage;
+  const memory = new Map();
+  globalThis.localStorage = {
+    getItem: (key) => memory.get(key) ?? null,
+    setItem: (key, value) => memory.set(key, String(value)),
+    removeItem: (key) => memory.delete(key),
+  };
+
+  try {
+    saveState({ ...defaults, profile: { displayName: "Account A" } }, "user-a");
+    saveState({ ...defaults, profile: { displayName: "Account B" } }, "user-b");
+
+    assert.equal(hasStoredState("user-a"), true);
+    assert.equal(hasStoredState("user-b"), true);
+    assert.equal(hasStoredState("new-user"), false);
+    assert.equal(loadState(defaults, "user-a").profile.displayName, "Account A");
+    assert.equal(loadState(defaults, "user-b").profile.displayName, "Account B");
+    assert.equal(loadState(defaults, "new-user").profile.displayName, "");
+    assert.equal(loadState(defaults, "new-user").onboarding.status, "pending");
+  } finally {
+    if (previousStorage === undefined) delete globalThis.localStorage;
+    else globalThis.localStorage = previousStorage;
+  }
 });

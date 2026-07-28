@@ -3,6 +3,11 @@ import { reverseGeocode } from "./placeSearch.js";
 const WEATHER_URL = "https://api.open-meteo.com/v1/forecast";
 const POSITION_KEY = "endurance-intelligence.weather-position";
 
+function positionKey(userId) {
+  const accountId = String(userId || "").trim();
+  return accountId ? `${POSITION_KEY}.user.${accountId}` : POSITION_KEY;
+}
+
 const WEATHER_LABELS = {
   0: "Klar", 1: "Überwiegend klar", 2: "Teilweise bewölkt", 3: "Bewölkt",
   45: "Nebel", 48: "Reifnebel", 51: "Leichter Nieselregen", 53: "Nieselregen",
@@ -18,9 +23,9 @@ export function weatherLabel(code) {
   return WEATHER_LABELS[code] || "Unbekannte Wetterlage";
 }
 
-export function loadSavedPosition() {
+export function loadSavedPosition(userId = "") {
   try {
-    const position = JSON.parse(localStorage.getItem(POSITION_KEY) || "null");
+    const position = JSON.parse(localStorage.getItem(positionKey(userId)) || "null");
     if (Number.isFinite(Number(position?.latitude)) && Number.isFinite(Number(position?.longitude))) return position;
   } catch {
     // A broken cached position should not block a new permission request.
@@ -28,12 +33,12 @@ export function loadSavedPosition() {
   return null;
 }
 
-export function clearSavedPosition() {
-  localStorage.removeItem(POSITION_KEY);
+export function clearSavedPosition(userId = "") {
+  localStorage.removeItem(positionKey(userId));
 }
 
-function savePosition(position) {
-  localStorage.setItem(POSITION_KEY, JSON.stringify({ ...position, savedAt: new Date().toISOString() }));
+function savePosition(position, userId) {
+  localStorage.setItem(positionKey(userId), JSON.stringify({ ...position, savedAt: new Date().toISOString() }));
 }
 
 export async function geolocationPermissionState() {
@@ -46,7 +51,7 @@ export async function geolocationPermissionState() {
   }
 }
 
-export function getCurrentPosition() {
+export function getCurrentPosition(userId = "") {
   if (!navigator.geolocation) {
     return Promise.reject(new Error("Standortermittlung wird von diesem Browser nicht unterstützt."));
   }
@@ -55,7 +60,7 @@ export function getCurrentPosition() {
     navigator.geolocation.getCurrentPosition(
       ({ coords }) => {
         const position = { latitude: coords.latitude, longitude: coords.longitude };
-        savePosition(position);
+        savePosition(position, userId);
         resolve(position);
       },
       (error) => {

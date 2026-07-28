@@ -21,6 +21,27 @@ function stepToken(unit: unknown, value: unknown, fallback: number) {
   return `${amount}${timeBased ? "s" : "mtr"}`;
 }
 
+function paceSeconds(value: unknown) {
+  const match = String(value || "").trim().replace(/[.,]/, ":").match(/^(\d{1,2}):([0-5]\d)$/);
+  if (!match) return null;
+  const seconds = Number(match[1]) * 60 + Number(match[2]);
+  return seconds >= 120 && seconds <= 1200 ? seconds : null;
+}
+
+function formatPace(value: number) {
+  const seconds = Math.max(0, Math.round(value));
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+function paceTarget(step: Record<string, unknown>, recovery: boolean) {
+  const targetSeconds = paceSeconds(step.targetPace);
+  if (targetSeconds == null) return recovery ? "Z1 Pace" : "Z5 Pace";
+  const tolerance = safeInteger(step.paceToleranceSeconds, 1, 60, 5);
+  const faster = formatPace(Math.max(120, targetSeconds - tolerance));
+  const slower = formatPace(targetSeconds + tolerance);
+  return `${faster}-${slower}/km Pace`;
+}
+
 function structuredSteps(input: Record<string, unknown>) {
   const supplied = Array.isArray(input.steps) ? input.steps.slice(0, 16) : [];
   if (supplied.length) {
@@ -30,12 +51,13 @@ function structuredSteps(input: Record<string, unknown>) {
       return {
         kind: recovery ? "recovery" : "work",
         token: stepToken(step.unit, step.value, recovery ? 200 : 400),
+        target: paceTarget(step, recovery),
       };
     });
   }
   return [
-    { kind: "work", token: stepToken(input.workUnit, input.workValue, 400) },
-    { kind: "recovery", token: stepToken(input.recoveryUnit, input.recoveryValue, 200) },
+    { kind: "work", token: stepToken(input.workUnit, input.workValue, 400), target: "Z5 Pace" },
+    { kind: "recovery", token: stepToken(input.recoveryUnit, input.recoveryValue, 200), target: "Z1 Pace" },
   ];
 }
 
@@ -48,8 +70,8 @@ function structuredTrackDescription(input: Record<string, unknown>) {
     "",
     `${input.kind === "sprints" ? "Sprints" : "Hauptteil"} ${rounds}x`,
     ...steps.map((step) => step.kind === "recovery"
-      ? `- Pause ${step.token} Z1 Pace intensity=recovery`
-      : `- Belastung ${step.token} Z5 Pace intensity=interval`),
+      ? `- Pause ${step.token} ${step.target} intensity=recovery`
+      : `- Belastung ${step.token} ${step.target} intensity=interval`),
     "",
     "Cool-down",
     "- Cool-down locker 10m Z1 Pace press lap intensity=cooldown",

@@ -1,7 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { defaultState } from "../data/defaults";
-import { loadState, saveState } from "../services/storage";
+import { hasStoredState, loadState, saveState } from "../services/storage";
 import { CloudConflictError, loadCloudState, saveCloudState, signOut, supabase } from "../services/supabase";
 import { fetchIntervalsStatus, mapIntervalsActivities, mergeIntervalsActivities, syncIntervalsActivities } from "../services/intervals";
 import { migrateConfiguration } from "../services/configuration";
@@ -156,7 +156,7 @@ function stateForCloud(state) {
 }
 
 export function AppProvider({ children }) {
-  const [state, setState] = useState(() => mergeState(loadState(defaultState), {}));
+  const [state, setState] = useState(() => mergeState(defaultState, {}));
   const [session, setSession] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [cloudStatus, setCloudStatus] = useState("local");
@@ -176,10 +176,14 @@ export function AppProvider({ children }) {
   const imageMigrationStarted = useRef(false);
   const stateRef = useRef(state);
   const sessionUserIdRef = useRef(null);
+  const localStateUserIdRef = useRef(null);
 
-  useEffect(() => saveState(state), [state]);
   useEffect(() => { stateRef.current = state; }, [state]);
-  useEffect(() => { sessionUserIdRef.current = session?.user?.id || null; }, [session?.user?.id]);
+  useEffect(() => {
+    const userId = session?.user?.id || "";
+    if (!userId || localStateUserIdRef.current !== userId || !cloudHydrated.current) return;
+    saveState(state, userId);
+  }, [state, session?.user?.id]);
 
   useEffect(() => {
     applyTheme(state.appearance);
@@ -187,28 +191,33 @@ export function AppProvider({ children }) {
 
   useEffect(() => {
     let active = true;
-    supabase.auth.getSession().then(({ data }) => {
+    function acceptSession(nextSession) {
       if (!active) return;
-      setSession(data.session || null);
-      setAuthLoading(false);
-    });
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      setSession(nextSession);
-      setAuthLoading(false);
-      if (!nextSession) {
+      const nextUserId = nextSession?.user?.id || null;
+      if (sessionUserIdRef.current !== nextUserId) {
+        sessionUserIdRef.current = nextUserId;
+        localStateUserIdRef.current = null;
         cloudHydrated.current = false;
+        skipNextCloudSave.current = false;
+        cloudUpdatedAtRef.current = null;
+        cloudConflict.current = false;
+        imageMigrationStarted.current = false;
+        intervalsAutoSyncStarted.current = false;
         setCloudStatus("local");
         setCloudError("");
         setCalendarToken(null);
         setCloudUpdatedAt(null);
-        cloudUpdatedAtRef.current = null;
-        cloudConflict.current = false;
-        imageMigrationStarted.current = false;
         setImageStorageStatus("idle");
         setImageStorageMessage("");
-        intervalsAutoSyncStarted.current = false;
         setIntervalsSyncStatus("idle");
+        setState(mergeState(defaultState, {}));
       }
+      setSession(nextSession);
+      setAuthLoading(false);
+    }
+    supabase.auth.getSession().then(({ data }) => acceptSession(data.session || null));
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      acceptSession(nextSession);
     });
     return () => {
       active = false;
@@ -220,27 +229,35 @@ export function AppProvider({ children }) {
     if (!session?.user?.id || cloudHydrated.current) return;
     let cancelled = false;
     async function hydrate() {
+      const userId = session.user.id;
       setCloudStatus("loading");
       setCloudError("");
       try {
-        const cloud = await loadCloudState(session.user.id);
-        if (cancelled) return;
+        const cloud = await loadCloudState(userId);
+        if (cancelled || sessionUserIdRef.current !== userId) return;
+        const hasAccountState = hasStoredState(userId);
+        const local = hasAccountState ? loadState(defaultState, userId) : mergeState(defaultState, {});
+        let hydratedState;
         if (cloud?.app_data && Object.keys(cloud.app_data).length > 0) {
-          skipNextCloudSave.current = true;
-          setState((local) => mergeState(local, cloud.app_data));
+          hydratedState = mergeState(local, cloud.app_data);
           setCalendarToken(cloud.calendar_token);
           setCloudUpdatedAt(cloud.updated_at);
           cloudUpdatedAtRef.current = cloud.updated_at;
-          flushQueuedImageDeletions(session.user.id, cloud.app_data).catch((error) => console.warn("Image cleanup postponed", error));
+          flushQueuedImageDeletions(userId, cloud.app_data).catch((error) => console.warn("Image cleanup postponed", error));
         } else {
-          const snapshot = stateForCloud(state);
-          const saved = await saveCloudState(session.user.id, snapshot);
-          if (cancelled) return;
+          hydratedState = local;
+          const snapshot = stateForCloud(hydratedState);
+          const saved = await saveCloudState(userId, snapshot);
+          if (cancelled || sessionUserIdRef.current !== userId) return;
           setCalendarToken(saved.calendar_token);
           setCloudUpdatedAt(saved.updated_at);
           cloudUpdatedAtRef.current = saved.updated_at;
-          flushQueuedImageDeletions(session.user.id, snapshot).catch((error) => console.warn("Image cleanup postponed", error));
+          flushQueuedImageDeletions(userId, snapshot).catch((error) => console.warn("Image cleanup postponed", error));
         }
+        skipNextCloudSave.current = true;
+        localStateUserIdRef.current = userId;
+        saveState(hydratedState, userId);
+        setState(hydratedState);
         cloudHydrated.current = true;
         cloudConflict.current = false;
         setCloudStatus("synced");
@@ -252,7 +269,7 @@ export function AppProvider({ children }) {
     }
     hydrate();
     return () => { cancelled = true; };
-  }, [session, state]);
+  }, [session?.user?.id]);
 
   useEffect(() => {
     if (!session?.user?.id || !cloudHydrated.current || cloudConflict.current) return;

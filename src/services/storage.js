@@ -2,7 +2,13 @@ import { migrateConfiguration } from "./configuration.js";
 import { normalizeAppearance } from "./theme.js";
 import { completedLegacyOnboarding } from "./onboarding.js";
 
-const KEY = "endurance-intelligence.v1";
+const LEGACY_KEY = "endurance-intelligence.v1";
+const ACCOUNT_KEY_PREFIX = `${LEGACY_KEY}.user`;
+
+function storageKey(userId) {
+  const accountId = String(userId || "").trim();
+  return accountId ? `${ACCOUNT_KEY_PREFIX}.${accountId}` : LEGACY_KEY;
+}
 
 function isDemoEntry(entry) {
   return entry?.source === "demo" || /^[defp]\d+$/.test(String(entry?.id || ""));
@@ -52,9 +58,17 @@ function sanitizeState(state, defaults) {
   return migrateConfiguration(sanitized);
 }
 
-export function loadState(defaults) {
+export function hasStoredState(userId) {
   try {
-    const stored = localStorage.getItem(KEY);
+    return Boolean(localStorage.getItem(storageKey(userId)));
+  } catch {
+    return false;
+  }
+}
+
+export function loadState(defaults, userId = "") {
+  try {
+    const stored = localStorage.getItem(storageKey(userId));
     if (stored) return sanitizeState(JSON.parse(stored), defaults);
 
   } catch {
@@ -64,8 +78,8 @@ export function loadState(defaults) {
   return migrateConfiguration(defaults);
 }
 
-export function saveState(state) {
-  localStorage.setItem(KEY, JSON.stringify(state));
+export function saveState(state, userId = "") {
+  localStorage.setItem(storageKey(userId), JSON.stringify(state));
 }
 
 export function createStateBackup(state) {
@@ -111,7 +125,7 @@ export async function readStateBackup(file, defaults) {
   return parseStateBackup(await file.text(), defaults);
 }
 
-export function resetState() {
-  localStorage.removeItem(KEY);
+export function resetState(userId = "") {
+  localStorage.removeItem(storageKey(userId));
   location.reload();
 }

@@ -4,9 +4,11 @@ import {
   buildTrackWorkoutTemplate,
   isProvisionalTrackWorkout,
   isTrackWorkout,
+  normalizeTrackPace,
   normalizeTrackRounds,
   normalizeTrackWorkout,
   normalizeTrackWorkoutTemplates,
+  trackPaceRange,
   trackWorkoutDistance,
   trackWorkoutForEditing,
   trackWorkoutSummary,
@@ -111,6 +113,29 @@ test("numeric track drafts stay empty while typing and normalize only when commi
   assert.equal(normalizeTrackWorkout(typedStep).steps[0].value, 1200);
 });
 
+test("pace targets normalize into Garmin-friendly ranges", () => {
+  assert.equal(normalizeTrackPace("4.40"), "4:40");
+  assert.equal(normalizeTrackPace("4:75"), "");
+
+  const workout = normalizeTrackWorkout({
+    rounds: 4,
+    steps: [
+      { kind: "work", unit: "distance", value: 1200, targetPace: "4:40", paceToleranceSeconds: 5 },
+      { kind: "recovery", unit: "distance", value: 200 },
+      { kind: "work", unit: "distance", value: 800, targetPace: "4,30", paceToleranceSeconds: 10 },
+    ],
+  });
+  assert.deepEqual(trackPaceRange(workout.steps[0]), {
+    targetPace: "4:40",
+    toleranceSeconds: 5,
+    fasterPace: "4:35",
+    slowerPace: "4:45",
+  });
+  assert.equal(workout.steps[2].targetPace, "4:30");
+  assert.equal(workout.steps[2].paceToleranceSeconds, 10);
+  assert.match(trackWorkoutSummary(workout), /1200 m Belastung @ 4:40\/km \(±5 s\)/);
+});
+
 test("new track definitions start provisional while legacy saved workouts remain final", () => {
   assert.equal(trackWorkoutForEditing().planningStatus, "draft");
   assert.equal(trackWorkoutForEditing({ rounds: 4 }).planningStatus, "final");
@@ -140,17 +165,17 @@ test("Intervals description contains an ordered Garmin block and LAP-controlled 
       kind: "sprints",
       rounds: 2,
       steps: [
-        { kind: "work", unit: "distance", value: 1200 },
+        { kind: "work", unit: "distance", value: 1200, targetPace: "4:40", paceToleranceSeconds: 5 },
         { kind: "recovery", unit: "distance", value: 400 },
-        { kind: "work", unit: "distance", value: 800 },
+        { kind: "work", unit: "distance", value: 800, targetPace: "4:30", paceToleranceSeconds: 5 },
         { kind: "recovery", unit: "time", value: 90 },
       ],
     },
   });
   assert.match(description, /Sprints 2x/);
-  assert.match(description, /Belastung 1200mtr Z5 Pace intensity=interval/);
+  assert.match(description, /Belastung 1200mtr 4:35-4:45\/km Pace intensity=interval/);
   assert.match(description, /Pause 400mtr Z1 Pace intensity=recovery/);
-  assert.match(description, /Belastung 800mtr Z5 Pace intensity=interval/);
+  assert.match(description, /Belastung 800mtr 4:25-4:35\/km Pace intensity=interval/);
   assert.match(description, /Pause 90s Z1 Pace intensity=recovery/);
   assert.equal(description.match(/press lap/g)?.length, 2);
   assert.match(description, /intensity=warmup/);

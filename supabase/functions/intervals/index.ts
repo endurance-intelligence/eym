@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { isIntervalsOwner } from "../_shared/intervalsAccess.ts";
 import { intervalDescription, isProvisionalTrackPlanItem } from "../_shared/structuredWorkout.ts";
 import { intervalsStartDateLocal } from "../_shared/plannerTiming.ts";
 
@@ -119,6 +120,19 @@ Deno.serve(async (request) => {
 
     const body = await request.json().catch(() => ({}));
     const action = String(body.action || "status");
+    const ownerUserId = Deno.env.get("INTERVALS_OWNER_USER_ID") || "";
+    const ownerAccess = isIntervalsOwner(user.id, ownerUserId);
+
+    if (!ownerAccess) {
+      const message = ownerUserId
+        ? "Für dieses EYM-Konto ist noch keine persönliche Intervals.icu-Verbindung eingerichtet."
+        : "Der private Intervals.icu-Zugang ist noch keinem EYM-Konto zugeordnet.";
+      if (action === "status") {
+        return json({ configured: false, connected: false, privateConnection: true, message });
+      }
+      return json({ message }, 403);
+    }
+
     const apiKey = Deno.env.get("INTERVALS_API_KEY") || "";
     const athleteId = encodeURIComponent(Deno.env.get("INTERVALS_ATHLETE_ID") || "0");
 

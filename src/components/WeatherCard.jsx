@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { briefingWeatherInsight, currentWeatherInsight } from "../services/briefingWeather";
 import { clearSavedPosition, fetchCurrentWeather, geolocationPermissionState, getCurrentPosition, loadSavedPosition } from "../services/weather";
+import { useApp } from "../context/AppContext";
 
 function WeatherIcon({ code, isDay = true }) {
   if ([95, 96, 99].includes(code)) return "⛈️";
@@ -12,16 +13,18 @@ function WeatherIcon({ code, isDay = true }) {
 }
 
 export default function WeatherCard({ plannedEntries = [], onInsight }) {
+  const { session } = useApp();
+  const userId = session?.user?.id || "";
   const [weather, setWeather] = useState(null);
   const [status, setStatus] = useState("idle");
   const [message, setMessage] = useState("Standort freigeben, um Outdoor-Wetter und Zeitfenster zu prüfen.");
 
-  async function loadWeather({ requestPermission = true } = {}) {
+  const loadWeather = useCallback(async ({ requestPermission = true } = {}) => {
     setStatus("loading");
     setMessage(requestPermission ? "Standort wird angefragt …" : "Wetter wird geladen …");
     try {
-      const saved = loadSavedPosition();
-      const position = saved && !requestPermission ? saved : await getCurrentPosition();
+      const saved = loadSavedPosition(userId);
+      const position = saved && !requestPermission ? saved : await getCurrentPosition(userId);
       const current = await fetchCurrentWeather(position.latitude, position.longitude);
       setWeather(current);
       setStatus("ready");
@@ -31,12 +34,12 @@ export default function WeatherCard({ plannedEntries = [], onInsight }) {
       setStatus("error");
       setMessage(error instanceof Error ? error.message : String(error));
     }
-  }
+  }, [userId]);
 
   useEffect(() => {
     let active = true;
     async function initialize() {
-      const saved = loadSavedPosition();
+      const saved = loadSavedPosition(userId);
       if (saved) {
         try {
           const current = await fetchCurrentWeather(saved.latitude, saved.longitude);
@@ -45,7 +48,7 @@ export default function WeatherCard({ plannedEntries = [], onInsight }) {
           setStatus("ready");
           return;
         } catch {
-          clearSavedPosition();
+          clearSavedPosition(userId);
         }
       }
       const permission = await geolocationPermissionState();
@@ -61,7 +64,7 @@ export default function WeatherCard({ plannedEntries = [], onInsight }) {
     }
     initialize();
     return () => { active = false; };
-  }, []);
+  }, [loadWeather, userId]);
 
   const insight = useMemo(() => briefingWeatherInsight(weather, plannedEntries), [weather, plannedEntries]);
   const cardInsight = insight?.mode === "flexible" ? currentWeatherInsight(weather) : insight;
@@ -87,7 +90,7 @@ export default function WeatherCard({ plannedEntries = [], onInsight }) {
             <span><b>{weather.windSpeed} km/h</b> Wind</span>
             <span><b>{weather.windGusts} km/h</b> Böen</span>
             <span><b>{weather.humidity} %</b> Feuchte</span>
-            <button type="button" onClick={() => { clearSavedPosition(); loadWeather({ requestPermission: true }); }}>Standort aktualisieren</button>
+            <button type="button" onClick={() => { clearSavedPosition(userId); loadWeather({ requestPermission: true }); }}>Standort aktualisieren</button>
           </div>
         </details>
       </> : <>

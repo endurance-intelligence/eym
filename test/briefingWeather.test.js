@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { briefingWeatherInsight } from "../src/services/briefingWeather.js";
+import { loadSavedPosition } from "../src/services/weather.js";
 
 function point(hour, overrides = {}) {
   return {
@@ -83,4 +84,26 @@ test("briefing never recommends a weather window that has already passed", () =>
     new Date("2026-07-27T20:30:00"),
   );
   assert.equal(insight.mode, "general");
+});
+
+test("saved weather positions stay inside the authenticated browser account", () => {
+  const previousStorage = globalThis.localStorage;
+  const memory = new Map([
+    ["endurance-intelligence.weather-position.user.user-a", JSON.stringify({ latitude: 52.02, longitude: 8.79 })],
+    ["endurance-intelligence.weather-position.user.user-b", JSON.stringify({ latitude: 53.55, longitude: 10 })],
+  ]);
+  globalThis.localStorage = {
+    getItem: (key) => memory.get(key) ?? null,
+    setItem: (key, value) => memory.set(key, String(value)),
+    removeItem: (key) => memory.delete(key),
+  };
+
+  try {
+    assert.equal(loadSavedPosition("user-a").latitude, 52.02);
+    assert.equal(loadSavedPosition("user-b").latitude, 53.55);
+    assert.equal(loadSavedPosition("new-user"), null);
+  } finally {
+    if (previousStorage === undefined) delete globalThis.localStorage;
+    else globalThis.localStorage = previousStorage;
+  }
 });

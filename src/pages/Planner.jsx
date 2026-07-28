@@ -307,7 +307,7 @@ function recentReasonCounts(plan, weekStart) {
 }
 
 export default function Planner() {
-  const { state, setState, calendarToken } = useApp();
+  const { state, setState, session, calendarToken } = useApp();
   const [offsetWeeks, setOffsetWeeks] = useState(0);
   const [forecast, setForecast] = useState([]);
   const [status, setStatus] = useState("");
@@ -905,7 +905,7 @@ export default function Planner() {
     let weather = forecast;
     try {
       if (!weather.length) {
-        const position = await getCurrentPosition();
+        const position = await getCurrentPosition(session?.user?.id);
         weather = await fetchWeeklyForecast(position.latitude, position.longitude, weekStart);
         setForecast(weather);
       }
@@ -1701,6 +1701,8 @@ export default function Planner() {
                       <label>Abschnitt<select value={step.kind} onChange={(event) => updateTrackStep(index, "kind", event.target.value)}><option value="work">Belastung</option><option value="recovery">Pause</option></select></label>
                       <label>Einheit<select value={step.unit} onChange={(event) => updateTrackStep(index, "unit", event.target.value)}><option value="distance">Meter</option><option value="time">Sekunden</option></select></label>
                       <label>Wert<input type="number" min={step.unit === "distance" ? "20" : "5"} max={step.unit === "distance" ? "5000" : "3600"} value={step.value} onChange={(event) => updateTrackStep(index, "value", event.target.value)} onBlur={() => commitTrackStep(index)} /></label>
+                      <label>Ziel-Pace /km<input type="text" inputMode="decimal" pattern="[0-9]{1,2}[:.,][0-5][0-9]" placeholder="z. B. 4:40" title="Pace im Format 4:40 min/km" value={step.targetPace || ""} onChange={(event) => updateTrackStep(index, "targetPace", event.target.value)} onBlur={() => commitTrackStep(index)} /></label>
+                      <label>Toleranz<select value={step.paceToleranceSeconds ?? 5} disabled={!step.targetPace} onChange={(event) => updateTrackStep(index, "paceToleranceSeconds", Number(event.target.value))}><option value="5">± 5 Sek.</option><option value="10">± 10 Sek.</option><option value="15">± 15 Sek.</option><option value="20">± 20 Sek.</option><option value="30">± 30 Sek.</option></select></label>
                       <div className="planner-track-step-actions">
                         <button type="button" onClick={() => moveTrackStep(index, -1)} disabled={index === 0} aria-label={`Schritt ${index + 1} nach oben`}>↑</button>
                         <button type="button" onClick={() => moveTrackStep(index, 1)} disabled={index === editingTrackWorkout.steps.length - 1} aria-label={`Schritt ${index + 1} nach unten`}>↓</button>
@@ -1731,7 +1733,7 @@ export default function Planner() {
                     <span>{editingTrackDistance.hasTimedSteps ? `plus ${trackDurationLabel(editingTrackDistance.timedSeconds)} zeitgesteuerte Abschnitte` : "inklusive Ein- und Auslaufen"}</span>
                   </div>
                 </div>
-                <small>Intervals.icu benötigt intern Schätzwerte für die Trainingslast; sie begrenzen Warm-up und Cool-down auf Garmin nicht. Für Pace-Hinweise muss unter Running eine Threshold Pace gesetzt und „Upload planned workouts“ für Garmin aktiviert sein.</small>
+                <small>Eine Ziel-Pace wie 4:40 mit ±5 Sekunden wird auf Garmin als Bereich 4:35–4:45 min/km geführt. Die Uhr meldet, wenn du außerhalb liegst. Intervals.icu benötigt zusätzlich unter Running eine gesetzte Threshold Pace und bei der Garmin-Verbindung „Upload planned workouts“.</small>
               </section>
             )}
             <label>Notiz<textarea value={editing.notes} onChange={(event) => setEditing({ ...editing, notes: event.target.value })} /></label>

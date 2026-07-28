@@ -20,6 +20,40 @@ function cleanText(value, maximum = 80) {
   return String(value || "").trim().replace(/\s+/g, " ").slice(0, maximum);
 }
 
+function paceSeconds(value) {
+  const match = String(value || "").trim().replace(/[.,]/, ":").match(/^(\d{1,2}):([0-5]\d)$/);
+  if (!match) return null;
+  const seconds = Number(match[1]) * 60 + Number(match[2]);
+  return seconds >= 120 && seconds <= 1200 ? seconds : null;
+}
+
+function formatPaceSeconds(value) {
+  const seconds = Math.max(0, Math.round(Number(value) || 0));
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+export function normalizeTrackPace(value) {
+  const seconds = paceSeconds(value);
+  return seconds == null ? "" : formatPaceSeconds(seconds);
+}
+
+export function normalizePaceTolerance(value) {
+  return clamp(value, 1, 60, 5);
+}
+
+export function trackPaceRange(input = {}) {
+  const targetPace = normalizeTrackPace(input.targetPace);
+  const targetSeconds = paceSeconds(targetPace);
+  if (targetSeconds == null) return null;
+  const toleranceSeconds = normalizePaceTolerance(input.paceToleranceSeconds);
+  return {
+    targetPace,
+    toleranceSeconds,
+    fasterPace: formatPaceSeconds(Math.max(120, targetSeconds - toleranceSeconds)),
+    slowerPace: formatPaceSeconds(targetSeconds + toleranceSeconds),
+  };
+}
+
 export function isTrackWorkout(item = {}) {
   return /orc\s*track|intervall|interval|sprint/i.test(`${item.type || ""} ${item.title || ""}`);
 }
@@ -31,6 +65,7 @@ export function normalizeTrackRounds(value) {
 export function normalizeTrackStep(input = {}, fallbackKind = "work") {
   const kind = input.kind === "recovery" ? "recovery" : fallbackKind === "recovery" ? "recovery" : "work";
   const unit = input.unit === "time" ? "time" : "distance";
+  const paceRange = trackPaceRange(input);
   return {
     kind,
     unit,
@@ -40,6 +75,10 @@ export function normalizeTrackStep(input = {}, fallbackKind = "work") {
       unit === "distance" ? 5000 : 3600,
       kind === "recovery" ? 200 : 400,
     ),
+    ...(paceRange ? {
+      targetPace: paceRange.targetPace,
+      paceToleranceSeconds: paceRange.toleranceSeconds,
+    } : {}),
   };
 }
 
@@ -159,7 +198,11 @@ function unitLabel(unit, value) {
 export function trackWorkoutSummary(input = {}) {
   const workout = normalizeTrackWorkout(input);
   const sequence = workout.steps
-    .map((step) => `${unitLabel(step.unit, step.value)} ${step.kind === "recovery" ? "Pause" : "Belastung"}`)
+    .map((step) => {
+      const paceRange = trackPaceRange(step);
+      const pace = paceRange ? ` @ ${paceRange.targetPace}/km (±${paceRange.toleranceSeconds} s)` : "";
+      return `${unitLabel(step.unit, step.value)} ${step.kind === "recovery" ? "Pause" : "Belastung"}${pace}`;
+    })
     .join(" → ");
   return `Warm-up bis LAP · ${workout.rounds} ${workout.rounds === 1 ? "Durchgang" : "Durchgänge"}: ${sequence} · Cool-down bis LAP`;
 }
