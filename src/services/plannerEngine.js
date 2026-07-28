@@ -914,6 +914,20 @@ export function generateWeekPlan({
     }
   }
 
+  plan = plan.map((entry) => {
+    const weatherForecast = forecast.find((day) => day.date === entry.date);
+    return weatherForecast ? {
+      ...entry,
+      weatherForecast: {
+        date: weatherForecast.date,
+        weatherCode: weatherForecast.weatherCode,
+        maxTemp: weatherForecast.maxTemp,
+        minTemp: weatherForecast.minTemp,
+        maxGust: weatherForecast.maxGust,
+        rainChance: weatherForecast.rainChance,
+      },
+    } : entry;
+  });
   plan.sort((a, b) => `${a.date}${a.time || ""}`.localeCompare(`${b.date}${b.time || ""}`));
 
   return {

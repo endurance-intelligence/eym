@@ -15,6 +15,7 @@ import { fuelCatalogKey } from "../services/fuelCatalog";
 import { lookupOpenPrices, productPriceSearchLinks } from "../services/productPrices";
 import { extractNutritionLabel } from "../services/nutritionOcr";
 import { isManagedImage, queueEntityImageDeletion, resolveImageUrl, uploadEntityImages } from "../services/imageStorage";
+import FuelPartner from "../components/FuelPartner";
 
 const categories = ["Gel", "Drink Mix", "Elektrolyte", "Riegel", "Recovery", "Kapseln", "Sonstiges"];
 const stockUnits = ["Stück", "Portionen", "Tabletten", "Beutel"];
@@ -611,6 +612,8 @@ export default function Fuel() {
     </PageTitle>
 
     {notice && <div className={`fuel-toast ${notice.tone}`} role="status"><b>{notice.message}</b><button type="button" aria-label="Hinweis schließen" onClick={() => setNotice(null)}>×</button></div>}
+
+    <FuelPartner />
 
     {showForm && <Card className="wide fuel-product-editor">
       <div className="fuel-photo-import">

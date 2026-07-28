@@ -7,6 +7,8 @@ import { activityCoordinatesFor, fetchActivityWeather } from "../services/activi
 import { useModalScrollLock } from "../services/modalScrollLock";
 import { consumptionSummary, consumedInventoryUnits, consumptionUnitsForFuel, defaultConsumptionUnit, fuelDisplayName, nutritionForConsumption } from "../services/fuelNutrition";
 import { activityCoachAssessment } from "../services/activityCoach";
+import { fuelRecommendationFromState, plannedWorkoutForActivity } from "../services/fuelPlanner";
+import "./ReviewModal.css";
 
 const emptyNutritionItem = (mode = "catalog") => ({
   id: crypto.randomUUID(),
@@ -86,6 +88,7 @@ export default function ReviewModal({ activity, onClose }) {
   const [saveError, setSaveError] = useState("");
   const kind = reviewKind(activity);
   const old = state.reviews[activity.id] || {};
+  const hasStoredReview = Object.keys(old).length > 0;
   const detectedEvent = isOfficialEvent(activity, old);
   const activityDay = String(activity.startDateLocal || activity.date || "").slice(0, 10);
   const inventoryApplies = (fuelItem) => Boolean(fuelItem && (!fuelItem.stockTrackedFrom || !activityDay || activityDay >= fuelItem.stockTrackedFrom));
@@ -107,6 +110,17 @@ export default function ReviewModal({ activity, onClose }) {
       affectsInventory: typeof item.affectsInventory === "boolean"
         ? item.affectsInventory
         : Boolean(item.fuelItemId && inventoryApplies(fuelItem)),
+    };
+  });
+  const plannedWorkout = !hasStoredReview ? plannedWorkoutForActivity(state, activity) : null;
+  const plannedFuelRecommendation = plannedWorkout
+    ? fuelRecommendationFromState(state, plannedWorkout, plannedWorkout.fuelMode)
+    : null;
+  const plannedNutrition = (plannedFuelRecommendation?.reviewItems || []).map((item) => {
+    const fuelItem = state.fuel.find((fuel) => fuel.id === item.fuelItemId);
+    return {
+      ...item,
+      affectsInventory: Boolean(item.fuelItemId && inventoryApplies(fuelItem)),
     };
   });
   const [weather, setWeather] = useState(() => activity.weather || (activity.temperature != null ? {
@@ -131,14 +145,14 @@ export default function ReviewModal({ activity, onClose }) {
     backSoreness: old.backSoreness ?? 0,
     mobility: old.mobility ?? 7,
     impactOnRunning: old.impactOnRunning || "nein",
-    drinkMl: old.drinkMl || "",
+    drinkMl: old.drinkMl || (plannedFuelRecommendation?.target.fluidTotal ? String(plannedFuelRecommendation.target.fluidTotal) : ""),
     weightBefore: old.weightBefore || "",
     weightAfter: old.weightAfter || "",
     urineMl: old.urineMl || 0,
     sweat: old.sweat || "mittel",
     notes: old.notes || "",
-    usedNutrition: old.usedNutrition ?? oldNutrition.length > 0,
-    nutritionItems: oldNutrition,
+    usedNutrition: old.usedNutrition ?? (oldNutrition.length > 0 || plannedNutrition.length > 0),
+    nutritionItems: oldNutrition.length > 0 ? oldNutrition : plannedNutrition,
     isEvent: old.isEvent ?? detectedEvent,
     eventTitle: old.eventTitle || (detectedEvent ? eventTitleFor(activity, old) : ""),
     eventCategory: old.eventCategory || "Offizieller Lauf",
@@ -341,6 +355,10 @@ export default function ReviewModal({ activity, onClose }) {
       carbohydrateTargetLow: kind === "endurance" ? nutritionSummary.targetLow : 0,
       carbohydrateTargetHigh: kind === "endurance" ? nutritionSummary.targetHigh : 0,
       carbohydrateStatus: kind === "endurance" ? nutritionSummary.status : null,
+      plannedFuelWorkoutId: plannedWorkout?.id || old.plannedFuelWorkoutId || null,
+      plannedFuelMode: plannedFuelRecommendation?.mode || old.plannedFuelMode || null,
+      plannedFuelCarbsTarget: plannedFuelRecommendation?.target.carbsTotal ?? old.plannedFuelCarbsTarget ?? null,
+      plannedFuelFluidTarget: plannedFuelRecommendation?.target.fluidTotal ?? old.plannedFuelFluidTarget ?? null,
       weather: weather || old.weather || null,
       coachAssessment,
       updatedAt: new Date().toISOString(),
@@ -432,6 +450,15 @@ export default function ReviewModal({ activity, onClose }) {
             </section>
 
             <section className={`review-feature-box ${review.usedNutrition ? "active" : ""}`}>
+              {plannedFuelRecommendation && (
+                <div className="review-fuel-prefill">
+                  <div>
+                    <b>Fuel Partner übernommen</b>
+                    <span>{plannedWorkout.title} · {plannedFuelRecommendation.packSummary}</span>
+                  </div>
+                  <small>Geplante Produkte und Trinkmenge sind vorausgefüllt. Bitte auf den tatsächlichen Verbrauch korrigieren; erst beim Speichern wird Bestand reduziert.</small>
+                </div>
+              )}
               <label className="review-toggle-row">
                 <span><b>Verpflegung</b><small>Produkte aus dem Fuel Lab übernehmen oder einmalig manuell erfassen.</small></span>
                 <input type="checkbox" checked={review.usedNutrition} onChange={(event) => toggleNutrition(event.target.checked)} />

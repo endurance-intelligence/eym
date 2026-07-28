@@ -162,3 +162,40 @@ test("planner uses the weekdays selected during onboarding, including a weekend-
     .sort();
   assert.deepEqual(runDays, ["Samstag", "Sonntag"]);
 });
+
+test("planned runs keep the matching weather snapshot for Fuel Partner guidance", () => {
+  const forecast = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date("2026-07-27T12:00:00");
+    date.setDate(date.getDate() + index);
+    return {
+      date: date.toISOString().slice(0, 10),
+      weatherCode: 1,
+      maxTemp: 20 + index,
+      minTemp: 12 + index,
+      maxGust: 25,
+      rainChance: 10,
+    };
+  });
+  const result = generateWeekPlan({
+    mission: { id: "goal", name: "50 km Lauf", date: "2026-11-21", targetKm: 50, milestones: [] },
+    offsetWeeks: 1,
+    today: new Date("2026-07-24T12:00:00"),
+    forecast,
+    config: {
+      recurringCommitments: [],
+      fixedAppointments: { football: false, orcRun: false, saturdayMode: "off" },
+      stabiCount: 0,
+      rowingCount: 0,
+      runDays: ["Dienstag", "Donnerstag", "Sonntag"],
+      maxLongRun: 30,
+    },
+  });
+
+  const plannedRun = result.plan.find((item) => /run|lauf/i.test(`${item.type} ${item.title}`));
+  assert.ok(plannedRun);
+  assert.equal(plannedRun.weatherForecast.date, plannedRun.date);
+  assert.equal(
+    plannedRun.weatherForecast.maxTemp,
+    forecast.find((day) => day.date === plannedRun.date).maxTemp,
+  );
+});

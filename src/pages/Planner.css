@@ -349,6 +349,75 @@
   .planner-spontaneous-toggle{min-height:52px}
 }
 
+/* v3.7.0 – compact Fuel Partner recommendation on planned runs */
+.planner-fuel-hint{
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr) auto;
+  gap:8px;
+  align-items:center;
+  min-width:0;
+  margin-top:9px;
+  padding:8px 10px;
+  border:1px solid var(--accent-border);
+  border-radius:11px;
+  background:var(--accent-surface);
+  color:var(--text);
+  text-decoration:none;
+}
+.planner-fuel-hint:hover{
+  border-color:var(--accent-border-strong);
+  background:var(--accent-surface-strong);
+  box-shadow:var(--ambient-glow-subtle);
+}
+.planner-fuel-hint>span{
+  color:var(--accent-bright);
+  font-size:10px;
+  font-weight:900;
+  letter-spacing:.07em;
+  text-transform:uppercase;
+  white-space:nowrap;
+}
+.planner-fuel-hint>strong{
+  min-width:0;
+  overflow:hidden;
+  font-size:13px;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.planner-fuel-hint>small{
+  margin:0;
+  color:var(--muted);
+  font-size:10px;
+  white-space:nowrap;
+}
+.planner-fuel-hint.warn{
+  border-color:#806328;
+  background:rgba(255,207,104,.07);
+}
+.planner-fuel-hint.warn>span,.planner-fuel-hint.warn>strong{
+  color:#ffdc8a;
+}
+@media(max-width:680px){
+  .planner-fuel-hint{
+    grid-template-columns:1fr auto;
+  }
+  .planner-fuel-hint>span{
+    grid-column:1/-1;
+  }
+  .planner-fuel-hint>small{
+    text-align:right;
+  }
+}
+@media(max-width:430px){
+  .planner-fuel-hint{
+    grid-template-columns:1fr;
+  }
+  .planner-fuel-hint>small{
+    text-align:left;
+    white-space:normal;
+  }
+}
+
 /* v3.5.6 – stable numeric drafts, provisional track workouts and configurable easy rowing */
 .planner-track-planning-status{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:14px 15px;border:1px solid var(--border);border-radius:13px;background:var(--bg-sidebar)}
 .planner-track-planning-status.draft{border-color:#806328;background:rgba(255,207,104,.07)}

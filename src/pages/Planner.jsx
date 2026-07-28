@@ -51,6 +51,10 @@ import {
   workoutSortTime,
   workoutTimingLabel,
 } from "../services/plannerTime";
+import {
+  fuelRecommendationFromState,
+  isFuelRelevantWorkout,
+} from "../services/fuelPlanner";
 import "./Planner.css";
 
 const dayFormatter = new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" });
@@ -330,6 +334,11 @@ export default function Planner() {
     const value = item.date || "";
     return value >= isoDate(weekStart) && value <= isoDate(weekEnd) && !item.archived;
   }).sort((a, b) => `${a.date}${workoutSortTime(a)}${a.title || ""}`.localeCompare(`${b.date}${workoutSortTime(b)}${b.title || ""}`)), [state.plan, weekStart, weekEnd]);
+  const fuelRecommendations = useMemo(() => new Map(
+    weekPlan
+      .filter(isFuelRelevantWorkout)
+      .map((item) => [item.id, fuelRecommendationFromState(state, item, item.fuelMode)]),
+  ), [state, weekPlan]);
   const mondayDate = isoDate(dateForDay(weekStart, 0));
   const wednesdayDate = isoDate(dateForDay(weekStart, 2));
   const saturdayDate = isoDate(dateForDay(weekStart, 5));
@@ -1031,6 +1040,8 @@ export default function Planner() {
     event.preventDefault();
     if (!editing?.title.trim()) return;
     const date = new Date(`${editing.date}T12:00:00`);
+    const weatherForecast = forecast.find((day) => day.date === editing.date)
+      || (editing.weatherForecast?.date === editing.date ? editing.weatherForecast : null);
     const next = normalizeWorkoutTiming({
       ...editing,
       day: new Intl.DateTimeFormat("de-DE", { weekday: "long" }).format(date),
@@ -1040,6 +1051,7 @@ export default function Planner() {
       structuredWorkout: isTrackWorkout(editing)
         ? normalizeTrackWorkout(editing.structuredWorkout)
         : null,
+      weatherForecast,
     });
     setState((current) => ({
       ...current,
@@ -1474,6 +1486,7 @@ export default function Planner() {
                 const matched = matches.get(item.id) || (item.matchedActivityId ? activityById.get(item.matchedActivityId) : null);
                 const isCancelled = Boolean(item.plannedCancellation);
                 const isMissed = !isCancelled && item.date < todayKey && !item.completed && !matched;
+                const fuelRecommendation = fuelRecommendations.get(item.id);
                 const className = `planner-workout ${item.completed || matched ? "completed" : ""} ${isMissed ? "missed" : ""} ${isCancelled ? "cancelled" : ""}`;
                 return (
                   <div className={className} key={item.id}>
@@ -1500,6 +1513,16 @@ export default function Planner() {
                       {matched && <small>{matched.name || item.actualTitle}</small>}
                       {item.missedReason && <small>Grund: {item.missedReason}{item.missedNote ? ` · ${item.missedNote}` : ""}</small>}
                       {item.notes && !isCancelled && <small>{item.notes}</small>}
+                      {fuelRecommendation && !matched && !item.completed && !isCancelled && !isMissed && (
+                        <Link
+                          className={`planner-fuel-hint ${fuelRecommendation.warnings.length ? "warn" : ""}`}
+                          to={`/fuel?workout=${item.id}`}
+                        >
+                          <span>◒ Fuel · {fuelRecommendation.modeLabel}</span>
+                          <strong>{fuelRecommendation.packSummary}</strong>
+                          <small>{fuelRecommendation.warnings.length ? "Bestand oder Produktdaten prüfen →" : "Strategie ansehen →"}</small>
+                        </Link>
+                      )}
                       {item.choicePending && item.choiceOptions && (
                         <div className="planner-choice-actions">
                           <button type="button" onClick={() => resolveSaturdayChoice(item, "orc")}>📍 ORC Track</button>

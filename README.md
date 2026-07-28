@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **3.6.1**
+Current app version: **3.7.0**
 
 **Eat your miles.**
 
@@ -391,6 +391,19 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 - Every structured track step can carry an absolute target pace and a tolerance. A target of `4:40/km` with `±5 s` is exported as `4:35-4:45/km Pace`, allowing Garmin to guide and alert during that step.
 - Existing track workouts without a target pace continue to use the previous Z5 work and Z1 recovery targets. Saved templates retain new pace targets.
 - Set a Running Threshold Pace in Intervals.icu and enable **Upload planned workouts** in its Garmin connection. Redeploy the `intervals` function after applying this version.
+
+## Daily Fuel Partner v3.7.0
+
+- Fuel Lab now starts with a Fuel Partner for every upcoming planned run. The nearest run opens automatically, while other future runs remain selectable.
+- Recommendations use planned duration, running context, stored weather, existing Fuel Lab products, successful Fuel reviews and reliable measured sweat rates.
+- Normal, Fuel-Training and Wettkampf modes keep a short easy run, a deliberate gut-training session and a performance-oriented race strategy separate.
+- Drink carbohydrates count toward the total before gels or bars are added. Caffeine is never selected automatically.
+- Consumption and packing are separate. The packing list can add one reserve for long sessions or races without pretending that the reserve was consumed.
+- Product quantities, sodium and current inventory are evaluated together. Missing product data and insufficient stock are shown before the run.
+- Every open planned run receives a compact Fuel hint in the weekly planner with a direct link to its strategy.
+- When the completed activity is reviewed, planned products and fluid volume are prefilled. The athlete confirms or corrects actual consumption; inventory is reduced only when the review is saved.
+- Recommendations start from duration-based sports-nutrition ranges and progress only through well-tolerated personal reviews. Reliable pre/post body-mass measurements can personalize fluid guidance.
+- Existing plans, reviews, Fuel Lab products and inventory remain unchanged. The additional mode and review references stay inside `athlete_data.app_data`; no database migration or Supabase function deployment is required.
 
 For fresh installations that have not yet applied the athlete-image cleanup, run `supabase/migrations/20260722120000_athlete_images.sql` once. Afterwards run:
 
