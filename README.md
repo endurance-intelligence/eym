@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **3.7.1**
+Current app version: **3.7.3**
 
 **Eat your miles.**
 
@@ -419,6 +419,12 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 - Technical shorthand remains unchanged in storage but is presented with readable separators such as `×`, `@` and `/`.
 - Older appointments without a saved template name keep their existing layout.
 - No database migration or Supabase function deployment is required.
+
+## Planner startup hotfix v3.7.3
+
+- The weekly planner now treats missing or legacy `structuredWorkout` values as workouts without a template label.
+- Non-track sessions and older plan entries no longer crash the planner after the v3.7.2 template-label update.
+- No athlete data is changed. No database migration or Supabase function deployment is required.
 
 For fresh installations that have not yet applied the athlete-image cleanup, run `supabase/migrations/20260722120000_athlete_images.sql` once. Afterwards run:
 

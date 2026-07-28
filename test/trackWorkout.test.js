@@ -53,6 +53,9 @@ test("saved track template names get a compact readable planner label", () => {
     "Schwelle – 4 × 1200 @ 4:40 / 800 @ 4:30",
   );
   assert.equal(trackWorkoutTemplateLabel({}), "");
+  assert.equal(trackWorkoutTemplateLabel(null), "");
+  assert.equal(trackWorkoutTemplateLabel(undefined), "");
+  assert.equal(trackWorkoutTemplateLabel("legacy workout"), "");
 });
 
 test("track distance separates work, recovery and the estimated LAP-controlled edges", () => {

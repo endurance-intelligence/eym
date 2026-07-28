@@ -38,7 +38,7 @@ export function normalizeTrackPace(value) {
 }
 
 export function trackWorkoutTemplateLabel(input = {}) {
-  const name = cleanText(input.templateName);
+  const name = cleanText(input?.templateName);
   if (!name) return "";
   return name
     .replace(/\s+-\s+/g, " – ")
