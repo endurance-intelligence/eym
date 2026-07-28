@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **3.7.4**
+Current app version: **3.7.5**
 
 **Eat your miles.**
 
@@ -433,6 +433,14 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 - Work intervals retain their configured absolute pace ranges. Legacy work intervals without an absolute pace keep the previous Z5 target.
 - Existing athlete data and saved workout templates remain unchanged. No database migration is required.
 - Redeploy the `intervals` Supabase function after applying this version, then resend the affected week to Garmin.
+
+## Fuel Lab tabs v3.7.5
+
+- Fuel Partner and product inventory now live in two separate Fuel Lab tabs instead of one long mixed page.
+- Fuel Partner remains the default destination, including direct links from planned workouts.
+- Product creation, editing, inventory, archived products and re-order actions stay together in the Products tab.
+- The selected planned workout remains available when switching between both tabs.
+- Existing products, inventory, plans and Fuel Partner recommendations remain unchanged. No database migration or Supabase function deployment is required.
 
 For fresh installations that have not yet applied the athlete-image cleanup, run `supabase/migrations/20260722120000_athlete_images.sql` once. Afterwards run:
 

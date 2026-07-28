@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { Card, PageTitle } from "../components/UI";
 import StoredImage from "../components/StoredImage";
@@ -15,6 +16,7 @@ import { fuelCatalogKey } from "../services/fuelCatalog";
 import { lookupOpenPrices, productPriceSearchLinks } from "../services/productPrices";
 import { extractNutritionLabel } from "../services/nutritionOcr";
 import { isManagedImage, queueEntityImageDeletion, resolveImageUrl, uploadEntityImages } from "../services/imageStorage";
+import { FUEL_LAB_TABS, fuelLabTabSearchParams, resolveFuelLabTab } from "../services/fuelLabTabs";
 import FuelPartner from "../components/FuelPartner";
 
 const categories = ["Gel", "Drink Mix", "Elektrolyte", "Riegel", "Recovery", "Kapseln", "Sonstiges"];
@@ -130,6 +132,8 @@ function priceLocation(item) {
 
 export default function Fuel() {
   const { state, setState, session } = useApp();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = resolveFuelLabTab(searchParams.get("tab"));
   const [product, setProduct] = useState(emptyProduct);
   const [showForm, setShowForm] = useState(false);
   const [scanStatus, setScanStatus] = useState("idle");
@@ -152,6 +156,10 @@ export default function Fuel() {
   const ingredientsPhotoInput = useRef(null);
 
   useEffect(() => () => window.clearTimeout(noticeTimer.current), []);
+
+  function selectTab(tab) {
+    setSearchParams(fuelLabTabSearchParams(searchParams, tab), { replace: true });
+  }
 
   function showNotice(message, tone = "good") {
     window.clearTimeout(noticeTimer.current);
@@ -608,12 +616,28 @@ export default function Fuel() {
 
   return <>
     <PageTitle eyebrow="Fuel Intelligence" title="Fuel Lab">
-      <button onClick={() => showForm ? resetEditor() : openNewProduct()}>{showForm ? "Schließen" : "+ Produkt"}</button>
+      {activeTab === "products" && <button onClick={() => showForm ? resetEditor() : openNewProduct()}>{showForm ? "Schließen" : "+ Produkt"}</button>}
     </PageTitle>
 
-    {notice && <div className={`fuel-toast ${notice.tone}`} role="status"><b>{notice.message}</b><button type="button" aria-label="Hinweis schließen" onClick={() => setNotice(null)}>×</button></div>}
+    <div className="section-tabs fuel-tabs" role="tablist" aria-label="Fuel-Lab-Bereiche">
+      {FUEL_LAB_TABS.map(([key, label]) => <button
+        type="button"
+        id={`fuel-tab-${key}`}
+        role="tab"
+        aria-controls={`fuel-panel-${key}`}
+        aria-selected={activeTab === key}
+        className={activeTab === key ? "selected" : ""}
+        onClick={() => selectTab(key)}
+        key={key}
+      >{label}</button>)}
+    </div>
 
-    <FuelPartner />
+    {activeTab === "partner" && <div className="fuel-tab-panel" id="fuel-panel-partner" role="tabpanel" aria-labelledby="fuel-tab-partner">
+      <FuelPartner />
+    </div>}
+
+    {activeTab === "products" && <div className="fuel-tab-panel" id="fuel-panel-products" role="tabpanel" aria-labelledby="fuel-tab-products">
+    {notice && <div className={`fuel-toast ${notice.tone}`} role="status"><b>{notice.message}</b><button type="button" aria-label="Hinweis schließen" onClick={() => setNotice(null)}>×</button></div>}
 
     {showForm && <Card className="wide fuel-product-editor">
       <div className="fuel-photo-import">
@@ -805,6 +829,7 @@ export default function Fuel() {
           {productPriceSearchLinks(priceProduct).map((link) => <a key={link.label} href={link.href} target="_blank" rel="noreferrer">{link.label} öffnen ↗</a>)}
         </div>
       </div>
+    </div>}
     </div>}
   </>;
 }
