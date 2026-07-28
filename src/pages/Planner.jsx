@@ -41,6 +41,7 @@ import {
   trackWorkoutDistance,
   trackWorkoutForEditing,
   trackWorkoutSummary,
+  trackWorkoutTemplateLabel,
   updateTrackStepDraft,
   updateTrackWorkoutDraft,
   workoutFromTrackTemplate,
@@ -1492,6 +1493,7 @@ export default function Planner() {
                 const isCancelled = Boolean(item.plannedCancellation);
                 const isMissed = !isCancelled && item.date < todayKey && !item.completed && !matched;
                 const fuelRecommendation = fuelRecommendations.get(item.id);
+                const trackTemplateLabel = trackWorkoutTemplateLabel(item.structuredWorkout);
                 const className = `planner-workout ${item.completed || matched ? "completed" : ""} ${isMissed ? "missed" : ""} ${isCancelled ? "cancelled" : ""}`;
                 return (
                   <div className={className} key={item.id}>
@@ -1514,7 +1516,7 @@ export default function Planner() {
                         {matched && <em>{String(matched.source || item.actualSource || "Garmin").toUpperCase()}</em>}
                       </div>
                       <h3>{item.title}</h3>
-                      <p>{item.type}{item.distance ? ` · ${item.distance} km geplant` : ""}{matched && Number(matched.distance || item.actualDistance || 0) ? ` · ${Number(matched.distance || item.actualDistance).toFixed(1)} km erledigt` : ""}{item.duration ? ` · ${item.duration} min` : ""}</p>
+                      <p>{item.type}{trackTemplateLabel ? ` · ${trackTemplateLabel}` : ""}{item.distance ? ` · ${item.distance} km geplant` : ""}{matched && Number(matched.distance || item.actualDistance || 0) ? ` · ${Number(matched.distance || item.actualDistance).toFixed(1)} km erledigt` : ""}{item.duration ? ` · ${item.duration} min` : ""}</p>
                       {matched && <small>{matched.name || item.actualTitle}</small>}
                       {item.missedReason && <small>Grund: {item.missedReason}{item.missedNote ? ` · ${item.missedNote}` : ""}</small>}
                       {item.notes && !isCancelled && <small>{item.notes}</small>}

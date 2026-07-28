@@ -413,6 +413,13 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 - Rest-day rows remain non-interactive. Hover, focus and touch affordances make the destination visible without changing the daily layout.
 - No database migration or Supabase function deployment is required.
 
+## Track template names in the weekly planner v3.7.2
+
+- Structured ORC Track and interval appointments show their saved template name in the compact detail row between workout type and planned metrics.
+- Technical shorthand remains unchanged in storage but is presented with readable separators such as `×`, `@` and `/`.
+- Older appointments without a saved template name keep their existing layout.
+- No database migration or Supabase function deployment is required.
+
 For fresh installations that have not yet applied the athlete-image cleanup, run `supabase/migrations/20260722120000_athlete_images.sql` once. Afterwards run:
 
 ```bash

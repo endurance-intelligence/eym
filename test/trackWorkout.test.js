@@ -12,6 +12,7 @@ import {
   trackWorkoutDistance,
   trackWorkoutForEditing,
   trackWorkoutSummary,
+  trackWorkoutTemplateLabel,
   updateTrackStepDraft,
   updateTrackWorkoutDraft,
   workoutFromTrackTemplate,
@@ -44,6 +45,14 @@ test("track summary supports an ordered mixed block", () => {
     ],
   });
   assert.equal(summary, "Warm-up bis LAP · 3 Durchgänge: 1200 m Belastung → 400 m Pause → 800 m Belastung → 400 m Pause · Cool-down bis LAP");
+});
+
+test("saved track template names get a compact readable planner label", () => {
+  assert.equal(
+    trackWorkoutTemplateLabel({ templateName: "Schwelle - 4 x 1200@4:40/800@4:30" }),
+    "Schwelle – 4 × 1200 @ 4:40 / 800 @ 4:30",
+  );
+  assert.equal(trackWorkoutTemplateLabel({}), "");
 });
 
 test("track distance separates work, recovery and the estimated LAP-controlled edges", () => {

@@ -37,6 +37,16 @@ export function normalizeTrackPace(value) {
   return seconds == null ? "" : formatPaceSeconds(seconds);
 }
 
+export function trackWorkoutTemplateLabel(input = {}) {
+  const name = cleanText(input.templateName);
+  if (!name) return "";
+  return name
+    .replace(/\s+-\s+/g, " – ")
+    .replace(/(\d)\s*[xX]\s*(?=\d)/g, "$1 × ")
+    .replace(/\s*@\s*/g, " @ ")
+    .replace(/\s*\/\s*/g, " / ");
+}
+
 export function normalizePaceTolerance(value) {
   return clamp(value, 1, 60, 5);
 }
