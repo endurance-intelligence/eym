@@ -33,9 +33,9 @@ function formatPace(value: number) {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
-function paceTarget(step: Record<string, unknown>, recovery: boolean) {
+function paceTarget(step: Record<string, unknown>) {
   const targetSeconds = paceSeconds(step.targetPace);
-  if (targetSeconds == null) return recovery ? "Z1 Pace" : "Z5 Pace";
+  if (targetSeconds == null) return "Z5 Pace";
   const tolerance = safeInteger(step.paceToleranceSeconds, 1, 60, 5);
   const faster = formatPace(Math.max(120, targetSeconds - tolerance));
   const slower = formatPace(targetSeconds + tolerance);
@@ -51,13 +51,13 @@ function structuredSteps(input: Record<string, unknown>) {
       return {
         kind: recovery ? "recovery" : "work",
         token: stepToken(step.unit, step.value, recovery ? 200 : 400),
-        target: paceTarget(step, recovery),
+        target: recovery ? "" : paceTarget(step),
       };
     });
   }
   return [
     { kind: "work", token: stepToken(input.workUnit, input.workValue, 400), target: "Z5 Pace" },
-    { kind: "recovery", token: stepToken(input.recoveryUnit, input.recoveryValue, 200), target: "Z1 Pace" },
+    { kind: "recovery", token: stepToken(input.recoveryUnit, input.recoveryValue, 200), target: "" },
   ];
 }
 
@@ -66,15 +66,15 @@ function structuredTrackDescription(input: Record<string, unknown>) {
   const steps = structuredSteps(input);
   const lines = [
     "Warm-up",
-    "- Warm-up locker 15m Z1-Z2 Pace press lap intensity=warmup",
+    "- Press lap 15m intensity=warmup",
     "",
     `${input.kind === "sprints" ? "Sprints" : "Hauptteil"} ${rounds}x`,
     ...steps.map((step) => step.kind === "recovery"
-      ? `- Pause ${step.token} ${step.target} intensity=recovery`
+      ? `- Pause ${step.token} intensity=recovery`
       : `- Belastung ${step.token} ${step.target} intensity=interval`),
     "",
     "Cool-down",
-    "- Cool-down locker 10m Z1 Pace press lap intensity=cooldown",
+    "- Press lap 10m intensity=cooldown",
   ];
   return lines.join("\n");
 }
@@ -105,28 +105,28 @@ export function intervalDescription(item: Record<string, unknown>) {
     const meters = Math.max(50, Math.min(5000, Math.round(Number(repeatMatch[2].replace(",", ".")))));
     return [
       "Warm-up",
-      "- 15m Z1-Z2 Pace intensity=warmup",
+      "- 15m intensity=warmup",
       "",
       `${repeats}x`,
       `- ${meters}mtr Z5 Pace intensity=interval`,
-      `- ${meters}mtr Z1 Pace intensity=recovery`,
+      `- ${meters}mtr intensity=recovery`,
       "",
       "Cool-down",
-      "- 10m Z1 Pace intensity=cooldown",
+      "- 10m intensity=cooldown",
     ].join("\n");
   }
 
   if (/intervall/.test(text)) {
     return [
       "Warm-up",
-      "- 15m Z1-Z2 Pace intensity=warmup",
+      "- 15m intensity=warmup",
       "",
       "6x",
       "- 2m Z5 Pace intensity=interval",
-      "- 2m Z1 Pace intensity=recovery",
+      "- 2m intensity=recovery",
       "",
       "Cool-down",
-      "- 10m Z1 Pace intensity=cooldown",
+      "- 10m intensity=cooldown",
     ].join("\n");
   }
 
@@ -134,13 +134,13 @@ export function intervalDescription(item: Record<string, unknown>) {
     const main = Math.max(8, duration - 25);
     return [
       "Warm-up",
-      "- 15m Z1-Z2 Pace intensity=warmup",
+      "- 15m intensity=warmup",
       "",
       "Schwelle",
       `- ${main}m Z4 Pace intensity=interval`,
       "",
       "Cool-down",
-      "- 10m Z1 Pace intensity=cooldown",
+      "- 10m intensity=cooldown",
     ].join("\n");
   }
 

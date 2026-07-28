@@ -1672,7 +1672,7 @@ export default function Planner() {
                 <div>
                   <p className="eyebrow">Geführtes Garmin-Workout</p>
                   <h3>Track-Abfolge festlegen</h3>
-                  <p>Warm-up und Cool-down bleiben offen. Auf Garmin wechselst du jeweils mit der LAP-Taste zum nächsten Abschnitt.</p>
+                  <p>Warm-up und Cool-down bleiben offen. Auf Garmin wechselst du jeweils mit der LAP-Taste zum nächsten Abschnitt. Beide sowie alle Pausen bleiben ohne Pace-Ziel.</p>
                 </div>
                 <div className={`planner-track-planning-status ${editingTrackWorkout.planningStatus === "draft" ? "draft" : "final"}`}>
                   <div>
@@ -1763,7 +1763,7 @@ export default function Planner() {
                     <span>{editingTrackDistance.hasTimedSteps ? `plus ${trackDurationLabel(editingTrackDistance.timedSeconds)} zeitgesteuerte Abschnitte` : "inklusive Ein- und Auslaufen"}</span>
                   </div>
                 </div>
-                <small>Eine Ziel-Pace wie 4:40 mit ±5 Sekunden wird auf Garmin als Bereich 4:35–4:45 min/km geführt. Die Uhr meldet, wenn du außerhalb liegst. Intervals.icu benötigt zusätzlich unter Running eine gesetzte Threshold Pace und bei der Garmin-Verbindung „Upload planned workouts“.</small>
+                <small>Nur Belastungen erhalten ein Pace-Ziel: 4:40 mit ±5 Sekunden wird auf Garmin als Bereich 4:35–4:45 min/km geführt. Warm-up, Pausen und Cool-down bleiben ohne Ziel. Intervals.icu benötigt zusätzlich unter Running eine gesetzte Threshold Pace und bei der Garmin-Verbindung „Upload planned workouts“.</small>
               </section>
             )}
             <label>Notiz<textarea value={editing.notes} onChange={(event) => setEditing({ ...editing, notes: event.target.value })} /></label>

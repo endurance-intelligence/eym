@@ -178,7 +178,7 @@ test("Intervals description contains an ordered Garmin block and LAP-controlled 
       rounds: 2,
       steps: [
         { kind: "work", unit: "distance", value: 1200, targetPace: "4:40", paceToleranceSeconds: 5 },
-        { kind: "recovery", unit: "distance", value: 400 },
+        { kind: "recovery", unit: "distance", value: 400, targetPace: "6:30", paceToleranceSeconds: 30 },
         { kind: "work", unit: "distance", value: 800, targetPace: "4:30", paceToleranceSeconds: 5 },
         { kind: "recovery", unit: "time", value: 90 },
       ],
@@ -186,12 +186,34 @@ test("Intervals description contains an ordered Garmin block and LAP-controlled 
   });
   assert.match(description, /Sprints 2x/);
   assert.match(description, /Belastung 1200mtr 4:35-4:45\/km Pace intensity=interval/);
-  assert.match(description, /Pause 400mtr Z1 Pace intensity=recovery/);
+  assert.match(description, /Pause 400mtr intensity=recovery/);
   assert.match(description, /Belastung 800mtr 4:25-4:35\/km Pace intensity=interval/);
-  assert.match(description, /Pause 90s Z1 Pace intensity=recovery/);
-  assert.equal(description.match(/press lap/g)?.length, 2);
+  assert.match(description, /Pause 90s intensity=recovery/);
+  assert.match(description, /- Press lap 15m intensity=warmup/);
+  assert.match(description, /- Press lap 10m intensity=cooldown/);
+  assert.doesNotMatch(description, /(?:Press lap|Pause)[^\n]*Pace/);
+  assert.equal(description.match(/press lap/gi)?.length, 2);
   assert.match(description, /intensity=warmup/);
   assert.match(description, /intensity=cooldown/);
+});
+
+test("generated interval and threshold edges stay free of pace targets", () => {
+  const intervals = intervalDescription({
+    type: "Intervalle",
+    title: "6 × 400 Meter",
+    duration: 60,
+  });
+  assert.match(intervals, /- 400mtr Z5 Pace intensity=interval/);
+  assert.match(intervals, /- 400mtr intensity=recovery/);
+  assert.doesNotMatch(intervals, /(?:warmup|recovery|cooldown)[^\n]*Pace/);
+
+  const threshold = intervalDescription({
+    type: "Schwellenlauf",
+    title: "Schwelle",
+    duration: 60,
+  });
+  assert.match(threshold, /- 35m Z4 Pace intensity=interval/);
+  assert.doesNotMatch(threshold, /(?:warmup|cooldown)[^\n]*Pace/);
 });
 
 test("named templates survive archive normalization and can be copied into a workout", () => {

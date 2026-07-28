@@ -1,4 +1,4 @@
-const CACHE_NAME = "eym-shell-v3.7.3";
+const CACHE_NAME = "eym-shell-v3.7.4";
 const APP_SHELL = ["./", "./index.html", "./favicon.svg", "./manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {

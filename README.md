@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **3.7.3**
+Current app version: **3.7.4**
 
 **Eat your miles.**
 
@@ -389,7 +389,7 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 - Existing `athlete_data` rows, plans, activities, reviews, calendar tokens and private images remain unchanged. No database migration is required.
 - The private Intervals.icu API-key connection is accepted only for the Supabase UUID configured in `INTERVALS_OWNER_USER_ID`. Other accounts remain disconnected until a user-specific OAuth flow is added.
 - Every structured track step can carry an absolute target pace and a tolerance. A target of `4:40/km` with `±5 s` is exported as `4:35-4:45/km Pace`, allowing Garmin to guide and alert during that step.
-- Existing track workouts without a target pace continue to use the previous Z5 work and Z1 recovery targets. Saved templates retain new pace targets.
+- Existing track workouts without a target pace continue to use the previous Z5 work target. Saved templates retain new pace targets; recovery targets are intentionally omitted from the Garmin export since v3.7.4.
 - Set a Running Threshold Pace in Intervals.icu and enable **Upload planned workouts** in its Garmin connection. Redeploy the `intervals` function after applying this version.
 
 ## Daily Fuel Partner v3.7.0
@@ -425,6 +425,14 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 - The weekly planner now treats missing or legacy `structuredWorkout` values as workouts without a template label.
 - Non-track sessions and older plan entries no longer crash the planner after the v3.7.2 template-label update.
 - No athlete data is changed. No database migration or Supabase function deployment is required.
+
+## Target-free recovery steps v3.7.4
+
+- Warm-up, recovery and cool-down steps are exported to Intervals.icu without a pace target, so Garmin does not raise pace alerts during easy or walking sections.
+- LAP-controlled warm-up and cool-down remain open. Distance- and time-based recovery steps keep their original duration.
+- Work intervals retain their configured absolute pace ranges. Legacy work intervals without an absolute pace keep the previous Z5 target.
+- Existing athlete data and saved workout templates remain unchanged. No database migration is required.
+- Redeploy the `intervals` Supabase function after applying this version, then resend the affected week to Garmin.
 
 For fresh installations that have not yet applied the athlete-image cleanup, run `supabase/migrations/20260722120000_athlete_images.sql` once. Afterwards run:
 
