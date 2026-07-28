@@ -5,10 +5,11 @@ import { Card, PageTitle } from "../components/UI";
 import { hydration } from "../services/insights";
 import { daysUntil, pace, hours } from "../utils/format";
 import WeatherCard from "../components/WeatherCard";
-import { activityTimestamp, isRunningActivity, preferredActivities } from "../services/activityUtils";
+import { activityTimestamp, isRunningActivity, preferredActivities, reviewKind } from "../services/activityUtils";
 import { activitiesWithGroups } from "../services/activityGroups";
 import { buildCoachState } from "../services/coachState";
 import { workoutSortTime, workoutTimingLabel } from "../services/plannerTime";
+import { briefingWorkoutDestination } from "../services/briefingNavigation";
 
 const dayLabel = new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" });
 const todayLabel = new Intl.DateTimeFormat("de-DE", { weekday: "long", day: "2-digit", month: "long" });
@@ -76,6 +77,8 @@ function todayOverview(plan, activities) {
     const missed = Boolean(item.missedReason);
     return {
       id: `today-plan-${item.id}`,
+      planItemId: item.id,
+      activityId: matched && reviewKind(matched) ? matched.id : null,
       title: matched?.name || item.actualTitle || item.title,
       detail: matched ? activityMetrics(matched) : plannedMetrics(item),
       note: missed ? `Ausgefallen: ${item.missedReason}` : item.notes || "",
@@ -89,6 +92,7 @@ function todayOverview(plan, activities) {
     .forEach((activity) => {
       items.push({
         id: `today-actual-${activity.id}`,
+        activityId: reviewKind(activity) ? activity.id : null,
         title: activity.name || activity.type || "Training",
         detail: activityMetrics(activity),
         note: "Zusätzlich absolvierte Einheit",
@@ -119,6 +123,36 @@ function todayOverview(plan, activities) {
         : "Heute ist Regeneration";
 
   return { items, headline, done, open };
+}
+
+function TodayWorkoutRow({ item }) {
+  const destination = briefingWorkoutDestination(item);
+  const content = (
+    <>
+      <span className="today-status-pill">{item.status}</span>
+      <div className="today-workout-copy">
+        <h3>{item.title}</h3>
+        {item.detail && <strong>{item.detail}</strong>}
+        {item.note && <p>{item.note}</p>}
+      </div>
+      {destination && <span className="today-workout-arrow" aria-hidden="true">→</span>}
+    </>
+  );
+
+  if (!destination) {
+    return <div className={`today-workout-row ${item.tone}`}>{content}</div>;
+  }
+
+  return (
+    <Link
+      className={`today-workout-row today-workout-link ${item.tone}`}
+      to={destination.pathname}
+      state={destination.state}
+      aria-label={`${item.title} direkt öffnen`}
+    >
+      {content}
+    </Link>
+  );
 }
 
 function nextDayOverview(plan) {
@@ -277,7 +311,7 @@ export default function Briefing() {
             <div className="today-card-actions"><span className={`today-summary ${today.open ? "planned" : today.done ? "done" : "rest"}`}>{today.open ? `${today.open} offen` : today.done ? `${today.done} erledigt` : "Regeneration"}</span><Link to="/planner">Wochenplan öffnen →</Link></div>
           </div>
           <div className="today-workout-list">
-            {today.items.map((item) => <div className={`today-workout-row ${item.tone}`} key={item.id}><span className="today-status-pill">{item.status}</span><div className="today-workout-copy"><h3>{item.title}</h3>{item.detail && <strong>{item.detail}</strong>}{item.note && <p>{item.note}</p>}</div></div>)}
+            {today.items.map((item) => <TodayWorkoutRow item={item} key={item.id} />)}
           </div>
           <div className="today-upcoming-preview">
             <div className="today-upcoming-heading"><div><p className="eyebrow">Als Nächstes</p><strong>Morgen · {todayLabel.format(upcoming.date)}</strong></div><span>Preview</span></div>

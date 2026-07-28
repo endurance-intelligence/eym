@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { Card, PageTitle } from "../components/UI";
 import { fmtDate, pace, hours } from "../utils/format";
@@ -56,7 +57,8 @@ function summaries(activities) {
 
 export default function Training() {
   const { state, setState, addActivity, updateActivity, syncIntervalsNow, intervalsSyncStatus } = useApp();
-  const [selected, setSelected] = useState(null);
+  const location = useLocation();
+  const requestedActivityId = location.state?.activityId;
   const [editingName, setEditingName] = useState(null);
   const [message, setMessage] = useState("");
   const [mergeMode, setMergeMode] = useState(false);
@@ -64,6 +66,10 @@ export default function Training() {
 
   const rawActivities = useMemo(() => preferredActivities(state.activities, { hideStrava: Boolean(state.intervals?.connected) }), [state.activities, state.intervals?.connected]);
   const activities = useMemo(() => activitiesWithGroups(rawActivities, state.activityGroups), [rawActivities, state.activityGroups]);
+  const [selected, setSelected] = useState(() => {
+    const requestedActivity = activities.find((activity) => String(activity.id) === String(requestedActivityId || ""));
+    return requestedActivity && reviewKind(requestedActivity) ? requestedActivity : null;
+  });
   const currentMonth = new Date().toISOString().slice(0, 7);
   const currentWeekKey = isoDateLocal(startOfIsoWeek(new Date()));
   const [openWeeks, setOpenWeeks] = useState(() => new Set([currentWeekKey]));

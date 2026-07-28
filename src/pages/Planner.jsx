@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { Card, PageTitle } from "../components/UI";
 import { useApp } from "../context/AppContext";
 import { getCurrentPosition } from "../services/weather";
@@ -312,10 +312,15 @@ function recentReasonCounts(plan, weekStart) {
 
 export default function Planner() {
   const { state, setState, session, calendarToken } = useApp();
+  const location = useLocation();
+  const requestedWorkoutId = location.state?.workoutId;
   const [offsetWeeks, setOffsetWeeks] = useState(0);
   const [forecast, setForecast] = useState([]);
   const [status, setStatus] = useState("");
-  const [editing, setEditing] = useState(null);
+  const [editing, setEditing] = useState(() => {
+    const requestedWorkout = state.plan.find((item) => String(item.id) === String(requestedWorkoutId || ""));
+    return requestedWorkout ? prepareWorkoutForEditing(requestedWorkout) : null;
+  });
   const [missedEditing, setMissedEditing] = useState(null);
   const [planningOpen, setPlanningOpen] = useState(false);
   const [planningDraft, setPlanningDraft] = useState(null);

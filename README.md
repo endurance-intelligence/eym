@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **3.7.0**
+Current app version: **3.7.1**
 
 **Eat your miles.**
 
@@ -404,6 +404,14 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 - When the completed activity is reviewed, planned products and fluid volume are prefilled. The athlete confirms or corrects actual consumption; inventory is reduced only when the review is saved.
 - Recommendations start from duration-based sports-nutrition ranges and progress only through well-tolerated personal reviews. Reliable pre/post body-mass measurements can personalize fluid guidance.
 - Existing plans, reviews, Fuel Lab products and inventory remain unchanged. The additional mode and review references stay inside `athlete_data.app_data`; no database migration or Supabase function deployment is required.
+
+## Direct briefing workout navigation v3.7.1
+
+- Every actionable row in today's briefing is now a direct link instead of a static summary.
+- Planned workouts and completed plan-only sessions open their exact planner editor immediately.
+- Completed or additional imported activities open their exact Training review immediately.
+- Rest-day rows remain non-interactive. Hover, focus and touch affordances make the destination visible without changing the daily layout.
+- No database migration or Supabase function deployment is required.
 
 For fresh installations that have not yet applied the athlete-image cleanup, run `supabase/migrations/20260722120000_athlete_images.sql` once. Afterwards run:
 
