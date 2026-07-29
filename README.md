@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **3.7.5**
+Current app version: **3.7.6**
 
 **Eat your miles.**
 
@@ -441,6 +441,13 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 - Product creation, editing, inventory, archived products and re-order actions stay together in the Products tab.
 - The selected planned workout remains available when switching between both tabs.
 - Existing products, inventory, plans and Fuel Partner recommendations remain unchanged. No database migration or Supabase function deployment is required.
+
+## Session states and review flow v3.7.6
+
+- Completed sessions open their linked review directly from the briefing; completed plan items without an imported activity still open the plan entry.
+- Edit, cancellation and archive actions disappear from completed weekly-plan rows.
+- Fixed appointments can only be manually completed after their scheduled end; future sessions no longer show a misleading empty completion control.
+- Completed rows use a neutral theme-safe surface with a green status marker instead of a large green tint.
 
 For fresh installations that have not yet applied the athlete-image cleanup, run `supabase/migrations/20260722120000_athlete_images.sql` once. Afterwards run:
 

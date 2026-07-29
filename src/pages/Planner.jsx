@@ -47,6 +47,7 @@ import {
   workoutFromTrackTemplate,
 } from "../services/trackWorkout";
 import {
+  canManuallyCompleteWorkout,
   isSpontaneousWorkout,
   normalizeWorkoutTiming,
   workoutSortTime,
@@ -330,6 +331,7 @@ export default function Planner() {
   const [planningInfoOpen, setPlanningInfoOpen] = useState(false);
   const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
   const [publishBusy, setPublishBusy] = useState(false);
+  const [plannerNow, setPlannerNow] = useState(() => new Date());
 
   const weekStart = useMemo(() => startOfWeek(new Date(), offsetWeeks), [offsetWeeks]);
   const weekEnd = dateForDay(weekStart, 6);
@@ -457,6 +459,11 @@ export default function Planner() {
       document.body.style.overflow = previousOverflow;
     };
   }, [modalVisible]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setPlannerNow(new Date()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     const updates = [...matches.entries()].filter(([id, activity]) => {
@@ -1492,12 +1499,44 @@ export default function Planner() {
                 const matched = matches.get(item.id) || (item.matchedActivityId ? activityById.get(item.matchedActivityId) : null);
                 const isCancelled = Boolean(item.plannedCancellation);
                 const isMissed = !isCancelled && item.date < todayKey && !item.completed && !matched;
+                const completed = Boolean(item.completed || matched);
+                const linkedCompletion = Boolean(matched || item.matchedActivityId);
+                const canComplete = canManuallyCompleteWorkout(item, plannerNow);
+                const hasStateMarker = completed || isCancelled || canComplete;
                 const fuelRecommendation = fuelRecommendations.get(item.id);
                 const trackTemplateLabel = trackWorkoutTemplateLabel(item.structuredWorkout);
-                const className = `planner-workout ${item.completed || matched ? "completed" : ""} ${isMissed ? "missed" : ""} ${isCancelled ? "cancelled" : ""}`;
+                const className = `planner-workout ${completed ? "completed" : ""} ${isMissed ? "missed" : ""} ${isCancelled ? "cancelled" : ""} ${hasStateMarker ? "" : "no-marker"}`;
                 return (
                   <div className={className} key={item.id}>
-                    <button className="planner-check" title={isCancelled ? "Ausfall zurücknehmen" : "Erledigt markieren"} onClick={() => isCancelled ? restoreCancelledWorkout(item) : updateWorkout(item.id, { completed: !item.completed, missedReason: "", missedNote: "", missedMeta: {}, plannedCancellation: false })}>{item.completed || matched ? "✓" : isCancelled ? "×" : isMissed ? "!" : ""}</button>
+                    {completed && linkedCompletion && <div className="planner-check completed" title="Erledigt" aria-label="Erledigt">✓</div>}
+                    {completed && !linkedCompletion && (
+                      <button
+                        className="planner-check completed"
+                        title="Erledigt zurücknehmen"
+                        aria-label={`${item.title}: Erledigt zurücknehmen`}
+                        onClick={() => updateWorkout(item.id, { completed: false, completedAt: null })}
+                      >
+                        ✓
+                      </button>
+                    )}
+                    {!completed && isCancelled && <button className="planner-check cancelled" title="Ausfall zurücknehmen" aria-label={`${item.title}: Ausfall zurücknehmen`} onClick={() => restoreCancelledWorkout(item)}>×</button>}
+                    {!completed && !isCancelled && canComplete && (
+                      <button
+                        className={`planner-check ${isMissed ? "missed" : "ready"}`}
+                        title={isMissed ? "Nachträglich als erledigt markieren" : "Als erledigt markieren"}
+                        aria-label={`${item.title}: Als erledigt markieren`}
+                        onClick={() => updateWorkout(item.id, {
+                          completed: true,
+                          completedAt: new Date().toISOString(),
+                          missedReason: "",
+                          missedNote: "",
+                          missedMeta: {},
+                          plannedCancellation: false,
+                        })}
+                      >
+                        {isMissed ? "!" : ""}
+                      </button>
+                    )}
                     <div
                       className={`planner-workout-main ${!isCancelled ? "planner-workout-open" : ""}`}
                       role={!isCancelled ? "button" : undefined}
@@ -1508,7 +1547,7 @@ export default function Planner() {
                       onKeyDown={!isCancelled ? (event) => openWorkoutFromKeyboard(item, event) : undefined}
                     >
                       <div>
-                        <span>{workoutTimingLabel(item)} · {matched ? "ERLEDIGT" : isCancelled ? "AUSGEFALLEN" : isMissed ? "NICHT ERLEDIGT" : item.optional ? "OPTIONAL" : "PFLICHT"}</span>
+                        <span>{workoutTimingLabel(item)} · {completed ? "ERLEDIGT" : isCancelled ? "AUSGEFALLEN" : isMissed ? "NICHT ERLEDIGT" : item.optional ? "OPTIONAL" : "PFLICHT"}</span>
                         {item.weatherAdjusted && <em>WETTER</em>}
                         {item.comboSession && <em>KOMBI-TAG</em>}
                         {item.doubleSession && <em>DOPPELTRAINING</em>}
@@ -1537,12 +1576,14 @@ export default function Planner() {
                         </div>
                       )}
                     </div>
-                    <div className="planner-actions">
-                      {isMissed && <button className="danger" onClick={() => openMissed(item)}>Grund angeben</button>}
-                      {isCancelled ? <button onClick={() => restoreCancelledWorkout(item)}>Wieder einplanen</button> : <button onClick={() => openWorkoutEditor(item)}>Bearbeiten</button>}
-                      {!isPastWeek && !isCancelled && <button onClick={() => openAdjustment(item.id, "cancel")}>Fällt aus</button>}
-                      <button onClick={() => updateWorkout(item.id, { archived: true })}>Archiv</button>
-                    </div>
+                    {!completed && (
+                      <div className="planner-actions">
+                        {isMissed && <button className="danger" onClick={() => openMissed(item)}>Grund angeben</button>}
+                        {isCancelled ? <button onClick={() => restoreCancelledWorkout(item)}>Wieder einplanen</button> : <button onClick={() => openWorkoutEditor(item)}>Bearbeiten</button>}
+                        {!isPastWeek && !isCancelled && <button onClick={() => openAdjustment(item.id, "cancel")}>Fällt aus</button>}
+                        <button onClick={() => updateWorkout(item.id, { archived: true })}>Archiv</button>
+                      </div>
+                    )}
                   </div>
                 );
               })}

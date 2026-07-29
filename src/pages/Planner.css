@@ -445,3 +445,28 @@
   .planner-track-planning-status button{min-width:0}
   .planner-rowing-setup{padding:14px}
 }
+
+/* v3.7.6 – distinct, theme-safe planner session states */
+.planner-workout.completed{
+  background:color-mix(in srgb,var(--bg-card-alt) 74%,var(--bg-input));
+  box-shadow:inset 3px 0 0 var(--success);
+}
+.planner-workout.completed .planner-check{
+  display:grid;
+  place-items:center;
+  border-color:var(--success);
+  background:var(--success);
+  color:#062311;
+  font-weight:950;
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--success) 13%,transparent);
+}
+.planner-workout.completed div.planner-check{cursor:default}
+.planner-workout.completed .planner-workout-main>div>span{color:var(--success-bright);font-weight:900}
+.planner-workout.no-marker{grid-template-columns:minmax(0,1fr) auto}
+.planner-check.ready{border-color:var(--border-strong);background:var(--bg-input)}
+.planner-check.missed{border-color:#e75d50;color:#ff9a90}
+.planner-check.cancelled{border-color:#8b6c2d;color:#ffcf68}
+@media(max-width:800px){
+  .planner-workout.no-marker{grid-template-columns:minmax(0,1fr)}
+  .planner-workout.no-marker .planner-actions{grid-column:1}
+}

@@ -339,10 +339,12 @@ html,body,#root{width:100%;max-width:100%;overflow-x:hidden}
 .today-workout-list{display:grid;gap:10px}
 .today-workout-row{display:grid;grid-template-columns:100px minmax(0,1fr);gap:16px;align-items:start;padding:15px 16px;border:1px solid var(--border);border-radius:15px;background:var(--bg-sidebar)}
 .today-workout-row.today-workout-link{position:relative;padding-right:54px;color:inherit;text-decoration:none;cursor:pointer;transition:border-color .18s ease,box-shadow .18s ease,transform .18s ease}
+.today-workout-row.today-workout-link.opens-review{padding-right:112px}
 .today-workout-row.today-workout-link:hover,.today-workout-row.today-workout-link:focus-visible{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent-border),var(--ambient-glow-subtle);transform:translateY(-1px)}
 .today-workout-row.today-workout-link:focus-visible{outline:none}
 .today-workout-arrow{position:absolute;right:16px;top:50%;display:grid;place-items:center;width:28px;height:28px;border:1px solid var(--accent-border);border-radius:9px;background:var(--accent-surface);color:var(--accent-bright);font-size:17px;transform:translateY(-50%)}
-.today-workout-row.done{border-color:var(--success-border);background:var(--success-soft)}
+.today-workout-arrow.review{width:auto;min-width:78px;padding:0 10px;font-size:11px;font-weight:900}
+.today-workout-row.done{border-color:var(--success-border);background:color-mix(in srgb,var(--bg-sidebar) 78%,var(--bg-input));box-shadow:inset 3px 0 0 var(--success)}
 .today-workout-row.planned{border-color:#65572f;background:#201b0e}
 .today-workout-row.optional{border-color:#3b4e41;background:#101b14}
 .today-workout-row.missed{border-color:#70423d;background:#241311}
@@ -353,7 +355,7 @@ html,body,#root{width:100%;max-width:100%;overflow-x:hidden}
 .readiness-card p{line-height:1.5}.readiness-metrics{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}.readiness-metrics span{display:inline-flex;gap:6px;padding:7px 9px;border:1px solid var(--border);border-radius:999px;background:var(--bg-sidebar);color:#8ea296;font-size:12px}.readiness-metrics b{color:var(--text)}.readiness-basis{margin-bottom:0;font-size:12px}
 .intervals-setup-card{border-color:var(--accent-border)}.intervals-setup-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:18px 0}.intervals-setup-step{display:grid;grid-template-columns:auto 1fr;gap:10px;padding:14px;border:1px solid var(--border);border-radius:14px;background:var(--bg-sidebar)}.intervals-setup-step>span{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:var(--accent);color:var(--bg-body);font-weight:900}.intervals-setup-step div{display:grid;gap:4px}.intervals-setup-step strong{font-size:14px}.intervals-setup-step small{color:var(--muted);line-height:1.45}.setup-note{margin-top:14px;padding:13px 14px;border:1px solid var(--border-strong);border-radius:13px;background:var(--bg-card);color:var(--muted-bright);line-height:1.5}.setup-note strong{color:var(--text)}.button-link{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;background:var(--button-bg);border:1px solid var(--accent-border);color:#fff;border-radius:11px;padding:10px 14px;font-weight:700}
 @media(max-width:900px){.intervals-setup-grid{grid-template-columns:1fr 1fr}}
-@media(max-width:600px){.today-card-heading{align-items:flex-start;flex-direction:column}.today-workout-row{grid-template-columns:1fr;gap:9px}.today-workout-row.today-workout-link{padding-right:50px}.today-workout-arrow{right:12px;top:14px;transform:none}.today-status-pill{justify-self:start}.intervals-setup-grid{grid-template-columns:1fr}}
+@media(max-width:600px){.today-card-heading{align-items:flex-start;flex-direction:column}.today-workout-row{grid-template-columns:1fr;gap:9px}.today-workout-row.today-workout-link{padding-right:50px}.today-workout-row.today-workout-link.opens-review{padding-right:108px}.today-workout-arrow{right:12px;top:14px;transform:none}.today-status-pill{justify-self:start}.intervals-setup-grid{grid-template-columns:1fr}}
 
 .settings-name-field{display:grid;gap:7px;max-width:360px;margin:16px 0;color:var(--muted-bright)}.settings-name-field input{width:100%;background:var(--bg-input);border:1px solid var(--border);color:#fff;border-radius:9px;padding:10px}
 

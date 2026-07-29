@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  canManuallyCompleteWorkout,
   isSpontaneousWorkout,
   normalizeWorkoutTiming,
   workoutTimingLabel,
@@ -36,4 +37,30 @@ test("Intervals uses calendar midnight for spontaneous workouts and real times f
   assert.equal(intervalsStartDateLocal({ date: "2026-07-28", title: "Intervalle", spontaneous: true }), "2026-07-28T00:00:00");
   assert.equal(intervalsStartDateLocal({ date: "2026-07-28", title: "ORC Track", fixed: true, time: "19:00" }), "2026-07-28T19:00:00");
   assert.equal(intervalsStartDateLocal({ date: "2026-07-28", title: "Legacy Easy Run", time: "18:00" }), "2026-07-28T00:00:00");
+});
+
+test("future sessions cannot be checked off before they can be finished", () => {
+  const morning = new Date(2026, 6, 29, 9, 0);
+  const duringWorkout = new Date(2026, 6, 29, 19, 30);
+  const afterWorkout = new Date(2026, 6, 29, 20, 2);
+  const fixed = {
+    date: "2026-07-29",
+    fixed: true,
+    time: "19:00",
+    duration: 62,
+  };
+
+  assert.equal(canManuallyCompleteWorkout(fixed, morning), false);
+  assert.equal(canManuallyCompleteWorkout(fixed, duringWorkout), false);
+  assert.equal(canManuallyCompleteWorkout(fixed, afterWorkout), true);
+  assert.equal(canManuallyCompleteWorkout({ ...fixed, date: "2026-07-30" }, afterWorkout), false);
+});
+
+test("past and spontaneous same-day sessions remain manually completable", () => {
+  const now = new Date(2026, 6, 29, 9, 0);
+
+  assert.equal(canManuallyCompleteWorkout({ date: "2026-07-28", spontaneous: true }, now), true);
+  assert.equal(canManuallyCompleteWorkout({ date: "2026-07-29", spontaneous: true }, now), true);
+  assert.equal(canManuallyCompleteWorkout({ date: "2026-07-29", spontaneous: true, completed: true }, now), false);
+  assert.equal(canManuallyCompleteWorkout({ date: "2026-07-29", spontaneous: true, plannedCancellation: true }, now), false);
 });
