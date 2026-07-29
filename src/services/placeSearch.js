@@ -11,6 +11,38 @@ function formatAddress(item) {
   return parts.length ? [...new Set(parts)].join(", ") : item.display_name;
 }
 
+function normalizedPlaceText(value) {
+  return String(value || "")
+    .normalize("NFKD")
+    .replace(/\p{Diacritic}/gu, "")
+    .replace(/ß/g, "ss")
+    .toLowerCase()
+    .replace(/[^\p{Letter}\p{Number}]+/gu, " ")
+    .trim();
+}
+
+export function placeSuggestionSubtitle(place) {
+  const name = String(place?.name || "").trim();
+  const label = String(place?.label || "").trim();
+  if (!label) return "";
+
+  const parts = label.split(",").map((part) => part.trim()).filter(Boolean);
+  if (parts.length > 1 && normalizedPlaceText(parts[0]) === normalizedPlaceText(name)) {
+    return parts.slice(1).join(", ");
+  }
+  return label;
+}
+
+function uniquePlaces(places) {
+  const seen = new Set();
+  return places.filter((place) => {
+    const key = normalizedPlaceText(place.label || place.displayName || `${place.name}-${place.latitude}-${place.longitude}`);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 export async function searchPlaces(query, signal) {
   const value = query.trim();
   if (value.length < 3) return [];
@@ -32,7 +64,7 @@ export async function searchPlaces(query, signal) {
   if (!response.ok) throw new Error("Ortsvorschläge konnten nicht geladen werden.");
 
   const results = await response.json();
-  return results.map((item) => ({
+  return uniquePlaces(results.map((item) => ({
     id: `${item.osm_type}-${item.osm_id}`,
     name: item.namedetails?.name || item.name || item.display_name.split(",")[0],
     label: formatAddress(item),
@@ -40,7 +72,7 @@ export async function searchPlaces(query, signal) {
     latitude: Number(item.lat),
     longitude: Number(item.lon),
     type: item.type || item.category || "Ort",
-  }));
+  })));
 }
 
 

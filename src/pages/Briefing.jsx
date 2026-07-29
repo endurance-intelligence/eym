@@ -277,7 +277,7 @@ export default function Briefing() {
 
   const nextEvent = (state.mission.milestones || [])
     .filter((item) => !item.archived && !item.isMainTarget && new Date(`${item.date}T23:59:59`) >= new Date())
-    .sort((a, b) => new Date(a.date) - new Date(b.date))[0];
+    .sort((a, b) => `${a.date}T${a.time || "23:59"}`.localeCompare(`${b.date}T${b.time || "23:59"}`))[0];
 
   const weekOpenItems = rows.reduce((sum, row) => sum + row.items.filter((item) => item.tone === "planned").length, 0);
   const todayKey = isoDate(new Date());
@@ -336,7 +336,7 @@ export default function Briefing() {
                 <span><b>{weekDistance.toFixed(1)}</b> / {calculatedTarget || "–"} km</span>
               </div>
               {calculatedTarget > 0 && <div className="progress"><i style={{ width: `${Math.min(100, weekDistance / calculatedTarget * 100)}%` }} /></div>}
-              {nextEvent && <p className="briefing-compact-footer"><span>Nächstes Event</span><b>{nextEvent.name}</b><strong>{daysUntil(nextEvent.date)} Tage</strong></p>}
+              {nextEvent && <p className="briefing-compact-footer"><span>Nächstes Event</span><b>{nextEvent.name}</b><strong>{daysUntil(nextEvent.date)} Tage{nextEvent.time ? ` · ${nextEvent.time} Uhr` : ""}</strong></p>}
             </Card>
           </Link>
 

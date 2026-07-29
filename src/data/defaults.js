@@ -4,6 +4,7 @@ export const mission = {
   id: "",
   name: "",
   date: "",
+  time: "",
   location: "",
   targetKm: 0,
   preparationStartDate: "",

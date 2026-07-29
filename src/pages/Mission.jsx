@@ -4,13 +4,14 @@ import { Card, PageTitle, Metric } from "../components/UI";
 import TrainingSectionNav from "../components/SectionNav";
 import { daysUntil, fmtDate } from "../utils/format";
 import { buildEventAdvice, fetchEventForecast } from "../services/eventWeather";
-import { searchPlaces } from "../services/placeSearch";
+import { placeSuggestionSubtitle, searchPlaces } from "../services/placeSearch";
 import { deriveAchievements } from "../services/achievements";
 import { activityDate, isRunningActivity, preferredActivities } from "../services/activityUtils";
 
 const emptyEvent = {
   name: "",
   date: "",
+  time: "",
   location: "",
   place: null,
   targetKm: "",
@@ -59,6 +60,7 @@ export default function Mission() {
       id: state.mission.id,
       name: state.mission.name,
       date: state.mission.date,
+      time: state.mission.time || "",
       location: state.mission.location || "",
       targetKm: state.mission.targetKm || 0,
       preparationStartDate,
@@ -123,6 +125,7 @@ export default function Mission() {
         id,
         name: draft.name.trim(),
         date: draft.date,
+        time: draft.time || "",
         location: draft.location.trim(),
         place: draft.place,
         targetKm: draft.targetKm === "" ? null : Number(draft.targetKm),
@@ -152,6 +155,7 @@ export default function Mission() {
           id: mainTarget.id,
           name: mainTarget.name,
           date: mainTarget.date,
+          time: mainTarget.time || "",
           location: mainTarget.location || "",
           targetKm: Number(mainTarget.targetKm) || 0,
           preparationStartDate: mainTarget.preparationStartDate || current.mission.preparationStartDate || preparationStartDate,
@@ -170,6 +174,7 @@ export default function Mission() {
     setDraft({
       name: item.name,
       date: item.date,
+      time: item.time || "",
       location: item.location || "",
       place: item.place || null,
       targetKm: item.targetKm ?? "",
@@ -204,6 +209,7 @@ export default function Mission() {
             id: mainTarget.id,
             name: mainTarget.name,
             date: mainTarget.date,
+            time: mainTarget.time || "",
             location: mainTarget.location || "",
             targetKm: Number(mainTarget.targetKm) || 0,
             preparationStartDate: mainTarget.preparationStartDate || current.mission.preparationStartDate,
@@ -231,6 +237,7 @@ export default function Mission() {
             id: mainTarget.id,
             name: mainTarget.name,
             date: mainTarget.date,
+            time: mainTarget.time || "",
             location: mainTarget.location || "",
             targetKm: Number(mainTarget.targetKm) || 0,
             preparationStartDate: mainTarget.preparationStartDate || current.mission.preparationStartDate,
@@ -259,7 +266,7 @@ export default function Mission() {
           <div><p className="eyebrow">{item.isMainTarget ? "Hauptziel" : archived ? "Archiviert" : "Meilenstein"}</p><h2>{item.name}</h2></div>
           {item.isMainTarget && <span className="main-target-badge">Hauptziel</span>}
         </div>
-        <p>{fmtDate(item.date)} · noch {daysUntil(item.date)} Tage</p>
+        <p>{fmtDate(item.date)}{item.time ? ` · ${item.time} Uhr` : ""} · noch {daysUntil(item.date)} Tage</p>
         <p className="muted">{item.location || "Noch kein Ort hinterlegt"}</p>
         {item.targetKm ? <p><strong>Ziel:</strong> {item.targetKm} km</p> : null}{item.goalType && <p><strong>Zielart:</strong> {{ finish: "Finish", time: "Zielzeit", pb: "Bestzeit", distance: "Distanz maximieren", training: "Vorbereitung" }[item.goalType] || item.goalType}{item.targetTime ? ` · ${item.targetTime}` : ""} · Priorität {item.priority || (item.isMainTarget ? "A" : "B")}</p>}{Number(item.elevationGain || 0) > 0 && <p><strong>Profil:</strong> {item.elevationGain} hm aufwärts · {item.surface || "gemischt"}</p>}
         {item.isMainTarget && <p><strong>Vorbereitung ab:</strong> {fmtDate(item.preparationStartDate || preparationStartDate)}</p>}
@@ -300,7 +307,7 @@ export default function Mission() {
             </div>
             <div className="hero-stats mission-hero-stats">
               <Metric label="Ziel" value={`${mainTarget.targetKm || state.mission.targetKm || 0} km`} />
-              <Metric label="Countdown" value={`${daysUntil(mainTarget.date)} Tage`} sub={fmtDate(mainTarget.date)} />
+              <Metric label="Countdown" value={`${daysUntil(mainTarget.date)} Tage`} sub={`${fmtDate(mainTarget.date)}${mainTarget.time ? ` · ${mainTarget.time} Uhr` : ""}`} />
               <Metric label="Vorbereitungsumfang" value={`${preparationKm.toFixed(0)} km`} sub={`seit ${fmtDate(preparationStartDate)}`} />
               <Metric label="Laufeinheiten" value={preparationRuns.length} sub="im aktuellen Aufbau" />
             </div>
@@ -324,11 +331,12 @@ export default function Mission() {
           <form className="editor-form mission-editor" onSubmit={save}>
             <label>Event<input name="name" value={draft.name} onChange={change} placeholder="z. B. erster Marathon" required /></label>
             <label>Datum<input name="date" type="date" value={draft.date} onChange={change} required /></label>
+            <label>Startzeit (optional)<input name="time" type="time" value={draft.time} onChange={change} /></label>
             <label className="place-field">Ort
               <input name="location" value={draft.location} onChange={change} placeholder="Ort oder Veranstaltungsstätte" autoComplete="off" />
               {draft.place && <small className="place-confirmed">✓ Ort aus OpenStreetMap übernommen</small>}
               {placeStatus && <small className="muted">{placeStatus}</small>}
-              {placeSuggestions.length > 0 && <div className="place-suggestions" role="listbox" aria-label="Ortsvorschläge">{placeSuggestions.map((place) => <button key={place.id} type="button" onClick={() => selectPlace(place)}><strong>{place.name}</strong><span>{place.label}</span></button>)}</div>}
+              {placeSuggestions.length > 0 && <div className="place-suggestions" role="listbox" aria-label="Ortsvorschläge">{placeSuggestions.map((place) => <button key={place.id} type="button" role="option" aria-selected="false" onClick={() => selectPlace(place)}><strong>{place.name}</strong><span>{placeSuggestionSubtitle(place)}</span></button>)}</div>}
             </label>
             <label>Zieldistanz (km)<input name="targetKm" type="number" min="0" step="0.1" value={draft.targetKm} onChange={change} /></label>
             <label>Zielart<select name="goalType" value={draft.goalType} onChange={change}><option value="finish">Teilnehmen und schaffen</option><option value="time">Mit Zielzeit absolvieren</option><option value="pb">Persönliche Bestzeit</option><option value="distance">Distanz / Zeit maximieren</option><option value="training">Trainings- oder Vorbereitungsevent</option></select></label>

@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **3.7.9**
+Current app version: **3.8.0**
 
 **Eat your miles.**
 
@@ -473,6 +473,14 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 - The Coach conclusion calls out recorded stomach symptoms and suggests checking gel timing, fluid volume and the product combination for similarly intense sessions.
 - Heart-rate guidance names and dates the exact easy run it refers to. ORC Track is not presented as an easy session, and the misleading phrase about “additional quality” is removed.
 - The monthly sport overview keeps its wide desktop cards but becomes a single horizontally swipeable row on phones instead of stacking every sport vertically.
+- No database migration or Supabase function deployment is required.
+
+## Event time and clean place suggestions v3.8.0
+
+- Manually created mission events now accept an optional start time next to the date. Saved times are retained while editing and shown in the mission overview and next-event briefing.
+- Duplicate OpenStreetMap results for the same street are merged before rendering.
+- Place suggestions separate the result name from its surrounding location, so street names no longer appear twice.
+- The suggestion list is rendered as a bounded overlay instead of pushing the remaining event fields down the page.
 - No database migration or Supabase function deployment is required.
 
 For fresh installations that have not yet applied the athlete-image cleanup, run `supabase/migrations/20260722120000_athlete_images.sql` once. Afterwards run:

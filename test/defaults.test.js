@@ -5,6 +5,7 @@ import { defaultState } from "../src/data/defaults.js";
 test("fresh state contains no athlete-specific mission or appointments", () => {
   assert.equal(defaultState.mission.name, "");
   assert.equal(defaultState.mission.date, "");
+  assert.equal(defaultState.mission.time, "");
   assert.deepEqual(defaultState.mission.milestones, []);
   assert.deepEqual(defaultState.planner.recurringCommitments, []);
   assert.deepEqual(defaultState.planner.trackWorkoutTemplates, []);
