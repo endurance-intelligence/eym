@@ -144,6 +144,11 @@ function goalRelevance(state, activity, elevation) {
 function subjectiveComparison(load, review) {
   const hasReview = numeric(review.rpe) > 0 || numeric(review.legs) > 0 || numeric(review.energy) > 0;
   if (!hasReview) return "Deine persönliche Rückmeldung ergänzt diese Einschätzung.";
+  const stomachSymptoms = (Array.isArray(review.stomachSymptoms) ? review.stomachSymptoms : [])
+    .filter((symptom) => !String(symptom).startsWith("Keine"));
+  if (stomachSymptoms.length > 0) {
+    return `Dein Review zeigt Magenauffälligkeiten (${stomachSymptoms.join(", ")}). Prüfe bei ähnlich intensiven Einheiten besonders Gel-Timing, Trinkmenge und die Kombination der Produkte.`;
+  }
   const feelsGood = numeric(review.legs) >= 7 && numeric(review.energy) >= 7 && numeric(review.overallFeeling) >= 7;
   const feelsPoor = numeric(review.legs) <= 4 || numeric(review.energy) <= 4 || numeric(review.overallFeeling) <= 4 || (Array.isArray(review.legSymptoms) && review.legSymptoms.includes("Schmerzen"));
   const objectivelyHard = ["Hoch", "Sehr hoch"].includes(load.value);

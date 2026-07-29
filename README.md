@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **3.7.8**
+Current app version: **3.7.9**
 
 **Eat your miles.**
 
@@ -464,6 +464,16 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 - Post-activity analysis leads with one clear summary, followed by load, execution and recovery consequence. Supporting measurements remain available on demand.
 - Drink-powder reviews separate portions from prepared and consumed fluid. One portion therefore keeps the same carbohydrates in a 500 ml or 650 ml bottle, while hydration is calculated from the amount actually consumed.
 - No database migration is required. Redeploy the `intervals` Supabase function after applying this version.
+
+## Direct weekly reviews and compact review results v3.7.9
+
+- Completed weekly-plan rows and additional imported activities open the linked activity review across the whole row. Completed plan rows without a linked review no longer reopen the plan editor.
+- Newly saved and existing reviews show a compact result view: activity facts, athlete scores, symptoms, fueling and the Coach conclusion. The complete form remains available through **Review bearbeiten**.
+- Stomach symptoms now include belching and bloating. A Fuel review with selected stomach symptoms is not learned as a successful product strategy, even when the numeric stomach score stayed high.
+- The Coach conclusion calls out recorded stomach symptoms and suggests checking gel timing, fluid volume and the product combination for similarly intense sessions.
+- Heart-rate guidance names and dates the exact easy run it refers to. ORC Track is not presented as an easy session, and the misleading phrase about “additional quality” is removed.
+- The monthly sport overview keeps its wide desktop cards but becomes a single horizontally swipeable row on phones instead of stacking every sport vertically.
+- No database migration or Supabase function deployment is required.
 
 For fresh installations that have not yet applied the athlete-image cleanup, run `supabase/migrations/20260722120000_athlete_images.sql` once. Afterwards run:
 

@@ -1,6 +1,20 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { briefingWorkoutDestination } from "../src/services/briefingNavigation.js";
+import {
+  briefingWorkoutDestination,
+  completedActivityDestination,
+} from "../src/services/briefingNavigation.js";
+
+test("opens a completed weekly activity directly in its review", () => {
+  assert.deepEqual(
+    completedActivityDestination("garmin-4711"),
+    {
+      pathname: "/training",
+      state: { activityId: "garmin-4711" },
+    },
+  );
+  assert.equal(completedActivityDestination(""), null);
+});
 
 test("opens a linked completed activity directly in Training", () => {
   assert.deepEqual(

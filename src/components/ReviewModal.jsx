@@ -63,6 +63,23 @@ function formatReviewDuration(hours) {
   return `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, "0")} h`;
 }
 
+function activeSymptoms(values = []) {
+  return values.filter((value) => !String(value).startsWith("Keine"));
+}
+
+function activitySummaryFacts(activity, weather) {
+  const durationHours = Number(activity.durationSeconds || 0) > 0
+    ? Number(activity.durationSeconds) / 3600
+    : Number(activity.duration || 0) / 60;
+  return [
+    Number(activity.distance || 0) > 0 ? `${Number(activity.distance).toLocaleString("de-DE", { maximumFractionDigits: 2 })} km` : "",
+    durationHours > 0 ? formatReviewDuration(durationHours) : "",
+    Number(activity.avgHr || 0) > 0 ? `Ø ${Math.round(Number(activity.avgHr))} bpm` : "",
+    Number(activity.elevation || 0) > 0 ? `${Math.round(Number(activity.elevation))} hm` : "",
+    weather?.temperature != null ? `${Math.round(Number(weather.temperature))} °C` : "",
+  ].filter(Boolean);
+}
+
 function ReviewScore({ label, value, onChange, low, high, description, variant = "positive", min = 1, wide = false }) {
   return (
     <label className={`review-score review-score-${variant} ${wide ? "wide-score" : ""}`}>
@@ -98,6 +115,7 @@ export default function ReviewModal({ activity, onClose }) {
   const kind = reviewKind(activity);
   const old = state.reviews[activity.id] || {};
   const hasStoredReview = Object.keys(old).length > 0;
+  const [editingReview, setEditingReview] = useState(() => !hasStoredReview);
   const detectedEvent = isOfficialEvent(activity, old);
   const activityDay = String(activity.startDateLocal || activity.date || "").slice(0, 10);
   const inventoryApplies = (fuelItem) => Boolean(fuelItem && (!fuelItem.stockTrackedFrom || !activityDay || activityDay >= fuelItem.stockTrackedFrom));
@@ -208,11 +226,13 @@ export default function ReviewModal({ activity, onClose }) {
     }
     const status = !totals.carbs ? "none" : carbsPerHour < targetLow ? "low" : carbsPerHour > targetHigh ? "high" : "good";
     const durationLabel = formatReviewDuration(durationHours);
+    const stomachSymptoms = activeSymptoms(review.stomachSymptoms);
     let feedback = label;
     if (status === "good") {
       const position = targetHigh > targetLow ? (carbsPerHour - targetLow) / (targetHigh - targetLow) : 0;
       feedback = `Kohlenhydratzufuhr gut getroffen. Mit ${Math.round(carbsPerHour)} g/h liegst du für ${durationLabel} ${position > 0.72 ? "am oberen Ende" : "im"} Orientierungsbereich von ${targetLow}–${targetHigh} g/h.`;
-      if (Number(review.stomach || 0) >= 8) feedback += " Die Menge wurde gut vertragen – für ähnlich lange Einheiten kannst du diese Strategie beibehalten.";
+      if (stomachSymptoms.length > 0) feedback += ` Die Menge lag rechnerisch passend, aber ${stomachSymptoms.join(" und ")} sprechen gegen diese Kombination bei ähnlich intensiven Einheiten.`;
+      else if (Number(review.stomach || 0) >= 8) feedback += " Die Menge wurde gut vertragen – für ähnlich lange Einheiten kannst du diese Strategie beibehalten.";
       else if (Number(review.stomach || 0) <= 5) feedback += " Die Menge war passend, wurde aber nicht optimal vertragen. Kleinere, gleichmäßigere Portionen oder andere Produkte testen.";
     } else if (status === "low") {
       feedback = `Mit ${Math.round(carbsPerHour)} g/h liegst du für ${durationLabel} unter dem Orientierungsbereich von ${targetLow}–${targetHigh} g/h. Bei ähnlichen langen Einheiten früher oder gleichmäßiger zuführen.`;
@@ -233,11 +253,45 @@ export default function ReviewModal({ activity, onClose }) {
       status,
       feedback,
     };
-  }, [activity.duration, activity.durationSeconds, review.nutritionItems, review.stomach, review.usedNutrition, state.fuel]);
+  }, [activity.duration, activity.durationSeconds, review.nutritionItems, review.stomach, review.stomachSymptoms, review.usedNutrition, state.fuel]);
 
   if (!kind) return null;
 
   const coachAssessment = activityCoachAssessment(state, activity, review, weather);
+  const summaryFacts = activitySummaryFacts(activity, weather);
+  const summarySymptoms = [
+    ...activeSymptoms(review.legSymptoms),
+    ...activeSymptoms(review.stomachSymptoms),
+  ];
+  const summaryScores = kind === "endurance"
+    ? [
+      ["Belastung", review.rpe],
+      ["Gesamtgefühl", review.overallFeeling],
+      ["Beine", review.legs],
+      ["Energie", review.energy],
+      ["Magen", review.stomach],
+    ]
+    : [
+      ["Belastung", review.rpe],
+      ["Energie", review.energy],
+      ["Oberkörper", review.upperBodySoreness],
+      ["Rücken", review.backSoreness],
+      ["Beweglichkeit", review.mobility],
+    ];
+  const coachMetrics = [
+    ["Belastung", coachAssessment.load],
+    ["Ausführung", coachAssessment.execution],
+    ["Konsequenz", coachAssessment.recovery],
+  ];
+  const summaryDrinkMl = Math.round(Number(review.drinkMl || nutritionSummary.totalFluidMl || 0));
+  const summaryFuelProducts = (review.usedNutrition ? review.nutritionItems : [])
+    .map((item) => {
+      const fuel = item.fuelItemId ? state.fuel.find((candidate) => candidate.id === item.fuelItemId) : null;
+      return fuel
+        ? fuelDisplayName(fuel)
+        : [item.manufacturer, item.product || item.type].filter(Boolean).join(" ");
+    })
+    .filter(Boolean);
   const set = (key, value) => setReview((current) => ({ ...current, [key]: value }));
   const hydrationResult = kind === "endurance" ? hydration(activity, review) : null;
 
@@ -415,10 +469,85 @@ export default function ReviewModal({ activity, onClose }) {
       coachAssessment,
       updatedAt: new Date().toISOString(),
     }, { memberIds: activity.memberActivityIds || [] });
-    onClose();
+    setEditingReview(false);
   }
 
   const enduranceTitle = isRoadCyclingActivity(activity) ? "Rennrad Review" : "Workout Review";
+
+  if (hasStoredReview && !editingReview) {
+    return (
+      <div className="modal-backdrop" role="presentation">
+        <section className="modal review-modal review-summary-modal" aria-label={`Review von ${activity.name}`}>
+          <button type="button" className="close" onClick={onClose}>×</button>
+          <div className="review-summary-heading">
+            <div>
+              <p className="eyebrow">Review abgeschlossen</p>
+              <h2>{activity.name}</h2>
+            </div>
+            <span>✓ Gespeichert</span>
+          </div>
+
+          <section className="review-summary-section">
+            <div className="review-summary-section-heading">
+              <div><small>Kurze Zusammenfassung</small><strong>So war die Einheit</strong></div>
+            </div>
+            <div className="review-summary-facts">
+              {summaryFacts.map((fact) => <span key={fact}>{fact}</span>)}
+            </div>
+            <div className="review-summary-scores">
+              {summaryScores.map(([label, value]) => (
+                <article key={label}>
+                  <small>{label}</small>
+                  <strong>{value}/10</strong>
+                </article>
+              ))}
+            </div>
+            {summarySymptoms.length > 0 && (
+              <div className="review-summary-alert">
+                <b>Auffälligkeiten</b>
+                <span>{summarySymptoms.join(" · ")}</span>
+              </div>
+            )}
+            {kind === "endurance" && (review.usedNutrition || summaryDrinkMl > 0) && (
+              <div className="review-summary-fuel">
+                <div>
+                  <small>Verpflegung & Trinken</small>
+                  <strong>{summaryFuelProducts.join(" · ") || "Getränk erfasst"}</strong>
+                </div>
+                <span>
+                  {nutritionSummary.totalCarbs > 0 ? `${Math.round(nutritionSummary.totalCarbs)} g KH` : "keine KH erfasst"}
+                  {summaryDrinkMl > 0 ? ` · ${summaryDrinkMl} ml getrunken` : ""}
+                </span>
+              </div>
+            )}
+            {review.notes && <p className="review-summary-notes"><b>Notiz:</b> {review.notes}</p>}
+          </section>
+
+          <section className="review-summary-coach">
+            <div className="review-summary-section-heading">
+              <div><small>Coach-Einschätzung</small><strong>Das sagt dein Coach</strong></div>
+              <span className={`tone-${coachAssessment.confidence.tone}`}>Datengrundlage {coachAssessment.confidence.value}</span>
+            </div>
+            <p>{coachAssessment.summary}</p>
+            <div className="review-summary-coach-metrics">
+              {coachMetrics.map(([label, entry]) => (
+                <article className={`tone-${entry.tone}`} key={label}>
+                  <small>{label}</small>
+                  <strong>{entry.value}</strong>
+                </article>
+              ))}
+            </div>
+            <div className="review-summary-conclusion"><b>Dein Review:</b> {coachAssessment.comparison}</div>
+          </section>
+
+          <div className="review-summary-actions">
+            <button type="button" onClick={onClose}>Schließen</button>
+            <button type="button" className="primary" onClick={() => setEditingReview(true)}>Review bearbeiten</button>
+          </div>
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="modal-backdrop" role="presentation">
@@ -440,7 +569,7 @@ export default function ReviewModal({ activity, onClose }) {
             </div>
             <div className="review-symptom-grid">
               <SymptomPicker title="Auffälligkeiten Beine" selected={review.legSymptoms} onChange={(value) => set("legSymptoms", value)} options={["Keine Auffälligkeiten", "Schwere Beine", "Muskelkater", "Schmerzen", "Krämpfe"]} />
-              <SymptomPicker title="Auffälligkeiten Magen" selected={review.stomachSymptoms} onChange={(value) => set("stomachSymptoms", value)} options={["Keine Beschwerden", "Übelkeit", "Völlegefühl", "Seitenstechen", "Toilettendrang"]} />
+              <SymptomPicker title="Auffälligkeiten Magen" selected={review.stomachSymptoms} onChange={(value) => set("stomachSymptoms", value)} options={["Keine Beschwerden", "Aufstoßen", "Blähungen", "Übelkeit", "Völlegefühl", "Seitenstechen", "Toilettendrang"]} />
             </div>
             <div className="form-grid">
               <label>Getrunken (ml)<input type="number" min="0" value={review.drinkMl} onChange={(event) => updateDrink(event.target.value)} /></label>
@@ -490,11 +619,7 @@ export default function ReviewModal({ activity, onClose }) {
               <div className="coach-activity-heading"><div><b>Coach-Einschätzung</b><small>Was die Einheit bedeutet und was jetzt sinnvoll ist</small></div><span className={`tone-${coachAssessment.confidence.tone}`}>Datengrundlage {coachAssessment.confidence.value}</span></div>
               <p className="coach-activity-summary">{coachAssessment.summary}</p>
               <div className="coach-activity-metrics">
-                {[
-                  ["Belastung", coachAssessment.load],
-                  ["Ausführung", coachAssessment.execution],
-                  ["Konsequenz", coachAssessment.recovery],
-                ].map(([label, entry]) => <article className={`tone-${entry.tone}`} key={label}><small>{label}</small><strong>{entry.value}</strong><span>{entry.text}</span></article>)}
+                {coachMetrics.map(([label, entry]) => <article className={`tone-${entry.tone}`} key={label}><small>{label}</small><strong>{entry.value}</strong><span>{entry.text}</span></article>)}
               </div>
               <p className="coach-activity-comparison"><b>Dein Review:</b> {coachAssessment.comparison}</p>
               <details><summary>Berücksichtigte Daten</summary><div className="coach-activity-factors">{coachAssessment.factors.map((factor) => <span key={factor}>{factor}</span>)}</div><p>{coachAssessment.confidence.text} Der interne Belastungswert dient nur dem persönlichen Vergleich und ist weder eine medizinische Bewertung noch eine Kopie der Garmin-Kennzahl. Bei Müdigkeit, Schmerzen oder ungewöhnlich schlechtem Gefühl hat deine Rückmeldung immer Vorrang.</p></details>

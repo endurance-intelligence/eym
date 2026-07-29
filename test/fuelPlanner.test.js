@@ -181,6 +181,46 @@ test("successful reviews personalize the carbohydrate rate and product priority"
   assert.match(result.rationale, /1 gut verträgliche Fuel-Review/);
 });
 
+test("a review with stomach symptoms is not learned as a successful fuel combination", () => {
+  const activity = {
+    id: "gi-review",
+    type: "Run",
+    name: "ORC Track",
+    date: "2026-07-28",
+    duration: 75,
+    distance: 13.3,
+  };
+  const reviews = {
+    "gi-review": {
+      stomach: 8,
+      energy: 8,
+      carbohydratesPerHour: 50,
+      stomachSymptoms: ["Aufstoßen", "Blähungen"],
+      nutritionItems: [
+        { fuelItemId: "gel-160" },
+        { fuelItemId: "hydrate-500" },
+      ],
+    },
+  };
+  const result = fuelRecommendationForWorkout({
+    workout: {
+      id: "next-long-run",
+      date: "2026-08-02",
+      title: "20 km Long Run",
+      type: "Long Run",
+      distance: 20,
+      duration: 140,
+    },
+    fuel: [gel160, hydrate],
+    activities: [activity],
+    reviews,
+    mode: "training",
+  });
+
+  assert.equal(result.confidence.key, "base");
+  assert.doesNotMatch(result.rationale, /gut verträgliche Fuel-Review/);
+});
+
 test("long runs default to fuel training and completed activities find their planned run", () => {
   const planned = {
     id: "planned-long",

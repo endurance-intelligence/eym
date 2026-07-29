@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Card, PageTitle } from "../components/UI";
 import TrainingSectionNav from "../components/SectionNav";
 import { useApp } from "../context/AppContext";
@@ -14,8 +14,9 @@ import {
   workoutTypes,
 } from "../services/plannerEngine";
 import { downloadCalendar } from "../services/calendar";
-import { preferredActivities } from "../services/activityUtils";
+import { preferredActivities, reviewKind } from "../services/activityUtils";
 import { activitiesWithGroups } from "../services/activityGroups";
+import { completedActivityDestination } from "../services/briefingNavigation";
 import { publishIntervalsWeek } from "../services/intervals";
 import { DEFAULT_REPLACEMENT_SPORTS, SPORT_OPTIONS, sortCommitments, sportLabel } from "../services/configuration";
 import { athleteBaseline, goalRequirements } from "../services/scienceCoach";
@@ -316,6 +317,7 @@ function recentReasonCounts(plan, weekStart) {
 export default function Planner() {
   const { state, setState, session, calendarToken } = useApp();
   const location = useLocation();
+  const navigate = useNavigate();
   const requestedWorkoutId = location.state?.workoutId;
   const [offsetWeeks, setOffsetWeeks] = useState(0);
   const [forecast, setForecast] = useState([]);
@@ -1089,6 +1091,17 @@ export default function Planner() {
     setEditing(prepareWorkoutForEditing(item));
   }
 
+  function openCompletedReview(destination, event) {
+    if (event.target.closest?.("button, a, input, select, textarea")) return;
+    navigate(destination.pathname, { state: destination.state });
+  }
+
+  function openCompletedReviewFromKeyboard(destination, event) {
+    if (event.target !== event.currentTarget || !["Enter", " "].includes(event.key)) return;
+    event.preventDefault();
+    navigate(destination.pathname, { state: destination.state });
+  }
+
   function openWorkoutFromRow(item, event) {
     if (event.target.closest?.("button, a, input, select, textarea")) return;
     openWorkoutEditor(item);
@@ -1484,16 +1497,31 @@ export default function Planner() {
                 {dayWeather && <small>{dayWeather.maxTemp}° · Böen {dayWeather.maxGust} · Regen {dayWeather.rainChance}%</small>}
               </header>
 
-              {actuals.map((activity) => (
-                <div className="planner-workout planner-actual completed" key={`actual-${activity.id}`}>
-                  <div className="planner-check">✓</div>
-                  <div className="planner-workout-main">
-                    <div><span>{activityTime(activity) ? `${activityTime(activity)} · ` : ""}ERLEDIGT</span><em>{String(activity.source || "Garmin").toUpperCase()}</em></div>
-                    <h3>{activity.name || activity.title || activity.type || "Training"}</h3>
-                    <p>{activity.type || activity.sportType || "Einheit"}{Number(activity.distance || 0) ? ` · ${Number(activity.distance).toFixed(1)} km` : ""}{Number(activity.duration || 0) ? ` · ${Math.round(Number(activity.duration))} min` : ""}</p>
+              {actuals.map((activity) => {
+                const reviewDestination = reviewKind(activity)
+                  ? completedActivityDestination(activity.id)
+                  : null;
+                return (
+                  <div
+                    className={`planner-workout planner-actual completed ${reviewDestination ? "planner-workout-review-open" : ""}`}
+                    key={`actual-${activity.id}`}
+                    role={reviewDestination ? "button" : undefined}
+                    tabIndex={reviewDestination ? 0 : undefined}
+                    title={reviewDestination ? "Review öffnen" : undefined}
+                    aria-label={reviewDestination ? `${activity.name || activity.type || "Training"}: Review öffnen` : undefined}
+                    onClick={reviewDestination ? (event) => openCompletedReview(reviewDestination, event) : undefined}
+                    onKeyDown={reviewDestination ? (event) => openCompletedReviewFromKeyboard(reviewDestination, event) : undefined}
+                  >
+                    <div className="planner-check">✓</div>
+                    <div className="planner-workout-main">
+                      <div><span>{activityTime(activity) ? `${activityTime(activity)} · ` : ""}ERLEDIGT</span><em>{String(activity.source || "Garmin").toUpperCase()}</em></div>
+                      <h3>{activity.name || activity.title || activity.type || "Training"}</h3>
+                      <p>{activity.type || activity.sportType || "Einheit"}{Number(activity.distance || 0) ? ` · ${Number(activity.distance).toFixed(1)} km` : ""}{Number(activity.duration || 0) ? ` · ${Math.round(Number(activity.duration))} min` : ""}</p>
+                    </div>
+                    {reviewDestination && <span className="planner-review-cue">Review →</span>}
                   </div>
-                </div>
-              ))}
+                );
+              })}
 
               {entries.length === 0 && actuals.length === 0 ? (
                 <button className="planner-empty" onClick={() => setEditing({ ...createBlank(weekStart), date: dateKey })}>+ frei</button>
@@ -1503,13 +1531,25 @@ export default function Planner() {
                 const isMissed = !isCancelled && item.date < todayKey && !item.completed && !matched;
                 const completed = Boolean(item.completed || matched);
                 const linkedCompletion = Boolean(matched || item.matchedActivityId);
+                const reviewDestination = completed && matched && reviewKind(matched)
+                  ? completedActivityDestination(matched.id)
+                  : null;
                 const canComplete = canManuallyCompleteWorkout(item, plannerNow);
                 const hasStateMarker = completed || isCancelled || canComplete;
                 const fuelRecommendation = fuelRecommendations.get(item.id);
                 const trackTemplateLabel = trackWorkoutTemplateLabel(item.structuredWorkout);
                 const className = `planner-workout ${completed ? "completed" : ""} ${isMissed ? "missed" : ""} ${isCancelled ? "cancelled" : ""} ${hasStateMarker ? "" : "no-marker"}`;
                 return (
-                  <div className={className} key={item.id}>
+                  <div
+                    className={`${className} ${reviewDestination ? "planner-workout-review-open" : ""}`}
+                    key={item.id}
+                    role={reviewDestination ? "button" : undefined}
+                    tabIndex={reviewDestination ? 0 : undefined}
+                    title={reviewDestination ? "Review öffnen" : completed ? "Review nach dem Aktivitätssync verfügbar" : undefined}
+                    aria-label={reviewDestination ? `${item.title}: Review öffnen` : undefined}
+                    onClick={reviewDestination ? (event) => openCompletedReview(reviewDestination, event) : undefined}
+                    onKeyDown={reviewDestination ? (event) => openCompletedReviewFromKeyboard(reviewDestination, event) : undefined}
+                  >
                     {completed && linkedCompletion && <div className="planner-check completed" title="Erledigt" aria-label="Erledigt">✓</div>}
                     {completed && !linkedCompletion && (
                       <button
@@ -1540,13 +1580,13 @@ export default function Planner() {
                       </button>
                     )}
                     <div
-                      className={`planner-workout-main ${!isCancelled ? "planner-workout-open" : ""}`}
-                      role={!isCancelled ? "button" : undefined}
-                      tabIndex={!isCancelled ? 0 : undefined}
-                      title={!isCancelled ? "Training öffnen" : undefined}
-                      aria-label={!isCancelled ? `${item.title} öffnen` : undefined}
-                      onClick={!isCancelled ? (event) => openWorkoutFromRow(item, event) : undefined}
-                      onKeyDown={!isCancelled ? (event) => openWorkoutFromKeyboard(item, event) : undefined}
+                      className={`planner-workout-main ${!completed && !isCancelled ? "planner-workout-open" : ""}`}
+                      role={!completed && !isCancelled ? "button" : undefined}
+                      tabIndex={!completed && !isCancelled ? 0 : undefined}
+                      title={!completed && !isCancelled ? "Training öffnen" : undefined}
+                      aria-label={!completed && !isCancelled ? `${item.title} öffnen` : undefined}
+                      onClick={!completed && !isCancelled ? (event) => openWorkoutFromRow(item, event) : undefined}
+                      onKeyDown={!completed && !isCancelled ? (event) => openWorkoutFromKeyboard(item, event) : undefined}
                     >
                       <div>
                         <span>{workoutTimingLabel(item)} · {completed ? "ERLEDIGT" : isCancelled ? "AUSGEFALLEN" : isMissed ? "NICHT ERLEDIGT" : item.optional ? "OPTIONAL" : "PFLICHT"}</span>
@@ -1578,6 +1618,7 @@ export default function Planner() {
                         </div>
                       )}
                     </div>
+                    {reviewDestination && <span className="planner-review-cue">Review →</span>}
                     {!completed && (
                       <div className="planner-actions">
                         {isMissed && <button className="danger" onClick={() => openMissed(item)}>Grund angeben</button>}

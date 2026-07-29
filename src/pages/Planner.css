@@ -462,6 +462,12 @@
 }
 .planner-workout.completed div.planner-check{cursor:default}
 .planner-workout.completed .planner-workout-main>div>span{color:var(--success-bright);font-weight:900}
+.planner-workout-review-open{cursor:pointer;transition:background .16s ease,box-shadow .16s ease}
+.planner-workout-review-open:hover{background:color-mix(in srgb,var(--accent-surface) 72%,var(--bg-card-alt))}
+.planner-workout-review-open:focus-visible{outline:2px solid var(--accent);outline-offset:-3px;background:color-mix(in srgb,var(--accent-surface) 72%,var(--bg-card-alt))}
+.planner-workout-review-open h3{transition:color .16s ease}
+.planner-workout-review-open:hover h3,.planner-workout-review-open:focus-visible h3{color:var(--accent-bright)}
+.planner-review-cue{justify-self:end;color:var(--accent-bright);font-size:13px;font-weight:900;white-space:nowrap}
 .planner-workout.no-marker{grid-template-columns:minmax(0,1fr) auto}
 .planner-check.ready{border-color:var(--border-strong);background:var(--bg-input)}
 .planner-check.missed{border-color:#e75d50;color:#ff9a90}
@@ -469,4 +475,5 @@
 @media(max-width:800px){
   .planner-workout.no-marker{grid-template-columns:minmax(0,1fr)}
   .planner-workout.no-marker .planner-actions{grid-column:1}
+  .planner-review-cue{grid-column:2;justify-self:start}
 }

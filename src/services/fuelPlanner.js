@@ -155,7 +155,13 @@ function fuelExperience(activities = [], reviews = {}) {
     const energy = numeric(review?.energy);
     const rate = numeric(review?.carbohydratesPerHour)
       || (hours > 0 ? numeric(review?.nutritionCarbsTotal) / hours : 0);
-    const successful = hours >= 0.75 && rate > 0 && stomach >= 7 && energy >= 5;
+    const stomachSymptoms = (Array.isArray(review?.stomachSymptoms) ? review.stomachSymptoms : [])
+      .filter((symptom) => !String(symptom).startsWith("Keine"));
+    const successful = hours >= 0.75
+      && rate > 0
+      && stomach >= 7
+      && energy >= 5
+      && stomachSymptoms.length === 0;
 
     if (successful) {
       successfulRates.push(rate);

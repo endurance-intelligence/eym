@@ -39,3 +39,257 @@
     text-align: left;
   }
 }
+
+.review-summary-modal {
+  width: min(860px, 100%);
+}
+
+.review-summary-heading,
+.review-summary-section-heading,
+.review-summary-fuel,
+.review-summary-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.review-summary-heading {
+  padding-right: 44px;
+}
+
+.review-summary-heading h2 {
+  margin: 3px 0 0;
+}
+
+.review-summary-heading > span,
+.review-summary-section-heading > span {
+  flex: none;
+  padding: 6px 9px;
+  border: 1px solid var(--success-border);
+  border-radius: 999px;
+  background: var(--success-soft);
+  color: var(--success-bright);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.review-summary-section,
+.review-summary-coach {
+  display: grid;
+  gap: 13px;
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--bg-card-alt);
+}
+
+.review-summary-coach {
+  border-color: var(--accent-border-strong);
+  background: linear-gradient(145deg, var(--accent-surface), var(--surface));
+}
+
+.review-summary-section-heading > div {
+  display: grid;
+  gap: 3px;
+}
+
+.review-summary-section-heading small {
+  color: var(--accent-bright);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+
+.review-summary-section-heading strong {
+  font-size: 18px;
+}
+
+.review-summary-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.review-summary-facts span {
+  padding: 6px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--bg-input);
+  color: var(--text-soft);
+  font-size: 12px;
+}
+
+.review-summary-scores {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.review-summary-scores article,
+.review-summary-coach-metrics article {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-input);
+}
+
+.review-summary-scores small,
+.review-summary-coach-metrics small,
+.review-summary-fuel small {
+  color: var(--muted);
+}
+
+.review-summary-scores strong {
+  font-size: 18px;
+}
+
+.review-summary-alert {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--warning) 55%, var(--border));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--warning) 9%, var(--bg-input));
+}
+
+.review-summary-alert b {
+  color: var(--warning);
+}
+
+.review-summary-alert span {
+  color: var(--text-soft);
+}
+
+.review-summary-fuel {
+  align-items: flex-start;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-input);
+}
+
+.review-summary-fuel > div {
+  display: grid;
+  gap: 3px;
+}
+
+.review-summary-fuel > span {
+  color: var(--accent-bright);
+  font-size: 12px;
+  font-weight: 800;
+  text-align: right;
+}
+
+.review-summary-notes,
+.review-summary-coach > p,
+.review-summary-conclusion {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.review-summary-notes {
+  color: var(--muted-bright);
+}
+
+.review-summary-coach > p {
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 760;
+}
+
+.review-summary-coach-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.review-summary-coach-metrics article.tone-good {
+  border-color: var(--accent-border);
+}
+
+.review-summary-coach-metrics article.tone-watch {
+  border-color: color-mix(in srgb, var(--warning) 55%, var(--border));
+}
+
+.review-summary-conclusion {
+  padding: 11px 12px;
+  border-left: 3px solid var(--accent);
+  border-radius: 0 11px 11px 0;
+  background: var(--bg-input);
+}
+
+.review-summary-actions {
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.review-summary-actions button {
+  width: auto;
+}
+
+@media (max-width: 620px) {
+  .review-summary-modal {
+    padding: 20px 14px;
+  }
+
+  .review-summary-heading,
+  .review-summary-section-heading,
+  .review-summary-fuel {
+    align-items: flex-start;
+  }
+
+  .review-summary-heading > span {
+    display: none;
+  }
+
+  .review-summary-section-heading > span {
+    white-space: nowrap;
+  }
+
+  .review-summary-scores {
+    display: flex;
+    overflow-x: auto;
+    padding-bottom: 5px;
+    scroll-snap-type: x proximity;
+  }
+
+  .review-summary-scores article {
+    flex: 0 0 105px;
+    scroll-snap-align: start;
+  }
+
+  .review-summary-coach-metrics {
+    gap: 6px;
+  }
+
+  .review-summary-coach-metrics article {
+    padding: 9px 7px;
+  }
+
+  .review-summary-coach-metrics strong {
+    font-size: 14px;
+  }
+
+  .review-summary-fuel,
+  .review-summary-actions {
+    display: grid;
+  }
+
+  .review-summary-fuel > span {
+    text-align: left;
+  }
+
+  .review-summary-actions {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .review-summary-actions button {
+    width: 100%;
+  }
+}

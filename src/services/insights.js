@@ -29,6 +29,13 @@ function sessionText(activity) {
   return `${activity?.name || ""} ${activity?.type || ""} ${activity?.sportType || ""}`.toLowerCase();
 }
 
+function sessionReference(activity) {
+  const name = activity?.name || activity?.type || "Lockerer Lauf";
+  const date = String(activity?.startDateLocal || activity?.date || "").slice(0, 10);
+  const [, , month, day] = date.match(/^(\d{4})-(\d{2})-(\d{2})$/) || [];
+  return `„${name}“${day && month ? ` vom ${day}.${month}.` : ""}`;
+}
+
 function isKeySession(activity) {
   const text = sessionText(activity);
   return Boolean(
@@ -148,6 +155,7 @@ export function coachDashboard(activities = [], reviews = {}, now = new Date()) 
       : "Noch keine bewerteten lockeren Läufe mit Herzfrequenz- und Wetterdaten.",
   };
   let hrAlert = false;
+  let hrReference = "";
   if (warmEasy.length >= 2 && mildEasy.length >= 2) {
     const warmHr = average(warmEasy.map(({ activity }) => activity.avgHr));
     const mildHr = average(mildEasy.map(({ activity }) => activity.avgHr));
@@ -166,13 +174,14 @@ export function coachDashboard(activities = [], reviews = {}, now = new Date()) 
     const difference = baseline == null ? 0 : Math.round(Number(latest.activity.avgHr) - baseline);
     const temperature = Number(reviewWeather(latest.activity, latest.review)?.temperature);
     const zonesHigh = highZoneShare(latest.activity);
+    hrReference = sessionReference(latest.activity);
     hrAlert = difference >= 7 || zonesHigh >= 25;
     hrWeather = {
       value: baseline == null ? `${latest.activity.avgHr} bpm` : `${difference >= 0 ? "+" : ""}${difference} bpm zum Median`,
       tone: hrAlert ? "warn" : "good",
       text: hrAlert
-        ? `Der letzte lockere Lauf lag herzfrequenzseitig über deinem jüngsten persönlichen Muster${Number.isFinite(temperature) ? ` (${temperature.toFixed(0)} °C)` : ""}. Der Coach plant deshalb keine zusätzliche Qualität, bis sich der Wert normalisiert.`
-        : "Der letzte lockere Lauf liegt herzfrequenzseitig im persönlichen Bereich der vergangenen Wochen.",
+        ? `Der lockere Lauf ${hrReference} lag herzfrequenzseitig über deinem jüngsten persönlichen Muster${Number.isFinite(temperature) ? ` (${temperature.toFixed(0)} °C)` : ""}. Der bestehende Plan bleibt unverändert. Beobachte beim nächsten lockeren Lauf, ob sich die Herzfrequenz wieder normalisiert.`
+        : `Der lockere Lauf ${hrReference} liegt herzfrequenzseitig im persönlichen Bereich der vergangenen Wochen.`,
     };
   }
 
@@ -229,7 +238,9 @@ export function coachDashboard(activities = [], reviews = {}, now = new Date()) 
   if (tired >= 2) recommendation = "Beine oder Energie waren in den letzten zwei Wochen mehrfach niedrig. Umfang reduzieren, die nächste Qualitätseinheit verschieben und Erholung priorisieren.";
   else if (unexpectedHard >= 2) recommendation = "Mehrere Einheiten waren härter als ihr objektiver Trainingscharakter erwarten ließ oder wurden schlecht verarbeitet. Der nächste Trainingsreiz bleibt locker, bis Energie und Beine wieder normal sind.";
   else if (expectedHard >= 2) recommendation = "Die Woche enthielt mehrere bewusst harte Schlüsselreize. Das ist in Ordnung, solange Erholung, lockere Herzfrequenz und Beine in den Folgetagen stabil bleiben.";
-  else if (hrAlert) recommendation = "Herzfrequenz und Wetter zeigen aktuell ein Belastungssignal. Lockere Läufe nach Gefühl steuern und vorerst keine zusätzliche Qualität einbauen.";
+  else if (hrAlert) recommendation = hrReference
+    ? `Beim lockeren Lauf ${hrReference} lag die Herzfrequenz über deinem jüngsten persönlichen Muster. Der bestehende Plan bleibt unverändert. Steuere den nächsten lockeren Lauf nach Gefühl und prüfe, ob die Herzfrequenz wieder im üblichen Bereich liegt.`
+    : "Bei vergleichbaren warmen lockeren Läufen liegt die Herzfrequenz aktuell höher. Der bestehende Plan bleibt unverändert. Steuere den nächsten lockeren Lauf nach Gefühl und prüfe, ob die Herzfrequenz wieder im üblichen Bereich liegt.";
   else if (keyAlert) recommendation = "Die letzte Schlüsseleinheit war belastend. Der Coach schützt die nächsten Tage und baut erst danach wieder auf.";
   else if (lowFuel >= 1) recommendation = "Die körperliche Belastung ist grundsätzlich stabil, aber bei langen Läufen fehlt noch Energiezufuhr. Der nächste Longrun wird als Fuel-Test geplant.";
 
