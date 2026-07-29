@@ -108,7 +108,29 @@ function loadAssessment(state, activity) {
   return { value, tone, text, current, typical, ratio };
 }
 
+function stableEventReview(review = {}) {
+  const legSymptoms = Array.isArray(review.legSymptoms) ? review.legSymptoms : [];
+  return numeric(review.legs) >= 6
+    && numeric(review.energy) >= 6
+    && numeric(review.overallFeeling) >= 6
+    && !legSymptoms.includes("Schmerzen");
+}
+
 function recoveryAssessment(load, environment, elevation, activity, review) {
+  if (review?.isEvent && review.eventPlanningImpact === "depleted") {
+    return {
+      value: "48 h+ prüfen",
+      tone: "watch",
+      text: "Du meldest deutliche Erschöpfung. Die Folgetage werden nach deinem Zustand geplant, nicht nach einer pauschalen Eventpause.",
+    };
+  }
+  if (review?.isEvent && review.eventPlanningImpact === "training" && stableEventReview(review)) {
+    return {
+      value: "Normal weiter",
+      tone: "good",
+      text: "Als normaler Trainingsreiz verarbeitet; der Eventstatus löst keine zusätzliche Erholungspause aus.",
+    };
+  }
   let points = load.value === "Sehr hoch" ? 4 : load.value === "Hoch" ? 3 : load.value === "Moderat" ? 2 : 1;
   points += environment.score >= 2 ? 1 : 0;
   points += elevation.density >= 15 ? 1 : 0;
@@ -143,19 +165,30 @@ function goalRelevance(state, activity, elevation) {
 
 function subjectiveComparison(load, review) {
   const hasReview = numeric(review.rpe) > 0 || numeric(review.legs) > 0 || numeric(review.energy) > 0;
-  if (!hasReview) return "Deine persönliche Rückmeldung ergänzt diese Einschätzung.";
+  let eventText = "";
+  if (review?.isEvent && review.eventPlanningImpact === "training") {
+    eventText = stableEventReview(review)
+      ? "Du hast das Event wie eine normale Trainingseinheit verarbeitet. Der Eventstatus allein bremst die Folgewoche daher nicht."
+      : "Du hast das Event als trainingsähnlich eingeordnet. Auffällige Werte bei Beinen, Energie oder Beschwerden haben für die Folgewoche trotzdem Vorrang.";
+  } else if (review?.isEvent && review.eventPlanningImpact === "hard") {
+    eventText = "Du hast das Event als spürbar härter als Training eingeordnet. Der Coach richtet die Erholung nach deinen tatsächlichen Review-Werten aus.";
+  } else if (review?.isEvent && review.eventPlanningImpact === "depleted") {
+    eventText = "Du meldest, dass dich das Event deutlich geleert hat. Deshalb wird die Folgewoche zunächst vorsichtiger geplant.";
+  }
+  const withEventText = (text) => [eventText, text].filter(Boolean).join(" ");
+  if (!hasReview) return withEventText("Deine persönliche Rückmeldung ergänzt diese Einschätzung.");
   const stomachSymptoms = (Array.isArray(review.stomachSymptoms) ? review.stomachSymptoms : [])
     .filter((symptom) => !String(symptom).startsWith("Keine"));
   if (stomachSymptoms.length > 0) {
-    return `Dein Review zeigt Magenauffälligkeiten (${stomachSymptoms.join(", ")}). Prüfe bei ähnlich intensiven Einheiten besonders Gel-Timing, Trinkmenge und die Kombination der Produkte.`;
+    return withEventText(`Dein Review zeigt Magenauffälligkeiten (${stomachSymptoms.join(", ")}). Prüfe bei ähnlich intensiven Einheiten besonders Gel-Timing, Trinkmenge und die Kombination der Produkte.`);
   }
   const feelsGood = numeric(review.legs) >= 7 && numeric(review.energy) >= 7 && numeric(review.overallFeeling) >= 7;
   const feelsPoor = numeric(review.legs) <= 4 || numeric(review.energy) <= 4 || numeric(review.overallFeeling) <= 4 || (Array.isArray(review.legSymptoms) && review.legSymptoms.includes("Schmerzen"));
   const objectivelyHard = ["Hoch", "Sehr hoch"].includes(load.value);
-  if (objectivelyHard && feelsGood) return "Die Einheit war hart, wurde von dir aber gut vertragen.";
-  if (!objectivelyHard && feelsPoor) return "Die Messdaten wirken unauffällig, dein Gefühl fällt aber deutlich schwächer aus. Für die weitere Planung hat dein Review Vorrang.";
-  if (objectivelyHard && feelsPoor) return "Messdaten und dein Gefühl zeigen beide eine hohe Belastung. Beobachte die Folgetage bewusst.";
-  return "Dein Review bestätigt die objektive Einordnung weitgehend.";
+  if (objectivelyHard && feelsGood) return withEventText("Die Einheit war hart, wurde von dir aber gut vertragen.");
+  if (!objectivelyHard && feelsPoor) return withEventText("Die Messdaten wirken unauffällig, dein Gefühl fällt aber deutlich schwächer aus. Für die weitere Planung hat dein Review Vorrang.");
+  if (objectivelyHard && feelsPoor) return withEventText("Messdaten und dein Gefühl zeigen beide eine hohe Belastung. Beobachte die Folgetage bewusst.");
+  return withEventText("Dein Review bestätigt die objektive Einordnung weitgehend.");
 }
 
 function assessmentSummary(load, execution, environment, recovery) {
@@ -175,9 +208,13 @@ function assessmentSummary(load, execution, environment, recovery) {
   const environmentText = environment.score > 0
     ? ` ${environment.text.replace(/ erhöhen die äußere Belastung\.?$/, " haben die Einheit zusätzlich erschwert.")}`
     : "";
-  const recoveryText = recovery.value === "12–24 h"
-    ? ` Die nächsten ${recovery.value} reichen voraussichtlich für die normale Erholung.`
-    : ` Für die nächsten ${recovery.value} locker trainieren.`;
+  const recoveryText = recovery.value === "Normal weiter"
+    ? " Dein Review stuft das Event als normal verarbeiteten Trainingsreiz ein; eine zusätzliche Eventpause ist nicht nötig."
+    : recovery.value === "48 h+ prüfen"
+      ? " Du meldest deutliche Erschöpfung; die Folgetage werden deshalb vorsichtiger und anhand deines Zustands geplant."
+      : recovery.value === "12–24 h"
+        ? ` Die nächsten ${recovery.value} reichen voraussichtlich für die normale Erholung.`
+        : ` Für die nächsten ${recovery.value} locker trainieren.`;
   return `${loadLabel}${executionText}${environmentText}${recoveryText}`;
 }
 

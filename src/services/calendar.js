@@ -45,6 +45,7 @@ function containsDistance(title, distance) {
 
 function calendarIcon(item) {
   const text = `${item.type || ""} ${item.title || ""}`.toLowerCase();
+  if (item.raceEvent || /wettkampf|race|marathon/.test(text)) return "🏁";
   if (item.choicePending || /samstagsoption|oder/.test(text)) return "🔀";
   if (item.fixed || /fußball|football|soccer|orc run|orc track/.test(text)) return "📍";
   if (/long run|longrun|backyard|intervall|schwelle|threshold|tempo/.test(text)) return "🔑";

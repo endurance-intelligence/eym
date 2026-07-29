@@ -186,6 +186,29 @@
   text-align: right;
 }
 
+.event-review-fields .wide-field small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.review-summary-event-impact {
+  display: grid;
+  gap: 4px;
+  padding: 12px 13px;
+  border: 1px solid var(--accent-border);
+  border-radius: 12px;
+  background: var(--accent-surface);
+}
+
+.review-summary-event-impact small {
+  color: var(--muted);
+}
+
+.review-summary-event-impact strong {
+  color: var(--accent-bright);
+}
+
 .review-summary-notes,
 .review-summary-coach > p,
 .review-summary-conclusion {

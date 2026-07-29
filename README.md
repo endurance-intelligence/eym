@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **3.8.0**
+Current app version: **3.8.1**
 
 **Eat your miles.**
 
@@ -482,6 +482,16 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 - Place suggestions separate the result name from its surrounding location, so street names no longer appear twice.
 - The suggestion list is rendered as a bounded overlay instead of pushing the remaining event fields down the page.
 - No database migration or Supabase function deployment is required.
+
+## Goal-aware event weeks and review-controlled recovery v3.8.1
+
+- The weekly planner keeps the next A/B goal as its strategic training target. A C-priority preparation event shapes its own week without replacing the B goal the athlete is currently building toward.
+- Every event in the selected week is inserted as a fixed event session with its saved date, start time, distance, location and goal role.
+- Event weeks replace the normal long run and protect freshness from hard supplemental work for five days before A, four days before B and three days before C events. Fixed appointments remain visible but are converted into a suitable easy or optional event-week version where necessary.
+- Event entries sync to Intervals.icu as calendar notes rather than artificial guided Z2 workouts.
+- Event reviews explicitly record whether the event felt like a normal training session, was harder than training or left the athlete depleted.
+- A training-like C event with stable legs, energy and symptoms does not trigger an automatic recovery week. A depleted review can reduce the following week, but recovery is based on the athlete's actual feedback instead of a fixed multi-day event pause.
+- Existing goals, plans and reviews remain compatible. No database migration is required. Redeploy the `intervals` Supabase function after applying this version.
 
 For fresh installations that have not yet applied the athlete-image cleanup, run `supabase/migrations/20260722120000_athlete_images.sql` once. Afterwards run:
 

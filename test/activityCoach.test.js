@@ -67,3 +67,84 @@ test("activity coach calls out selected stomach symptoms instead of claiming goo
   assert.match(result.comparison, /Gel-Timing/);
   assert.doesNotMatch(result.comparison, /gut vertragen/);
 });
+
+test("training-like C event does not create an automatic event recovery pause", () => {
+  const activity = {
+    id: "c-event",
+    type: "Run",
+    name: "7. UrLand-Lauf Oerlinghausen",
+    date: "2026-08-21",
+    distance: 9.6,
+    duration: 52,
+    avgHr: 164,
+  };
+  const state = {
+    activities: [activity],
+    reviews: {},
+    plan: [{
+      id: "planned-event",
+      date: "2026-08-21",
+      title: "7. UrLand-Lauf Oerlinghausen",
+      type: "Wettkampf",
+      distance: 9.6,
+      duration: 52,
+      raceEvent: true,
+      goalPriority: "C",
+    }],
+    profile: {},
+    mission: {},
+  };
+
+  const result = activityCoachAssessment(state, activity, {
+    isEvent: true,
+    eventPlanningImpact: "training",
+    legs: 8,
+    energy: 8,
+    overallFeeling: 8,
+    rpe: 9,
+  });
+
+  assert.equal(result.recovery.value, "Normal weiter");
+  assert.match(result.summary, /zusätzliche Eventpause ist nicht nötig/i);
+  assert.match(result.comparison, /Eventstatus allein bremst die Folgewoche daher nicht/);
+});
+
+test("depleted event review overrides a generic recovery estimate without imposing a fixed five-day pause", () => {
+  const activity = {
+    id: "hard-event",
+    type: "Run",
+    name: "Backyard Ultra",
+    date: "2026-09-26",
+    distance: 100,
+    duration: 780,
+  };
+  const state = {
+    activities: [activity],
+    reviews: {},
+    plan: [{
+      id: "planned-event",
+      date: "2026-09-26",
+      title: "Backyard Ultra",
+      type: "Wettkampf",
+      distance: 100,
+      duration: 780,
+      raceEvent: true,
+      goalPriority: "B",
+    }],
+    profile: {},
+    mission: {},
+  };
+
+  const result = activityCoachAssessment(state, activity, {
+    isEvent: true,
+    eventPlanningImpact: "depleted",
+    legs: 7,
+    energy: 7,
+    overallFeeling: 6,
+    rpe: 9,
+  });
+
+  assert.equal(result.recovery.value, "48 h+ prüfen");
+  assert.match(result.recovery.text, /nicht nach einer pauschalen Eventpause/i);
+  assert.doesNotMatch(result.summary, /5 Tage/i);
+});

@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { isIntervalsOwner } from "../_shared/intervalsAccess.ts";
-import { intervalDescription, isProvisionalTrackPlanItem } from "../_shared/structuredWorkout.ts";
+import { intervalDescription, isGuidedPlanItem, isProvisionalTrackPlanItem } from "../_shared/structuredWorkout.ts";
 import { intervalsStartDateLocal } from "../_shared/plannerTiming.ts";
 
 const corsHeaders = {
@@ -75,15 +75,8 @@ function workoutType(item: Record<string, unknown>) {
   return "Run";
 }
 
-function isGuidedWorkout(item: Record<string, unknown>) {
-  const value = `${item.type || ""} ${item.title || ""}`.toLowerCase();
-  if (item.choicePending || /samstagsoption/.test(value)) return false;
-  return /run|lauf|orc|interval|schwelle|backyard|laufband|treadmill|rad|ride|bike|cycling/.test(value)
-    && !/fußball|football|soccer|stabi|mobility|mobilität|rudern|row|ruhetag|rest/.test(value);
-}
-
 function planEvent(item: Record<string, unknown>, existingId?: unknown) {
-  const guided = isGuidedWorkout(item);
+  const guided = isGuidedPlanItem(item);
   const externalId = `${PLAN_PREFIX}${String(item.id || crypto.randomUUID())}`;
   const base: Record<string, unknown> = {
     ...(existingId ? { id: existingId } : {}),

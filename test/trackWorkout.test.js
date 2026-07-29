@@ -17,7 +17,11 @@ import {
   updateTrackWorkoutDraft,
   workoutFromTrackTemplate,
 } from "../src/services/trackWorkout.js";
-import { intervalDescription, isProvisionalTrackPlanItem } from "../supabase/functions/_shared/structuredWorkout.ts";
+import {
+  intervalDescription,
+  isGuidedPlanItem,
+  isProvisionalTrackPlanItem,
+} from "../supabase/functions/_shared/structuredWorkout.ts";
 
 test("ORC Track receives a safe structured workout default", () => {
   assert.equal(isTrackWorkout({ type: "ORC Track" }), true);
@@ -167,6 +171,21 @@ test("new track definitions start provisional while legacy saved workouts remain
     type: "ORC Track",
     structuredWorkout: { planningStatus: "final" },
   }), false);
+});
+
+test("race events sync as calendar notes instead of synthetic guided Z2 workouts", () => {
+  assert.equal(isGuidedPlanItem({
+    type: "Wettkampf",
+    title: "7. UrLand-Lauf Oerlinghausen",
+    raceEvent: true,
+    calendarOnly: true,
+    distance: 9.6,
+  }), false);
+  assert.equal(isGuidedPlanItem({
+    type: "Easy Run",
+    title: "8 km locker",
+    distance: 8,
+  }), true);
 });
 
 test("Intervals description contains an ordered Garmin block and LAP-controlled edges", () => {

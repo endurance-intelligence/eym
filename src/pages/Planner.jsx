@@ -67,6 +67,10 @@ const reasonOptions = ["Termin fiel aus", "Keine Zeit", "Müde", "Schmerzen", "K
 const cancellationReasonOptions = ["Termin fiel aus", "Keine Zeit", "Müde", "Schmerzen", "Krankheit", "Wetter", "Bewusst ausgelassen", "Sonstiges"];
 const plannerDays = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"];
 
+function eventProtectionDays(priority) {
+  return { A: 5, B: 4, C: 3 }[priority] || 3;
+}
+
 function replacementWorkoutType(sport) {
   return {
     running: "Easy Run",
@@ -220,7 +224,7 @@ function normalizedType(value = "") {
   if (type.includes("mobility") || type.includes("mobilität") || type.includes("yoga")) return "mobility";
   if (type.includes("strength") || type.includes("stabi") || type.includes("workout") || type.includes("kraft")) return "strength";
   if (type.includes("rest") || type.includes("ruhe") || type.includes("erholungstag")) return "rest";
-  if (type.includes("run") || type.includes("lauf") || type.includes("treadmill") || type.includes("orc") || type.includes("backyard") || type.includes("interval") || type.includes("schwelle")) return "running";
+  if (type.includes("run") || type.includes("lauf") || type.includes("treadmill") || type.includes("orc") || type.includes("backyard") || type.includes("interval") || type.includes("schwelle") || type.includes("wettkampf") || type.includes("race") || type.includes("marathon") || type.includes("ultra")) return "running";
   return type;
 }
 
@@ -345,6 +349,7 @@ export default function Planner() {
     const value = item.date || "";
     return value >= isoDate(weekStart) && value <= isoDate(weekEnd) && !item.archived;
   }).sort((a, b) => `${a.date}${workoutSortTime(a)}${a.title || ""}`.localeCompare(`${b.date}${workoutSortTime(b)}${b.title || ""}`)), [state.plan, weekStart, weekEnd]);
+  const weekEventEntries = useMemo(() => weekPlan.filter((item) => item.raceEvent), [weekPlan]);
   const fuelRecommendations = useMemo(() => new Map(
     weekPlan
       .filter(isFuelRelevantWorkout)
@@ -988,10 +993,15 @@ export default function Planner() {
         lastRecoveryWeek: generated.recoveryWeek,
         lastPlanningTarget: generated.planningTarget || null,
         lastLoopStrategy: generated.loopStrategy || null,
+        lastEventWeek: generated.eventWeek || null,
       },
     }));
 
-    const loadLabel = generated.recoveryWeek ? "Entlastungswoche" : `Aufbauwoche ${generated.cycleWeek}/3`;
+    const loadLabel = generated.eventWeek
+      ? `${generated.eventWeek.label} · ${generated.eventWeek.protectionText}`
+      : generated.recoveryWeek
+        ? "Entlastungswoche"
+        : `Aufbauwoche ${generated.cycleWeek}/3`;
     const readinessNotes = generated.readiness.notes.length ? ` ${generated.readiness.notes.join(" ")}` : "";
     const targetLabel = generated.planningTarget?.name ? ` · Fokus ${generated.planningTarget.name}` : "";
     const loopLabel = generated.loopStrategy ? ` · Loop-Block ${generated.loopStrategy.loops} × ${String(generated.loopStrategy.loopKm).replace(".", ",")} km` : "";
@@ -1104,12 +1114,20 @@ export default function Planner() {
 
   function openWorkoutFromRow(item, event) {
     if (event.target.closest?.("button, a, input, select, textarea")) return;
+    if (item.raceEvent) {
+      navigate("/mission");
+      return;
+    }
     openWorkoutEditor(item);
   }
 
   function openWorkoutFromKeyboard(item, event) {
     if (event.target !== event.currentTarget || !["Enter", " "].includes(event.key)) return;
     event.preventDefault();
+    if (item.raceEvent) {
+      navigate("/mission");
+      return;
+    }
     openWorkoutEditor(item);
   }
 
@@ -1381,6 +1399,20 @@ export default function Planner() {
         <button onClick={() => setEditing(createBlank(weekStart))} disabled={isPastWeek || planningWeekPending}>+ Einheit</button>
       </section>
 
+      {weekEventEntries.length > 0 && (
+        <Card className="wide planner-event-week-card">
+          <div>
+            <p className="eyebrow">Eventwoche · Frische geschützt</p>
+            <h2>{weekEventEntries.map((item) => item.title).join(" · ")}</h2>
+            <p>Das Event ersetzt Longrun und harte Qualität. In den {Math.max(...weekEventEntries.map((item) => eventProtectionDays(item.goalPriority)))} Tagen davor werden intensive Zusatzbelastungen entschärft; danach ist Erholung eingeplant.</p>
+            {config.lastPlanningTarget?.name && <small>Strategischer Trainingsfokus bleibt: <strong>{config.lastPlanningTarget.name}</strong>.</small>}
+          </div>
+          <div className="planner-event-week-badges">
+            {weekEventEntries.map((item) => <span key={item.id}>Priorität {item.goalPriority || "B"} · {item.distance ? `${item.distance} km` : "Event"}{item.time ? ` · ${item.time} Uhr` : ""}</span>)}
+          </div>
+        </Card>
+      )}
+
       {planningWeekPending ? (
         <Card className={`wide planner-week-gate ${planningWeekLocked ? "locked" : "ready"}`}>
           <div>
@@ -1583,14 +1615,15 @@ export default function Planner() {
                       className={`planner-workout-main ${!completed && !isCancelled ? "planner-workout-open" : ""}`}
                       role={!completed && !isCancelled ? "button" : undefined}
                       tabIndex={!completed && !isCancelled ? 0 : undefined}
-                      title={!completed && !isCancelled ? "Training öffnen" : undefined}
-                      aria-label={!completed && !isCancelled ? `${item.title} öffnen` : undefined}
+                      title={!completed && !isCancelled ? item.raceEvent ? "Ziel öffnen" : "Training öffnen" : undefined}
+                      aria-label={!completed && !isCancelled ? `${item.title}: ${item.raceEvent ? "Ziel" : "Training"} öffnen` : undefined}
                       onClick={!completed && !isCancelled ? (event) => openWorkoutFromRow(item, event) : undefined}
                       onKeyDown={!completed && !isCancelled ? (event) => openWorkoutFromKeyboard(item, event) : undefined}
                     >
                       <div>
                         <span>{workoutTimingLabel(item)} · {completed ? "ERLEDIGT" : isCancelled ? "AUSGEFALLEN" : isMissed ? "NICHT ERLEDIGT" : item.optional ? "OPTIONAL" : "PFLICHT"}</span>
                         {item.weatherAdjusted && <em>WETTER</em>}
+                        {item.raceEvent && <em>EVENT {item.goalPriority || "B"}</em>}
                         {item.comboSession && <em>KOMBI-TAG</em>}
                         {item.doubleSession && <em>DOPPELTRAINING</em>}
                         {isProvisionalTrackWorkout(item) ? <em>VORLÄUFIG</em> : item.intervalsPublishedAt && <em>INTERVALS</em>}
@@ -1622,9 +1655,13 @@ export default function Planner() {
                     {!completed && (
                       <div className="planner-actions">
                         {isMissed && <button className="danger" onClick={() => openMissed(item)}>Grund angeben</button>}
-                        {isCancelled ? <button onClick={() => restoreCancelledWorkout(item)}>Wieder einplanen</button> : <button onClick={() => openWorkoutEditor(item)}>Bearbeiten</button>}
+                        {isCancelled
+                          ? <button onClick={() => restoreCancelledWorkout(item)}>Wieder einplanen</button>
+                          : item.raceEvent
+                            ? <button onClick={() => navigate("/mission")}>Ziel öffnen</button>
+                            : <button onClick={() => openWorkoutEditor(item)}>Bearbeiten</button>}
                         {!isPastWeek && !isCancelled && <button onClick={() => openAdjustment(item.id, "cancel")}>Fällt aus</button>}
-                        <button onClick={() => updateWorkout(item.id, { archived: true })}>Archiv</button>
+                        {!item.raceEvent && <button onClick={() => updateWorkout(item.id, { archived: true })}>Archiv</button>}
                       </div>
                     )}
                   </div>

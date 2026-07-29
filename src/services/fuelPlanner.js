@@ -53,7 +53,7 @@ export function isFuelRelevantWorkout(workout) {
   const text = `${workout?.title || ""} ${workout?.name || ""} ${workout?.type || ""}`.toLowerCase();
   if (/fußball|football|\brad(?:fahren)?\b|cycling|\bride\b|rudern|rowing|schwimm|swim|stabi|mobility|ruhetag/.test(text)) return false;
   return (numeric(workout.distance) > 0 || workoutDurationMinutes(workout) > 0)
-    && /\brun(?:ning)?\b|long ?run|lauf|track|intervall|interval|schwelle|tempo|backyard|loop|trail|treadmill|orc/.test(text);
+    && /\brun(?:ning)?\b|long ?run|lauf|track|intervall|interval|schwelle|tempo|backyard|loop|trail|treadmill|orc|wettkampf|race|marathon|ultra/.test(text);
 }
 
 function workoutDurationMinutes(workout) {

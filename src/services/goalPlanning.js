@@ -1,0 +1,162 @@
+const DAY_MS = 86400000;
+
+const EVENT_POLICIES = {
+  A: {
+    priority: "A",
+    label: "Hauptziel",
+    phaseLabel: "Eventwoche · Priorität A",
+    hardProtectionDays: 5,
+    supplementalShare: 0.18,
+    maxSupplementalKm: 10,
+    easyRunCapKm: 5,
+    maxGeneratedRuns: 1,
+  },
+  B: {
+    priority: "B",
+    label: "Wichtiges Zwischenziel",
+    phaseLabel: "Eventwoche · Priorität B",
+    hardProtectionDays: 4,
+    supplementalShare: 0.28,
+    maxSupplementalKm: 14,
+    easyRunCapKm: 6,
+    maxGeneratedRuns: 1,
+  },
+  C: {
+    priority: "C",
+    label: "Trainings-/Vorbereitungsevent",
+    phaseLabel: "Eventwoche · Priorität C",
+    hardProtectionDays: 3,
+    supplementalShare: 0.4,
+    maxSupplementalKm: 18,
+    easyRunCapKm: 8,
+    maxGeneratedRuns: 2,
+  },
+};
+
+function dateAtNoon(value) {
+  const date = new Date(`${String(value || "").slice(0, 10)}T12:00:00`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function eventKey(event) {
+  return String(event?.id || `${event?.date || ""}:${event?.name || ""}`);
+}
+
+export function eventPriority(event = {}) {
+  if (event.isMainTarget) return "A";
+  const value = String(event.priority || "").toUpperCase();
+  return EVENT_POLICIES[value] ? value : "B";
+}
+
+export function missionEvents(mission = {}) {
+  const stored = Array.isArray(mission?.milestones) ? mission.milestones : [];
+  const values = [...stored];
+  if (mission?.name && mission?.date && !values.some((event) => eventKey(event) === eventKey(mission))) {
+    values.push({
+      ...mission,
+      isMainTarget: true,
+      priority: "A",
+    });
+  }
+
+  const seen = new Set();
+  return values
+    .filter((event) => event?.date && !event.archived)
+    .map((event) => ({
+      ...event,
+      priority: eventPriority(event),
+      goalType: event.goalType || (event.targetTime ? "time" : "finish"),
+      targetKm: Math.max(0, Number(event.targetKm || 0)),
+      time: event.time || "",
+    }))
+    .filter((event) => {
+      const key = eventKey(event);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((left, right) => `${left.date}${left.time || ""}`.localeCompare(`${right.date}${right.time || ""}`));
+}
+
+export function selectStrategicTarget(mission = {}, referenceDate = new Date()) {
+  const reference = dateAtNoon(referenceDate instanceof Date
+    ? `${referenceDate.getFullYear()}-${String(referenceDate.getMonth() + 1).padStart(2, "0")}-${String(referenceDate.getDate()).padStart(2, "0")}`
+    : referenceDate);
+  const upcoming = missionEvents(mission).filter((event) => {
+    const date = dateAtNoon(event.date);
+    return date && (!reference || date >= reference);
+  });
+  const strategic = upcoming.filter((event) => event.priority !== "C");
+  return strategic[0] || upcoming[0] || null;
+}
+
+export function eventPolicy(priority) {
+  return EVENT_POLICIES[eventPriority({ priority })];
+}
+
+export function buildEventWeek(mission = {}, weekStart = new Date()) {
+  const start = new Date(weekStart);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 6);
+  end.setHours(23, 59, 59, 999);
+
+  const events = missionEvents(mission).filter((event) => {
+    const date = dateAtNoon(event.date);
+    return date && date >= start && date <= end;
+  });
+  if (!events.length) return null;
+
+  const primary = [...events].sort((left, right) => {
+    const rank = { A: 0, B: 1, C: 2 };
+    return rank[left.priority] - rank[right.priority]
+      || `${left.date}${left.time || ""}`.localeCompare(`${right.date}${right.time || ""}`);
+  })[0];
+  const policy = eventPolicy(primary.priority);
+  const totalDistanceKm = Number(events.reduce((sum, event) => sum + Number(event.targetKm || 0), 0).toFixed(1));
+
+  return {
+    ...policy,
+    primary,
+    events,
+    totalDistanceKm,
+    weekStart: `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-${String(start.getDate()).padStart(2, "0")}`,
+    protectionText: `${policy.hardProtectionDays * 24} Stunden ohne harte Zusatzbelastung vor ${primary.name}`,
+  };
+}
+
+export function eventDurationMinutes(event = {}) {
+  const match = String(event.targetTime || "").match(/^(\d{1,2}):([0-5]\d)(?::([0-5]\d))?$/);
+  if (match) {
+    const minutes = Number(match[1]) * 60 + Number(match[2]) + Number(match[3] || 0) / 60;
+    return Math.max(1, Math.round(minutes));
+  }
+  const distance = Math.max(0, Number(event.targetKm || 0));
+  return distance ? Math.max(20, Math.round(distance * (distance >= 50 ? 8 : 6.2))) : 60;
+}
+
+export function eventGoalLabel(event = {}) {
+  return {
+    finish: "Teilnehmen und schaffen",
+    time: event.targetTime ? `Zielzeit ${event.targetTime}` : "Mit Zielzeit absolvieren",
+    pb: event.targetTime ? `Bestzeit · Ziel ${event.targetTime}` : "Persönliche Bestzeit",
+    distance: "Distanz / Zeit maximieren",
+    training: "Vorbereitungs- und Trainingslauf",
+  }[event.goalType] || "Event absolvieren";
+}
+
+export function eventRelation(date, eventWeek) {
+  if (!eventWeek?.events?.length) return null;
+  const input = dateAtNoon(date);
+  if (!input) return null;
+  return eventWeek.events
+    .map((event) => {
+      const eventDate = dateAtNoon(event.date);
+      return {
+        event,
+        days: eventDate ? Math.round((eventDate - input) / DAY_MS) : 999,
+      };
+    })
+    .sort((left, right) => Math.abs(left.days) - Math.abs(right.days)
+      || String(left.event.date).localeCompare(String(right.event.date)))[0];
+}

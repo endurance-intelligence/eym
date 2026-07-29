@@ -116,8 +116,9 @@ export default function ReviewModal({ activity, onClose }) {
   const old = state.reviews[activity.id] || {};
   const hasStoredReview = Object.keys(old).length > 0;
   const [editingReview, setEditingReview] = useState(() => !hasStoredReview);
-  const detectedEvent = isOfficialEvent(activity, old);
   const activityDay = String(activity.startDateLocal || activity.date || "").slice(0, 10);
+  const plannedWorkout = !hasStoredReview ? plannedWorkoutForActivity(state, activity) : null;
+  const detectedEvent = isOfficialEvent(activity, old) || Boolean(plannedWorkout?.raceEvent);
   const inventoryApplies = (fuelItem) => Boolean(fuelItem && (!fuelItem.stockTrackedFrom || !activityDay || activityDay >= fuelItem.stockTrackedFrom));
   const defaultBottleVolumeMl = Number(state.profile?.defaultBottleVolumeMl || 650);
   const oldNutrition = (Array.isArray(old.nutritionItems) ? old.nutritionItems : []).filter((item) => !item.hydrationLinked).map((item) => {
@@ -134,7 +135,6 @@ export default function ReviewModal({ activity, onClose }) {
         : Boolean(item.fuelItemId && inventoryApplies(fuelItem)),
     };
   });
-  const plannedWorkout = !hasStoredReview ? plannedWorkoutForActivity(state, activity) : null;
   const plannedFuelRecommendation = plannedWorkout
     ? fuelRecommendationFromState(state, plannedWorkout, plannedWorkout.fuelMode)
     : null;
@@ -176,8 +176,9 @@ export default function ReviewModal({ activity, onClose }) {
     usedNutrition: old.usedNutrition ?? (oldNutrition.length > 0 || plannedNutrition.length > 0),
     nutritionItems: oldNutrition.length > 0 ? oldNutrition : plannedNutrition,
     isEvent: old.isEvent ?? detectedEvent,
-    eventTitle: old.eventTitle || (detectedEvent ? eventTitleFor(activity, old) : ""),
-    eventCategory: old.eventCategory || "Offizieller Lauf",
+    eventTitle: old.eventTitle || (plannedWorkout?.raceEvent ? plannedWorkout.title : detectedEvent ? eventTitleFor(activity, old) : ""),
+    eventCategory: old.eventCategory || (plannedWorkout?.goalPriority === "C" || plannedWorkout?.goalType === "training" ? "Trainingswettkampf" : "Offizieller Lauf"),
+    eventPlanningImpact: old.eventPlanningImpact || (plannedWorkout?.goalPriority === "C" ? "training" : "hard"),
   });
 
   useEffect(() => {
@@ -452,6 +453,9 @@ export default function ReviewModal({ activity, onClose }) {
         : review.drinkMl,
       usedNutrition: kind === "endurance" && review.usedNutrition,
       isEvent: kind === "endurance" && review.isEvent,
+      eventPlanningImpact: kind === "endurance" && review.isEvent ? review.eventPlanningImpact : null,
+      plannedEventId: plannedWorkout?.targetEventId || old.plannedEventId || null,
+      eventPriority: plannedWorkout?.goalPriority || old.eventPriority || null,
       nutritionCarbsTotal: kind === "endurance" ? Number(nutritionSummary.totalCarbs.toFixed(1)) : 0,
       carbohydratesPerHour: kind === "endurance" ? Number(nutritionSummary.carbsPerHour.toFixed(1)) : 0,
       nutritionSodiumTotal: kind === "endurance" ? Math.round(nutritionSummary.totalSodium) : 0,
@@ -506,6 +510,16 @@ export default function ReviewModal({ activity, onClose }) {
               <div className="review-summary-alert">
                 <b>Auffälligkeiten</b>
                 <span>{summarySymptoms.join(" · ")}</span>
+              </div>
+            )}
+            {kind === "endurance" && review.isEvent && (
+              <div className="review-summary-event-impact">
+                <small>Wirkung auf die Folgeplanung</small>
+                <strong>{{
+                  training: "Wie eine normale Trainingseinheit verarbeitet",
+                  hard: "Spürbar härter als Training",
+                  depleted: "Deutlich geleert · Erholung nötig",
+                }[review.eventPlanningImpact] || "Noch nicht bewertet"}</strong>
               </div>
             )}
             {kind === "endurance" && (review.usedNutrition || summaryDrinkMl > 0) && (
@@ -722,6 +736,14 @@ export default function ReviewModal({ activity, onClose }) {
                 <div className="event-review-fields">
                   <label>Eventname<input value={review.eventTitle} onChange={(event) => set("eventTitle", event.target.value)} placeholder={activity.name || activity.sourceName} /></label>
                   <label>Art<select value={review.eventCategory} onChange={(event) => set("eventCategory", event.target.value)}><option>Offizieller Lauf</option><option>Wettkampf</option><option>Spontanes Event</option><option>Trainingswettkampf</option></select></label>
+                  <label className="wide-field">Wirkung auf die nächste Trainingswoche
+                    <select value={review.eventPlanningImpact} onChange={(event) => set("eventPlanningImpact", event.target.value)}>
+                      <option value="training">Hat sich wie eine normale Trainingseinheit angefühlt</option>
+                      <option value="hard">War spürbar härter als Training</option>
+                      <option value="depleted">Hat mich deutlich geleert · Erholung nötig</option>
+                    </select>
+                    <small>Bei „normale Trainingseinheit“ erzwingt der Eventstatus keine zusätzliche Pause. Beine, Energie und Beschwerden werden weiterhin berücksichtigt.</small>
+                  </label>
                 </div>
               )}
             </section>

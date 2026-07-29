@@ -1,4 +1,12 @@
 import { reviewKind } from "./activityUtils.js";
+import {
+  buildEventWeek,
+  eventDurationMinutes,
+  eventGoalLabel,
+  eventPolicy,
+  eventRelation,
+  selectStrategicTarget,
+} from "./goalPlanning.js";
 
 const DAY_NAMES = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"];
 const DAY_INDEX = { Montag: 0, Dienstag: 1, Mittwoch: 2, Donnerstag: 3, Freitag: 4, Samstag: 5, Sonntag: 6 };
@@ -21,6 +29,7 @@ export const workoutTypes = [
   "Radfahren",
   "Schwimmen",
   "Mobility",
+  "Wettkampf",
   "Sonstiges",
   "Ruhetag",
 ];
@@ -86,7 +95,7 @@ function boundedNumber(value, minimum, maximum, fallback) {
 function isRunningPlanEntry(entry) {
   const value = `${entry?.type || ""} ${entry?.title || ""}`.toLowerCase();
   if (/rudern|rowing|rad|ride|bike|cycling|schwimm|swim|fußball|football|soccer|stabi|mobility|mobilität/.test(value)) return false;
-  return /run|lauf|orc|interval|schwelle|backyard|track|treadmill/.test(value);
+  return /run|lauf|orc|interval|schwelle|backyard|track|treadmill|wettkampf|race|marathon|ultra/.test(value);
 }
 
 function recentLongestRun(activities, weekStart) {
@@ -105,11 +114,7 @@ function daysToMission(mission, weekStart) {
 }
 
 function planningTarget(mission, weekStart) {
-  const milestones = Array.isArray(mission?.milestones) ? mission.milestones : [];
-  const candidates = milestones
-    .filter((entry) => entry?.date && !entry.archived && new Date(`${entry.date}T12:00:00`) >= weekStart)
-    .sort((left, right) => String(left.date).localeCompare(String(right.date)));
-  const selected = candidates[0] || (mission?.date ? mission : null);
+  const selected = selectStrategicTarget(mission, weekStart);
   if (!selected) return mission || {};
   const text = String(selected.name || "").toLowerCase();
   if (text.includes("backyard")) {
@@ -148,12 +153,15 @@ function loopTrainingPrescription(goal, daysLeft, longRun, cycle, recoveryWeek) 
   };
 }
 
-function trainingPhase(daysLeft) {
-  if (daysLeft <= 14) return { key: "taper", label: "Taper", factor: 0.62, longShare: 0.24 };
+function trainingPhase(daysLeft, priority = "A") {
+  const policy = eventPolicy(priority);
+  const taperDays = priority === "C" ? 7 : 14;
+  const taperFactor = priority === "A" ? 0.62 : priority === "B" ? 0.68 : 0.78;
+  if (daysLeft <= taperDays) return { key: "taper", label: `Taper für Priorität ${priority}`, factor: taperFactor, longShare: priority === "C" ? 0.27 : 0.24 };
   if (daysLeft <= 35) return { key: "peak", label: "Peak & Absicherung", factor: 0.94, longShare: 0.31 };
   if (daysLeft <= 84) return { key: "specific", label: "Zielspezifisch", factor: 1.03, longShare: 0.36 };
   if (daysLeft <= 140) return { key: "build", label: "Aufbau", factor: 1.02, longShare: 0.33 };
-  return { key: "base", label: "Grundlage", factor: 1, longShare: 0.3 };
+  return { key: "base", label: "Grundlage", factor: policy.priority === "C" ? 0.98 : 1, longShare: 0.3 };
 }
 
 function cycleWeek(mission, weekStart) {
@@ -238,6 +246,7 @@ function highZoneShare(activity) {
 }
 
 function isExpectedHardSession(activity, review) {
+  if (review?.isEvent && review?.eventPlanningImpact === "training") return false;
   const text = `${activity?.name || ""} ${activity?.type || ""} ${activity?.sportType || ""}`.toLowerCase();
   const durationMinutes = Number(activity?.durationSeconds || 0) / 60 || Number(activity?.duration || 0);
   const elevation = Number(activity?.elevation || activity?.elevationGain || 0);
@@ -251,6 +260,9 @@ function isExpectedHardSession(activity, review) {
 }
 
 function isUnexpectedHardSession(activity, review) {
+  if (review?.isEvent && review?.eventPlanningImpact === "training") {
+    return Number(review?.legs ?? 10) <= 4 || Number(review?.energy ?? 10) <= 4;
+  }
   const rpe = Number(review?.rpe || 0);
   if (Number(review?.legs ?? 10) <= 4 || Number(review?.energy ?? 10) <= 4) return true;
   if (rpe < 8) return false;
@@ -280,7 +292,9 @@ export function reviewGuidance(activities = [], reviews = {}, weekStart = new Da
   }).length;
   const unexpectedHard = endurance.filter((activity) => isUnexpectedHardSession(activity, reviews[activity.id])).length;
   const expectedHard = endurance.filter((activity) => isExpectedHardSession(activity, reviews[activity.id])).length;
+  const depletedEvents = endurance.filter((activity) => reviews[activity.id]?.isEvent && reviews[activity.id]?.eventPlanningImpact === "depleted").length;
   const highHr = endurance.filter((activity) => {
+    if (reviews[activity.id]?.isEvent) return false;
     const text = `${activity.name || ""} ${activity.type || ""}`.toLowerCase();
     const intendedEasy = /locker|easy|recovery|longrun|long run|orc run/.test(text) && !/intervall|schwelle|tempo|race|wettkampf/.test(text);
     return intendedEasy && highZoneShare(activity) >= 25 && Number(reviews[activity.id]?.rpe || 5) >= 6;
@@ -307,6 +321,11 @@ export function reviewGuidance(activities = [], reviews = {}, weekStart = new Da
     notes.push("Mehrere Einheiten waren härter als ihr Trainingscharakter erwarten ließ oder wurden schlecht verarbeitet: keine zusätzliche Qualitätseinheit.");
   } else if (expectedHard >= 2) {
     notes.push("Mehrere harte Schlüsselreize wurden als erwartbar erkannt. Sie zählen als Belastung, lösen ohne Erholungswarnung aber keine automatische Entlastung aus.");
+  }
+  if (depletedEvents >= 1) {
+    factor *= 0.78;
+    hardAllowed = false;
+    notes.push("Dein Event-Review meldet deutliche Erschöpfung: Die nächste Woche wird entlastet und ohne harte Zusatzbelastung geplant.");
   }
   if (highHr >= 1) {
     factor *= highHr >= 2 ? 0.86 : 0.93;
@@ -367,6 +386,237 @@ function item(weekStart, dayIndex, values) {
     spontaneous,
     time: spontaneous ? "" : values.time || "",
   };
+}
+
+function eventWeekTarget(base, readiness, eventWeek) {
+  if (!eventWeek) return null;
+  const readinessFactor = Math.max(0.35, Math.min(1, Number(readiness.factor || 1)));
+  const supplementalKm = Math.round(Math.min(
+    eventWeek.maxSupplementalKm,
+    base * eventWeek.supplementalShare,
+  ) * readinessFactor);
+  return Math.max(
+    Math.round(eventWeek.totalDistanceKm),
+    Math.round(eventWeek.totalDistanceKm + supplementalKm),
+  );
+}
+
+function weekDayIndex(weekStart, dateValue) {
+  const date = new Date(`${dateValue}T12:00:00`);
+  date.setHours(0, 0, 0, 0);
+  return Math.round((date - weekStart) / DAY_MS);
+}
+
+function addMissionEvents(plan, weekStart, eventWeek) {
+  if (!eventWeek) return;
+  eventWeek.events.forEach((event) => {
+    const dayIndex = weekDayIndex(weekStart, event.date);
+    if (dayIndex < 0 || dayIndex > 6) return;
+    const profile = [
+      Number(event.elevationGain || 0) > 0 ? `${Number(event.elevationGain)} hm aufwärts` : "",
+      event.surface ? `Untergrund ${event.surface}` : "",
+    ].filter(Boolean).join(" · ");
+    plan.push(item(weekStart, dayIndex, {
+      time: event.time || "",
+      title: event.name || "Event",
+      type: "Wettkampf",
+      distance: Number(event.targetKm || 0),
+      duration: eventDurationMinutes(event),
+      notes: [
+        `Priorität ${event.priority} · ${eventGoalLabel(event)}.`,
+        `Diese Einheit ersetzt die harte Schlüsseleinheit der Woche; der übrige Plan schützt deine Frische.`,
+        event.role ? `Rolle im Aufbau: ${event.role}.` : "",
+        profile,
+      ].filter(Boolean).join(" "),
+      optional: false,
+      fixed: true,
+      spontaneous: false,
+      race: true,
+      officialEvent: true,
+      raceEvent: true,
+      keySession: true,
+      calendarOnly: true,
+      targetEventId: event.id || null,
+      goalPriority: event.priority,
+      goalType: event.goalType,
+      location: event.location || "",
+      elevationGain: Number(event.elevationGain || 0),
+      elevationLoss: Number(event.elevationLoss || 0),
+      surface: event.surface || "",
+      fuelMode: "race",
+    }));
+  });
+}
+
+function isHardEventWeekEntry(entry) {
+  const text = `${entry?.type || ""} ${entry?.title || ""}`.toLowerCase();
+  return entry?.commitmentLoad === "high"
+    || /fußball|football|soccer|orc track|intervall|interval|schwelle|threshold|tempo|sprint|backyard|loop|long run|longrun/.test(text);
+}
+
+function isStrengthEntry(entry) {
+  return /stabi|mobility|mobilität|kraft|strength|rudern|rowing/.test(`${entry?.type || ""} ${entry?.title || ""}`.toLowerCase());
+}
+
+function eventProtectedMobility(entry, eventName, afterEvent = false) {
+  return {
+    ...entry,
+    title: afterEvent ? "Optionale Mobility zur Erholung" : "Kurze Mobility & Aktivierung",
+    type: "Mobility",
+    distance: 0,
+    duration: Math.min(15, Number(entry.duration || 15)),
+    optional: true,
+    eventProtection: true,
+    notes: afterEvent
+      ? `Erholung nach ${eventName}: nur lockere Mobilität, kein Kraft- oder Ruderreiz.`
+      : `Frische für ${eventName}: nur Mobilität und Aktivierung, keine ermüdende Kraftbelastung.`,
+  };
+}
+
+function applyEventWeekProtection(plan, weekStart, eventWeek) {
+  if (!eventWeek) return plan;
+  const protectedPlan = plan.flatMap((entry) => {
+    if (entry.raceEvent || entry.type === "Ruhetag") return [entry];
+    const relation = eventRelation(entry.date, eventWeek);
+    if (!relation) return [entry];
+    const eventName = relation.event.name || "das Event";
+    const running = isRunningPlanEntry(entry);
+    const hard = isHardEventWeekEntry(entry);
+    const strength = isStrengthEntry(entry);
+
+    if (relation.days === 0) {
+      if (strength) return [eventProtectedMobility(entry, eventName)];
+      if (!entry.fixed && !entry.commitmentId) return [];
+      return [{
+        ...entry,
+        title: `${entry.title} auslassen`,
+        distance: 0,
+        optional: true,
+        eventProtection: true,
+        notes: `${eventName} ist die Schlüsseleinheit des Tages. Dieser zusätzliche Fixtermin soll ausfallen.`,
+      }];
+    }
+
+    if (relation.days === 1) {
+      if (strength) return [eventProtectedMobility(entry, eventName)];
+      if (!entry.fixed && !entry.commitmentId) return [];
+      if (running && !hard) {
+        const distance = Math.min(4, Math.max(3, Number(entry.distance || 4)));
+        return [{
+          ...entry,
+          title: `${distance} km Shake-out optional`,
+          type: "Easy Run",
+          distance,
+          duration: Math.round(distance * 6.8),
+          optional: true,
+          eventProtection: true,
+          notes: `Nur wenn die Beine gut sind: sehr locker vor ${eventName}, keine Pace und keine Zusatzkilometer.`,
+        }];
+      }
+      return [{
+        ...entry,
+        title: `${entry.title} auslassen`,
+        distance: 0,
+        optional: true,
+        eventProtection: true,
+        notes: `Ruhetag vor ${eventName}: keine zusätzliche Belastung.`,
+      }];
+    }
+
+    if (relation.days > 1 && relation.days <= eventWeek.hardProtectionDays && hard) {
+      if (running) {
+        const distance = Math.min(5, Math.max(3, Number(entry.distance || 5)));
+        return [{
+          ...entry,
+          title: `${entry.title} · nur locker`,
+          type: "Easy Run",
+          distance,
+          duration: Math.round(distance * 6.6),
+          optional: false,
+          eventProtection: true,
+          structuredWorkout: null,
+          notes: `Frische für ${eventName}: keine Intervalle, keine Schwelle und kein Sprint. Nur locker mit höchstens vier kurzen Steigerungen.`,
+        }];
+      }
+      return [{
+        ...entry,
+        title: `${entry.title} auslassen für ${eventName}`,
+        distance: 0,
+        optional: true,
+        eventProtection: true,
+        notes: `${eventWeek.protectionText}. Dieser intensive Termin ist deshalb nur als Auslass-Hinweis eingeplant.`,
+      }];
+    }
+
+    if (relation.days > 0 && running && !hard) {
+      const distance = Math.min(eventWeek.easyRunCapKm, Math.max(3, Number(entry.distance || 4)));
+      return [{
+        ...entry,
+        title: entry.fixed || entry.commitmentId ? `${entry.title} · ${distance} km locker` : `${distance} km locker`,
+        type: "Easy Run",
+        distance,
+        duration: Math.round(distance * 6.5),
+        eventProtection: true,
+        structuredWorkout: null,
+        notes: `Locker im Frischerahmen für ${eventName}. Keine Zusatzkilometer und keine ungeplante Intensität.`,
+      }];
+    }
+
+    if (relation.days < 0) {
+      const daysAfter = Math.abs(relation.days);
+      if (strength) return [eventProtectedMobility(entry, eventName, true)];
+      if (daysAfter === 1 && !entry.fixed && !entry.commitmentId) return [];
+      if (hard && !running) {
+        return [{
+          ...entry,
+          title: `${entry.title} auslassen`,
+          distance: 0,
+          optional: true,
+          eventProtection: true,
+          notes: `Erholung nach ${eventName}: keine weitere intensive Belastung in dieser Eventwoche.`,
+        }];
+      }
+      if (running) {
+        const distance = Math.min(eventWeek.priority === "C" ? 5 : 4, Math.max(3, Number(entry.distance || 4)));
+        return [{
+          ...entry,
+          title: `${distance} km Recovery optional`,
+          type: "Easy Run",
+          distance,
+          duration: Math.round(distance * 7),
+          optional: true,
+          eventProtection: true,
+          structuredWorkout: null,
+          notes: `Nur zur lockeren Erholung nach ${eventName}. Bei schweren Beinen komplett auslassen.`,
+        }];
+      }
+    }
+
+    return [entry];
+  });
+
+  eventWeek.events.forEach((event) => {
+    const eventIndex = weekDayIndex(weekStart, event.date);
+    [
+      { index: eventIndex - 1, title: `Ruhetag vor ${event.name}`, notes: `Bewusste Frische für das Event mit Priorität ${event.priority}.` },
+      { index: eventIndex + 1, title: `Erholung nach ${event.name}`, notes: "Kein Nachholen ausgefallener Kilometer; Schlaf, Essen und lockere Bewegung haben Vorrang." },
+    ].forEach((rest) => {
+      if (rest.index < 0 || rest.index > 6) return;
+      const date = isoDate(dateForDay(weekStart, rest.index));
+      if (protectedPlan.some((entry) => entry.date === date)) return;
+      protectedPlan.push(item(weekStart, rest.index, {
+        title: rest.title,
+        type: "Ruhetag",
+        distance: 0,
+        duration: 0,
+        notes: rest.notes,
+        optional: false,
+        eventProtection: true,
+      }));
+    });
+  });
+
+  return protectedPlan;
 }
 
 function addStrengthSessions(plan, weekStart, config, readiness) {
@@ -550,7 +800,7 @@ function applyRecurringCommitments(plan, weekStart, config, mode = "all") {
   });
 }
 
-function distributeEasyKilometers(plan, weekStart, target, fixedKm, config, phase, readiness, cycle) {
+function distributeEasyKilometers(plan, weekStart, target, fixedKm, config, phase, readiness, cycle, eventWeek = null) {
   const allowed = new Set(Array.isArray(config.runDays) ? config.runDays : []);
   const trueDoubleDays = new Set(config.doubleTrainingDays || []);
 
@@ -567,7 +817,13 @@ function distributeEasyKilometers(plan, weekStart, target, fixedKm, config, phas
     "Samstag",
     "Sonntag",
     "Montag",
-  ].filter((day) => allowed.has(day) && (!hasEnduranceSession(day) || trueDoubleDays.has(day)));
+  ].filter((day) => {
+    if (!allowed.has(day) || (hasEnduranceSession(day) && !trueDoubleDays.has(day))) return false;
+    if (!eventWeek) return true;
+    const date = isoDate(dateForDay(weekStart, DAY_INDEX[day]));
+    const relation = eventRelation(date, eventWeek);
+    return !relation || ![0, 1].includes(relation.days);
+  });
 
   const remaining = Math.max(0, target - fixedKm);
   const defaultDesiredSessions = target >= 75 ? 3 : remaining > 12 ? 2 : 1;
@@ -576,7 +832,12 @@ function distributeEasyKilometers(plan, weekStart, target, fixedKm, config, phas
   const progressionSessions = acceptedTargetRunCount > 0 ? Math.max(0, acceptedTargetRunCount - existingRunSessions) : 0;
   const desiredSessions = acceptedTargetRunCount > 0 ? progressionSessions : defaultDesiredSessions;
   const maxSessionsByKilometers = remaining >= 4 ? Math.floor(remaining / 4) : remaining >= 3 ? 1 : 0;
-  const sessionCount = Math.min(desiredSessions, candidates.length, maxSessionsByKilometers);
+  const sessionCount = Math.min(
+    desiredSessions,
+    candidates.length,
+    maxSessionsByKilometers,
+    eventWeek?.maxGeneratedRuns ?? Number.POSITIVE_INFINITY,
+  );
   if (!sessionCount || remaining < 3) return;
 
   const weights = sessionCount === 1
@@ -591,23 +852,32 @@ function distributeEasyKilometers(plan, weekStart, target, fixedKm, config, phas
             return raw.map((value) => value / totalWeight);
           })();
   candidates.slice(0, sessionCount).forEach((day, index) => {
-    const distance = Math.max(4, Math.round(remaining * weights[index]));
+    const date = isoDate(dateForDay(weekStart, DAY_INDEX[day]));
+    const relation = eventRelation(date, eventWeek);
+    const afterEvent = Boolean(relation && relation.days < 0);
+    const rawDistance = Math.max(eventWeek ? 3 : 4, Math.round(remaining * weights[index]));
+    const distance = eventWeek ? Math.min(eventWeek.easyRunCapKm, rawDistance) : rawDistance;
     const paired = hasEnduranceSession(day);
-    const quality = day === "Freitag" && !paired && readiness.hardAllowed && ["build", "specific"].includes(phase.key) && cycle >= 2 && target >= 45;
+    const quality = !eventWeek && day === "Freitag" && !paired && readiness.hardAllowed && ["build", "specific"].includes(phase.key) && cycle >= 2 && target >= 45;
     plan.push(item(weekStart, DAY_INDEX[day], {
       time: paired ? "07:00" : "18:00",
-      title: quality ? `${distance} km mit Schwellenblock` : `${distance} km locker`,
+      title: quality ? `${distance} km mit Schwellenblock` : afterEvent ? `${distance} km Recovery optional` : `${distance} km locker`,
       type: quality ? "Schwellenlauf" : "Easy Run",
       distance,
-      duration: Math.round(distance * 6.4),
+      duration: Math.round(distance * (afterEvent ? 7 : 6.4)),
       notes: quality
         ? "Nur kontrolliert: Einlaufen, kurzer Schwellenblock und auslaufen."
+        : afterEvent
+          ? `Nur zur lockeren Erholung nach ${relation.event.name}. Bei schweren Beinen komplett auslassen.`
         : paired
           ? "Echter Doppeltrainingstag: sehr locker laufen und ausreichend Abstand zur zweiten Einheit lassen."
-          : "Locker laufen, keine Pace erzwingen.",
-      optional: index === sessionCount - 1 && target >= 55,
+          : eventWeek
+            ? `Locker im Frischerahmen für ${eventWeek.primary.name}. Keine Zusatzkilometer und keine ungeplante Intensität.`
+            : "Locker laufen, keine Pace erzwingen.",
+      optional: afterEvent || (index === sessionCount - 1 && target >= 55),
       doubleSession: paired,
       comboSession: false,
+      eventProtection: Boolean(eventWeek),
     }));
   });
 }
@@ -637,7 +907,11 @@ export function generateWeekPlan({
   const longestRecent = recentLongestRun(activities, historyCutoff) || reportedLongestRun;
   const goal = planningTarget(mission, weekStart);
   const daysLeft = daysToMission(goal, weekStart);
-  const phase = trainingPhase(daysLeft);
+  const eventWeek = buildEventWeek(mission, weekStart);
+  const strategicPhase = trainingPhase(daysLeft, goal?.priority || (goal?.isMainTarget ? "A" : "B"));
+  const phase = eventWeek
+    ? { key: "event", label: eventWeek.phaseLabel, factor: 1, longShare: 0 }
+    : strategicPhase;
   const cycle = cycleWeek(mission, weekStart);
   const scheduledRecoveryWeek = cycle === 4;
   const missedSignals = recentMissedSignals(planHistory, historyCutoff);
@@ -647,11 +921,13 @@ export function generateWeekPlan({
   const readiness = combineReadiness(checkinReadiness, reviewReadiness);
   const earlyRecoveryWeek = readiness.factor < 0.86 || !readiness.longRunAllowed || ["unchanged", "worse"].includes(config.checkin?.pain) || ["recovering", "symptoms"].includes(config.checkin?.illness);
   const recoveryWeek = scheduledRecoveryWeek || earlyRecoveryWeek;
-  const recoveryReason = scheduledRecoveryWeek
-    ? "Geplante Entlastung nach dem 3:1-Grundrhythmus."
-    : earlyRecoveryWeek
-      ? "Entlastung wurde wegen Befinden, Reviews oder ausgefallener Einheiten vorgezogen."
-      : "Belastungswoche innerhalb des adaptiven Aufbauzyklus.";
+  const recoveryReason = eventWeek
+    ? `${eventWeek.protectionText}. Das Event ersetzt Longrun und harte Qualität; danach ist Erholung eingeplant.`
+    : scheduledRecoveryWeek
+      ? "Geplante Entlastung nach dem 3:1-Grundrhythmus."
+      : earlyRecoveryWeek
+        ? "Entlastung wurde wegen Befinden, Reviews oder ausgefallener Einheiten vorgezogen."
+        : "Belastungswoche innerhalb des adaptiven Aufbauzyklus.";
   const hasRecurringCommitments = Array.isArray(config.recurringCommitments) && config.recurringCommitments.length > 0;
   const fixedAppointments = {
     football: hasRecurringCommitments ? false : config.fixedAppointments?.football !== false,
@@ -665,24 +941,29 @@ export function generateWeekPlan({
   const goalFallback = Math.max(25, Math.min(45, Number(goal?.targetKm || mission?.targetKm || 50) * 0.4));
   const base = recentAverage || (reportedWeeklyKmAvailable ? (reportedWeeklyKm || starterFallback) : goalFallback);
   const cycleFactor = recoveryWeek ? (scheduledRecoveryWeek ? 0.75 : 0.82) : [1, 1.04, 1.08][cycle - 1] || 1;
-  let target = base * cycleFactor * phase.factor * readiness.factor;
+  const protectedEventTarget = eventWeekTarget(base, readiness, eventWeek);
+  let target = protectedEventTarget ?? (base * cycleFactor * phase.factor * readiness.factor);
 
-  if (!recoveryWeek && phase.key !== "taper" && lastWeek > 0) target = Math.min(target, lastWeek * 1.1);
-  if (recentPeak > 0 && !recoveryWeek && phase.key !== "taper") target = Math.min(target, recentPeak * 1.1);
+  if (!eventWeek && !recoveryWeek && phase.key !== "taper" && lastWeek > 0) target = Math.min(target, lastWeek * 1.1);
+  if (!eventWeek && recentPeak > 0 && !recoveryWeek && phase.key !== "taper") target = Math.min(target, recentPeak * 1.1);
   const minimumTarget = recentAverage || reportedWeeklyKmAvailable
     ? Math.max(6, Math.min(22, Math.round(base * (readiness.longRunAllowed ? 0.8 : 0.65))))
     : readiness.longRunAllowed ? 22 : 12;
-  target = Math.max(minimumTarget, Math.round(target));
+  target = eventWeek
+    ? Math.max(Math.round(eventWeek.totalDistanceKm), Math.round(target))
+    : Math.max(minimumTarget, Math.round(target));
 
   const allowedRuns = new Set(Array.isArray(config.runDays) ? config.runDays : []);
   (config.recurringCommitments || [])
     .filter((entry) => entry?.enabled !== false && entry.sport === "running" && DAY_INDEX[entry.weekday] !== undefined)
     .forEach((entry) => allowedRuns.add(entry.weekday));
-  const wednesdayKm = fixedAppointments.orcRun ? Math.min(10, Math.max(6, Math.round(target * 0.18))) : 0;
-  const saturdayKm = fixedAppointments.saturdayMode !== "off" && phase.key !== "taper" && readiness.longRunAllowed
+  const wednesdayKm = fixedAppointments.orcRun
+    ? Math.min(eventWeek?.easyRunCapKm || 10, Math.max(eventWeek ? 4 : 6, Math.round(target * 0.18)))
+    : 0;
+  const saturdayKm = !eventWeek && fixedAppointments.saturdayMode !== "off" && phase.key !== "taper" && readiness.longRunAllowed
     ? Math.min(10, Math.max(recoveryWeek ? 5 : 6, Math.round(target * 0.13)))
     : 0;
-  const desiredLong = Math.round(target * phase.longShare * (recoveryWeek ? 0.82 : 1));
+  const desiredLong = eventWeek ? 0 : Math.round(target * phase.longShare * (recoveryWeek ? 0.82 : 1));
   const starterBaseline = !recentAverage && reportedWeeklyKmAvailable && reportedWeeklyKm < 20;
   const minimumLongRun = starterBaseline ? (base >= 14 ? 6 : 4) : 12;
   const progressionCap = longestRecent > 0
@@ -690,7 +971,7 @@ export function generateWeekPlan({
     : starterBaseline
       ? Math.max(minimumLongRun, Math.round(base * 0.55))
       : desiredLong;
-  const longRun = readiness.longRunAllowed
+  const longRun = !eventWeek && readiness.longRunAllowed
     ? Math.max(minimumLongRun, Math.min(desiredLong, progressionCap, Number(config.maxLongRun || 38)))
     : 0;
   const loopPrescription = loopTrainingPrescription(goal, daysLeft, longRun, cycle, recoveryWeek);
@@ -776,6 +1057,7 @@ export function generateWeekPlan({
   }
 
   applyRecurringCommitments(plan, weekStart, config, "running");
+  addMissionEvents(plan, weekStart, eventWeek);
 
   const trueDoubleDays = new Set(config.doubleTrainingDays || []);
   const longRunDay = ["Sonntag", "Samstag", "Freitag", "Donnerstag", "Mittwoch", "Dienstag", "Montag"]
@@ -806,10 +1088,11 @@ export function generateWeekPlan({
   }
 
   const fixedKm = plan.reduce((sum, entry) => sum + Number(entry.distance || 0), 0);
-  distributeEasyKilometers(plan, weekStart, target, fixedKm, config, phase, readiness, cycle);
+  distributeEasyKilometers(plan, weekStart, target, fixedKm, config, phase, readiness, cycle, eventWeek);
   applyExtraOrcTrack(plan, weekStart, fixedAppointments.extraOrcTrackDay, config);
   applyRecurringCommitments(plan, weekStart, config, "non-running");
   addStrengthSessions(plan, weekStart, config, readiness);
+  plan = applyEventWeekProtection(plan, weekStart, eventWeek);
 
   if (!readiness.hardAllowed) {
     const painLevel = Number(config.checkin?.painLevel || 0);
@@ -898,11 +1181,16 @@ export function generateWeekPlan({
     plan = plan.filter((entry) => entry.date >= todayKey);
     const remainingTarget = Math.max(0, target - Number(completedRunningKm || 0));
     const runEntries = plan.filter((entry) => Number(entry.distance || 0) > 0 && isRunningPlanEntry(entry));
-    const generatedRunKm = runEntries.reduce((sum, entry) => sum + Number(entry.distance || 0), 0);
-    if (generatedRunKm > 0 && remainingTarget < generatedRunKm) {
-      const factor = remainingTarget / generatedRunKm;
+    const protectedRaceKm = runEntries
+      .filter((entry) => entry.raceEvent)
+      .reduce((sum, entry) => sum + Number(entry.distance || 0), 0);
+    const adjustableRunEntries = runEntries.filter((entry) => !entry.raceEvent);
+    const generatedRunKm = adjustableRunEntries.reduce((sum, entry) => sum + Number(entry.distance || 0), 0);
+    const adjustableTarget = Math.max(0, remainingTarget - protectedRaceKm);
+    if (generatedRunKm > 0 && adjustableTarget < generatedRunKm) {
+      const factor = adjustableTarget / generatedRunKm;
       plan = plan.map((entry) => {
-        if (!runEntries.some((runEntry) => runEntry.id === entry.id)) return entry;
+        if (!adjustableRunEntries.some((runEntry) => runEntry.id === entry.id)) return entry;
         const adjusted = Math.max(entry.optional ? 0 : 3, Math.round(Number(entry.distance || 0) * factor));
         return {
           ...entry,
@@ -910,7 +1198,7 @@ export function generateWeekPlan({
           title: entry.title.replace(/^\d+(?:[.,]\d+)?\s*km/, `${adjusted} km`),
           notes: `${entry.notes} Bereits absolvierte Laufkilometer dieser Woche wurden berücksichtigt.`,
         };
-      }).filter((entry) => Number(entry.distance || 0) > 0 || ["Fußball", "Stabi", "Rudern", "Ruhetag"].includes(entry.type));
+      }).filter((entry) => Number(entry.distance || 0) > 0 || ["Fußball", "Stabi", "Mobility", "Rudern", "Ruhetag", "Wettkampf"].includes(entry.type));
     }
   }
 
@@ -929,6 +1217,12 @@ export function generateWeekPlan({
     } : entry;
   });
   plan.sort((a, b) => `${a.date}${a.time || ""}`.localeCompare(`${b.date}${b.time || ""}`));
+  if (eventWeek) {
+    const plannedRunningKm = plan
+      .filter((entry) => !entry.plannedCancellation && isRunningPlanEntry(entry))
+      .reduce((sum, entry) => sum + Number(entry.distance || 0), 0);
+    if (plannedRunningKm > 0) target = Math.round(plannedRunningKm);
+  }
 
   return {
     plan,
@@ -944,7 +1238,35 @@ export function generateWeekPlan({
     recoveryReason,
     readiness,
     daysLeft,
-    planningTarget: goal ? { id: goal.id, name: goal.name, date: goal.date, targetKm: goal.targetKm, targetMinKm: goal.targetMinKm, targetMaxKm: goal.targetMaxKm, goalKind: goal.goalKind } : null,
+    planningTarget: goal ? {
+      id: goal.id,
+      name: goal.name,
+      date: goal.date,
+      time: goal.time || "",
+      targetKm: goal.targetKm,
+      targetMinKm: goal.targetMinKm,
+      targetMaxKm: goal.targetMaxKm,
+      goalKind: goal.goalKind,
+      priority: goal.priority || (goal.isMainTarget ? "A" : "B"),
+      goalType: goal.goalType || "finish",
+    } : null,
+    eventWeek: eventWeek ? {
+      weekStart: eventWeek.weekStart,
+      priority: eventWeek.priority,
+      label: eventWeek.label,
+      phaseLabel: eventWeek.phaseLabel,
+      hardProtectionDays: eventWeek.hardProtectionDays,
+      protectionText: eventWeek.protectionText,
+      events: eventWeek.events.map((event) => ({
+        id: event.id,
+        name: event.name,
+        date: event.date,
+        time: event.time || "",
+        targetKm: event.targetKm,
+        priority: event.priority,
+        goalType: event.goalType,
+      })),
+    } : null,
     loopStrategy: loopPrescription,
     history: history.map((week) => ({ start: isoDate(week.start), km: Math.round(week.km * 10) / 10 })),
     weatherNote: fridayWeather?.indoor ? "Freitag wetterbedingt angepasst." : "",

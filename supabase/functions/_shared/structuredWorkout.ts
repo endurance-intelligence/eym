@@ -87,6 +87,13 @@ export function isProvisionalTrackPlanItem(item: Record<string, unknown>) {
       && (structuredWorkout as Record<string, unknown>).planningStatus === "draft");
 }
 
+export function isGuidedPlanItem(item: Record<string, unknown>) {
+  const value = `${item.type || ""} ${item.title || ""}`.toLowerCase();
+  if (item.calendarOnly || item.raceEvent || item.choicePending || /samstagsoption/.test(value)) return false;
+  return /run|lauf|orc|interval|schwelle|backyard|laufband|treadmill|rad|ride|bike|cycling/.test(value)
+    && !/fußball|football|soccer|stabi|mobility|mobilität|rudern|row|ruhetag|rest/.test(value);
+}
+
 export function intervalDescription(item: Record<string, unknown>) {
   const title = String(item.title || "");
   const type = String(item.type || "");
