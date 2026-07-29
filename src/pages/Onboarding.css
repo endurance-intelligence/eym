@@ -76,6 +76,32 @@
 .onboarding-metric-inputs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:18px}.onboarding-metric-inputs label{padding:16px;border:1px solid var(--border);border-radius:16px;background:var(--bg-card-alt)}.onboarding-metric-inputs label>span{color:var(--muted-bright);font-size:11px;text-transform:uppercase;letter-spacing:.06em}.onboarding-metric-inputs input{font-size:21px;font-weight:850}
 .onboarding-field-note{color:var(--muted);font-size:10px;font-weight:500;line-height:1.35}
 .onboarding-info-strip{display:flex;align-items:flex-start;gap:11px;margin-top:16px;padding:13px 15px;border-left:3px solid var(--accent);background:var(--accent-soft);color:var(--muted-bright);font-size:12px;line-height:1.5}.onboarding-info-strip b{flex:0 0 auto;color:var(--text)}
+.onboarding-data-flow{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px;margin-bottom:16px}
+.onboarding-data-flow article{display:flex;gap:13px;padding:16px;border:1px solid var(--border);border-radius:16px;background:var(--bg-input)}
+.onboarding-data-flow article>span{display:grid;place-items:center;width:34px;height:34px;flex:0 0 34px;border-radius:11px;background:var(--accent-surface-strong);color:var(--accent-bright);font-size:18px;font-weight:900}
+.onboarding-data-flow article div{display:grid;gap:5px}.onboarding-data-flow strong{font-size:13px}.onboarding-data-flow p{margin:0;color:var(--muted);font-size:10px;line-height:1.5}
+.onboarding-intervals-card{padding:20px;border:1px solid var(--accent-border);border-radius:20px;background:linear-gradient(145deg,var(--accent-surface),var(--bg-input))}
+.onboarding-intervals-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}.onboarding-intervals-heading h2{margin:4px 0 0;font-size:21px}
+.onboarding-connected-badge{padding:7px 10px;border:1px solid var(--accent-border-strong);border-radius:999px;background:var(--accent-surface-strong);color:var(--accent-bright);font-size:10px;font-weight:900;white-space:nowrap}
+.onboarding-intervals-guide{display:grid;gap:1px;margin:18px 0;padding:0;list-style:none}
+.onboarding-intervals-guide li{display:grid;grid-template-columns:auto 1fr;gap:12px;padding:13px 0;border-top:1px solid var(--border)}
+.onboarding-intervals-guide li:last-child{border-bottom:1px solid var(--border)}
+.onboarding-intervals-guide li>span{display:grid;place-items:center;width:28px;height:28px;border:1px solid var(--accent-border);border-radius:9px;color:var(--accent-bright);font-size:10px;font-weight:900}
+.onboarding-intervals-guide li>div{display:grid;gap:4px}.onboarding-intervals-guide strong{font-size:13px}.onboarding-intervals-guide p{margin:0;color:var(--muted-bright);font-size:11px;line-height:1.45}
+.onboarding-link-row{display:flex;flex-wrap:wrap;gap:12px;margin-top:5px}.onboarding-link-row a,.onboarding-garmin-note>a{color:var(--accent-bright);font-size:10px;font-weight:800;text-decoration:none}.onboarding-link-row a:hover,.onboarding-garmin-note>a:hover{text-decoration:underline}
+.onboarding-api-key-panel{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:10px}
+.onboarding-api-key-panel label{display:grid;gap:7px;color:var(--text-soft);font-size:11px;font-weight:750}
+.onboarding-secret-input{display:grid;grid-template-columns:minmax(0,1fr) auto}
+.onboarding-secret-input input{min-width:0;min-height:47px;border:1px solid var(--border-strong);border-radius:12px 0 0 12px;background:var(--bg-body);padding:11px 12px;color:var(--text);outline:0}.onboarding-secret-input input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.onboarding-secret-input button{border-left:0;border-radius:0 12px 12px 0;background:var(--bg-card);color:var(--muted-bright);font-size:10px}
+.onboarding-connect-button{min-height:47px;white-space:nowrap}
+.onboarding-reconnect{margin-top:4px}.onboarding-reconnect summary{cursor:pointer;color:var(--muted-bright);font-size:11px;font-weight:750}.onboarding-reconnect[open] summary{margin-bottom:12px}
+.onboarding-connection-message{margin:13px 0 0;padding:11px 13px;border-radius:12px;font-size:11px;line-height:1.45}.onboarding-connection-message.success{border:1px solid var(--accent-border);background:var(--accent-soft);color:var(--accent-bright)}.onboarding-connection-message.error{border:1px solid #8f4d4d;background:#3c1f1f;color:#ffb2b2}
+.onboarding-secret-note{display:flex;align-items:flex-start;gap:10px;margin-top:14px;padding:12px;border:1px dashed var(--border-strong);border-radius:13px}
+.onboarding-secret-note>span{font-size:14px}.onboarding-secret-note p{display:grid;gap:3px;margin:0}.onboarding-secret-note b{font-size:10px}.onboarding-secret-note small{color:var(--muted);font-size:9px;line-height:1.45}
+.onboarding-garmin-note{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-top:12px;padding:14px 16px;border:1px solid var(--border);border-radius:16px;background:var(--bg-card-alt)}
+.onboarding-garmin-note>div{display:flex;align-items:flex-start;gap:11px}.onboarding-garmin-note>div>span{display:grid;place-items:center;width:31px;height:31px;flex:0 0 31px;border-radius:10px;background:#173c58;color:#85d1ff;font-size:11px;font-weight:950}
+.onboarding-garmin-note p{display:grid;gap:4px;margin:0}.onboarding-garmin-note strong{font-size:11px}.onboarding-garmin-note small{max-width:520px;color:var(--muted);font-size:9px;line-height:1.45}
 .mission-mode-grid{grid-template-columns:repeat(2,minmax(0,1fr));margin-bottom:20px}.mission-mode-grid button>span{font-size:24px;line-height:1}.mission-fields{margin-top:0}.onboarding-empty-choice{margin-top:22px}
 .onboarding-week-section{padding:20px 0;border-top:1px solid var(--border)}.onboarding-week-section:last-of-type{border-bottom:1px solid var(--border)}
 .onboarding-section-title{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:15px}.onboarding-section-title>div{display:flex;align-items:center;gap:10px}.onboarding-section-title>div>span{display:grid;place-items:center;width:27px;height:27px;border:1px solid var(--accent-border);border-radius:9px;color:var(--accent);font-size:10px;font-weight:900}.onboarding-section-title h2{margin:0;font-size:18px}.onboarding-section-title>small{max-width:360px;color:var(--muted);font-size:11px;line-height:1.4;text-align:right}
@@ -107,9 +133,11 @@
 @media(max-width:700px){
   .onboarding-step{padding:31px 18px 25px}
   .onboarding-heading{margin-bottom:23px}.onboarding-heading h1{font-size:clamp(36px,11vw,49px)}.onboarding-heading>p:last-child{font-size:14px}
-  .level-grid,.mission-mode-grid,.onboarding-form-grid,.onboarding-metric-inputs,.onboarding-summary-grid{grid-template-columns:1fr}.onboarding-form-grid .wide-field,.onboarding-summary-grid .wide-summary{grid-column:auto}
+  .level-grid,.mission-mode-grid,.onboarding-form-grid,.onboarding-metric-inputs,.onboarding-summary-grid,.onboarding-data-flow{grid-template-columns:1fr}.onboarding-form-grid .wide-field,.onboarding-summary-grid .wide-summary{grid-column:auto}
   .onboarding-choice-grid button{min-height:auto}
   .onboarding-info-strip{display:grid}
+  .onboarding-api-key-panel{grid-template-columns:1fr}.onboarding-connect-button{width:100%}
+  .onboarding-garmin-note{align-items:flex-start;flex-direction:column}
   .onboarding-section-title{display:grid;gap:7px}.onboarding-section-title>small{text-align:left}
   .onboarding-day-picker>div{grid-template-columns:repeat(7,minmax(36px,1fr));overflow-x:auto;padding-bottom:3px}
   .onboarding-conflict-options>div,.onboarding-final-note{grid-template-columns:1fr}
@@ -118,6 +146,7 @@
 @media(max-width:460px){
   .onboarding-mobile-head{padding:15px}
   .onboarding-highlight,.onboarding-empty-choice{padding:15px}
+  .onboarding-intervals-card{padding:15px}.onboarding-intervals-heading{display:grid}.onboarding-connected-badge{justify-self:start}
   .onboarding-count-picker{gap:5px}.onboarding-count-picker button{padding:10px 2px}
   .onboarding-day-picker>div{grid-template-columns:repeat(7,38px)}
   .onboarding-commitment-editor{padding:13px}

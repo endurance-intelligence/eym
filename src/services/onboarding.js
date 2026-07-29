@@ -1,6 +1,7 @@
-export const ONBOARDING_VERSION = 1;
+export const ONBOARDING_VERSION = 2;
 export const ONBOARDING_STEPS = [
   { key: "profile", label: "Über dich" },
+  { key: "intervals", label: "Daten verbinden" },
   { key: "baseline", label: "Ausgangslage" },
   { key: "mission", label: "Dein Ziel" },
   { key: "week", label: "Deine Woche" },
@@ -77,6 +78,15 @@ export function normalizeOnboarding(state = {}) {
     };
   }
 
+  if (current.status === "pending" && current.migratedFromExistingData === false) {
+    return {
+      version: Math.max(ONBOARDING_VERSION, numeric(current.version)),
+      status: "pending",
+      completedAt: null,
+      migratedFromExistingData: false,
+    };
+  }
+
   if (hasEstablishedAthleteData(state)) {
     return {
       version: ONBOARDING_VERSION,
@@ -124,12 +134,19 @@ export function createOnboardingDraft(state = {}) {
     stabiDays: [],
     recurringCommitments: [],
     coachProgressionEnabled: true,
+    intervalsConnected: Boolean(state.intervals?.connected),
+    intervalsImportedActivities: 0,
+    baselineSource: "",
   };
 }
 
 export function onboardingStepError(stepKey, draft = {}) {
   if (stepKey === "profile" && !String(draft.displayName || "").trim()) {
     return "Bitte sag deinem Coach, wie er dich ansprechen darf.";
+  }
+
+  if (stepKey === "intervals" && !draft.intervalsConnected) {
+    return "Bitte verbinde zuerst dein persönliches Intervals.icu-Konto.";
   }
 
   if (stepKey === "baseline") {
@@ -170,6 +187,46 @@ export function onboardingStepError(stepKey, draft = {}) {
   }
 
   return "";
+}
+
+function runningActivity(activity) {
+  const value = `${activity?.category || ""} ${activity?.type || ""} ${activity?.sportType || ""}`.toLowerCase();
+  return activity && (/running/.test(value) || /\brun\b/.test(value) || /trailrun|virtualrun/.test(value));
+}
+
+function activityTimestamp(activity) {
+  const value = activity?.startDateLocal || activity?.date;
+  const timestamp = value ? new Date(value).getTime() : Number.NaN;
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+export function onboardingBaselineFromActivities(activities = [], now = new Date()) {
+  const end = new Date(now);
+  end.setHours(23, 59, 59, 999);
+  const sixWeeksAgo = new Date(end);
+  sixWeeksAgo.setDate(sixWeeksAgo.getDate() - 42);
+  const eightWeeksAgo = new Date(end);
+  eightWeeksAgo.setDate(eightWeeksAgo.getDate() - 56);
+
+  const runs = (Array.isArray(activities) ? activities : [])
+    .filter(runningActivity)
+    .map((activity) => ({ activity, timestamp: activityTimestamp(activity) }))
+    .filter((entry) => entry.timestamp != null && entry.timestamp <= end.getTime());
+  const sixWeekRuns = runs.filter((entry) => entry.timestamp >= sixWeeksAgo.getTime());
+  const eightWeekRuns = runs.filter((entry) => entry.timestamp >= eightWeeksAgo.getTime());
+  const weeklyKm = sixWeekRuns.reduce((sum, entry) => sum + Number(entry.activity.distance || 0), 0) / 6;
+  const longestRunKm = eightWeekRuns.reduce(
+    (longest, entry) => Math.max(longest, Number(entry.activity.distance || 0)),
+    0,
+  );
+
+  return {
+    hasData: eightWeekRuns.length > 0,
+    activityCount: eightWeekRuns.length,
+    currentRunsPerWeek: Math.round((sixWeekRuns.length / 6) * 2) / 2,
+    weeklyKm: Number(weeklyKm.toFixed(1)),
+    longestRunKm: Number(longestRunKm.toFixed(1)),
+  };
 }
 
 function goalFromDraft(draft, preparationStartDate, idFactory) {
@@ -258,6 +315,11 @@ export function completeOnboardingState(
       doubleTrainingDays: [],
       recurringCommitments: commitments,
       legacyMigrationComplete: true,
+    },
+    intervals: {
+      ...state.intervals,
+      configured: Boolean(draft.intervalsConnected || state.intervals?.configured),
+      connected: Boolean(draft.intervalsConnected || state.intervals?.connected),
     },
   };
 }

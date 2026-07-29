@@ -8,7 +8,12 @@ import { downloadStateBackup, readStateBackup, resetState } from "../services/st
 import { defaultState } from "../data/defaults";
 import { mergeGarminActivities, readGarminExport } from "../services/garminImport";
 import { calendarSubscriptionUrl } from "../services/supabase";
-import { fetchIntervalsStatus, intervalsOnlineReady } from "../services/intervals";
+import {
+  connectIntervalsApiKey,
+  disconnectIntervals,
+  fetchIntervalsStatus,
+  intervalsOnlineReady,
+} from "../services/intervals";
 import { normalizeAppearance, resolveTheme, THEME_PRESET_LIST } from "../services/theme";
 import { athleteProfileAssessment, EXPERIENCE_OPTIONS, experienceLabel } from "../services/athleteProfile";
 import {
@@ -42,6 +47,9 @@ export default function Settings() {
   const [garminMessage, setGarminMessage] = useState("");
   const [intervalsMessage, setIntervalsMessage] = useState("");
   const [intervalsBusy, setIntervalsBusy] = useState(false);
+  const [intervalsApiKey, setIntervalsApiKey] = useState("");
+  const [showIntervalsApiKey, setShowIntervalsApiKey] = useState(false);
+  const [editIntervalsApiKey, setEditIntervalsApiKey] = useState(false);
   const [commitmentDraft, setCommitmentDraft] = useState(null);
   const [commitmentMessage, setCommitmentMessage] = useState("");
   const [profileMessage, setProfileMessage] = useState("");
@@ -146,6 +154,8 @@ export default function Settings() {
           ...current.intervals,
           configured: Boolean(status.configured),
           connected: Boolean(status.connected),
+          connectionMode: status.connectionMode || null,
+          connectedAt: status.connectedAt || current.intervals?.connectedAt || null,
         },
       }));
       setIntervalsMessage(status.connected ? "Intervals.icu ist verbunden." : status.message || "Intervals.icu ist noch nicht eingerichtet.");
@@ -163,6 +173,63 @@ export default function Settings() {
       setIntervalsMessage(`${result.added || 0} neue Aktivitäten geladen, ${result.duplicates || 0} vorhandene Einheiten ergänzt.`);
     } catch (error) {
       setIntervalsMessage(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function saveIntervalsConnection() {
+    const apiKey = intervalsApiKey.trim();
+    if (!apiKey) {
+      setIntervalsMessage("Bitte füge deinen persönlichen API-Key ein.");
+      return;
+    }
+    setIntervalsBusy(true);
+    setIntervalsMessage("");
+    try {
+      const connection = await connectIntervalsApiKey(apiKey);
+      setIntervalsApiKey("");
+      setEditIntervalsApiKey(false);
+      setState((current) => ({
+        ...current,
+        intervals: {
+          ...current.intervals,
+          configured: true,
+          connected: true,
+          connectionMode: connection.connectionMode || "personal",
+          connectedAt: connection.connectedAt || new Date().toISOString(),
+        },
+      }));
+      const result = await syncIntervalsNow();
+      setIntervalsMessage(`Verbunden. ${result.added || 0} neue Aktivitäten geladen, ${result.duplicates || 0} vorhandene Einheiten ergänzt.`);
+    } catch (error) {
+      setIntervalsMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIntervalsBusy(false);
+    }
+  }
+
+  async function removeIntervalsConnection() {
+    if (!window.confirm("Intervals.icu-Verbindung wirklich trennen? Bereits importierte Aktivitäten bleiben erhalten.")) return;
+    setIntervalsBusy(true);
+    setIntervalsMessage("");
+    try {
+      await disconnectIntervals();
+      setIntervalsApiKey("");
+      setEditIntervalsApiKey(false);
+      setState((current) => ({
+        ...current,
+        intervals: {
+          ...current.intervals,
+          configured: false,
+          connected: false,
+          connectionMode: null,
+          connectedAt: null,
+        },
+      }));
+      setIntervalsMessage("Intervals.icu wurde getrennt. Bereits importierte Aktivitäten bleiben in deinem Konto.");
+    } catch (error) {
+      setIntervalsMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIntervalsBusy(false);
     }
   }
 
@@ -391,7 +458,56 @@ export default function Settings() {
 
     {section === "connections" && <div className="grid">
       <Card className="wide"><p className="eyebrow">Endurance Intelligence Cloud</p><h2>Geräteübergreifend synchronisiert</h2><p className="muted">Angemeldet als <b>{session?.user?.email}</b>. Änderungen werden automatisch in Supabase gespeichert.</p><span className={`cloud-status ${cloudStatus}`}>{cloudStatusLabel}</span>{cloudUpdatedAt && <p className="muted">Letzte Cloud-Aktualisierung: {new Date(cloudUpdatedAt).toLocaleString("de-DE")}</p>}{cloudError && <p className="connection-message cloud-error-message">{cloudError}</p>}<div className="button-row"><button onClick={uploadLocalState}>{cloudStatus === "conflict" ? "Lokalen Stand behalten" : cloudStatus === "error" ? "Speichern erneut versuchen" : "Lokale Daten in Cloud übernehmen"}</button><button className="secondary" onClick={reloadCloudState}>{cloudStatus === "conflict" ? "Neueren Cloud-Stand laden" : "Cloud neu laden"}</button><button className="secondary" onClick={logout}>Abmelden</button></div></Card>
-      <Card className="wide intervals-setup-card"><p className="eyebrow">Intervals.icu · Datenzentrale</p><h2>{state.intervals?.connected ? "Verbunden und bereit" : state.intervals?.configured ? "Verbindung prüfen" : "Trainingsplattformen bündeln"}</h2><p className="muted">Garmin, Strava, Polar oder weitere Plattformen werden in Intervals.icu verbunden. Die zusammengeführten Aktivitäten werden von dort geladen.</p><div className="intervals-setup-grid"><div className="intervals-setup-step"><span>1</span><div><strong>Intervals.icu öffnen</strong><small>Anmelden oder kostenlos ein Konto erstellen.</small></div></div><div className="intervals-setup-step"><span>2</span><div><strong>Datenquelle verbinden</strong><small>Unter Settings → Connections Garmin, Strava, Polar oder deine Plattform auswählen.</small></div></div><div className="intervals-setup-step"><span>3</span><div><strong>Sync prüfen</strong><small>Kontrollieren, ob deine letzten Aktivitäten sichtbar sind.</small></div></div><div className="intervals-setup-step"><span>4</span><div><strong>App verbinden</strong><small>Verbindung testen und Aktivitäten synchronisieren.</small></div></div></div>{state.intervals?.lastSyncAt && <p className="muted">Letzter Sync: {new Date(state.intervals.lastSyncAt).toLocaleString("de-DE")}</p>}<div className="button-row"><a className="button-link" href="https://intervals.icu/settings/connections" target="_blank" rel="noreferrer">Intervals.icu Connections öffnen</a><button onClick={checkIntervals} disabled={intervalsBusy || !intervalsOnlineReady()}>{intervalsBusy ? "Prüfe …" : "Verbindung prüfen"}</button>{state.intervals?.connected && <button className="secondary" onClick={syncIntervals} disabled={intervalsSyncStatus === "syncing"}>{intervalsSyncStatus === "syncing" ? "Synchronisiert …" : "Jetzt synchronisieren"}</button>}</div><div className="setup-note"><strong>Garmin-Workouts:</strong> Bei der Garmin-Verbindung „Upload planned workouts“ aktivieren.</div><div className="setup-note"><strong>Mehrere Nutzer:</strong> Der private API-Key ist auf genau ein Supabase-Konto begrenzt. Weitere Konten bleiben bis zur persönlichen OAuth-Verbindung von Intervals.icu und Garmin getrennt.</div>{intervalsMessage && <p className="connection-message">{intervalsMessage}</p>}</Card>
+      <Card className="wide intervals-setup-card">
+        <p className="eyebrow">Intervals.icu · Datenzentrale</p>
+        <h2>{state.intervals?.connected ? "Persönlich verbunden und bereit" : state.intervals?.configured ? "Verbindung prüfen" : "Trainingsplattformen bündeln"}</h2>
+        <p className="muted">Garmin, Strava, Polar oder weitere Plattformen werden in Intervals.icu verbunden. Endurance Intelligence lädt die zusammengeführten Aktivitäten und schreibt bestätigte Wochenpläne in deinen Intervals-Kalender zurück.</p>
+        <div className="intervals-setup-grid">
+          <div className="intervals-setup-step"><span>1</span><div><strong>Datenquellen verbinden</strong><small>In Intervals.icu unter Settings → Connections Garmin, Strava, Polar oder deine Plattform auswählen.</small></div></div>
+          <div className="intervals-setup-step"><span>2</span><div><strong>API-Key kopieren</strong><small>Unter Settings weit nach unten zu Developer Settings scrollen und beim API Key „view“ wählen.</small></div></div>
+          <div className="intervals-setup-step"><span>3</span><div><strong>Hier sicher verbinden</strong><small>Der Schlüssel wird geprüft und getrennt vom Profil verschlüsselt gespeichert.</small></div></div>
+          <div className="intervals-setup-step"><span>4</span><div><strong>Import & Export</strong><small>Aktivitäten synchronisieren und bestätigte Pläne an Intervals.icu senden.</small></div></div>
+        </div>
+
+        {state.intervals?.connected && !editIntervalsApiKey ? (
+          <div className="intervals-connected-panel">
+            <div><span>✓</span><p><strong>Verbindung aktiv</strong><small>{state.intervals?.connectionMode === "legacy" ? "Bestehende Betreiber-Verbindung. Du kannst sie jetzt durch deinen persönlichen API-Key ersetzen." : "Dein API-Key liegt verschlüsselt in der nur serverseitig lesbaren Verbindungsablage."}</small></p></div>
+            <button type="button" className="secondary" onClick={() => { setEditIntervalsApiKey(true); setIntervalsMessage(""); }}>{state.intervals?.connectionMode === "legacy" ? "Persönlichen API-Key hinterlegen" : "API-Key ersetzen"}</button>
+          </div>
+        ) : (
+          <div className="intervals-key-editor">
+            <label>Persönlicher Intervals.icu API-Key
+              <span>
+                <input
+                  autoComplete="off"
+                  spellCheck="false"
+                  type={showIntervalsApiKey ? "text" : "password"}
+                  value={intervalsApiKey}
+                  placeholder="API-Key aus Developer Settings"
+                  onChange={(event) => { setIntervalsApiKey(event.target.value); setIntervalsMessage(""); }}
+                />
+                <button type="button" className="secondary" onClick={() => setShowIntervalsApiKey((value) => !value)}>{showIntervalsApiKey ? "Verbergen" : "Anzeigen"}</button>
+              </span>
+            </label>
+            <div className="button-row">
+              <a className="button-link" href="https://intervals.icu/settings" target="_blank" rel="noreferrer">Developer Settings öffnen</a>
+              <button type="button" onClick={saveIntervalsConnection} disabled={intervalsBusy || !intervalsOnlineReady()}>{intervalsBusy ? "Prüfe …" : "API-Key prüfen & speichern"}</button>
+              {state.intervals?.connected && <button type="button" className="secondary" onClick={() => { setEditIntervalsApiKey(false); setIntervalsApiKey(""); }}>Abbrechen</button>}
+            </div>
+          </div>
+        )}
+
+        {state.intervals?.lastSyncAt && <p className="muted">Letzter Sync: {new Date(state.intervals.lastSyncAt).toLocaleString("de-DE")}</p>}
+        <div className="button-row">
+          <a className="button-link" href="https://intervals.icu/settings/connections" target="_blank" rel="noreferrer">Intervals.icu Connections öffnen</a>
+          <button onClick={checkIntervals} disabled={intervalsBusy || !intervalsOnlineReady()}>{intervalsBusy ? "Prüfe …" : "Verbindung prüfen"}</button>
+          {state.intervals?.connected && <button className="secondary" onClick={syncIntervals} disabled={intervalsSyncStatus === "syncing"}>{intervalsSyncStatus === "syncing" ? "Synchronisiert …" : "Jetzt synchronisieren"}</button>}
+          {state.intervals?.connected && state.intervals?.connectionMode !== "legacy" && <button className="secondary intervals-disconnect-button" onClick={removeIntervalsConnection} disabled={intervalsBusy}>Verbindung trennen</button>}
+        </div>
+        <div className="setup-note"><strong>Garmin-Workouts:</strong> Bei der Garmin-Verbindung „Upload planned workouts“ aktivieren. Andernfalls erscheinen Pläne nur im Intervals.icu-Kalender.</div>
+        <div className="setup-note"><strong>Sicherheit:</strong> Der persönliche API-Key wird nie im Profil, Backup oder Browser-Speicher abgelegt. Wenn du ihn in Intervals.icu neu erzeugst, musst du ihn hier einmal ersetzen.</div>
+        {intervalsMessage && <p className="connection-message">{intervalsMessage}</p>}
+      </Card>
     </div>}
 
     {section === "data" && <div className="grid">

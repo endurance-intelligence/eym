@@ -30,6 +30,14 @@ export async function fetchIntervalsStatus() {
   return invokeIntervals("status");
 }
 
+export async function connectIntervalsApiKey(apiKey) {
+  return invokeIntervals("connect", { apiKey });
+}
+
+export async function disconnectIntervals() {
+  return invokeIntervals("disconnect");
+}
+
 export async function fetchIntervalsGear() {
   return invokeIntervals("gear");
 }

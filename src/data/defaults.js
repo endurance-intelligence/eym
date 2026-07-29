@@ -98,6 +98,8 @@ export const defaultState = {
   intervals: {
     connected: false,
     configured: false,
+    connectionMode: null,
+    connectedAt: null,
     lastSyncAt: null,
     importFrom: "2025-01-01",
   },

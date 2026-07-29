@@ -13,8 +13,15 @@ import {
   ONBOARDING_STEPS,
   completeOnboardingState,
   createOnboardingDraft,
+  onboardingBaselineFromActivities,
   onboardingStepError,
 } from "../services/onboarding";
+import {
+  connectIntervalsApiKey,
+  mapIntervalsActivities,
+  mergeIntervalsActivities,
+  syncIntervalsActivities,
+} from "../services/intervals";
 import "./Onboarding.css";
 
 const WEEKDAYS = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"];
@@ -57,6 +64,10 @@ export default function Onboarding() {
   const [message, setMessage] = useState("");
   const [commitmentDraft, setCommitmentDraft] = useState(null);
   const [commitmentMessage, setCommitmentMessage] = useState("");
+  const [intervalsApiKey, setIntervalsApiKey] = useState("");
+  const [intervalsBusy, setIntervalsBusy] = useState(false);
+  const [intervalsMessage, setIntervalsMessage] = useState("");
+  const [showIntervalsApiKey, setShowIntervalsApiKey] = useState(false);
 
   const currentStep = ONBOARDING_STEPS[step];
   const todayKey = localDateKey();
@@ -150,8 +161,76 @@ export default function Onboarding() {
       ...current,
       currentRunsPerWeek: runs,
       targetRunCount: runs === "" ? current.targetRunCount : Math.round(Math.max(1, Math.min(7, runs || 2))),
+      baselineSource: "manual",
     }));
     setMessage("");
+  }
+
+  async function connectIntervals() {
+    const apiKey = intervalsApiKey.trim();
+    if (!apiKey) {
+      setIntervalsMessage("Bitte kopiere deinen persönlichen API-Key aus Intervals.icu hier hinein.");
+      return;
+    }
+    setIntervalsBusy(true);
+    setIntervalsMessage("");
+    try {
+      const connection = await connectIntervalsApiKey(apiKey);
+      setIntervalsApiKey("");
+      setState((current) => ({
+        ...current,
+        intervals: {
+          ...current.intervals,
+          configured: true,
+          connected: true,
+          connectionMode: connection.connectionMode || "personal",
+        },
+      }));
+      setDraft((current) => ({ ...current, intervalsConnected: true }));
+
+      try {
+        const result = await syncIntervalsActivities(state.intervals?.importFrom || "2025-01-01");
+        const imported = mapIntervalsActivities(Array.isArray(result.activities) ? result.activities : []);
+        const merged = mergeIntervalsActivities(state.activities, imported);
+        const baseline = onboardingBaselineFromActivities(merged.activities);
+        const syncedAt = result.syncedAt || new Date().toISOString();
+        setState((current) => ({
+          ...current,
+          activities: mergeIntervalsActivities(current.activities, imported).activities,
+          intervals: {
+            ...current.intervals,
+            configured: true,
+            connected: true,
+            connectionMode: connection.connectionMode || "personal",
+            lastSyncAt: syncedAt,
+          },
+        }));
+        setDraft((current) => ({
+          ...current,
+          intervalsConnected: true,
+          intervalsImportedActivities: imported.length,
+          baselineSource: baseline.hasData ? "intervals" : current.baselineSource,
+          ...(baseline.hasData ? {
+            currentRunsPerWeek: baseline.currentRunsPerWeek,
+            weeklyKm: baseline.weeklyKm,
+            longestRunKm: baseline.longestRunKm,
+            targetRunCount: Math.round(Math.max(1, Math.min(7, baseline.currentRunsPerWeek || 2))),
+          } : {}),
+        }));
+        setIntervalsMessage(
+          baseline.hasData
+            ? `Verbunden. ${imported.length} Aktivitäten wurden geladen und deine aktuelle Laufbasis vorausgefüllt.`
+            : `Verbunden. ${imported.length} Aktivitäten wurden geladen; aktuelle Laufwerte ergänzt du im nächsten Schritt selbst.`,
+        );
+      } catch (error) {
+        setIntervalsMessage(`Verbindung gespeichert. Der erste Import konnte noch nicht abgeschlossen werden: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    } catch (error) {
+      setDraft((current) => ({ ...current, intervalsConnected: false }));
+      setIntervalsMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIntervalsBusy(false);
+    }
   }
 
   return (
@@ -219,6 +298,80 @@ export default function Onboarding() {
               </>
             )}
 
+            {currentStep.key === "intervals" && (
+              <>
+                <div className="onboarding-heading">
+                  <p className="eyebrow">Deine Trainingsdaten</p>
+                  <h1>Intervals.icu verbinden.</h1>
+                  <p>Damit dein Coach nicht mit leeren Annahmen startet, übernimmt Endurance Intelligence deine vorhandenen Aktivitäten aus Intervals.icu und kann bestätigte Wochenpläne dorthin zurückschreiben.</p>
+                </div>
+
+                <div className="onboarding-data-flow">
+                  <article><span>↓</span><div><strong>Import in deinen Coach</strong><p>Aktivitäten, Distanz, Dauer, Herzfrequenz, Belastung und verfügbare Wetterdaten.</p></div></article>
+                  <article><span>↑</span><div><strong>Export aus deinem Coach</strong><p>Bestätigte Wochenpläne und strukturierte Workouts in den Intervals.icu-Kalender – von dort optional weiter zu Garmin.</p></div></article>
+                </div>
+
+                <section className="onboarding-intervals-card">
+                  <div className="onboarding-intervals-heading">
+                    <div><p className="eyebrow">Einmalige Einrichtung</p><h2>Persönlichen API-Key holen</h2></div>
+                    {draft.intervalsConnected && <span className="onboarding-connected-badge">✓ Verbunden</span>}
+                  </div>
+                  <ol className="onboarding-intervals-guide">
+                    <li><span>1</span><div><strong>Intervals.icu öffnen</strong><p>Einloggen oder zuerst ein kostenloses Konto anlegen.</p><div className="onboarding-link-row"><a href="https://intervals.icu/settings" target="_blank" rel="noreferrer">Settings öffnen ↗</a><a href="https://intervals.icu/signup" target="_blank" rel="noreferrer">Konto erstellen ↗</a></div></div></li>
+                    <li><span>2</span><div><strong>Zu „Developer Settings“ scrollen</strong><p>Der Bereich befindet sich weit unten auf der Settings-Seite. Beim Eintrag API Key auf „view“ klicken und den Schlüssel kopieren.</p></div></li>
+                    <li><span>3</span><div><strong>API-Key hier einfügen</strong><p>Eine Athlete-ID musst du nicht suchen – Intervals.icu ordnet den Schlüssel automatisch deinem eigenen Konto zu.</p></div></li>
+                  </ol>
+
+                  {!draft.intervalsConnected ? (
+                    <div className="onboarding-api-key-panel">
+                      <label>Persönlicher Intervals.icu API-Key
+                        <span className="onboarding-secret-input">
+                          <input
+                            autoComplete="off"
+                            spellCheck="false"
+                            type={showIntervalsApiKey ? "text" : "password"}
+                            value={intervalsApiKey}
+                            placeholder="API-Key einfügen"
+                            onChange={(event) => { setIntervalsApiKey(event.target.value); setIntervalsMessage(""); }}
+                          />
+                          <button type="button" onClick={() => setShowIntervalsApiKey((value) => !value)}>{showIntervalsApiKey ? "Verbergen" : "Anzeigen"}</button>
+                        </span>
+                      </label>
+                      <button type="button" className="primary onboarding-connect-button" onClick={connectIntervals} disabled={intervalsBusy}>{intervalsBusy ? "Prüfe und importiere …" : "Verbindung prüfen & Daten laden"}</button>
+                    </div>
+                  ) : (
+                    <details className="onboarding-reconnect">
+                      <summary>Anderen API-Key verwenden</summary>
+                      <div className="onboarding-api-key-panel">
+                        <label>Neuer Intervals.icu API-Key
+                          <span className="onboarding-secret-input">
+                            <input
+                              autoComplete="off"
+                              spellCheck="false"
+                              type={showIntervalsApiKey ? "text" : "password"}
+                              value={intervalsApiKey}
+                              placeholder="Neuen API-Key einfügen"
+                              onChange={(event) => { setIntervalsApiKey(event.target.value); setIntervalsMessage(""); }}
+                            />
+                            <button type="button" onClick={() => setShowIntervalsApiKey((value) => !value)}>{showIntervalsApiKey ? "Verbergen" : "Anzeigen"}</button>
+                          </span>
+                        </label>
+                        <button type="button" className="primary onboarding-connect-button" onClick={connectIntervals} disabled={intervalsBusy}>{intervalsBusy ? "Prüfe …" : "API-Key ersetzen"}</button>
+                      </div>
+                    </details>
+                  )}
+
+                  {intervalsMessage && <p className={`onboarding-connection-message ${draft.intervalsConnected ? "success" : "error"}`} aria-live="polite">{intervalsMessage}</p>}
+                  <div className="onboarding-secret-note"><span>🔒</span><p><strong>Wie ein Passwort behandeln</strong><small>Der API-Key erlaubt den Zugriff auf dein Intervals.icu-Konto. Nach dem Test wird er nicht im Profil oder Browser, sondern verschlüsselt in einer getrennten, nur serverseitig lesbaren Ablage gespeichert. Bei einer Neugenerierung verbindest du ihn hier erneut.</small></p></div>
+                </section>
+
+                <section className="onboarding-garmin-note">
+                  <div><span>G</span><p><strong>Workouts zusätzlich an Garmin senden?</strong><small>Öffne in Intervals.icu Settings → Connections → Garmin und aktiviere „Upload planned workouts“. Ohne diese Option landen die Pläne korrekt in Intervals.icu, aber nicht automatisch auf deiner Uhr.</small></p></div>
+                  <a href="https://intervals.icu/settings/connections" target="_blank" rel="noreferrer">Garmin-Verbindung öffnen ↗</a>
+                </section>
+              </>
+            )}
+
             {currentStep.key === "baseline" && (
               <>
                 <div className="onboarding-heading">
@@ -235,10 +388,10 @@ export default function Onboarding() {
                 </div>
                 <div className="onboarding-metric-inputs">
                   <label><span>Läufe pro Woche</span><input type="number" min="0" max="7" step="0.5" value={draft.currentRunsPerWeek} placeholder="0–7" onChange={(event) => baselineRunsChanged(event.target.value)} /><FieldNote>dein aktueller Durchschnitt</FieldNote></label>
-                  <label><span>Kilometer pro Woche</span><input type="number" min="0" max="300" step="0.1" value={draft.weeklyKm} placeholder="z. B. 25" onChange={(event) => update("weeklyKm", numberOrBlank(event.target.value))} /><FieldNote>ungefährer 6-Wochen-Schnitt</FieldNote></label>
-                  <label><span>Längster Lauf</span><input type="number" min="0" max="250" step="0.1" value={draft.longestRunKm} placeholder="z. B. 12" onChange={(event) => update("longestRunKm", numberOrBlank(event.target.value))} /><FieldNote>innerhalb der letzten 8 Wochen</FieldNote></label>
+                  <label><span>Kilometer pro Woche</span><input type="number" min="0" max="300" step="0.1" value={draft.weeklyKm} placeholder="z. B. 25" onChange={(event) => { update("weeklyKm", numberOrBlank(event.target.value)); update("baselineSource", "manual"); }} /><FieldNote>ungefährer 6-Wochen-Schnitt</FieldNote></label>
+                  <label><span>Längster Lauf</span><input type="number" min="0" max="250" step="0.1" value={draft.longestRunKm} placeholder="z. B. 12" onChange={(event) => { update("longestRunKm", numberOrBlank(event.target.value)); update("baselineSource", "manual"); }} /><FieldNote>innerhalb der letzten 8 Wochen</FieldNote></label>
                 </div>
-                <div className="onboarding-info-strip"><b>Warum fragt dein Coach das?</b><span>Ohne importierte Historie verhindern diese Werte, dass ein neuer Wochenplan mit einem zu hohen pauschalen Kilometerumfang startet.</span></div>
+                <div className="onboarding-info-strip"><b>{draft.baselineSource === "intervals" ? "Aus Intervals.icu vorausgefüllt" : "Warum fragt dein Coach das?"}</b><span>{draft.baselineSource === "intervals" ? "Die Werte wurden aus den letzten sechs beziehungsweise acht Wochen berechnet. Prüfe sie kurz und korrigiere sie, falls deine aktuelle Situation davon abweicht." : "Diese Werte verhindern, dass ein neuer Wochenplan mit einem zu hohen pauschalen Kilometerumfang startet."}</span></div>
               </>
             )}
 
@@ -356,6 +509,7 @@ export default function Onboarding() {
                   <article><span>Ausgangslage</span><strong>{level?.label || experienceLabel(draft.experienceLevel)}</strong><p>{draft.currentRunsPerWeek} Läufe · ca. {draft.weeklyKm} km pro Woche · Longrun {draft.longestRunKm} km</p></article>
                   <article><span>Ziel</span><strong>{missionSummary}</strong><p>{draft.missionMode === "event" && draft.missionDate ? new Date(`${draft.missionDate}T12:00:00`).toLocaleDateString("de-DE") : "Kann später jederzeit ergänzt werden"}</p></article>
                   <article><span>Wochenrahmen</span><strong>Bis zu {draft.targetRunCount} Läufe</strong><p>{draft.runDays.map((day) => day.slice(0, 2)).join(" · ")}{draft.stabiCount ? ` · ${draft.stabiCount} × Stabi` : ""}</p></article>
+                  <article className="wide-summary"><span>Datenquelle</span><strong>Intervals.icu verbunden</strong><p>{draft.intervalsImportedActivities ? `${draft.intervalsImportedActivities} Aktivitäten beim Erstimport geladen` : "Verbindung geprüft; der Import läuft nach dem Start erneut an"}</p></article>
                   <article className="wide-summary"><span>Feste Termine</span><strong>{draft.recurringCommitments.length ? `${draft.recurringCommitments.length} berücksichtigt` : "Keine hinterlegt"}</strong><p>{draft.recurringCommitments.length ? sortedCommitments.map((item) => `${item.weekday.slice(0, 2)} ${item.name}`).join(" · ") : "Du kannst sie später unter Settings → Training & Planung ergänzen."}</p></article>
                 </div>
                 <label className="onboarding-progress-toggle">
@@ -377,7 +531,7 @@ export default function Onboarding() {
               <span>Schritt {step + 1} von {ONBOARDING_STEPS.length}</span>
             </div>
             {message && <p role="alert">{message}</p>}
-            <button type="button" className="primary onboarding-next" onClick={next}>{step === ONBOARDING_STEPS.length - 1 ? "Jetzt starten" : "Weiter"} <span>→</span></button>
+            <button type="button" className="primary onboarding-next" onClick={next} disabled={intervalsBusy}>{step === ONBOARDING_STEPS.length - 1 ? "Jetzt starten" : "Weiter"} <span>→</span></button>
           </footer>
         </section>
       </section>

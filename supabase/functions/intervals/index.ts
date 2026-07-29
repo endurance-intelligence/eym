@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { isIntervalsOwner } from "../_shared/intervalsAccess.ts";
+import { decryptIntervalsApiKey, encryptIntervalsApiKey } from "../_shared/intervalsCredentials.ts";
 import { intervalDescription, isGuidedPlanItem, isProvisionalTrackPlanItem } from "../_shared/structuredWorkout.ts";
 import { intervalsStartDateLocal } from "../_shared/plannerTiming.ts";
 
@@ -22,7 +23,7 @@ function requiredSecret(name: string) {
   return value;
 }
 
-async function authenticatedUser(request: Request) {
+async function authenticatedContext(request: Request) {
   const supabaseUrl = requiredSecret("SUPABASE_URL");
   const serviceRole = requiredSecret("SUPABASE_SERVICE_ROLE_KEY");
   const admin = createClient(supabaseUrl, serviceRole, { auth: { persistSession: false, autoRefreshToken: false } });
@@ -31,11 +32,21 @@ async function authenticatedUser(request: Request) {
   if (!accessJwt) return null;
   const { data, error } = await admin.auth.getUser(accessJwt);
   if (error || !data.user) return null;
-  return data.user;
+  return { admin, user: data.user };
 }
 
 function intervalsAuthorization(apiKey: string) {
   return `Basic ${btoa(`API_KEY:${apiKey}`)}`;
+}
+
+class IntervalsRequestError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "IntervalsRequestError";
+    this.status = status;
+  }
 }
 
 async function intervalsRequest(path: string, apiKey: string, init: RequestInit = {}) {
@@ -51,13 +62,96 @@ async function intervalsRequest(path: string, apiKey: string, init: RequestInit 
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     const message = typeof data?.error === "string" ? data.error : data?.message;
-    throw new Error(message || `Intervals.icu-Anfrage fehlgeschlagen (${response.status}).`);
+    throw new IntervalsRequestError(
+      message || `Intervals.icu-Anfrage fehlgeschlagen (${response.status}).`,
+      response.status,
+    );
   }
   return data;
 }
 
 function intervalsGet(path: string, apiKey: string) {
   return intervalsRequest(path, apiKey);
+}
+
+function connectionErrorMessage(error: unknown) {
+  if (error instanceof IntervalsRequestError && [401, 403].includes(error.status)) {
+    return "Intervals.icu hat den API-Key nicht akzeptiert. Kopiere ihn unter Settings → Developer Settings bitte erneut.";
+  }
+  return error instanceof Error ? error.message : String(error);
+}
+
+function verificationQuery() {
+  const newestDate = new Date();
+  newestDate.setDate(newestDate.getDate() + 1);
+  const oldestDate = new Date();
+  oldestDate.setDate(oldestDate.getDate() - 30);
+  return new URLSearchParams({
+    oldest: oldestDate.toISOString().slice(0, 10),
+    newest: newestDate.toISOString().slice(0, 10),
+    limit: "1",
+  });
+}
+
+async function verifyConnection(apiKey: string, athleteId = "0") {
+  const latest = await intervalsGet(
+    `/athlete/${encodeURIComponent(athleteId)}/activities?${verificationQuery().toString()}`,
+    apiKey,
+  );
+  if (!Array.isArray(latest)) throw new Error("Intervals.icu hat keine gültige Aktivitätsliste geliefert.");
+  return latest;
+}
+
+async function personalConnection(
+  admin: ReturnType<typeof createClient>,
+  userId: string,
+) {
+  const { data, error } = await admin
+    .from("intervals_connections")
+    .select("api_key_ciphertext, athlete_id, connected_at")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) {
+    if (error.code === "42P01") return { connection: null, storageReady: false };
+    throw error;
+  }
+  if (!data?.api_key_ciphertext) return { connection: null, storageReady: true };
+  const apiKey = await decryptIntervalsApiKey(
+    data.api_key_ciphertext,
+    requiredSecret("INTERVALS_CREDENTIALS_KEY"),
+  );
+  return {
+    storageReady: true,
+    connection: {
+      apiKey,
+      athleteId: String(data.athlete_id || "0"),
+      mode: "personal",
+      connectedAt: data.connected_at || null,
+    },
+  };
+}
+
+async function connectionForUser(
+  admin: ReturnType<typeof createClient>,
+  userId: string,
+) {
+  const personal = await personalConnection(admin, userId);
+  if (personal.connection) return personal;
+
+  const ownerUserId = Deno.env.get("INTERVALS_OWNER_USER_ID") || "";
+  const legacyApiKey = Deno.env.get("INTERVALS_API_KEY") || "";
+  if (isIntervalsOwner(userId, ownerUserId) && legacyApiKey) {
+    return {
+      storageReady: personal.storageReady,
+      connection: {
+        apiKey: legacyApiKey,
+        athleteId: Deno.env.get("INTERVALS_ATHLETE_ID") || "0",
+        mode: "legacy",
+        connectedAt: null,
+      },
+    };
+  }
+  return personal;
 }
 
 function validDate(value: unknown) {
@@ -108,48 +202,122 @@ Deno.serve(async (request) => {
   if (request.method !== "POST") return json({ message: "Nur POST ist erlaubt." }, 405);
 
   try {
-    const user = await authenticatedUser(request);
-    if (!user) return json({ message: "Nicht angemeldet." }, 401);
+    const authentication = await authenticatedContext(request);
+    if (!authentication) return json({ message: "Nicht angemeldet." }, 401);
+    const { admin, user } = authentication;
 
     const body = await request.json().catch(() => ({}));
     const action = String(body.action || "status");
-    const ownerUserId = Deno.env.get("INTERVALS_OWNER_USER_ID") || "";
-    const ownerAccess = isIntervalsOwner(user.id, ownerUserId);
 
-    if (!ownerAccess) {
-      const message = ownerUserId
-        ? "Für dieses Konto ist noch keine persönliche Intervals.icu-Verbindung eingerichtet."
-        : "Der private Intervals.icu-Zugang ist noch keinem Konto zugeordnet.";
-      if (action === "status") {
-        return json({ configured: false, connected: false, privateConnection: true, message });
+    if (action === "connect") {
+      const apiKey = String(body.apiKey || "").trim();
+      if (apiKey.length < 12 || apiKey.length > 500) {
+        return json({ message: "Bitte füge den vollständigen Intervals.icu API-Key ein." }, 400);
       }
-      return json({ message }, 403);
+      let latest: unknown[];
+      try {
+        latest = await verifyConnection(apiKey);
+      } catch (error) {
+        return json({ message: connectionErrorMessage(error) }, 400);
+      }
+      const ciphertext = await encryptIntervalsApiKey(
+        apiKey,
+        requiredSecret("INTERVALS_CREDENTIALS_KEY"),
+      );
+      const now = new Date().toISOString();
+      const { error } = await admin
+        .from("intervals_connections")
+        .upsert({
+          user_id: user.id,
+          api_key_ciphertext: ciphertext,
+          athlete_id: "0",
+          connected_at: now,
+          last_verified_at: now,
+        }, { onConflict: "user_id" });
+      if (error?.code === "42P01") {
+        return json({ message: "Die sichere Intervals.icu-Ablage ist noch nicht installiert. Bitte zuerst die neue Supabase-Migration ausführen." }, 503);
+      }
+      if (error) throw error;
+      return json({
+        configured: true,
+        connected: true,
+        connectionMode: "personal",
+        activityCount: latest.length,
+        connectedAt: now,
+      });
     }
 
-    const apiKey = Deno.env.get("INTERVALS_API_KEY") || "";
-    const athleteId = encodeURIComponent(Deno.env.get("INTERVALS_ATHLETE_ID") || "0");
+    if (action === "disconnect") {
+      const { error } = await admin
+        .from("intervals_connections")
+        .delete()
+        .eq("user_id", user.id);
+      if (error?.code === "42P01") {
+        return json({ message: "Die sichere Intervals.icu-Ablage ist noch nicht installiert." }, 503);
+      }
+      if (error) throw error;
+      return json({ configured: false, connected: false });
+    }
+
+    let resolved;
+    try {
+      resolved = await connectionForUser(admin, user.id);
+    } catch (error) {
+      if (action === "status") {
+        return json({
+          configured: true,
+          connected: false,
+          message: "Der gespeicherte Intervals.icu-Zugang konnte nicht entschlüsselt werden. Bitte den API-Key erneut verbinden.",
+        });
+      }
+      throw error;
+    }
+    const connection = resolved.connection;
+
+    if (!connection) {
+      const message = resolved.storageReady
+        ? "Für dieses Konto ist noch keine persönliche Intervals.icu-Verbindung eingerichtet."
+        : "Die sichere Intervals.icu-Ablage ist noch nicht installiert.";
+      if (action === "status") {
+        return json({
+          configured: false,
+          connected: false,
+          connectionMode: null,
+          storageReady: resolved.storageReady,
+          message,
+        });
+      }
+      return json({ message }, resolved.storageReady ? 403 : 503);
+    }
+
+    const apiKey = connection.apiKey;
+    const athleteId = encodeURIComponent(connection.athleteId || "0");
 
     if (action === "status") {
-      if (!apiKey) return json({ configured: false, connected: false, message: "INTERVALS_API_KEY fehlt." });
       try {
-        const newestDate = new Date();
-        newestDate.setDate(newestDate.getDate() + 1);
-        const oldestDate = new Date();
-        oldestDate.setDate(oldestDate.getDate() - 30);
-        const query = new URLSearchParams({
-          oldest: oldestDate.toISOString().slice(0, 10),
-          newest: newestDate.toISOString().slice(0, 10),
-          limit: "1",
+        const latest = await verifyConnection(apiKey, connection.athleteId);
+        if (connection.mode === "personal") {
+          await admin
+            .from("intervals_connections")
+            .update({ last_verified_at: new Date().toISOString() })
+            .eq("user_id", user.id);
+        }
+        return json({
+          configured: true,
+          connected: true,
+          connectionMode: connection.mode,
+          connectedAt: connection.connectedAt,
+          activityCount: latest.length,
         });
-        const latest = await intervalsGet(`/athlete/${athleteId}/activities?${query.toString()}`, apiKey);
-        return json({ configured: true, connected: true, activityCount: Array.isArray(latest) ? latest.length : 0 });
       } catch (error) {
-        return json({ configured: true, connected: false, message: error instanceof Error ? error.message : String(error) });
+        return json({
+          configured: true,
+          connected: false,
+          connectionMode: connection.mode,
+          message: connectionErrorMessage(error),
+        });
       }
     }
-
-    if (!apiKey) return json({ message: "INTERVALS_API_KEY ist in Supabase noch nicht gesetzt." }, 400);
-
 
     if (action === "gear") {
       const gear = await intervalsGet(`/athlete/${athleteId}/gear`, apiKey);

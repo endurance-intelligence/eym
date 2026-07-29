@@ -403,6 +403,8 @@ export function AppProvider({ children }) {
             ...current.intervals,
             configured: Boolean(status.configured),
             connected: Boolean(status.connected),
+            connectionMode: status.connectionMode || null,
+            connectedAt: status.connectedAt || current.intervals?.connectedAt || null,
           },
         }));
         if (!status.connected) return;
