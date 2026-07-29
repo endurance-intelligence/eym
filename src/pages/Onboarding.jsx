@@ -184,6 +184,8 @@ export default function Onboarding() {
           configured: true,
           connected: true,
           connectionMode: connection.connectionMode || "personal",
+          storageReady: true,
+          credentialIssue: null,
         },
       }));
       setDraft((current) => ({ ...current, intervalsConnected: true }));
@@ -202,6 +204,8 @@ export default function Onboarding() {
             configured: true,
             connected: true,
             connectionMode: connection.connectionMode || "personal",
+            storageReady: true,
+            credentialIssue: null,
             lastSyncAt: syncedAt,
           },
         }));

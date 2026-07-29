@@ -100,6 +100,8 @@ export const defaultState = {
     configured: false,
     connectionMode: null,
     connectedAt: null,
+    storageReady: null,
+    credentialIssue: null,
     lastSyncAt: null,
     importFrom: "2025-01-01",
   },

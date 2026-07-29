@@ -156,9 +156,11 @@ export default function Settings() {
           connected: Boolean(status.connected),
           connectionMode: status.connectionMode || null,
           connectedAt: status.connectedAt || current.intervals?.connectedAt || null,
+          storageReady: status.storageReady ?? current.intervals?.storageReady ?? null,
+          credentialIssue: status.credentialIssue || null,
         },
       }));
-      setIntervalsMessage(status.connected ? "Intervals.icu ist verbunden." : status.message || "Intervals.icu ist noch nicht eingerichtet.");
+      setIntervalsMessage(status.message || (status.connected ? "Intervals.icu ist verbunden." : "Intervals.icu ist noch nicht eingerichtet."));
     } catch (error) {
       setIntervalsMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -196,6 +198,8 @@ export default function Settings() {
           connected: true,
           connectionMode: connection.connectionMode || "personal",
           connectedAt: connection.connectedAt || new Date().toISOString(),
+          storageReady: true,
+          credentialIssue: null,
         },
       }));
       const result = await syncIntervalsNow();
@@ -223,6 +227,8 @@ export default function Settings() {
           connected: false,
           connectionMode: null,
           connectedAt: null,
+          storageReady: true,
+          credentialIssue: null,
         },
       }));
       setIntervalsMessage("Intervals.icu wurde getrennt. Bereits importierte Aktivitäten bleiben in deinem Konto.");
@@ -460,7 +466,7 @@ export default function Settings() {
       <Card className="wide"><p className="eyebrow">Endurance Intelligence Cloud</p><h2>Geräteübergreifend synchronisiert</h2><p className="muted">Angemeldet als <b>{session?.user?.email}</b>. Änderungen werden automatisch in Supabase gespeichert.</p><span className={`cloud-status ${cloudStatus}`}>{cloudStatusLabel}</span>{cloudUpdatedAt && <p className="muted">Letzte Cloud-Aktualisierung: {new Date(cloudUpdatedAt).toLocaleString("de-DE")}</p>}{cloudError && <p className="connection-message cloud-error-message">{cloudError}</p>}<div className="button-row"><button onClick={uploadLocalState}>{cloudStatus === "conflict" ? "Lokalen Stand behalten" : cloudStatus === "error" ? "Speichern erneut versuchen" : "Lokale Daten in Cloud übernehmen"}</button><button className="secondary" onClick={reloadCloudState}>{cloudStatus === "conflict" ? "Neueren Cloud-Stand laden" : "Cloud neu laden"}</button><button className="secondary" onClick={logout}>Abmelden</button></div></Card>
       <Card className="wide intervals-setup-card">
         <p className="eyebrow">Intervals.icu · Datenzentrale</p>
-        <h2>{state.intervals?.connected ? "Persönlich verbunden und bereit" : state.intervals?.configured ? "Verbindung prüfen" : "Trainingsplattformen bündeln"}</h2>
+        <h2>{state.intervals?.connected ? (state.intervals?.connectionMode === "legacy" ? "Verbunden – persönliche Ablage noch offen" : "Persönlich verbunden und bereit") : state.intervals?.configured ? "Verbindung prüfen" : "Trainingsplattformen bündeln"}</h2>
         <p className="muted">Garmin, Strava, Polar oder weitere Plattformen werden in Intervals.icu verbunden. Endurance Intelligence lädt die zusammengeführten Aktivitäten und schreibt bestätigte Wochenpläne in deinen Intervals-Kalender zurück.</p>
         <div className="intervals-setup-grid">
           <div className="intervals-setup-step"><span>1</span><div><strong>Datenquellen verbinden</strong><small>In Intervals.icu unter Settings → Connections Garmin, Strava, Polar oder deine Plattform auswählen.</small></div></div>

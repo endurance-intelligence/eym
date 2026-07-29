@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **3.8.3**
+Current app version: **3.8.4**
 
 **Eat your miles.**
 
@@ -510,6 +510,15 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 - The onboarding guide distinguishes activity import, plan export and the additional Intervals.icu Garmin option **Upload planned workouts**.
 - Existing completed accounts do not repeat onboarding. The former owner-bound environment connection remains available as a compatibility fallback.
 - Apply `20260729190000_intervals_connections.sql`, set the stable `INTERVALS_CREDENTIALS_KEY` secret and redeploy the `intervals` function.
+
+## Intervals.icu credential recovery v3.8.4
+
+- Structured Supabase and Edge Function errors are converted into readable messages instead of leaking `[object Object]` into the UI.
+- Missing tables, stale PostgREST schema cache, missing permissions, a missing encryption secret and a genuinely unreadable ciphertext are reported as separate problems.
+- Saving a personal API key now reads the stored ciphertext back and decrypts it before the app reports a successful connection.
+- The original owner account keeps using the former server-side Intervals.icu connection while the new personal credential storage is unavailable or an older personal ciphertext cannot be read. Other accounts remain isolated and never receive that fallback.
+- The recovery migration idempotently restores the credential table, grants and update trigger, then explicitly reloads the PostgREST schema cache. Existing connection rows are preserved.
+- Keep the existing `INTERVALS_CREDENTIALS_KEY`; do not generate a new value. Apply `20260729193000_intervals_connection_recovery.sql` and redeploy the `intervals` function.
 
 For fresh installations that have not yet applied the athlete-image cleanup, run `supabase/migrations/20260722120000_athlete_images.sql` once. Afterwards run:
 

@@ -1,6 +1,10 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { isIntervalsOwner } from "../_shared/intervalsAccess.ts";
+import { canUseLegacyIntervalsConnection } from "../_shared/intervalsAccess.ts";
 import { decryptIntervalsApiKey, encryptIntervalsApiKey } from "../_shared/intervalsCredentials.ts";
+import {
+  intervalsStorageMessage,
+  readableIntervalsError,
+} from "../_shared/intervalsErrors.ts";
 import { intervalDescription, isGuidedPlanItem, isProvisionalTrackPlanItem } from "../_shared/structuredWorkout.ts";
 import { intervalsStartDateLocal } from "../_shared/plannerTiming.ts";
 
@@ -61,7 +65,7 @@ async function intervalsRequest(path: string, apiKey: string, init: RequestInit 
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const message = typeof data?.error === "string" ? data.error : data?.message;
+    const message = readableIntervalsError(data?.error ?? data?.message, "");
     throw new IntervalsRequestError(
       message || `Intervals.icu-Anfrage fehlgeschlagen (${response.status}).`,
       response.status,
@@ -78,7 +82,7 @@ function connectionErrorMessage(error: unknown) {
   if (error instanceof IntervalsRequestError && [401, 403].includes(error.status)) {
     return "Intervals.icu hat den API-Key nicht akzeptiert. Kopiere ihn unter Settings → Developer Settings bitte erneut.";
   }
-  return error instanceof Error ? error.message : String(error);
+  return readableIntervalsError(error);
 }
 
 function verificationQuery() {
@@ -112,16 +116,57 @@ async function personalConnection(
     .eq("user_id", userId)
     .maybeSingle();
   if (error) {
-    if (error.code === "42P01") return { connection: null, storageReady: false };
-    throw error;
+    return {
+      connection: null,
+      storageReady: false,
+      hasStoredConnection: false,
+      issue: {
+        kind: "storage",
+        message: intervalsStorageMessage(error, "read"),
+      },
+    };
   }
-  if (!data?.api_key_ciphertext) return { connection: null, storageReady: true };
-  const apiKey = await decryptIntervalsApiKey(
-    data.api_key_ciphertext,
-    requiredSecret("INTERVALS_CREDENTIALS_KEY"),
-  );
+  if (!data?.api_key_ciphertext) {
+    return {
+      connection: null,
+      storageReady: true,
+      hasStoredConnection: false,
+      issue: null,
+    };
+  }
+
+  const credentialSecret = Deno.env.get("INTERVALS_CREDENTIALS_KEY") || "";
+  if (!credentialSecret) {
+    return {
+      connection: null,
+      storageReady: true,
+      hasStoredConnection: true,
+      issue: {
+        kind: "secret",
+        message: "Das Supabase-Secret INTERVALS_CREDENTIALS_KEY fehlt. Setze das bestehende Secret wieder und deploye die Funktion „intervals“ erneut.",
+      },
+    };
+  }
+
+  let apiKey: string;
+  try {
+    apiKey = await decryptIntervalsApiKey(data.api_key_ciphertext, credentialSecret);
+  } catch {
+    return {
+      connection: null,
+      storageReady: true,
+      hasStoredConnection: true,
+      issue: {
+        kind: "decrypt",
+        message: "Der gespeicherte persönliche API-Key kann mit dem aktuellen Supabase-Secret nicht gelesen werden. Speichere deinen Intervals.icu API-Key hier erneut.",
+      },
+    };
+  }
+
   return {
     storageReady: true,
+    hasStoredConnection: true,
+    issue: null,
     connection: {
       apiKey,
       athleteId: String(data.athlete_id || "0"),
@@ -140,9 +185,11 @@ async function connectionForUser(
 
   const ownerUserId = Deno.env.get("INTERVALS_OWNER_USER_ID") || "";
   const legacyApiKey = Deno.env.get("INTERVALS_API_KEY") || "";
-  if (isIntervalsOwner(userId, ownerUserId) && legacyApiKey) {
+  if (canUseLegacyIntervalsConnection(userId, ownerUserId, legacyApiKey)) {
     return {
       storageReady: personal.storageReady,
+      hasStoredConnection: personal.hasStoredConnection,
+      issue: personal.issue,
       connection: {
         apiKey: legacyApiKey,
         athleteId: Deno.env.get("INTERVALS_ATHLETE_ID") || "0",
@@ -225,7 +272,7 @@ Deno.serve(async (request) => {
         requiredSecret("INTERVALS_CREDENTIALS_KEY"),
       );
       const now = new Date().toISOString();
-      const { error } = await admin
+      const { data: savedConnection, error } = await admin
         .from("intervals_connections")
         .upsert({
           user_id: user.id,
@@ -233,11 +280,21 @@ Deno.serve(async (request) => {
           athlete_id: "0",
           connected_at: now,
           last_verified_at: now,
-        }, { onConflict: "user_id" });
-      if (error?.code === "42P01") {
-        return json({ message: "Die sichere Intervals.icu-Ablage ist noch nicht installiert. Bitte zuerst die neue Supabase-Migration ausführen." }, 503);
+        }, { onConflict: "user_id" })
+        .select("api_key_ciphertext, athlete_id, connected_at")
+        .single();
+      if (error) return json({ message: intervalsStorageMessage(error, "save") }, 503);
+      try {
+        const restoredApiKey = await decryptIntervalsApiKey(
+          String(savedConnection?.api_key_ciphertext || ""),
+          requiredSecret("INTERVALS_CREDENTIALS_KEY"),
+        );
+        if (restoredApiKey !== apiKey) throw new Error("Der gespeicherte API-Key stimmt nicht mit dem geprüften Schlüssel überein.");
+      } catch {
+        return json({
+          message: "Der API-Key wurde von Intervals.icu akzeptiert und gespeichert, konnte bei der anschließenden Sicherheitsprüfung aber nicht wieder gelesen werden. Prüfe, ob INTERVALS_CREDENTIALS_KEY unverändert gesetzt ist, und speichere den API-Key danach erneut.",
+        }, 500);
       }
-      if (error) throw error;
       return json({
         configured: true,
         connected: true,
@@ -252,42 +309,28 @@ Deno.serve(async (request) => {
         .from("intervals_connections")
         .delete()
         .eq("user_id", user.id);
-      if (error?.code === "42P01") {
-        return json({ message: "Die sichere Intervals.icu-Ablage ist noch nicht installiert." }, 503);
-      }
-      if (error) throw error;
+      if (error) return json({ message: intervalsStorageMessage(error, "delete") }, 503);
       return json({ configured: false, connected: false });
     }
 
-    let resolved;
-    try {
-      resolved = await connectionForUser(admin, user.id);
-    } catch (error) {
-      if (action === "status") {
-        return json({
-          configured: true,
-          connected: false,
-          message: "Der gespeicherte Intervals.icu-Zugang konnte nicht entschlüsselt werden. Bitte den API-Key erneut verbinden.",
-        });
-      }
-      throw error;
-    }
+    const resolved = await connectionForUser(admin, user.id);
     const connection = resolved.connection;
 
     if (!connection) {
-      const message = resolved.storageReady
+      const message = resolved.issue?.message || (resolved.storageReady
         ? "Für dieses Konto ist noch keine persönliche Intervals.icu-Verbindung eingerichtet."
-        : "Die sichere Intervals.icu-Ablage ist noch nicht installiert.";
+        : "Die sichere Intervals.icu-Ablage ist noch nicht installiert.");
       if (action === "status") {
         return json({
-          configured: false,
+          configured: Boolean(resolved.hasStoredConnection),
           connected: false,
           connectionMode: null,
           storageReady: resolved.storageReady,
+          credentialIssue: resolved.issue?.kind || null,
           message,
         });
       }
-      return json({ message }, resolved.storageReady ? 403 : 503);
+      return json({ message }, resolved.issue ? (resolved.storageReady ? 409 : 503) : 403);
     }
 
     const apiKey = connection.apiKey;
@@ -308,6 +351,11 @@ Deno.serve(async (request) => {
           connectionMode: connection.mode,
           connectedAt: connection.connectedAt,
           activityCount: latest.length,
+          storageReady: resolved.storageReady,
+          credentialIssue: resolved.issue?.kind || null,
+          message: connection.mode === "legacy" && resolved.issue
+            ? `Intervals.icu ist über deine bisherige Verbindung aktiv. ${resolved.issue.message}`
+            : null,
         });
       } catch (error) {
         return json({
@@ -406,6 +454,6 @@ Deno.serve(async (request) => {
     return json({ message: "Unbekannte Intervals.icu-Aktion." }, 400);
   } catch (error) {
     console.error(error);
-    return json({ message: error instanceof Error ? error.message : String(error) }, 500);
+    return json({ message: readableIntervalsError(error) }, 500);
   }
 });

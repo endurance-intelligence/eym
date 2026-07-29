@@ -1,4 +1,5 @@
 import { activitiesLikelySame } from "./activityUtils.js";
+import { readableErrorText } from "./errorText.js";
 import { supabase, supabaseConfigured } from "./supabase.js";
 
 async function invokeIntervals(action, payload = {}) {
@@ -6,19 +7,21 @@ async function invokeIntervals(action, payload = {}) {
     body: { action, ...payload },
   });
   if (error) {
-    let detail = error.message || "Intervals.icu-Anfrage fehlgeschlagen.";
+    let detail = readableErrorText(error, "Intervals.icu-Anfrage fehlgeschlagen.");
     try {
       const response = error.context;
       if (response?.json) {
         const body = await response.json();
-        detail = body?.message || detail;
+        detail = readableErrorText(body?.message ?? body, detail);
       }
     } catch {
       // Keep the original function error.
     }
     throw new Error(detail);
   }
-  if (data?.message && action !== "status" && !Array.isArray(data?.activities)) throw new Error(data.message);
+  if (data?.message && action !== "status" && !Array.isArray(data?.activities)) {
+    throw new Error(readableErrorText(data.message, "Intervals.icu-Anfrage fehlgeschlagen."));
+  }
   return data || {};
 }
 

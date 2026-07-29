@@ -405,6 +405,8 @@ export function AppProvider({ children }) {
             connected: Boolean(status.connected),
             connectionMode: status.connectionMode || null,
             connectedAt: status.connectedAt || current.intervals?.connectedAt || null,
+            storageReady: status.storageReady ?? current.intervals?.storageReady ?? null,
+            credentialIssue: status.credentialIssue || null,
           },
         }));
         if (!status.connected) return;
