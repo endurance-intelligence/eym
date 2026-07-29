@@ -610,7 +610,9 @@ export default function Coach() {
               <div>
                 <p className="eyebrow">Missionsausblick</p>
                 <h2>{outlook.nextTarget ? `${outlook.nextTarget.name} in ${outlook.nextDays} Tagen` : "Kein nächstes Ziel hinterlegt"}</h2>
-                <p className="muted">{outlook.nextTarget ? `Zielkorridor: ${outlook.targetRange.label}. Der Coach bewertet Kontinuität, Longrun, Schlüsselreize und Erholung.` : "Lege unter Mission Control einen Wettkampf oder Meilenstein an."}</p>
+                <p className="muted">{outlook.nextTarget
+                  ? `${outlook.nextTarget.id !== outlook.strategicTarget?.id ? `Nächster Termin: ${outlook.targetRange.label}. Strategischer Trainingsfokus: ${outlook.strategicTarget?.name || "noch offen"} · Priorität ${outlook.strategicTarget?.priority || "B"} · ${outlook.strategicDays ?? "?"} Tage. ` : `Zielkorridor: ${outlook.targetRange.label}. `}Der Coach bewertet Kontinuität, Longrun, Schlüsselreize und Erholung.`
+                  : "Lege unter Training → Ziele einen Wettkampf oder Meilenstein an."}</p>
               </div>
               <div className={`coach-readiness-badge ${outlook.readiness.tone}`}><strong>{outlook.score}%</strong><span>{outlook.readiness.label}</span></div>
             </div>
@@ -621,11 +623,11 @@ export default function Coach() {
               <div><span>Schlüsseleinheiten</span><strong>{outlook.keySessions}</strong></div>
             </div>
             <div className="coach-loop-preview">
-              <div><p className="eyebrow">Nächster spezifischer Block</p><h3>{outlook.loop.title}</h3><p>{outlook.loop.text}</p></div>
+              <div><p className="eyebrow">Nächster spezifischer Block{outlook.loop.targetName ? ` · ${outlook.loop.targetName} (${outlook.loop.priority})` : ""}</p><h3>{outlook.loop.title}</h3><p>{outlook.loop.text}</p></div>
               <p className="coach-readiness-copy">{outlook.readiness.text} {outlook.expectedHard ? `${outlook.expectedHard} harte Schlüsseleinheit${outlook.expectedHard === 1 ? " wurde" : "en wurden"} als erwarteter Trainingsreiz erkannt.` : ""}</p>
             </div>
             {outlook.roadmap.length > 0 && <div className="coach-roadmap">{outlook.roadmap.map((step) => <article className={step.current ? "current" : ""} key={`${step.label}-${step.title}`}><span>{step.label}</span><h3>{step.title}</h3><p>{step.text}</p></article>)}</div>}
-            {outlook.mainTarget && outlook.nextTarget && outlook.mainTarget.id !== outlook.nextTarget.id && <p className="coach-main-target-note"><strong>Danach:</strong> {outlook.mainTarget.name} in {outlook.mainDays} Tagen.</p>}
+            {outlook.mainTarget && outlook.strategicTarget && outlook.mainTarget.id !== outlook.strategicTarget.id && <p className="coach-main-target-note"><strong>Nach {outlook.strategicTarget.name}:</strong> {outlook.mainTarget.name} in {outlook.mainDays} Tagen.</p>}
           </Card>
           <SignalCard eyebrow="Schlüsseleinheiten" signal={analysis.keySessions} />
         </div>

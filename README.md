@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **3.8.1**
+Current app version: **3.8.2**
 
 **Eat your miles.**
 
@@ -77,7 +77,7 @@ The current API-key integration is for the private test account only. Before EYM
 
 `INTERVALS_OWNER_USER_ID` must contain the UUID of the Supabase Auth user who owns the private Intervals.icu credentials. Other authenticated EYM accounts receive no access to this connection.
 
-For a controlled onboarding test, keep public registration disabled and create the tester under **Supabase → Authentication → Users → Add user**. On first confirmed login, EYM creates a separate `athlete_data` row for that UUID. Existing rows are not updated, and RLS limits every account to its own athlete document and image folder.
+The login page offers registration so a fresh account can run through onboarding. On first confirmed login, EYM creates a separate `athlete_data` row for that UUID. Existing rows are not updated, and RLS limits every account to its own athlete document and image folder. If an installation should no longer accept new accounts, build it with `VITE_ALLOW_SIGNUP=false`.
 
 ## Retired direct Strava connection
 
@@ -492,6 +492,15 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 - Event reviews explicitly record whether the event felt like a normal training session, was harder than training or left the athlete depleted.
 - A training-like C event with stable legs, energy and symptoms does not trigger an automatic recovery week. A depleted review can reduce the following week, but recovery is based on the athlete's actual feedback instead of a fixed multi-day event pause.
 - Existing goals, plans and reviews remain compatible. No database migration is required. Redeploy the `intervals` Supabase function after applying this version.
+
+## Strategic loop blocks and fresh-account registration v3.8.2
+
+- The mission outlook keeps the next chronological event visible, but derives specific training blocks from the next strategic A/B goal. A nearer C event can therefore no longer remove the Backyard loop prescription.
+- Goals can store the course format separately from aid access: loop course, out-and-back or point-to-point, plus aid after every loop, fixed aid stations or self-support.
+- Loop goals store their actual loop distance. Existing Backyard and Heartbeat Ultra goals remain compatible and are recognized as 6.7 km and 6 km loops without manual re-entry.
+- Weekly planning uses the stored course profile instead of depending on an event name. Loop notes adapt to the saved aid-station setup.
+- Fresh-account registration is available from the login page by default so the complete onboarding start can be tested. It can be closed with `VITE_ALLOW_SIGNUP=false`.
+- No database migration or Supabase function deployment is required.
 
 For fresh installations that have not yet applied the athlete-image cleanup, run `supabase/migrations/20260722120000_athlete_images.sql` once. Afterwards run:
 

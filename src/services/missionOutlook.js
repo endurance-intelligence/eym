@@ -1,4 +1,9 @@
 import { activityTimestamp, isRunningActivity } from "./activityUtils.js";
+import {
+  eventCourseProfile,
+  missionEvents,
+  selectStrategicTarget,
+} from "./goalPlanning.js";
 
 const DAY_MS = 86400000;
 
@@ -25,33 +30,22 @@ function daysUntil(event, now) {
 }
 
 function upcomingTargets(mission, now) {
-  const entries = Array.isArray(mission?.milestones) ? mission.milestones : [];
-  const fallback = mission?.date ? [{
-    id: mission.id,
-    name: mission.name,
-    date: mission.date,
-    targetKm: mission.targetKm,
-    location: mission.location,
-    isMainTarget: true,
-  }] : [];
-  const merged = [...entries, ...fallback].filter((entry, index, all) => (
-    entry?.date
-    && !entry.archived
-    && eventDate(entry) >= new Date(now.getFullYear(), now.getMonth(), now.getDate())
-    && all.findIndex((candidate) => candidate.id === entry.id || (candidate.name === entry.name && candidate.date === entry.date)) === index
+  return missionEvents(mission).filter((entry) => (
+    eventDate(entry) >= new Date(now.getFullYear(), now.getMonth(), now.getDate())
   ));
-  return merged.sort((left, right) => eventDate(left) - eventDate(right));
 }
 
 function targetRange(event) {
   const text = String(event?.name || "").toLowerCase();
+  const courseProfile = eventCourseProfile(event);
   if (text.includes("backyard")) {
     return {
       min: Number(event.targetMinKm || 60),
       max: Number(event.targetMaxKm || 80),
       label: `${Number(event.targetMinKm || 60)}–${Number(event.targetMaxKm || 80)} km`,
-      loopKm: 6.7,
+      loopKm: courseProfile.loopKm,
       kind: "backyard",
+      ...courseProfile,
     };
   }
   const km = Number(event?.targetKm || 0);
@@ -59,8 +53,9 @@ function targetRange(event) {
     min: km,
     max: km,
     label: km ? `${km} km` : "Distanz offen",
-    loopKm: /heartbeat|fulda/.test(text) ? 6 : null,
-    kind: /heartbeat|fulda/.test(text) ? "heartbeat" : "race",
+    loopKm: courseProfile.loopKm,
+    kind: /heartbeat|fulda/.test(text) ? "heartbeat" : courseProfile.courseType === "loop" ? "loop" : "race",
+    ...courseProfile,
   };
 }
 
@@ -124,11 +119,20 @@ function nextLoopPrescription(target, daysLeft, metrics) {
   const capabilityLoops = Math.max(2, Math.floor(Math.max(metrics.longestRun, 14) / range.loopKm));
   const loops = clamp(Math.min(baseLoops, capabilityLoops + 1), 2, range.kind === "backyard" ? 6 : 7);
   const km = Math.round(loops * range.loopKm * 10) / 10;
+  const supplyRoutine = range.aidStationMode === "every_loop"
+    ? "Rundenpause und Zugriff auf die Verpflegung nach jeder Runde realistisch testen."
+    : range.aidStationMode === "fixed_stations"
+      ? "Die Abstände der festen Verpflegungspunkte im Training nachbilden."
+      : range.aidStationMode === "self_supported"
+        ? "Material und vollständige Selbstversorgung wie im Event mitführen."
+        : "Pace, Stopps und die geplante Verpflegungsroutine testen.";
   return {
     title: `${loops} × ${String(range.loopKm).replace(".", ",")} km · ${String(km).replace(".", ",")} km`,
+    targetName: target?.name || "",
+    priority: target?.priority || (target?.isMainTarget ? "A" : "B"),
     text: range.kind === "backyard"
-      ? "Als kontrollierter Loop-Block mit Geh-/Verpflegungsroutine. Nicht die komplette Zielstrecke im Training erzwingen."
-      : `Als ${target?.name ? `${target.name}-spezifischer ` : ""}Loop-Block mit gleichmäßiger Pace, kurzen Stopps und vollständigem Fuel-Test.`,
+      ? `Als kontrollierter Backyard-Block mit Geh- und Rundenroutine. ${supplyRoutine} Nicht die komplette Zielstrecke im Training erzwingen.`
+      : `Als ${target?.name ? `${target.name}-spezifischer ` : ""}Loop-Block mit gleichmäßiger Pace und kurzen Stopps. ${supplyRoutine}`,
   };
 }
 
@@ -136,6 +140,7 @@ export function buildMissionOutlook(activities = [], reviews = {}, mission = {},
   const targets = upcomingTargets(mission, now);
   const nextTarget = targets[0] || null;
   const mainTarget = targets.find((target) => target.isMainTarget) || targets.at(-1) || null;
+  const strategicTarget = selectStrategicTarget(mission, now);
   const weeks = recentRunWeeks(activities, now, 8);
   const averageKm = weeks.reduce((sum, week) => sum + week.km, 0) / Math.max(1, weeks.length);
   const peakKm = Math.max(0, ...weeks.map((week) => week.km));
@@ -165,12 +170,14 @@ export function buildMissionOutlook(activities = [], reviews = {}, mission = {},
 
   const nextDays = nextTarget ? daysUntil(nextTarget, now) : null;
   const mainDays = mainTarget ? daysUntil(mainTarget, now) : null;
+  const strategicDays = strategicTarget ? daysUntil(strategicTarget, now) : null;
   const range = targetRange(nextTarget);
-  const loop = nextLoopPrescription(nextTarget, nextDays, { averageKm, peakKm, activeWeeks, longestRun, keySessions });
+  const strategicRange = targetRange(strategicTarget);
+  const loop = nextLoopPrescription(strategicTarget, strategicDays, { averageKm, peakKm, activeWeeks, longestRun, keySessions });
 
   const roadmap = [];
-  if (nextTarget && (range.kind === "backyard" || Number(nextTarget.targetKm || 0) >= 50)) {
-    const currentPhase = nextDays <= 21 ? "taper" : nextDays <= 56 ? "specific" : "base";
+  if (strategicTarget && (strategicRange.kind === "backyard" || Number(strategicTarget.targetKm || 0) >= 50)) {
+    const currentPhase = strategicDays <= 21 ? "taper" : strategicDays <= 56 ? "specific" : "base";
     roadmap.push({
       label: currentPhase === "base" ? "Aktuelle Phase" : "Grundlage",
       title: "Basis stabilisieren",
@@ -179,8 +186,8 @@ export function buildMissionOutlook(activities = [], reviews = {}, mission = {},
     });
     roadmap.push({
       label: currentPhase === "specific" ? "Aktuelle Phase" : "In den nächsten Wochen",
-      title: range.loopKm ? `${nextTarget.name}-spezifische Loops` : `${nextTarget.name}-spezifischer Aufbau`,
-      text: range.loopKm
+      title: strategicRange.loopKm ? `${strategicTarget.name}-spezifische Loops` : `${strategicTarget.name}-spezifischer Aufbau`,
+      text: strategicRange.loopKm
         ? "Alle 1–2 Belastungswochen ein Loop-Block mit Pace-, Pausen-, Geh- und Fuel-Routine. Der Umfang wächst nur bei stabilen Reviews."
         : "Lange Einheiten, mögliche Back-to-Back-Blöcke und die Wettkampfverpflegung werden schrittweise spezifischer. Der Umfang wächst nur bei stabilen Reviews.",
       current: currentPhase === "specific",
@@ -192,11 +199,11 @@ export function buildMissionOutlook(activities = [], reviews = {}, mission = {},
       current: currentPhase === "taper",
     });
   }
-  if (mainTarget && (!nextTarget || mainTarget.id !== nextTarget.id)) {
+  if (mainTarget && (!strategicTarget || mainTarget.id !== strategicTarget.id)) {
     roadmap.push({
-      label: `Nach ${nextTarget?.name || "dem Zwischenziel"}`,
+      label: `Nach ${strategicTarget?.name || "dem Zwischenziel"}`,
       title: `Übergang zu ${mainTarget.name}`,
-      text: `${nextTarget?.name || "Das Zwischenziel"} ist ein wichtiger Trainingsreiz. Danach folgen reviewgesteuerte Erholung und anschließend ein spezifischer Aufbau für ${mainTarget.name}.`,
+      text: `${strategicTarget?.name || "Das Zwischenziel"} ist ein wichtiger Trainingsreiz. Danach folgen reviewgesteuerte Erholung und anschließend ein spezifischer Aufbau für ${mainTarget.name}.`,
       current: false,
     });
   }
@@ -204,9 +211,12 @@ export function buildMissionOutlook(activities = [], reviews = {}, mission = {},
   return {
     nextTarget,
     mainTarget,
+    strategicTarget,
     nextDays,
     mainDays,
+    strategicDays,
     targetRange: range,
+    strategicTargetRange: strategicRange,
     readiness,
     score,
     averageKm: Math.round(averageKm * 10) / 10,

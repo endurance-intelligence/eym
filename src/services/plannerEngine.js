@@ -2,6 +2,7 @@ import { reviewKind } from "./activityUtils.js";
 import {
   buildEventWeek,
   eventDurationMinutes,
+  eventCourseProfile,
   eventGoalLabel,
   eventPolicy,
   eventRelation,
@@ -117,18 +118,19 @@ function planningTarget(mission, weekStart) {
   const selected = selectStrategicTarget(mission, weekStart);
   if (!selected) return mission || {};
   const text = String(selected.name || "").toLowerCase();
+  const courseProfile = eventCourseProfile(selected);
   if (text.includes("backyard")) {
     return {
       ...selected,
+      ...courseProfile,
       targetKm: Number(selected.targetKm || ((Number(selected.targetMinKm || 60) + Number(selected.targetMaxKm || 80)) / 2)),
       targetMinKm: Number(selected.targetMinKm || 60),
       targetMaxKm: Number(selected.targetMaxKm || 80),
-      loopKm: 6.7,
       goalKind: "backyard",
     };
   }
-  if (/heartbeat|fulda/.test(text)) return { ...selected, loopKm: 6, goalKind: "heartbeat" };
-  return { ...selected, goalKind: "race" };
+  if (/heartbeat|fulda/.test(text)) return { ...selected, ...courseProfile, goalKind: "heartbeat" };
+  return { ...selected, ...courseProfile, goalKind: courseProfile.courseType === "loop" ? "loop" : "race" };
 }
 
 function loopTrainingPrescription(goal, daysLeft, longRun, cycle, recoveryWeek) {
@@ -142,14 +144,21 @@ function loopTrainingPrescription(goal, daysLeft, longRun, cycle, recoveryWeek) 
   const loops = Math.max(2, Math.min(desiredLoops, availableLoops, goal.goalKind === "backyard" ? 6 : 7));
   const distance = Math.round(loops * loopKm * 10) / 10;
   const loopLabel = String(loopKm).replace(".", ",");
+  const supplyRoutine = goal.aidStationMode === "every_loop"
+    ? "Nach jeder Runde den geplanten kurzen Stopp und den Zugriff auf Getränke oder Fuel proben."
+    : goal.aidStationMode === "fixed_stations"
+      ? "Die Abstände der Verpflegungspunkte im Training realistisch simulieren."
+      : goal.aidStationMode === "self_supported"
+        ? "Die geplante Selbstversorgung und das komplette Material mitführen."
+        : "Pausen- und Fuel-Routine passend zum Event testen.";
   return {
     loops,
     loopKm,
     distance,
     title: `${loops} × ${loopLabel} km${goal?.name ? ` · ${goal.name}` : " Loop-Training"}`,
     notes: goal.goalKind === "backyard"
-      ? "Spezifischer Loop-Block: jede Runde kontrolliert, Pausen-, Geh- und Fuel-Routine testen. Keine komplette 60–80-km-Generalprobe im Training erzwingen."
-      : `Spezifischer Loop-Block für ${goal?.name || "das Hauptziel"}: gleichmäßige Pace, kurze Stopps und den vollständigen Fuel-/Materialablauf testen.`,
+      ? `Spezifischer Backyard-Block: jede Runde kontrolliert und die Geh-/Rundenroutine testen. ${supplyRoutine} Keine komplette 60–80-km-Generalprobe im Training erzwingen.`
+      : `Spezifischer Loop-Block für ${goal?.name || "das Hauptziel"}: gleichmäßige Pace und kurze Stopps. ${supplyRoutine}`,
   };
 }
 
@@ -1247,6 +1256,9 @@ export function generateWeekPlan({
       targetMinKm: goal.targetMinKm,
       targetMaxKm: goal.targetMaxKm,
       goalKind: goal.goalKind,
+      courseType: goal.courseType,
+      loopKm: goal.loopKm,
+      aidStationMode: goal.aidStationMode,
       priority: goal.priority || (goal.isMainTarget ? "A" : "B"),
       goalType: goal.goalType || "finish",
     } : null,

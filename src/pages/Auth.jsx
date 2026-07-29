@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { resetPassword, signIn, signUp } from "../services/supabase";
+import { signupEnabled } from "../services/authAccess";
 
-const allowSignup = String(import.meta.env.VITE_ALLOW_SIGNUP || "false").toLowerCase() === "true";
+const allowSignup = signupEnabled(import.meta.env.VITE_ALLOW_SIGNUP);
 
 export default function Auth() {
   const [mode, setMode] = useState("login");

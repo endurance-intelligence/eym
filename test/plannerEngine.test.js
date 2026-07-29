@@ -326,6 +326,53 @@ test("outside the C event week the planner keeps training toward B without an ea
   assert.ok(result.plan.some((item) => item.type === "Long Run" || item.type === "Loop-Training"));
 });
 
+test("an explicit B-priority loop course creates a loop workout without relying on its name", () => {
+  const result = generateWeekPlan({
+    mission: {
+      id: "main",
+      name: "Späteres Hauptziel",
+      date: "2026-11-21",
+      targetKm: 80,
+      milestones: [
+        {
+          id: "custom-loop",
+          name: "Herbst-Challenge",
+          date: "2026-09-20",
+          targetKm: 60,
+          priority: "B",
+          courseType: "loop",
+          loopKm: 5,
+          aidStationMode: "fixed_stations",
+        },
+        {
+          id: "main",
+          name: "Späteres Hauptziel",
+          date: "2026-11-21",
+          targetKm: 80,
+          priority: "A",
+          isMainTarget: true,
+        },
+      ],
+    },
+    profile: {
+      selfReportedRunsPerWeek: 5,
+      selfReportedWeeklyKm: 50,
+      selfReportedLongestRunKm: 24,
+    },
+    config: goalAwareConfig,
+    today: new Date("2026-08-10T12:00:00"),
+  });
+
+  const loop = result.plan.find((item) => item.type === "Loop-Training");
+  assert.ok(loop);
+  assert.equal(result.planningTarget.id, "custom-loop");
+  assert.equal(result.planningTarget.courseType, "loop");
+  assert.equal(result.planningTarget.loopKm, 5);
+  assert.equal(loop.loopTraining.loopKm, 5);
+  assert.match(loop.title, /^\d+ × 5 km · Herbst-Challenge$/);
+  assert.match(loop.notes, /Abstände der Verpflegungspunkte/);
+});
+
 test("a B event replaces the long run and is never shrunk below its goal distance", () => {
   const result = generateWeekPlan({
     mission: goalAwareMission,

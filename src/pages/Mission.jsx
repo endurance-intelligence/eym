@@ -7,6 +7,11 @@ import { buildEventAdvice, fetchEventForecast } from "../services/eventWeather";
 import { placeSuggestionSubtitle, searchPlaces } from "../services/placeSearch";
 import { deriveAchievements } from "../services/achievements";
 import { activityDate, isRunningActivity, preferredActivities } from "../services/activityUtils";
+import {
+  aidStationLabel,
+  courseTypeLabel,
+  eventCourseProfile,
+} from "../services/goalPlanning";
 
 const emptyEvent = {
   name: "",
@@ -23,6 +28,9 @@ const emptyEvent = {
   elevationGain: "",
   elevationLoss: "",
   surface: "road",
+  courseType: "unspecified",
+  loopKm: "",
+  aidStationMode: "unspecified",
   role: "",
 };
 
@@ -63,6 +71,9 @@ export default function Mission() {
       time: state.mission.time || "",
       location: state.mission.location || "",
       targetKm: state.mission.targetKm || 0,
+      courseType: state.mission.courseType || "",
+      loopKm: state.mission.loopKm || 0,
+      aidStationMode: state.mission.aidStationMode || "",
       preparationStartDate,
       isMainTarget: true,
       archived: false,
@@ -137,6 +148,9 @@ export default function Mission() {
         elevationGain: draft.elevationGain === "" ? 0 : Number(draft.elevationGain),
         elevationLoss: draft.elevationLoss === "" ? 0 : Number(draft.elevationLoss),
         surface: draft.surface || "road",
+        courseType: draft.courseType || "unspecified",
+        loopKm: draft.courseType === "loop" && draft.loopKm !== "" ? Number(draft.loopKm) : 0,
+        aidStationMode: draft.aidStationMode || "unspecified",
         role: draft.role || "",
         archived: false,
       };
@@ -158,6 +172,9 @@ export default function Mission() {
           time: mainTarget.time || "",
           location: mainTarget.location || "",
           targetKm: Number(mainTarget.targetKm) || 0,
+          courseType: mainTarget.courseType || "unspecified",
+          loopKm: Number(mainTarget.loopKm) || 0,
+          aidStationMode: mainTarget.aidStationMode || "unspecified",
           preparationStartDate: mainTarget.preparationStartDate || current.mission.preparationStartDate || preparationStartDate,
           milestones: next,
         },
@@ -170,6 +187,7 @@ export default function Mission() {
   }
 
   function edit(item) {
+    const courseProfile = eventCourseProfile(item);
     setEditingId(item.id);
     setDraft({
       name: item.name,
@@ -186,6 +204,9 @@ export default function Mission() {
       elevationGain: item.elevationGain ?? "",
       elevationLoss: item.elevationLoss ?? "",
       surface: item.surface || "road",
+      courseType: courseProfile.courseType,
+      loopKm: courseProfile.loopKm || "",
+      aidStationMode: courseProfile.aidStationMode,
       role: item.role || "",
     });
     setShowEditor(true);
@@ -212,6 +233,9 @@ export default function Mission() {
             time: mainTarget.time || "",
             location: mainTarget.location || "",
             targetKm: Number(mainTarget.targetKm) || 0,
+            courseType: mainTarget.courseType || "unspecified",
+            loopKm: Number(mainTarget.loopKm) || 0,
+            aidStationMode: mainTarget.aidStationMode || "unspecified",
             preparationStartDate: mainTarget.preparationStartDate || current.mission.preparationStartDate,
           } : {}),
           milestones: next,
@@ -240,6 +264,9 @@ export default function Mission() {
             time: mainTarget.time || "",
             location: mainTarget.location || "",
             targetKm: Number(mainTarget.targetKm) || 0,
+            courseType: mainTarget.courseType || "unspecified",
+            loopKm: Number(mainTarget.loopKm) || 0,
+            aidStationMode: mainTarget.aidStationMode || "unspecified",
             preparationStartDate: mainTarget.preparationStartDate || current.mission.preparationStartDate,
           } : {}),
           milestones: next,
@@ -260,6 +287,7 @@ export default function Mission() {
 
   function eventCard(item, archived = false) {
     const forecast = forecasts[item.id];
+    const courseProfile = eventCourseProfile(item);
     return (
       <Card key={item.id} className={item.isMainTarget ? "main-target-card" : ""}>
         <div className="card-heading-row">
@@ -269,6 +297,7 @@ export default function Mission() {
         <p>{fmtDate(item.date)}{item.time ? ` · ${item.time} Uhr` : ""} · noch {daysUntil(item.date)} Tage</p>
         <p className="muted">{item.location || "Noch kein Ort hinterlegt"}</p>
         {item.targetKm ? <p><strong>Ziel:</strong> {item.targetKm} km</p> : null}{item.goalType && <p><strong>Zielart:</strong> {{ finish: "Finish", time: "Zielzeit", pb: "Bestzeit", distance: "Distanz maximieren", training: "Vorbereitung" }[item.goalType] || item.goalType}{item.targetTime ? ` · ${item.targetTime}` : ""} · Priorität {item.priority || (item.isMainTarget ? "A" : "B")}</p>}{Number(item.elevationGain || 0) > 0 && <p><strong>Profil:</strong> {item.elevationGain} hm aufwärts · {item.surface || "gemischt"}</p>}
+        {courseProfile.courseType !== "unspecified" && <p><strong>Strecke:</strong> {courseTypeLabel(courseProfile.courseType)}{courseProfile.loopKm ? ` · ${String(courseProfile.loopKm).replace(".", ",")} km je Runde` : ""}{courseProfile.aidStationMode !== "unspecified" ? ` · ${aidStationLabel(courseProfile.aidStationMode)}` : ""}</p>}
         {item.isMainTarget && <p><strong>Vorbereitung ab:</strong> {fmtDate(item.preparationStartDate || preparationStartDate)}</p>}
         <div className="event-actions">
           {!archived && <button onClick={() => edit(item)}>Bearbeiten</button>}
@@ -345,6 +374,9 @@ export default function Mission() {
             <label>Höhenmeter aufwärts<input name="elevationGain" type="number" min="0" value={draft.elevationGain} onChange={change} /></label>
             <label>Höhenmeter abwärts<input name="elevationLoss" type="number" min="0" value={draft.elevationLoss} onChange={change} /></label>
             <label>Untergrund<select name="surface" value={draft.surface} onChange={change}><option value="road">Straße</option><option value="trail">Trail</option><option value="mixed">Gemischt</option><option value="track">Bahn</option></select></label>
+            <label>Streckenformat<select name="courseType" value={draft.courseType} onChange={change}><option value="unspecified">Noch offen / nicht relevant</option><option value="loop">Rundenkurs</option><option value="out_and_back">Hin und zurück</option><option value="point_to_point">A nach B</option></select><small>Damit erkennt dein Coach, welche Abläufe im Training geprobt werden sollen.</small></label>
+            {draft.courseType === "loop" && <label>Rundenlänge (km)<input name="loopKm" type="number" min="0.1" step="0.1" value={draft.loopKm} onChange={change} required /><small>Backyard: 6,7 km. Heartbeat Ultra: 6 km.</small></label>}
+            <label>Versorgung im Event<select name="aidStationMode" value={draft.aidStationMode} onChange={change}><option value="unspecified">Noch offen / nicht relevant</option><option value="every_loop">Verpflegung nach jeder Runde</option><option value="fixed_stations">Feste Verpflegungspunkte</option><option value="self_supported">Selbstversorgung / alles mitnehmen</option></select></label>
             <label className="wide-field">Rolle im Aufbau<input name="role" value={draft.role} onChange={change} placeholder="z. B. kontrollierter Trainingswettkampf" /></label>
             {draft.isMainTarget && <label>Vorbereitung ab<input name="preparationStartDate" type="date" value={draft.preparationStartDate} onChange={change} /></label>}
             <label className="checkbox-label"><input name="isMainTarget" type="checkbox" checked={draft.isMainTarget} onChange={change} /> Als Hauptziel markieren</label>

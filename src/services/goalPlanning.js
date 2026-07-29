@@ -1,5 +1,19 @@
 const DAY_MS = 86400000;
 
+const COURSE_TYPE_LABELS = {
+  unspecified: "Noch offen",
+  loop: "Rundenkurs",
+  out_and_back: "Hin und zurück",
+  point_to_point: "A nach B",
+};
+
+const AID_STATION_LABELS = {
+  unspecified: "Versorgung noch offen",
+  every_loop: "Verpflegung nach jeder Runde",
+  fixed_stations: "Feste Verpflegungspunkte",
+  self_supported: "Selbstversorgung",
+};
+
 const EVENT_POLICIES = {
   A: {
     priority: "A",
@@ -42,6 +56,41 @@ function eventKey(event) {
   return String(event?.id || `${event?.date || ""}:${event?.name || ""}`);
 }
 
+export function eventCourseProfile(event = {}) {
+  const input = event || {};
+  const text = String(input.name || "").toLowerCase();
+  const explicitLoopKm = Math.max(0, Number(input.loopKm || 0));
+  const legacyBackyard = text.includes("backyard");
+  const legacyHeartbeat = /heartbeat|fulda/.test(text);
+  const inferredLoopKm = legacyBackyard ? 6.7 : legacyHeartbeat ? 6 : 0;
+  const storedCourseType = String(input.courseType || "");
+  const courseType = COURSE_TYPE_LABELS[storedCourseType]
+    ? storedCourseType
+    : explicitLoopKm || inferredLoopKm
+      ? "loop"
+      : "unspecified";
+  const storedAidStationMode = String(input.aidStationMode || "");
+  const aidStationMode = AID_STATION_LABELS[storedAidStationMode]
+    ? storedAidStationMode
+    : courseType === "loop" && (legacyBackyard || legacyHeartbeat)
+      ? "every_loop"
+      : "unspecified";
+
+  return {
+    courseType,
+    loopKm: courseType === "loop" ? explicitLoopKm || inferredLoopKm : 0,
+    aidStationMode,
+  };
+}
+
+export function courseTypeLabel(value) {
+  return COURSE_TYPE_LABELS[value] || COURSE_TYPE_LABELS.unspecified;
+}
+
+export function aidStationLabel(value) {
+  return AID_STATION_LABELS[value] || AID_STATION_LABELS.unspecified;
+}
+
 export function eventPriority(event = {}) {
   if (event.isMainTarget) return "A";
   const value = String(event.priority || "").toUpperCase();
@@ -62,13 +111,17 @@ export function missionEvents(mission = {}) {
   const seen = new Set();
   return values
     .filter((event) => event?.date && !event.archived)
-    .map((event) => ({
-      ...event,
-      priority: eventPriority(event),
-      goalType: event.goalType || (event.targetTime ? "time" : "finish"),
-      targetKm: Math.max(0, Number(event.targetKm || 0)),
-      time: event.time || "",
-    }))
+    .map((event) => {
+      const courseProfile = eventCourseProfile(event);
+      return {
+        ...event,
+        ...courseProfile,
+        priority: eventPriority(event),
+        goalType: event.goalType || (event.targetTime ? "time" : "finish"),
+        targetKm: Math.max(0, Number(event.targetKm || 0)),
+        time: event.time || "",
+      };
+    })
     .filter((event) => {
       const key = eventKey(event);
       if (seen.has(key)) return false;

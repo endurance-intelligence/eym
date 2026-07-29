@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   buildEventWeek,
+  eventCourseProfile,
   eventPolicy,
   missionEvents,
   selectStrategicTarget,
@@ -65,4 +66,36 @@ test("after the B milestone the later A goal becomes the strategic target", () =
   const strategic = selectStrategicTarget(mission, new Date("2026-10-01T12:00:00"));
   assert.equal(strategic.id, "heartbeat");
   assert.equal(strategic.priority, "A");
+});
+
+test("course profiles keep explicit route and aid-station data while migrating known legacy loops", () => {
+  assert.deepEqual(eventCourseProfile({
+    name: "Backyard Ultra",
+  }), {
+    courseType: "loop",
+    loopKm: 6.7,
+    aidStationMode: "every_loop",
+  });
+
+  assert.deepEqual(eventCourseProfile({
+    name: "Mein Rundenrennen",
+    courseType: "loop",
+    loopKm: 5,
+    aidStationMode: "fixed_stations",
+  }), {
+    courseType: "loop",
+    loopKm: 5,
+    aidStationMode: "fixed_stations",
+  });
+
+  assert.deepEqual(eventCourseProfile({
+    name: "Stadt zu Stadt",
+    courseType: "point_to_point",
+    loopKm: 8,
+    aidStationMode: "self_supported",
+  }), {
+    courseType: "point_to_point",
+    loopKm: 0,
+    aidStationMode: "self_supported",
+  });
 });
