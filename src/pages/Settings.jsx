@@ -1,6 +1,8 @@
 import { useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { Card, PageTitle } from "../components/UI";
+import Equipment from "./Equipment";
 import { downloadCalendar } from "../services/calendar";
 import { downloadStateBackup, readStateBackup, resetState } from "../services/storage";
 import { defaultState } from "../data/defaults";
@@ -20,6 +22,11 @@ import {
   sortCommitments,
   sportLabel,
 } from "../services/configuration";
+import {
+  resolveSettingsSection,
+  SETTINGS_SECTIONS,
+  settingsSectionSearchParams,
+} from "../services/navigation";
 
 function numberOrBlank(value) {
   return value === "" || value === null || value === undefined ? "" : Number(value);
@@ -27,6 +34,8 @@ function numberOrBlank(value) {
 
 export default function Settings() {
   const { state, setState, session, cloudStatus, cloudUpdatedAt, cloudError, imageStorageStatus, imageStorageMessage, retryImageMigration, calendarToken, intervalsSyncStatus, syncIntervalsNow, uploadLocalState, reloadCloudState, logout } = useApp();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const section = resolveSettingsSection(searchParams.get("section"));
   const [calendarMessage, setCalendarMessage] = useState("");
   const [garminBusy, setGarminBusy] = useState(false);
   const [garminPreview, setGarminPreview] = useState(null);
@@ -35,7 +44,6 @@ export default function Settings() {
   const [intervalsBusy, setIntervalsBusy] = useState(false);
   const [commitmentDraft, setCommitmentDraft] = useState(null);
   const [commitmentMessage, setCommitmentMessage] = useState("");
-  const [section, setSection] = useState("overview");
   const [profileMessage, setProfileMessage] = useState("");
   const [backupMessage, setBackupMessage] = useState("");
   const garminInput = useRef(null);
@@ -50,6 +58,10 @@ export default function Settings() {
   const activeTheme = resolveTheme(appearance);
   const customTheme = resolveTheme({ ...appearance, themeId: "custom" });
   const athleteAssessment = athleteProfileAssessment(state);
+
+  function selectSection(key) {
+    setSearchParams(settingsSectionSearchParams(searchParams, key), { replace: true });
+  }
 
   function updateAppearance(patch) {
     setState((current) => ({
@@ -209,49 +221,47 @@ export default function Settings() {
   const calendarUrl = calendarToken ? calendarSubscriptionUrl(calendarToken) : "";
   const cloudStatusLabel = { local: "Nur lokal", loading: "Cloud wird geladen …", saving: "Wird gespeichert …", synced: "Synchronisiert", conflict: "Neuerer Stand auf einem anderen Gerät", error: "Synchronisierung fehlgeschlagen" }[cloudStatus] || cloudStatus;
 
-  const sectionTabs = [
-    ["overview", "Übersicht"],
-    ["profile", "Profil"],
-    ["planning", "Training & Planung"],
-    ["appearance", "Darstellung"],
-    ["connections", "Verbindungen"],
-    ["data", "Daten & Kalender"],
-  ];
-
   return <>
     <PageTitle eyebrow="Settings" title="Deine Konfiguration" />
     <div className="section-tabs settings-tabs" role="tablist" aria-label="Einstellungsbereiche">
-      {sectionTabs.map(([key, label]) => <button type="button" className={section === key ? "selected" : ""} onClick={() => setSection(key)} key={key}>{label}</button>)}
+      {SETTINGS_SECTIONS.map(([key, label]) => <button type="button" role="tab" aria-selected={section === key} className={section === key ? "selected" : ""} onClick={() => selectSection(key)} key={key}>{label}</button>)}
     </div>
 
     {section === "overview" && <div className="grid settings-overview-grid">
       <Card className="settings-overview-card">
         <p className="eyebrow">Profil</p><h2>{state.profile?.displayName || "Noch ohne Anzeigename"}</h2>
         <p className="muted">{state.profile?.birthDate ? `Geburtsdatum ${new Date(`${state.profile.birthDate}T12:00:00`).toLocaleDateString("de-DE")}` : "Geburtsdatum optional"}{state.profile?.heightCm ? ` · ${state.profile.heightCm} cm` : ""}{state.profile?.weightKg ? ` · ${state.profile.weightKg} kg` : ""}</p>
-        <button type="button" onClick={() => setSection("profile")}>Profil öffnen</button>
+        <button type="button" onClick={() => selectSection("profile")}>Profil öffnen</button>
       </Card>
       <Card className="settings-overview-card">
         <p className="eyebrow">Training & Planung</p><h2>{commitments.length} Fixtermine</h2>
         <p className="muted">{commitments.length ? commitments.map((item) => `${item.weekday.slice(0, 2)} · ${item.name}`).join(" · ") : "Noch keine wiederkehrenden Einheiten"}</p>
-        <button type="button" onClick={() => setSection("planning")}>Planungsregeln öffnen</button>
+        <button type="button" onClick={() => selectSection("planning")}>Planungsregeln öffnen</button>
+      </Card>
+      <Card className="settings-overview-card">
+        <p className="eyebrow">Ausrüstung</p><h2>{(state.equipment || []).filter((item) => !item.archived).length} aktiv</h2>
+        <p className="muted">Schuhe, Laufband, Rudergerät und weitere Ausrüstung an einem Ort verwalten.</p>
+        <button type="button" onClick={() => selectSection("equipment")}>Ausrüstung öffnen</button>
       </Card>
       <Card className="settings-overview-card settings-overview-theme">
         <p className="eyebrow">Darstellung</p><h2>{activeTheme.label}</h2>
         <div className="theme-overview-swatches"><span style={{ background: activeTheme.primary }} /><span style={{ background: activeTheme.secondary }} /></div>
         <p className="muted">Persönliches Ambient-Theme · Glow {appearance.glowEnabled ? `${appearance.glowIntensity} %` : "aus"}</p>
-        <button type="button" onClick={() => setSection("appearance")}>Theme anpassen</button>
+        <button type="button" onClick={() => selectSection("appearance")}>Theme anpassen</button>
       </Card>
       <Card className="settings-overview-card">
         <p className="eyebrow">Verbindungen</p><h2>{state.intervals?.connected ? "Intervals.icu verbunden" : "Intervals.icu noch offen"}</h2>
         <p className="muted">Cloud: {cloudStatusLabel}{state.intervals?.lastSyncAt ? ` · letzter Aktivitäts-Sync ${new Date(state.intervals.lastSyncAt).toLocaleDateString("de-DE")}` : ""}</p>
-        <button type="button" onClick={() => setSection("connections")}>Verbindungen öffnen</button>
+        <button type="button" onClick={() => selectSection("connections")}>Verbindungen öffnen</button>
       </Card>
       <Card className="settings-overview-card">
         <p className="eyebrow">Daten & Kalender</p><h2>{calendarToken ? "Kalenderabo aktiv" : "Kalenderabo vorbereiten"}</h2>
         <p className="muted">{state.garmin?.lastImportAt ? `Garmin-Import: ${new Date(state.garmin.lastImportAt).toLocaleDateString("de-DE")}` : "Garmin-Historie kann als Backup importiert werden."}</p>
-        <button type="button" onClick={() => setSection("data")}>Datenbereich öffnen</button>
+        <button type="button" onClick={() => selectSection("data")}>Datenbereich öffnen</button>
       </Card>
     </div>}
+
+    {section === "equipment" && <Equipment embedded />}
 
     {section === "profile" && <div className="grid">
       <Card className="wide settings-profile-card">

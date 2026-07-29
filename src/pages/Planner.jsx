@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Card, PageTitle } from "../components/UI";
+import TrainingSectionNav from "../components/SectionNav";
 import { useApp } from "../context/AppContext";
 import { getCurrentPosition } from "../services/weather";
 import {
@@ -1330,7 +1331,7 @@ export default function Planner() {
 
   return (
     <>
-      <PageTitle eyebrow="Wochenplaner" title="Deine Woche">
+      <PageTitle eyebrow="Training" title="Deine Woche">
         <div className="page-actions planner-page-actions">
           <button className="primary planner-generate" onClick={requestPlanning} disabled={isPastWeek || planningWeekLocked}>
             ✦ {isPastWeek ? "Woche abgeschlossen" : weekPlan.length ? "Woche anpassen" : planningWeekLocked ? "Noch nicht planbar" : offsetWeeks === 1 ? "Nächste Woche planen" : "Woche planen"}
@@ -1350,6 +1351,7 @@ export default function Planner() {
           </details>
         </div>
       </PageTitle>
+      <TrainingSectionNav />
       {offsetWeeks === 0 && ["adjust", "watch"].includes(unifiedCoach.level) && <Card className={`wide planner-science-card ${unifiedCoach.level}`}><div className="planner-science-heading"><div><p className="eyebrow">Gemeinsame Coach-Bewertung</p><h2>{unifiedCoach.recommendation.title}</h2></div><span>EYM schlägt vor · du entscheidest</span></div><p>{unifiedCoach.recommendation.text}</p><div className="planner-science-context"><span>Gewöhnung: {baseline.runDays.toFixed(1)} Lauftage/Woche · {baseline.weeklyKm.toFixed(0)} km/Woche</span><span>Zielprofil: {goalProfile.focus.join(" · ")}</span><span>Projizierter Load: {scienceAssessment.projected} · jüngster Rahmen: {scienceAssessment.average || "noch offen"}</span></div>{scienceAssessment.candidates.length > 0 && <div className="planner-science-suggestions">{scienceAssessment.candidates.map((item) => <article key={item.id}><b>{item.title}</b><span>{item.date}</span><p>{item.suggestion}</p><button type="button" onClick={() => openAdjustment(item.id, "replace")}>Diese Einheit anpassen</button></article>)}</div>}<small>{unifiedCoach.protectionNote} Auch spezifische Belastungsblöcke und Back-to-Back-Einheiten können bewusst richtig sein.</small></Card>}
 
       <div className="planner-week-nav">

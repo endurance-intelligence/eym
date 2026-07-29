@@ -1,21 +1,11 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { version } from "../../package.json";
 import { useApp } from "../context/AppContext";
-
-const links = [
-  ["/", "Briefing", "◉"],
-  ["/planner", "Wochenplan", "▦"],
-  ["/coach", "Coach", "✦"],
-  ["/mission", "Mission", "◎"],
-  ["/training", "Training", "↗"],
-  ["/fuel", "Fuel Lab", "◒"],
-  ["/equipment", "Equipment", "◇"],
-  ["/analytics", "Analytics", "▥"],
-  ["/settings", "Settings", "⚙"],
-];
+import { isMainNavigationActive, MAIN_NAV_ITEMS } from "../services/navigation";
 
 export default function Layout() {
   const { state, cloudStatus, cloudUpdatedAt, cloudError } = useApp();
+  const location = useLocation();
   const milestones = Array.isArray(state.mission?.milestones) ? state.mission.milestones : [];
   const mainTarget = milestones.find((item) => item.isMainTarget && !item.archived) || state.mission || {};
   const targetLabel = Number(mainTarget.targetKm || 0) > 0 ? `${Number(mainTarget.targetKm)} KM` : "ZIEL SETZEN";
@@ -32,7 +22,14 @@ export default function Layout() {
     <div className="shell">
       <aside>
         <div className="brand"><b>Endurance Intelligence</b><span>Eat your miles.</span><small>v{version}</small></div>
-        <nav>{links.map(([to, name, icon]) => <NavLink key={to} to={to} end={to === "/"}><i>{icon}</i>{name}</NavLink>)}</nav>
+        <nav>{MAIN_NAV_ITEMS.map((item) => {
+          const active = isMainNavigationActive(location.pathname, item);
+          return (
+            <Link key={item.key} to={item.to} className={active ? "active" : ""} aria-current={active ? "page" : undefined}>
+              <i>{item.icon}</i>{item.label}
+            </Link>
+          );
+        })}</nav>
         <div className="aside-foot">
           <NavLink to="/settings" className={`aside-cloud-status ${cloudStatus}`} title={cloudTitle}><i />{cloudLabel}</NavLink>
           <span>{mainTarget.name || "Deine Mission"}</span><br /><strong>{targetLabel}</strong>

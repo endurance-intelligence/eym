@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **3.7.6**
+Current app version: **3.7.7**
 
 **Eat your miles.**
 
@@ -448,6 +448,13 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 - Edit, cancellation and archive actions disappear from completed weekly-plan rows.
 - Fixed appointments can only be manually completed after their scheduled end; future sessions no longer show a misleading empty completion control.
 - Completed rows use a neutral theme-safe surface with a green status marker instead of a large green tint.
+
+## Focused navigation and coach cleanup v3.7.7
+
+- The main navigation is reduced to Briefing, Training, Coach, Fuel Lab and Settings.
+- Week, sessions, goals and analysis are grouped as tabs inside Training without changing their existing deep links.
+- Equipment is now a Settings section; the former `/equipment` route forwards to the new location.
+- Coach knowledge duplicates and the recommendation-history card are removed. HF and weather remain under Today, while Fuel Partner owns fuel learning.
 
 For fresh installations that have not yet applied the athlete-image cleanup, run `supabase/migrations/20260722120000_athlete_images.sql` once. Afterwards run:
 

@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { Card, Metric, PageTitle } from "../components/UI";
+import TrainingSectionNav from "../components/SectionNav";
 import { preferredActivities, sportGroup } from "../services/activityUtils";
 import { buildTrainingAnalytics } from "../services/trainingAnalytics";
 import { buildCoachState } from "../services/coachState";
@@ -59,7 +60,8 @@ export default function Analytics() {
   if (activities.length === 0) {
     return (
       <>
-        <PageTitle eyebrow="Analytics" title="Zahlen mit Bedeutung" />
+        <PageTitle eyebrow="Training" title="Analyse" />
+        <TrainingSectionNav />
         <Card>
           <h2>Noch keine Daten</h2>
           <p className="muted">Importiere Garmin oder synchronisiere Intervals.icu. Danach zeigt EYM nicht nur Summen, sondern Umfang, Konstanz, Zielnähe und Datenqualität.</p>
@@ -70,11 +72,12 @@ export default function Analytics() {
 
   return (
     <>
-      <PageTitle eyebrow="Analytics" title="Trainingstrends">
+      <PageTitle eyebrow="Training" title="Analyse">
         <div className="analytics-range-picker" aria-label="Analysezeitraum">
           {[8, 12].map((value) => <button type="button" className={weekCount === value ? "selected" : ""} onClick={() => setWeekCount(value)} key={value}>{value} Wochen</button>)}
         </div>
       </PageTitle>
+      <TrainingSectionNav />
 
       <div className="grid analytics-grid">
         <Card className={`wide analytics-coach-summary ${coach.level}`}>

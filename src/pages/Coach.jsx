@@ -2,11 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { Card, PageTitle } from "../components/UI";
-import { hydration } from "../services/insights";
 import {
   activityDate,
   activityTimestamp,
-  isRunningActivity,
   preferredActivities,
   reviewKind,
   reviewKindLabel,
@@ -20,7 +18,6 @@ import { releaseScreenWakeLock, requestScreenWakeLock } from "../services/wakeLo
 import {
   buildCoachState,
   recommendationFeedbackEntry,
-  recommendationOutcome,
 } from "../services/coachState";
 import { answerCoachQuestion, COACH_QUESTION_OPTIONS } from "../services/coachExplainer";
 import {
@@ -46,7 +43,6 @@ const coachTabs = [
   ["today", "Heute"],
   ["development", "Entwicklung"],
   ["mobility", "Stabi & Mobility"],
-  ["knowledge", "Wissen"],
 ];
 
 function SignalCard({ eyebrow, signal }) {
@@ -185,14 +181,6 @@ export default function Coach() {
   const recommendationHistory = Array.isArray(state.coachRecommendationHistory) ? state.coachRecommendationHistory : [];
   const currentRecommendationFeedback = recommendationHistory.find((entry) => entry.recommendationId === unifiedCoach.recommendation.id);
   const coachAnswer = useMemo(() => answerCoachQuestion(unifiedCoach, coachQuestionKey), [unifiedCoach, coachQuestionKey]);
-  const latestRunningActivity = useMemo(() => canonicalActivities
-    .filter(isRunningActivity)
-    .sort((left, right) => activityTimestamp(right) - activityTimestamp(left))[0], [canonicalActivities]);
-  const latestRunningReview = latestRunningActivity ? state.reviews[latestRunningActivity.id] : null;
-  const hydrationLearning = latestRunningActivity ? hydration(latestRunningActivity, latestRunningReview) : null;
-  const learningPoint = hydrationLearning?.reliable
-    ? `Für ähnliche Bedingungen sind ungefähr ${hydrationLearning.recommendedLow}–${hydrationLearning.recommendedHigh} ml pro Stunde ein sinnvoller Startpunkt.`
-    : hydrationLearning?.reason || "Je genauer du Trinkmenge und Gefühl direkt nach der Einheit protokollierst, desto persönlicher werden deine Empfehlungen.";
 
   const mobilitySettings = state.mobilityCoach || {};
   const durationMinutes = Number(mobilitySettings.durationMinutes || 25);
@@ -660,31 +648,7 @@ export default function Coach() {
             {outlook.roadmap.length > 0 && <div className="coach-roadmap">{outlook.roadmap.map((step) => <article className={step.current ? "current" : ""} key={`${step.label}-${step.title}`}><span>{step.label}</span><h3>{step.title}</h3><p>{step.text}</p></article>)}</div>}
             {outlook.mainTarget && outlook.nextTarget && outlook.mainTarget.id !== outlook.nextTarget.id && <p className="coach-main-target-note"><strong>Danach:</strong> {outlook.mainTarget.name} in {outlook.mainDays} Tagen.</p>}
           </Card>
-          <Card className="wide coach-feedback-history">
-            <div className="card-heading-row">
-              <div><p className="eyebrow">Empfehlungsverlauf</p><h2>Was EYM vorgeschlagen hat – und was danach geschah</h2></div>
-              <span>{recommendationHistory.length}</span>
-            </div>
-            {recommendationHistory.length ? (
-              <div className="coach-feedback-list">
-                {recommendationHistory.slice(0, 6).map((entry) => {
-                  const outcome = recommendationOutcome(entry, canonicalActivities, state.reviews);
-                  return (
-                    <article key={entry.id}>
-                      <div>
-                        <strong>{entry.title}</strong>
-                        <span>{new Date(entry.respondedAt).toLocaleDateString("de-DE")} · {entry.status === "helpful" ? "hilfreich" : "nicht passend"}</span>
-                      </div>
-                      <p>{entry.text}</p>
-                      <b className={outcome.status}>{outcome.label}</b>
-                    </article>
-                  );
-                })}
-              </div>
-            ) : <p className="muted">Sobald du eine Coach-Einordnung als hilfreich oder nicht passend markierst, erscheint sie hier. EYM verändert dadurch keinen Plan automatisch.</p>}
-          </Card>
           <SignalCard eyebrow="Schlüsseleinheiten" signal={analysis.keySessions} />
-          <SignalCard eyebrow="Fuel & Hydration" signal={analysis.fuel} />
         </div>
       )}
 
@@ -900,22 +864,6 @@ export default function Coach() {
             </div>
             {!visibleLibraryExercises.length && <p className="empty-library-result">Keine passende Übung gefunden. Suche oder Schwerpunkt anpassen.</p>}
             <p className="mobility-safety-note">Schmerz ist kein Trainingsziel. Übungen abbrechen oder vereinfachen, wenn die Bewegung Beschwerden auslöst; bei Physio-Vorgaben gilt die persönlich gezeigte Ausführung.</p>
-          </Card>
-        </div>
-      )}
-
-      {activeTab === "knowledge" && (
-        <div className="grid coach-dashboard-grid">
-          <Card className="wide insight coach-recommendation">
-            <p className="eyebrow">Lernpunkt{latestRunningActivity?.name ? ` · ${latestRunningActivity.name}` : ""}</p>
-            <blockquote>{learningPoint}</blockquote>
-          </Card>
-          <SignalCard eyebrow="Fuel & Hydration" signal={analysis.fuel} />
-          <SignalCard eyebrow="HF & Wetter" signal={analysis.hrWeather} />
-          <Card className="wide">
-            <p className="eyebrow">Review-Logik</p>
-            <h2>Gefühl direkt nach der Einheit</h2>
-            <p className="muted">Bei Beine, Energie, Beweglichkeit und Magenverträglichkeit bedeutet 10 einen sehr guten beziehungsweise beschwerdefreien Zustand. Bei der wahrgenommenen Belastung bedeutet 10 maximal anstrengend.</p>
           </Card>
         </div>
       )}

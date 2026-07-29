@@ -9,7 +9,7 @@ import { queueEntityImageDeletion, uploadEntityImages } from "../services/imageS
 const categories = ["Schuhe", "Fahrrad", "Laufband", "Rudergerät", "Weste", "Stirnlampe", "Sonstiges"];
 const emptyItem = { name: "", category: "Schuhe", km: "0", limit: "800", photo: "" };
 
-export default function Equipment() {
+export default function Equipment({ embedded = false }) {
   const { state, setState, session } = useApp();
   const [showForm, setShowForm] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
@@ -154,13 +154,26 @@ export default function Equipment() {
     </Card>;
   }
 
+  const pageActions = (
+    <div className="page-actions">
+      {state.intervals?.connected && <button onClick={importIntervalsEquipment} disabled={syncing}>{syncing ? "Wird geladen …" : "Aus Intervals übernehmen"}</button>}
+      <button onClick={() => setShowForm((value) => !value)}>+ Ausrüstung</button>
+    </div>
+  );
+
   return <>
-    <PageTitle eyebrow="Equipment Intelligence" title="Ausrüstung">
-      <div className="page-actions">
-        {state.intervals?.connected && <button onClick={importIntervalsEquipment} disabled={syncing}>{syncing ? "Wird geladen …" : "Aus Intervals übernehmen"}</button>}
-        <button onClick={() => setShowForm((value) => !value)}>+ Ausrüstung</button>
+    {embedded ? (
+      <div className="settings-section-heading settings-equipment-heading">
+        <div>
+          <p className="eyebrow">Ausrüstung</p>
+          <h2>Schuhe & Geräte</h2>
+          <p className="muted">Kilometer, Einsätze, Fotos und Wechselgrenzen verwalten.</p>
+        </div>
+        {pageActions}
       </div>
-    </PageTitle>
+    ) : (
+      <PageTitle eyebrow="Settings" title="Ausrüstung">{pageActions}</PageTitle>
+    )}
 
     <input ref={replacementInput} className="visually-hidden" type="file" accept="image/*" capture="environment" onChange={replacePhoto} />
     {status && <p className="connection-message">{status}</p>}

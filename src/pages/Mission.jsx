@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { Card, PageTitle, Metric } from "../components/UI";
+import TrainingSectionNav from "../components/SectionNav";
 import { daysUntil, fmtDate } from "../utils/format";
 import { buildEventAdvice, fetchEventForecast } from "../services/eventWeather";
 import { searchPlaces } from "../services/placeSearch";
@@ -278,13 +279,14 @@ export default function Mission() {
 
   return (
     <>
-      <PageTitle eyebrow="Mission Control" title="Mission Control">
+      <PageTitle eyebrow="Training" title="Ziele">
         <button className="mission-add-button" onClick={() => {
           setEditingId(null);
           setDraft(emptyEvent);
           setShowEditor((value) => !value);
         }}>+ Meilenstein / Event</button>
       </PageTitle>
+      <TrainingSectionNav />
       <div className="grid mission-grid">
         {mainTarget && (
           <Card className="hero wide mission-main-hero">

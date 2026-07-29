@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { HashRouter, Routes, Route } from "react-router-dom";
+import { HashRouter, Navigate, Routes, Route } from "react-router-dom";
 import Layout from "./components/Layout";
 import Briefing from "./pages/Briefing";
 import Auth from "./pages/Auth";
@@ -11,7 +11,6 @@ const Mission = lazy(() => import("./pages/Mission"));
 const Training = lazy(() => import("./pages/Training"));
 const Coach = lazy(() => import("./pages/Coach"));
 const Fuel = lazy(() => import("./pages/Fuel"));
-const Equipment = lazy(() => import("./pages/Equipment"));
 const Analytics = lazy(() => import("./pages/Analytics"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Planner = lazy(() => import("./pages/Planner"));
@@ -30,5 +29,5 @@ export default function App() {
   if (!session) return <Auth />;
   if (cloudStatus === "local" || cloudStatus === "loading") return <main className="auth-shell"><section className="auth-card"><p className="eyebrow">Endurance Intelligence</p><h1>Dein Profil wird geladen …</h1><p className="muted">EYM prüft zuerst deinen vorhandenen Stand, damit nichts überschrieben wird.</p></section></main>;
   if (state.onboarding?.status !== "completed") return <ErrorBoundary><Onboarding /></ErrorBoundary>;
-  return <ErrorBoundary><HashRouter><Routes><Route element={<Layout />}><Route index element={<Briefing />} /><Route path="mission" element={deferredPage(Mission)} /><Route path="training" element={deferredPage(Training)} /><Route path="planner" element={deferredPage(Planner)} /><Route path="coach" element={deferredPage(Coach)} /><Route path="fuel" element={deferredPage(Fuel)} /><Route path="equipment" element={deferredPage(Equipment)} /><Route path="analytics" element={deferredPage(Analytics)} /><Route path="settings" element={deferredPage(Settings)} /></Route></Routes></HashRouter></ErrorBoundary>;
+  return <ErrorBoundary><HashRouter><Routes><Route element={<Layout />}><Route index element={<Briefing />} /><Route path="mission" element={deferredPage(Mission)} /><Route path="training" element={deferredPage(Training)} /><Route path="planner" element={deferredPage(Planner)} /><Route path="coach" element={deferredPage(Coach)} /><Route path="fuel" element={deferredPage(Fuel)} /><Route path="equipment" element={<Navigate to="/settings?section=equipment" replace />} /><Route path="analytics" element={deferredPage(Analytics)} /><Route path="settings" element={deferredPage(Settings)} /></Route></Routes></HashRouter></ErrorBoundary>;
 }

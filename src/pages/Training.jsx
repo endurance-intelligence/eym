@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { Card, PageTitle } from "../components/UI";
+import TrainingSectionNav from "../components/SectionNav";
 import { fmtDate, pace, hours } from "../utils/format";
 import ReviewModal from "../components/ReviewModal";
 import ActivityNameModal from "../components/ActivityNameModal";
@@ -225,6 +226,7 @@ export default function Training() {
           <button onClick={addManualActivity}>+ Manuell</button>
         </div>
       </PageTitle>
+      <TrainingSectionNav />
 
       {mergeMode && <Card className="wide merge-activity-bar">
         <div><strong>Läufe eines Tages zusammenfassen</strong><span>Wähle Aufwärmen, ORC Track und Auslaufen. Distanz, Dauer und Höhenmeter werden addiert; du gibst nur eine Review ab.</span></div>
