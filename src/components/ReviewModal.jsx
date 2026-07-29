@@ -5,7 +5,16 @@ import { eventTitleFor, isOfficialEvent } from "../services/achievements";
 import { isRoadCyclingActivity, reviewKind, reviewKindLabel } from "../services/activityUtils";
 import { activityCoordinatesFor, fetchActivityWeather } from "../services/activityWeather";
 import { useModalScrollLock } from "../services/modalScrollLock";
-import { consumptionSummary, consumedInventoryUnits, consumptionUnitsForFuel, defaultConsumptionUnit, fuelDisplayName, nutritionForConsumption } from "../services/fuelNutrition";
+import {
+  consumptionSummary,
+  consumedInventoryUnits,
+  consumptionUnitsForFuel,
+  defaultConsumptionUnit,
+  fuelDisplayName,
+  normalizeMixedDrinkConsumption,
+  nutritionForConsumption,
+  usesMixedDrinkTracking,
+} from "../services/fuelNutrition";
 import { activityCoachAssessment } from "../services/activityCoach";
 import { fuelRecommendationFromState, plannedWorkoutForActivity } from "../services/fuelPlanner";
 import "./ReviewModal.css";
@@ -92,18 +101,13 @@ export default function ReviewModal({ activity, onClose }) {
   const detectedEvent = isOfficialEvent(activity, old);
   const activityDay = String(activity.startDateLocal || activity.date || "").slice(0, 10);
   const inventoryApplies = (fuelItem) => Boolean(fuelItem && (!fuelItem.stockTrackedFrom || !activityDay || activityDay >= fuelItem.stockTrackedFrom));
+  const defaultBottleVolumeMl = Number(state.profile?.defaultBottleVolumeMl || 650);
   const oldNutrition = (Array.isArray(old.nutritionItems) ? old.nutritionItems : []).filter((item) => !item.hydrationLinked).map((item) => {
     const fuelItem = state.fuel.find((fuel) => fuel.id === item.fuelItemId);
-    const preparedVolumeMl = Number(fuelItem?.preparedVolumeMl || 0);
-    const convertPortionsToMl = preparedVolumeMl > 0 && item.unit === "Portionen";
-    const portionCount = Number(item.quantity || 1);
+    const normalized = normalizeMixedDrinkConsumption(item, fuelItem, defaultBottleVolumeMl);
     return {
-      ...item,
+      ...normalized,
       mode: item.mode || (item.fuelItemId ? "catalog" : "manual"),
-      unit: convertPortionsToMl ? "ml" : item.unit,
-      quantity: convertPortionsToMl
-        ? String(Math.round(portionCount * preparedVolumeMl))
-        : item.quantity,
       carbohydratesPerUnit: item.carbohydratesPerUnit ?? fuelItem?.carbs ?? "",
       sodiumPerUnit: item.sodiumPerUnit ?? fuelItem?.sodium ?? "",
       caffeinePerUnit: item.caffeinePerUnit ?? fuelItem?.caffeine ?? "",
@@ -119,7 +123,7 @@ export default function ReviewModal({ activity, onClose }) {
   const plannedNutrition = (plannedFuelRecommendation?.reviewItems || []).map((item) => {
     const fuelItem = state.fuel.find((fuel) => fuel.id === item.fuelItemId);
     return {
-      ...item,
+      ...normalizeMixedDrinkConsumption(item, fuelItem, defaultBottleVolumeMl),
       affectsInventory: Boolean(item.fuelItemId && inventoryApplies(fuelItem)),
     };
   });
@@ -186,8 +190,9 @@ export default function ReviewModal({ activity, onClose }) {
         carbs: sum.carbs + values.carbs,
         sodium: sum.sodium + values.sodium,
         caffeine: sum.caffeine + values.caffeine,
+        fluid: sum.fluid + Number(values.fluidConsumedMl || 0),
       };
-    }, { carbs: 0, sodium: 0, caffeine: 0 });
+    }, { carbs: 0, sodium: 0, caffeine: 0, fluid: 0 });
     const durationHours = Number(activity.durationSeconds || 0) > 0
       ? Number(activity.durationSeconds) / 3600
       : Number(activity.duration || 0) / 60;
@@ -218,6 +223,7 @@ export default function ReviewModal({ activity, onClose }) {
       totalCarbs: totals.carbs,
       totalSodium: totals.sodium,
       totalCaffeine: totals.caffeine,
+      totalFluidMl: totals.fluid,
       durationHours,
       carbsPerHour,
       sodiumPerHour,
@@ -283,8 +289,48 @@ export default function ReviewModal({ activity, onClose }) {
     }));
   }
 
+  function updateMixedPortions(id, value) {
+    setReview((current) => ({
+      ...current,
+      nutritionItems: current.nutritionItems.map((item) => {
+        if (item.id !== id) return item;
+        const previousPortions = Math.max(0.01, Number(item.quantity || 1));
+        const nextPortions = Math.max(0, Number(value || 0));
+        const bottleVolume = Number(item.mixedVolumeMl || 0) / previousPortions || defaultBottleVolumeMl;
+        const wasFullyConsumed = item.consumedVolumeMl === ""
+          || Number(item.consumedVolumeMl || 0) === Number(item.mixedVolumeMl || 0);
+        const mixedVolumeMl = Math.round(bottleVolume * nextPortions);
+        return {
+          ...item,
+          quantity: String(value),
+          mixedVolumeMl: String(mixedVolumeMl),
+          consumedVolumeMl: wasFullyConsumed ? String(mixedVolumeMl) : item.consumedVolumeMl,
+        };
+      }),
+    }));
+  }
+
+  function updateBottleVolume(id, value) {
+    setReview((current) => ({
+      ...current,
+      nutritionItems: current.nutritionItems.map((item) => {
+        if (item.id !== id) return item;
+        const portions = Math.max(0, Number(item.quantity || 0));
+        const mixedVolumeMl = Math.round(portions * Number(value || 0));
+        const wasFullyConsumed = item.consumedVolumeMl === ""
+          || Number(item.consumedVolumeMl || 0) === Number(item.mixedVolumeMl || 0);
+        return {
+          ...item,
+          mixedVolumeMl: String(mixedVolumeMl),
+          consumedVolumeMl: wasFullyConsumed ? String(mixedVolumeMl) : item.consumedVolumeMl,
+        };
+      }),
+    }));
+  }
+
   function selectFuelItem(id, fuelItemId) {
     const selected = state.fuel.find((item) => item.id === fuelItemId);
+    const mixedDrink = usesMixedDrinkTracking(selected);
     setReview((current) => ({
       ...current,
       nutritionItems: current.nutritionItems.map((item) => item.id !== id ? item : selected ? {
@@ -294,8 +340,10 @@ export default function ReviewModal({ activity, onClose }) {
         fuelItemId: selected.id,
         manufacturer: selected.brand || "",
         product: selected.name || "",
-        unit: defaultConsumptionUnit(selected),
-        quantity: defaultConsumptionUnit(selected) === "ml" ? String(selected.preparedVolumeMl || selected.servingQuantity || 500) : (item.quantity || "1"),
+        unit: mixedDrink ? "Portionen" : defaultConsumptionUnit(selected),
+        quantity: "1",
+        mixedVolumeMl: mixedDrink ? String(defaultBottleVolumeMl) : undefined,
+        consumedVolumeMl: mixedDrink ? String(defaultBottleVolumeMl) : undefined,
         carbohydratesPerUnit: selected.carbs ?? item.carbohydratesPerUnit ?? "",
         sodiumPerUnit: selected.sodium ?? item.sodiumPerUnit ?? "",
         caffeinePerUnit: selected.caffeine ?? item.caffeinePerUnit ?? "",
@@ -345,6 +393,9 @@ export default function ReviewModal({ activity, onClose }) {
       ...review,
       reviewType: kind,
       nutritionItems: nextNutrition,
+      drinkMl: kind === "endurance" && !review.drinkMl && nutritionSummary.totalFluidMl > 0
+        ? String(Math.round(nutritionSummary.totalFluidMl))
+        : review.drinkMl,
       usedNutrition: kind === "endurance" && review.usedNutrition,
       isEvent: kind === "endurance" && review.isEvent,
       nutritionCarbsTotal: kind === "endurance" ? Number(nutritionSummary.totalCarbs.toFixed(1)) : 0,
@@ -352,6 +403,7 @@ export default function ReviewModal({ activity, onClose }) {
       nutritionSodiumTotal: kind === "endurance" ? Math.round(nutritionSummary.totalSodium) : 0,
       sodiumPerHour: kind === "endurance" ? Math.round(nutritionSummary.sodiumPerHour) : 0,
       nutritionCaffeineTotal: kind === "endurance" ? Math.round(nutritionSummary.totalCaffeine) : 0,
+      nutritionFluidTotal: kind === "endurance" ? Math.round(nutritionSummary.totalFluidMl) : 0,
       carbohydrateTargetLow: kind === "endurance" ? nutritionSummary.targetLow : 0,
       carbohydrateTargetHigh: kind === "endurance" ? nutritionSummary.targetHigh : 0,
       carbohydrateStatus: kind === "endurance" ? nutritionSummary.status : null,
@@ -435,18 +487,17 @@ export default function ReviewModal({ activity, onClose }) {
             )}
 
             <section className="review-feature-box coach-activity-assessment">
-              <div className="coach-activity-heading"><div><b>Coach-Analyse der Einheit</b><small>Datenbasierte Einordnung · getrennt von deinem persönlichen Gefühl</small></div><span className={`tone-${coachAssessment.confidence.tone}`}>Datengrundlage {coachAssessment.confidence.value}</span></div>
+              <div className="coach-activity-heading"><div><b>Coach-Einschätzung</b><small>Was die Einheit bedeutet und was jetzt sinnvoll ist</small></div><span className={`tone-${coachAssessment.confidence.tone}`}>Datengrundlage {coachAssessment.confidence.value}</span></div>
+              <p className="coach-activity-summary">{coachAssessment.summary}</p>
               <div className="coach-activity-metrics">
                 {[
-                  ["Objektive Belastung", coachAssessment.load],
+                  ["Belastung", coachAssessment.load],
                   ["Ausführung", coachAssessment.execution],
-                  ["Umgebung", coachAssessment.environment],
-                  ["Erholungsbedarf", coachAssessment.recovery],
-                  ["Zielrelevanz", coachAssessment.relevance],
+                  ["Konsequenz", coachAssessment.recovery],
                 ].map(([label, entry]) => <article className={`tone-${entry.tone}`} key={label}><small>{label}</small><strong>{entry.value}</strong><span>{entry.text}</span></article>)}
               </div>
-              <p className="coach-activity-comparison"><b>Zusammenspiel mit deinem Review:</b> {coachAssessment.comparison}</p>
-              <details><summary>Welche Daten wurden berücksichtigt?</summary><div className="coach-activity-factors">{coachAssessment.factors.map((factor) => <span key={factor}>{factor}</span>)}</div><p>{coachAssessment.confidence.text} Der EYM-Load ist eine interne Vergleichsgröße und keine medizinische Bewertung oder Kopie der Garmin-Kennzahl. Deine subjektive Rückmeldung hat bei Müdigkeit, Schmerzen oder ungewöhnlich schlechtem Gefühl immer Vorrang.</p></details>
+              <p className="coach-activity-comparison"><b>Dein Review:</b> {coachAssessment.comparison}</p>
+              <details><summary>Berücksichtigte Daten</summary><div className="coach-activity-factors">{coachAssessment.factors.map((factor) => <span key={factor}>{factor}</span>)}</div><p>{coachAssessment.confidence.text} Der interne Belastungswert dient nur dem persönlichen Vergleich und ist weder eine medizinische Bewertung noch eine Kopie der Garmin-Kennzahl. Bei Müdigkeit, Schmerzen oder ungewöhnlich schlechtem Gefühl hat deine Rückmeldung immer Vorrang.</p></details>
             </section>
 
             <section className={`review-feature-box ${review.usedNutrition ? "active" : ""}`}>
@@ -472,22 +523,39 @@ export default function ReviewModal({ activity, onClose }) {
                   {review.nutritionItems.some((item) => item.fuelItemId && item.affectsInventory === false) && <div className="nutrition-inventory-note"><b>Bestand bleibt unverändert</b><span>Mindestens ein historischer oder bereits verbrauchter Artikel ist ohne Bestandsabzug markiert. Dieser Hinweis gilt für alle entsprechend markierten Einträge.</span></div>}
                   {review.nutritionItems.map((item, index) => {
                     const selectedFuel = item.fuelItemId ? state.fuel.find((fuel) => fuel.id === item.fuelItemId) : null;
+                    const mixedDrink = usesMixedDrinkTracking(selectedFuel);
                     const totals = nutritionForConsumption(item, selectedFuel);
                     return <div className={`nutrition-review-item ${item.mode === "manual" ? "manual" : "catalog"}`} key={item.id}>
                       <div className="nutrition-review-heading"><div><b>Verpflegung {index + 1}</b><small>{item.mode === "manual" ? "Manuelle Eingabe" : "Fuel Lab"}</small></div><button type="button" className="text-danger" onClick={() => removeNutritionItem(item.id)}>Entfernen</button></div>
                       {item.mode !== "manual" ? <>
-                        <label className="nutrition-catalog-select">Produkt aus Fuel Lab
+                        {!selectedFuel && <label className="nutrition-catalog-select">Produkt aus Fuel Lab
                           <select value={item.fuelItemId || ""} onChange={(event) => selectFuelItem(item.id, event.target.value)}>
                             <option value="">Produkt auswählen …</option>
                             {state.fuel.filter((fuel) => !fuel.archived).map((fuel) => <option key={fuel.id} value={fuel.id}>{fuelDisplayName(fuel)} · {fuel.quantity} {fuel.stockUnit || "Stück"}</option>)}
                           </select>
-                        </label>
+                        </label>}
                         {selectedFuel && <div className="nutrition-catalog-card">
-                          <div className="nutrition-catalog-copy"><span>{selectedFuel.category}</span><b>{fuelDisplayName(selectedFuel)}</b>{selectedFuel.preparedVolumeMl && <small>{selectedFuel.servingQuantity || 1} {selectedFuel.servingUnit || "g"}{selectedFuel.scoopsPerServing ? ` · ${selectedFuel.scoopsPerServing} Messlöffel` : ""} ergeben {selectedFuel.preparedVolumeMl} ml.</small>}</div>
-                          <div className="nutrition-consumption-fields">
-                            <label>Menge<input type="number" min="0" step={item.unit === "ml" ? "10" : "0.1"} value={item.quantity} onChange={(event) => updateNutritionItem(item.id, "quantity", event.target.value)} /></label>
-                            <label>Einheit<select value={item.unit} onChange={(event) => updateNutritionItem(item.id, "unit", event.target.value)}>{consumptionUnitsForFuel(selectedFuel).map((unit) => <option key={unit}>{unit}</option>)}</select></label>
+                          <div className="nutrition-catalog-copy">
+                            <span>{selectedFuel.category}</span>
+                            <b>{fuelDisplayName(selectedFuel)}</b>
+                            {mixedDrink
+                              ? <small>{Number(selectedFuel.carbs || 0).toFixed(1).replace(".0", "")} g Kohlenhydrate pro Portion{selectedFuel.sodium ? ` · ${Math.round(Number(selectedFuel.sodium))} mg Natrium` : ""}. Mischvorschlag des Produkts: {selectedFuel.preparedVolumeMl} ml.</small>
+                              : selectedFuel.servingQuantity && <small>{selectedFuel.servingQuantity} {selectedFuel.servingUnit || "g"} pro Portion.</small>}
+                            <button type="button" className="nutrition-change-product" onClick={() => selectFuelItem(item.id, "")}>Produkt wechseln</button>
                           </div>
+                          {mixedDrink ? (
+                            <div className="nutrition-mix-fields">
+                              <label>Portionen<input type="number" min="0" step="0.25" value={item.quantity} onChange={(event) => updateMixedPortions(item.id, event.target.value)} /></label>
+                              <label>Flasche je Portion (ml)<input type="number" min="0" step="10" value={Number(item.quantity || 0) > 0 ? Math.round(Number(item.mixedVolumeMl || 0) / Number(item.quantity)) : ""} onChange={(event) => updateBottleVolume(item.id, event.target.value)} /></label>
+                              <label>Insgesamt getrunken (ml)<input type="number" min="0" max={item.mixedVolumeMl || undefined} step="10" value={item.consumedVolumeMl || ""} onChange={(event) => updateNutritionItem(item.id, "consumedVolumeMl", event.target.value)} /></label>
+                              <div className="nutrition-bottle-presets"><span>Flaschengröße je Portion</span>{[500, 650].map((volume) => <button type="button" className={Number(item.quantity || 0) > 0 && Math.round(Number(item.mixedVolumeMl || 0) / Number(item.quantity)) === volume ? "selected" : ""} onClick={() => updateBottleVolume(item.id, volume)} key={volume}>{volume} ml</button>)}</div>
+                            </div>
+                          ) : (
+                            <div className="nutrition-consumption-fields">
+                              <label>Menge<input type="number" min="0" step={item.unit === "ml" ? "10" : "0.1"} value={item.quantity} onChange={(event) => updateNutritionItem(item.id, "quantity", event.target.value)} /></label>
+                              <label>Einheit<select value={item.unit} onChange={(event) => updateNutritionItem(item.id, "unit", event.target.value)}>{consumptionUnitsForFuel(selectedFuel).map((unit) => <option key={unit}>{unit}</option>)}</select></label>
+                            </div>
+                          )}
                           <div className="nutrition-live-values">{consumptionSummary(item, selectedFuel).map((part) => <span key={part}>{part}</span>)}{!consumptionSummary(item, selectedFuel).length && <span>Nährwerte im Fuel Lab noch nicht vollständig.</span>}</div>
                           <label className="inventory-impact-toggle"><input type="checkbox" checked={item.affectsInventory !== false} onChange={(event) => updateNutritionItem(item.id, "affectsInventory", event.target.checked)} /><span>Aktuellen Bestand reduzieren{item.affectsInventory !== false && totals.inventoryUnits > 0 ? ` · ${totals.inventoryUnits.toFixed(1).replace(".0", "")} ${selectedFuel.stockUnit || "Einheiten"}` : ""}</span></label>
                         </div>}
@@ -508,6 +576,7 @@ export default function ReviewModal({ activity, onClose }) {
                     <div className="fuel-review-metrics">
                       <span><small>Kohlenhydrate gesamt</small><strong>{nutritionSummary.totalCarbs.toFixed(0)} g</strong></span>
                       <span><small>Kohlenhydrate pro Stunde</small><strong>{nutritionSummary.durationHours > 0 ? `${nutritionSummary.carbsPerHour.toFixed(0)} g/h` : "–"}</strong></span>
+                      <span><small>Produktgetränk</small><strong>{nutritionSummary.totalFluidMl > 0 ? `${Math.round(nutritionSummary.totalFluidMl)} ml` : "nicht erfasst"}</strong></span>
                       <span><small>Natrium gesamt</small><strong>{nutritionSummary.totalSodium > 0 ? `${Math.round(nutritionSummary.totalSodium)} mg` : "nicht erfasst"}</strong></span>
                       <span><small>Natrium pro Stunde</small><strong>{nutritionSummary.totalSodium > 0 && nutritionSummary.durationHours > 0 ? `${Math.round(nutritionSummary.sodiumPerHour)} mg/h` : "–"}</strong></span>
                       <span><small>Koffein gesamt</small><strong>{nutritionSummary.totalCaffeine > 0 ? `${Math.round(nutritionSummary.totalCaffeine)} mg` : "nicht erfasst"}</strong></span>

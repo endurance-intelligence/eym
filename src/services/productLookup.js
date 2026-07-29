@@ -290,5 +290,5 @@ export async function lookupOpenFoodFactsProduct(rawBarcode) {
   const result = await lookupV3(barcode) || await lookupV2(barcode);
   if (result) return result;
   const community = COMMUNITY_FUEL_CATALOG[barcode];
-  return community ? productResult(barcode, community, "EYM Community Fuel") : { found: false, barcode };
+  return community ? productResult(barcode, community, "Community Fuel") : { found: false, barcode };
 }

@@ -97,7 +97,7 @@ export function downloadStateBackup(state) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `eym-backup-${backup.createdAt.slice(0, 10)}.json`;
+  link.download = `endurance-intelligence-backup-${backup.createdAt.slice(0, 10)}.json`;
   link.click();
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
@@ -112,7 +112,7 @@ export function parseStateBackup(text, defaults) {
   const wrapped = parsed?.format === "endurance-intelligence-backup";
   const data = wrapped ? parsed.data : parsed;
   if (!data || typeof data !== "object" || !["activities", "plan", "profile", "mission"].some((key) => key in data)) {
-    throw new Error("Die Datei ist keine gültige EYM-Sicherung.");
+    throw new Error("Die Datei ist keine gültige App-Sicherung.");
   }
   return {
     state: sanitizeState(data, defaults),
@@ -121,7 +121,7 @@ export function parseStateBackup(text, defaults) {
 }
 
 export async function readStateBackup(file, defaults) {
-  if (!file) throw new Error("Bitte eine EYM-Sicherungsdatei auswählen.");
+  if (!file) throw new Error("Bitte eine App-Sicherungsdatei auswählen.");
   return parseStateBackup(await file.text(), defaults);
 }
 

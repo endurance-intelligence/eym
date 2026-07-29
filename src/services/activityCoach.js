@@ -103,8 +103,8 @@ function loadAssessment(state, activity) {
   else if (!typical && (numeric(activity.duration) >= 90 || numeric(activity.distance) >= 18)) { value = "Hoch"; tone = "watch"; }
   const external = numeric(activity.trainingLoad);
   const text = typical > 0
-    ? `${current} EYM-Load · typisch ${Math.round(typical)} für vergleichbare Einheiten${external ? ` · Intervals Load ${Math.round(external)}` : ""}`
-    : `${current} EYM-Load${external ? ` · Intervals Load ${Math.round(external)}` : ""}`;
+    ? `${current} interner Belastungswert · typisch ${Math.round(typical)} für vergleichbare Einheiten${external ? ` · Intervals Load ${Math.round(external)}` : ""}`
+    : `${current} interner Belastungswert${external ? ` · Intervals Load ${Math.round(external)}` : ""}`;
   return { value, tone, text, current, typical, ratio };
 }
 
@@ -143,14 +143,37 @@ function goalRelevance(state, activity, elevation) {
 
 function subjectiveComparison(load, review) {
   const hasReview = numeric(review.rpe) > 0 || numeric(review.legs) > 0 || numeric(review.energy) > 0;
-  if (!hasReview) return "Deine subjektive Rückmeldung ergänzt diese Datenanalyse.";
+  if (!hasReview) return "Deine persönliche Rückmeldung ergänzt diese Einschätzung.";
   const feelsGood = numeric(review.legs) >= 7 && numeric(review.energy) >= 7 && numeric(review.overallFeeling) >= 7;
   const feelsPoor = numeric(review.legs) <= 4 || numeric(review.energy) <= 4 || numeric(review.overallFeeling) <= 4 || (Array.isArray(review.legSymptoms) && review.legSymptoms.includes("Schmerzen"));
   const objectivelyHard = ["Hoch", "Sehr hoch"].includes(load.value);
-  if (objectivelyHard && feelsGood) return "Objektiv anspruchsvoll, von dir aber gut verarbeitet. Das spricht für eine stabile Belastungsverträglichkeit.";
-  if (!objectivelyHard && feelsPoor) return "Die Messdaten wirken nicht außergewöhnlich, dein Gefühl fällt aber deutlich schwächer aus. Für die weitere Planung hat dein Review Vorrang.";
-  if (objectivelyHard && feelsPoor) return "Daten und Gefühl zeigen beide eine hohe Belastung. Die Folgetage sollten bewusst beobachtet werden.";
-  return "Dein Gefühl und die objektive Einordnung passen weitgehend zusammen.";
+  if (objectivelyHard && feelsGood) return "Die Einheit war hart, wurde von dir aber gut vertragen.";
+  if (!objectivelyHard && feelsPoor) return "Die Messdaten wirken unauffällig, dein Gefühl fällt aber deutlich schwächer aus. Für die weitere Planung hat dein Review Vorrang.";
+  if (objectivelyHard && feelsPoor) return "Messdaten und dein Gefühl zeigen beide eine hohe Belastung. Beobachte die Folgetage bewusst.";
+  return "Dein Review bestätigt die objektive Einordnung weitgehend.";
+}
+
+function assessmentSummary(load, execution, environment, recovery) {
+  const loadLabel = {
+    "Sehr hoch": "Sehr hohe Belastung",
+    Hoch: "Hohe Belastung",
+    Moderat: "Moderate Belastung",
+    Locker: "Lockere Belastung",
+  }[load.value] || `${load.value}e Belastung`;
+  const executionText = execution.value === "Im Planrahmen"
+    ? ", aber im geplanten Rahmen."
+    : execution.value === "Mehr als geplant"
+      ? " und deutlich umfangreicher als geplant."
+      : execution.value === "Kürzer als geplant"
+        ? ", jedoch kürzer als geplant."
+        : " ohne eindeutig passende Planeinheit.";
+  const environmentText = environment.score > 0
+    ? ` ${environment.text.replace(/ erhöhen die äußere Belastung\.?$/, " haben die Einheit zusätzlich erschwert.")}`
+    : "";
+  const recoveryText = recovery.value === "12–24 h"
+    ? ` Die nächsten ${recovery.value} reichen voraussichtlich für die normale Erholung.`
+    : ` Für die nächsten ${recovery.value} locker trainieren.`;
+  return `${loadLabel}${executionText}${environmentText}${recoveryText}`;
 }
 
 function dataConfidence(activity, weather) {
@@ -195,6 +218,7 @@ export function activityCoachAssessment(state, activity, review = {}, weatherOve
     recovery,
     relevance,
     confidence,
+    summary: assessmentSummary(load, execution, environment, recovery),
     comparison: subjectiveComparison(load, review),
     factors,
   };

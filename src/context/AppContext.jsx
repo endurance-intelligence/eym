@@ -10,6 +10,7 @@ import { findFuelCatalogMatch, fuelCatalogKey, reviewFuelCategory } from "../ser
 import { consumedInventoryUnits } from "../services/fuelNutrition";
 import { applyImageMigrations, embeddedImageCount, flushQueuedImageDeletions, migrateEmbeddedImages } from "../services/imageStorage";
 import { completedLegacyOnboarding } from "../services/onboarding";
+import { accountReviewTrackingStartDate } from "../services/reviewCoverage";
 
 const AppContext = createContext(null);
 
@@ -155,6 +156,18 @@ function stateForCloud(state) {
   return cloudState;
 }
 
+function withAccountReviewTrackingStart(state, accountCreatedAt) {
+  const startDate = accountReviewTrackingStartDate(state, accountCreatedAt);
+  if (state.profile?.reviewTrackingStartDate === startDate) return state;
+  return {
+    ...state,
+    profile: {
+      ...state.profile,
+      reviewTrackingStartDate: startDate,
+    },
+  };
+}
+
 export function AppProvider({ children }) {
   const [state, setState] = useState(() => mergeState(defaultState, {}));
   const [session, setSession] = useState(null);
@@ -239,13 +252,16 @@ export function AppProvider({ children }) {
         const local = hasAccountState ? loadState(defaultState, userId) : mergeState(defaultState, {});
         let hydratedState;
         if (cloud?.app_data && Object.keys(cloud.app_data).length > 0) {
-          hydratedState = mergeState(local, cloud.app_data);
+          hydratedState = withAccountReviewTrackingStart(
+            mergeState(local, cloud.app_data),
+            session.user.created_at,
+          );
           setCalendarToken(cloud.calendar_token);
           setCloudUpdatedAt(cloud.updated_at);
           cloudUpdatedAtRef.current = cloud.updated_at;
           flushQueuedImageDeletions(userId, cloud.app_data).catch((error) => console.warn("Image cleanup postponed", error));
         } else {
-          hydratedState = local;
+          hydratedState = withAccountReviewTrackingStart(local, session.user.created_at);
           const snapshot = stateForCloud(hydratedState);
           const saved = await saveCloudState(userId, snapshot);
           if (cancelled || sessionUserIdRef.current !== userId) return;
@@ -269,7 +285,7 @@ export function AppProvider({ children }) {
     }
     hydrate();
     return () => { cancelled = true; };
-  }, [session?.user?.id]);
+  }, [session?.user?.created_at, session?.user?.id]);
 
   useEffect(() => {
     if (!session?.user?.id || !cloudHydrated.current || cloudConflict.current) return;

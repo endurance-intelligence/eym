@@ -251,7 +251,7 @@ export function recovery(reviews, activities) {
     return {
       label: "Noch offen",
       tone: "neutral",
-      text: "Bewerte mindestens einen Lauf. Danach kann EYM Beine, Energie und empfundene Belastung sinnvoll einordnen.",
+      text: "Bewerte mindestens einen Lauf. Danach kann dein Coach Beine, Energie und empfundene Belastung sinnvoll einordnen.",
       reviewed: 0,
       legs: "–",
       energy: "–",

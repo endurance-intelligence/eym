@@ -48,6 +48,10 @@ test("training analytics builds weekly volume, adherence and goal specificity fr
   const result = buildTrainingAnalytics(state, now, 8);
   assert.equal(result.weeks.length, 8);
   assert.equal(result.metrics.runs, 7);
+  assert.equal(result.metrics.reviewEligibleRuns, 4);
+  assert.equal(result.reviewCoverage.trackingStart, "2026-07-01");
+  assert.equal(result.reviewCoverage.eligible.length, 4);
+  assert.deepEqual(result.reviewCoverage.missing.map((activity) => activity.id), ["r7", "r5", "r4"]);
   assert.equal(result.metrics.longRuns, 2);
   assert.equal(result.metrics.backToBackBlocks, 1);
   assert.equal(result.metrics.planAdherence, 0.5);
@@ -60,4 +64,27 @@ test("running intensity keeps quality and long sessions separate from easy runs"
   assert.equal(runningIntensity(run("easy", "2026-07-01", 8, "8 km locker")), "easy");
   assert.equal(runningIntensity(run("quality", "2026-07-02", 8, "ORC Track – Intervalle")), "quality");
   assert.equal(runningIntensity(run("long", "2026-07-03", 24, "Sonntagslauf")), "long");
+});
+
+test("review coverage stays anchored at account start instead of the selected analytics window", () => {
+  const state = {
+    activities: [
+      run("old-reviewed", "2026-03-05", 10),
+      run("old-missing", "2026-03-12", 12),
+      run("recent", "2026-07-20", 8),
+    ],
+    activityGroups: [],
+    reviews: {
+      "old-reviewed": { legs: 7, energy: 8 },
+      recent: { legs: 8, energy: 8 },
+    },
+    profile: { reviewTrackingStartDate: "2026-03-01" },
+    plan: [],
+    mission: {},
+    intervals: {},
+  };
+
+  const result = buildTrainingAnalytics(state, new Date("2026-07-24T12:00:00"), 8);
+  assert.equal(result.reviewCoverage.eligible.length, 3);
+  assert.deepEqual(result.reviewCoverage.missing.map((activity) => activity.id), ["old-missing"]);
 });

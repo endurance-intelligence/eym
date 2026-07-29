@@ -1033,7 +1033,7 @@ export default function Planner() {
           },
         },
       }));
-      setStatus(`${Number(result.uploaded || publishablePlan.length)} Einheiten an Intervals.icu gesendet · ${Number(result.guided || 0)} geführte Garmin-Workouts · ${Number(result.notes || 0)} Kalendereinträge.${provisionalTrackPlan.length ? ` ${provisionalTrackPlan.length} vorläufige Track-Einheit${provisionalTrackPlan.length === 1 ? "" : "en"} blieb${provisionalTrackPlan.length === 1 ? "" : "en"} nur in EYM.` : ""}`);
+      setStatus(`${Number(result.uploaded || publishablePlan.length)} Einheiten an Intervals.icu gesendet · ${Number(result.guided || 0)} geführte Garmin-Workouts · ${Number(result.notes || 0)} Kalendereinträge.${provisionalTrackPlan.length ? ` ${provisionalTrackPlan.length} vorläufige Track-Einheit${provisionalTrackPlan.length === 1 ? "" : "en"} blieb${provisionalTrackPlan.length === 1 ? "" : "en"} nur im Wochenplan.` : ""}`);
       setPublishConfirmOpen(false);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
@@ -1074,7 +1074,7 @@ export default function Planner() {
         : [...current.plan, next],
     }));
     if (isProvisionalTrackWorkout(next)) {
-      setStatus("Track-Workout vorläufig gespeichert. Es bleibt in EYM und wird erst nach „Final“ an Garmin gesendet.");
+      setStatus("Track-Workout vorläufig gespeichert. Es bleibt im Wochenplan und wird erst nach „Final“ an Garmin gesendet.");
     } else if (isTrackWorkout(next)) {
       setStatus("Track-Workout final gespeichert. Falls die Woche schon gesendet wurde, anschließend „Garmin aktualisieren“ drücken.");
     }
@@ -1344,7 +1344,7 @@ export default function Planner() {
             <div className="action-menu-panel">
               {calendarToken && <span className="action-menu-status">✓ Kalenderabo aktiv</span>}
               {publishedWeek && <span className="action-menu-status">{planChangedAfterPublish ? "! Garmin-Stand veraltet" : `✓ ${publishedWeek.guided || 0} Workouts und ${publishedWeek.notes || 0} Termine gesendet`}</span>}
-              <button type="button" onClick={(event) => { setPlanningInfoOpen(true); event.currentTarget.closest("details")?.removeAttribute("open"); }}>Wie plant EYM?</button>
+              <button type="button" onClick={(event) => { setPlanningInfoOpen(true); event.currentTarget.closest("details")?.removeAttribute("open"); }}>Wie plant dein Coach?</button>
               <button type="button" onClick={(event) => { downloadCalendar(weekPlan); event.currentTarget.closest("details")?.removeAttribute("open"); }} disabled={!weekPlan.length}>ICS-Datei laden</button>
               <button type="button" onClick={(event) => { requestPublish(); event.currentTarget.closest("details")?.removeAttribute("open"); }} disabled={publishBusy || (!publishedWeek && publishablePlan.length === 0)}>{publishedWeek ? "Garmin erneut senden" : "Plan an Garmin senden"}</button>
             </div>
@@ -1352,7 +1352,7 @@ export default function Planner() {
         </div>
       </PageTitle>
       <TrainingSectionNav />
-      {offsetWeeks === 0 && ["adjust", "watch"].includes(unifiedCoach.level) && <Card className={`wide planner-science-card ${unifiedCoach.level}`}><div className="planner-science-heading"><div><p className="eyebrow">Gemeinsame Coach-Bewertung</p><h2>{unifiedCoach.recommendation.title}</h2></div><span>EYM schlägt vor · du entscheidest</span></div><p>{unifiedCoach.recommendation.text}</p><div className="planner-science-context"><span>Gewöhnung: {baseline.runDays.toFixed(1)} Lauftage/Woche · {baseline.weeklyKm.toFixed(0)} km/Woche</span><span>Zielprofil: {goalProfile.focus.join(" · ")}</span><span>Projizierter Load: {scienceAssessment.projected} · jüngster Rahmen: {scienceAssessment.average || "noch offen"}</span></div>{scienceAssessment.candidates.length > 0 && <div className="planner-science-suggestions">{scienceAssessment.candidates.map((item) => <article key={item.id}><b>{item.title}</b><span>{item.date}</span><p>{item.suggestion}</p><button type="button" onClick={() => openAdjustment(item.id, "replace")}>Diese Einheit anpassen</button></article>)}</div>}<small>{unifiedCoach.protectionNote} Auch spezifische Belastungsblöcke und Back-to-Back-Einheiten können bewusst richtig sein.</small></Card>}
+      {offsetWeeks === 0 && ["adjust", "watch"].includes(unifiedCoach.level) && <Card className={`wide planner-science-card ${unifiedCoach.level}`}><div className="planner-science-heading"><div><p className="eyebrow">Gemeinsame Coach-Bewertung</p><h2>{unifiedCoach.recommendation.title}</h2></div><span>Dein Coach schlägt vor · du entscheidest</span></div><p>{unifiedCoach.recommendation.text}</p><div className="planner-science-context"><span>Gewöhnung: {baseline.runDays.toFixed(1)} Lauftage/Woche · {baseline.weeklyKm.toFixed(0)} km/Woche</span><span>Zielprofil: {goalProfile.focus.join(" · ")}</span><span>Projizierter Load: {scienceAssessment.projected} · jüngster Rahmen: {scienceAssessment.average || "noch offen"}</span></div>{scienceAssessment.candidates.length > 0 && <div className="planner-science-suggestions">{scienceAssessment.candidates.map((item) => <article key={item.id}><b>{item.title}</b><span>{item.date}</span><p>{item.suggestion}</p><button type="button" onClick={() => openAdjustment(item.id, "replace")}>Diese Einheit anpassen</button></article>)}</div>}<small>{unifiedCoach.protectionNote} Auch spezifische Belastungsblöcke und Back-to-Back-Einheiten können bewusst richtig sein.</small></Card>}
 
       <div className="planner-week-nav">
         <button disabled={offsetWeeks === 0 && !previousWeekHasPlan} title={offsetWeeks === 0 && !previousWeekHasPlan ? "Keine ältere geplante Woche vorhanden" : "Vorherige Woche"} onClick={() => { setOffsetWeeks((value) => value - 1); setForecast([]); setStatus(""); }}>←</button>
@@ -1373,7 +1373,7 @@ export default function Planner() {
           <div>
             <p className="eyebrow">Wochenabschluss</p>
             <h2>{planningWeekLocked ? `${planningTargetLabel} ist noch nicht planbar` : `${closurePeriodLabel === "Vorwoche" ? "Vorwoche" : "Aktuelle Woche"} ist ausgewertet`}</h2>
-            <p className="muted">{planningWeekLocked ? `EYM wartet auf die erforderlichen Rückmeldungen der ${closurePeriodLabel}, bevor die nächste Belastung berechnet wird.` : "Alle tatsächlich erforderlichen Reviews liegen vor und jede geplante Einheit ist erledigt oder nachvollziehbar geklärt."}</p>
+            <p className="muted">{planningWeekLocked ? `Dein Coach wartet auf die erforderlichen Rückmeldungen der ${closurePeriodLabel}, bevor die nächste Belastung berechnet wird.` : "Alle tatsächlich erforderlichen Reviews liegen vor und jede geplante Einheit ist erledigt oder nachvollziehbar geklärt."}</p>
           </div>
           <div className="planner-gate-checks">
             <div className={previousWeekClosure?.missingReviews.length ? "open" : "done"}><b>{previousWeekClosure?.missingReviews.length ? "!" : "✓"}</b><span><strong>Reviews</strong><small>{previousWeekClosure?.missingReviews.length ? `${previousWeekClosure.missingReviews.length} Rückmeldung${previousWeekClosure.missingReviews.length === 1 ? " fehlt" : "en fehlen"}` : "Alle erforderlichen Reviews vorhanden"}</small></span></div>
@@ -1602,10 +1602,10 @@ export default function Planner() {
             <p className="eyebrow">Woche bestätigen</p>
             <h2>Plan an Intervals.icu senden?</h2>
             <p><strong>{publishablePlan.length}</strong> zukünftige Einheit{publishablePlan.length === 1 ? "" : "en"} werden für {dayFormatter.format(weekStart)} bis {dayFormatter.format(weekEnd)} veröffentlicht.</p>
-            {provisionalTrackPlan.length > 0 && <p className="planner-publish-draft-note"><strong>{provisionalTrackPlan.length} vorläufige Track-Einheit{provisionalTrackPlan.length === 1 ? "" : "en"}</strong> bleibt{provisionalTrackPlan.length === 1 ? "" : "en"} in EYM und wird{provisionalTrackPlan.length === 1 ? "" : "werden"} nicht an Garmin gesendet. Eine früher gesendete Fassung wird beim Aktualisieren entfernt.</p>}
+            {provisionalTrackPlan.length > 0 && <p className="planner-publish-draft-note"><strong>{provisionalTrackPlan.length} vorläufige Track-Einheit{provisionalTrackPlan.length === 1 ? "" : "en"}</strong> bleibt{provisionalTrackPlan.length === 1 ? "" : "en"} im Wochenplan und wird{provisionalTrackPlan.length === 1 ? "" : "werden"} nicht an Garmin gesendet. Eine früher gesendete Fassung wird beim Aktualisieren entfernt.</p>}
             <div className="planner-protection-list">
               <span>✓ Lauf- und Radeinheiten werden als strukturierte Workouts angelegt</span>
-              <span>✓ Vorläufige Track-Workouts bleiben in EYM, bis du sie ausdrücklich auf „Final“ stellst</span>
+              <span>✓ Vorläufige Track-Workouts bleiben im Wochenplan, bis du sie ausdrücklich auf „Final“ stellst</span>
               <span>✓ Eine noch offene Samstagswahl bleibt zunächst als Kalendereintrag und wird nach deiner Entscheidung aktualisiert</span>
               <span>✓ Fußball, Stabi, Mobility und Rudern bleiben reine Kalendereinträge</span>
               <span>✓ Erneutes Senden aktualisiert bestehende Einträge statt Duplikate anzulegen</span>
@@ -1672,7 +1672,7 @@ export default function Planner() {
           <div className="modal planner-logic-modal">
             <button type="button" className="close" onClick={() => setPlanningInfoOpen(false)}>×</button>
             <p className="eyebrow">Planlogik</p>
-            <h2>So plant EYM deine Woche</h2>
+            <h2>So plant dein Coach deine Woche</h2>
             <div className="planner-logic-flow">Mission <b>→</b> Historie <b>→</b> Belastung <b>→</b> Befinden <b>→</b> Wetter</div>
             <p className="muted">Vor der ersten Planung werden Fixtermine, Trainingshistorie, Reviews und dein Check-in berücksichtigt. Sobald der Plan steht, wird er nicht automatisch neu berechnet. Änderungen erfolgen gezielt pro Einheit.</p>
             <div className="form-grid">
@@ -1721,7 +1721,7 @@ export default function Planner() {
                   <div>
                     <strong>Planungsstand</strong>
                     <small>{editingTrackWorkout.planningStatus === "draft"
-                      ? "In EYM speichern, aber noch nicht an Garmin senden. Ideal, wenn Runden oder Pausen erst am Trainingstag feststehen."
+                      ? "Im Wochenplan speichern, aber noch nicht an Garmin senden. Ideal, wenn Runden oder Pausen erst am Trainingstag feststehen."
                       : "Die Abfolge ist bestätigt und wird beim nächsten Senden bzw. Aktualisieren an Garmin übergeben."}</small>
                   </div>
                   <div role="group" aria-label="Planungsstand des Track-Workouts">
@@ -1871,7 +1871,7 @@ export default function Planner() {
               {planningDraft.checkin.fatigue !== "none" && <label>Warum müde?<select value={planningDraft.checkin.fatigueCause} onChange={(event) => updateCheckin("fatigueCause", event.target.value)}><option value="">Bitte auswählen</option><option>Schlaf</option><option>Arbeit/Stress</option><option>Training</option><option>Familie/Alltag</option><option>Unklar</option></select></label>}
               {planningDraft.checkin.pain !== "none" && <label>Schmerzstärke<input type="number" min="0" max="10" value={planningDraft.checkin.painLevel} onChange={(event) => updateCheckin("painLevel", Number(event.target.value))} /></label>}
               {planningDraft.checkin.pain !== "none" && <label>Wo?<input value={planningDraft.checkin.painArea} onChange={(event) => updateCheckin("painArea", event.target.value)} placeholder="z. B. linke Wade" /></label>}
-              <label>Zielrahmen Lauftage<input type="number" min="0" max="7" value={planningDraft.targetRunCount || 0} onChange={(event) => setPlanningDraft({ ...planningDraft, targetRunCount: Number(event.target.value) })} /><small>Obergrenze für diese neue Woche. EYM nutzt nur verfügbare Tage und kann darunter bleiben.</small></label>
+              <label>Zielrahmen Lauftage<input type="number" min="0" max="7" value={planningDraft.targetRunCount || 0} onChange={(event) => setPlanningDraft({ ...planningDraft, targetRunCount: Number(event.target.value) })} /><small>Obergrenze für diese neue Woche. Dein Coach nutzt nur verfügbare Tage und kann darunter bleiben.</small></label>
               <label>Stabi-Einheiten<input type="number" min="0" max="7" value={planningDraft.stabiCount} onChange={(event) => setPlanningDraft({ ...planningDraft, stabiCount: Number(event.target.value) })} /></label>
               <label>Ruder-Einheiten<input type="number" min="0" max="7" value={planningDraft.rowingCount} onChange={(event) => setPlanningDraft({ ...planningDraft, rowingCount: Number(event.target.value) })} /></label>
             </div>
@@ -1881,7 +1881,7 @@ export default function Planner() {
                 <div>
                   <p className="eyebrow">Lockeres Rudern</p>
                   <h3>Ruhige Grundlageneinheit konfigurieren</h3>
-                  <p className="muted">Standard sind 5.000 m in 35 Minuten. Der SPM-Korridor dient nur als Technik- und Rhythmushilfe; EYM macht daraus keine zusätzliche harte Intervalleinheit.</p>
+                  <p className="muted">Standard sind 5.000 m in 35 Minuten. Der SPM-Korridor dient nur als Technik- und Rhythmushilfe; daraus wird keine zusätzliche harte Intervalleinheit.</p>
                 </div>
                 <div className="form-grid">
                   <label>Ziel in km<input type="number" min="0.5" max="50" step="0.5" value={planningDraft.rowingDistanceKm} onChange={(event) => setPlanningDraft({ ...planningDraft, rowingDistanceKm: event.target.value })} onBlur={() => commitPlanningNumber("rowingDistanceKm", 0.5, 50, 5)} /></label>

@@ -125,8 +125,8 @@ Deno.serve(async (request) => {
 
     if (!ownerAccess) {
       const message = ownerUserId
-        ? "Für dieses EYM-Konto ist noch keine persönliche Intervals.icu-Verbindung eingerichtet."
-        : "Der private Intervals.icu-Zugang ist noch keinem EYM-Konto zugeordnet.";
+        ? "Für dieses Konto ist noch keine persönliche Intervals.icu-Verbindung eingerichtet."
+        : "Der private Intervals.icu-Zugang ist noch keinem Konto zugeordnet.";
       if (action === "status") {
         return json({ configured: false, connected: false, privateConnection: true, message });
       }

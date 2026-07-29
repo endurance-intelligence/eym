@@ -4,9 +4,7 @@ import { useApp } from "../context/AppContext";
 import { Card, PageTitle } from "../components/UI";
 import {
   activityDate,
-  activityTimestamp,
   preferredActivities,
-  reviewKind,
   reviewKindLabel,
 } from "../services/activityUtils";
 import ReviewModal from "../components/ReviewModal";
@@ -19,7 +17,7 @@ import {
   buildCoachState,
   recommendationFeedbackEntry,
 } from "../services/coachState";
-import { answerCoachQuestion, COACH_QUESTION_OPTIONS } from "../services/coachExplainer";
+import { reviewCoverageSummary } from "../services/reviewCoverage";
 import {
   buildMobilityWorkout,
   equipmentLabel,
@@ -161,7 +159,6 @@ export default function Coach() {
   const [sessionCoachOverride, setSessionCoachOverride] = useState(null);
   const [dismissedCoachSuggestionId, setDismissedCoachSuggestionId] = useState("");
   const [wakeLockStatus, setWakeLockStatus] = useState("idle");
-  const [coachQuestionKey, setCoachQuestionKey] = useState("why");
   const previousRunnerRef = useRef(null);
   const cueKeyRef = useRef("");
   const wakeLockRef = useRef(null);
@@ -169,18 +166,20 @@ export default function Coach() {
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   const canonicalActivities = useMemo(() => preferredActivities(state.activities), [state.activities]);
   const reviewActivities = useMemo(() => activitiesWithGroups(canonicalActivities, state.activityGroups), [canonicalActivities, state.activityGroups]);
-  const monthReviewable = useMemo(() => reviewActivities
-    .filter((activity) => reviewKind(activity) && activityDate(activity).startsWith(currentMonth))
-    .sort((a, b) => activityTimestamp(b) - activityTimestamp(a)), [reviewActivities, currentMonth]);
-  const openReviews = monthReviewable.filter((activity) => !state.reviews[activity.id]);
-  const reviewed = monthReviewable.filter((activity) => state.reviews[activity.id]);
+  const monthCoverage = useMemo(() => reviewCoverageSummary(state, reviewActivities, {
+    allActivities: [...(state.activities || []), ...canonicalActivities, ...reviewActivities],
+    now,
+    fromDate: `${currentMonth}-01`,
+  }), [canonicalActivities, currentMonth, now, reviewActivities, state]);
+  const monthReviewable = monthCoverage.eligible.filter((activity) => activityDate(activity).startsWith(currentMonth));
+  const openReviews = monthCoverage.missing.filter((activity) => activityDate(activity).startsWith(currentMonth));
+  const reviewed = monthCoverage.reviewed.filter((activity) => activityDate(activity).startsWith(currentMonth));
   const unifiedCoach = useMemo(() => buildCoachState(state, now), [state, now]);
   const analysis = unifiedCoach.dashboard;
   const athleteAssessment = unifiedCoach.athlete;
   const outlook = unifiedCoach.outlook;
   const recommendationHistory = Array.isArray(state.coachRecommendationHistory) ? state.coachRecommendationHistory : [];
   const currentRecommendationFeedback = recommendationHistory.find((entry) => entry.recommendationId === unifiedCoach.recommendation.id);
-  const coachAnswer = useMemo(() => answerCoachQuestion(unifiedCoach, coachQuestionKey), [unifiedCoach, coachQuestionKey]);
 
   const mobilitySettings = state.mobilityCoach || {};
   const durationMinutes = Number(mobilitySettings.durationMinutes || 25);
@@ -475,7 +474,7 @@ export default function Coach() {
             completedAt,
             actualTitle: completedRunner.title || "Stabi & Mobility Coach",
             actualDuration: Number(completedRunner.durationMinutes || 0),
-            actualSource: "EYM Coach",
+            actualSource: "Dein Coach",
             matchedMobilityWorkoutId: completedRunner.sessionId,
             missedReason: "",
           } : item),
@@ -564,7 +563,7 @@ export default function Coach() {
             </div>
             <p className="coach-recommendation-copy">{unifiedCoach.recommendation.text}</p>
             <details className="coach-evidence">
-              <summary>Warum sagt EYM das?</summary>
+              <summary>Warum diese Einschätzung?</summary>
               <ul>{unifiedCoach.recommendation.evidence.map((item) => <li key={item}>{item}.</li>)}</ul>
               <small>{unifiedCoach.protectionNote}</small>
             </details>
@@ -577,26 +576,6 @@ export default function Coach() {
               </div>
             </div>
           </Card>
-          <details className="wide card coach-question-beta">
-            <summary>
-              <div><p className="eyebrow">Coach-Fragen · Beta</p><strong>Eine Einordnung aus deinen EYM-Fakten öffnen</strong><span>Keine externe Datenübertragung · keine automatische Planänderung</span></div>
-              <b>⌄</b>
-            </summary>
-            <div className="coach-question-body">
-              <div className="coach-question-options">
-                {COACH_QUESTION_OPTIONS.map((option) => <button type="button" className={coachQuestionKey === option.key ? "selected" : ""} onClick={() => setCoachQuestionKey(option.key)} key={option.key}>{option.label}</button>)}
-              </div>
-              <article className="coach-question-answer">
-                <span>Faktengebundene Antwort</span>
-                <h2>{coachAnswer.title}</h2>
-                <p>{coachAnswer.answer}</p>
-                <div className="coach-answer-evidence">
-                  {coachAnswer.evidence.map((item) => <div key={item.id}><small>{item.label} · {item.source}</small><strong>{item.value}</strong>{item.detail && <p>{item.detail}</p>}</div>)}
-                </div>
-                <small className="coach-answer-protection">{coachAnswer.protection}</small>
-              </article>
-            </div>
-          </details>
           <Card className="coach-review-summary">
             <p className="eyebrow">Reviews im Monat</p>
             <h2>{reviewed.length}/{monthReviewable.length} bewertet</h2>
@@ -622,7 +601,7 @@ export default function Coach() {
       {activeTab === "development" && (
         <div className="grid coach-dashboard-grid">
           <Card className="wide coach-athlete-model">
-            <div className="coach-athlete-model-heading"><div><p className="eyebrow">Athletenmodell</p><h2>{athleteAssessment.observedLabel} · Belastungsverträglichkeit {athleteAssessment.tolerance.label}</h2><p className="muted">EYM lernt aus deiner tatsächlichen Routine. Eine höhere Einstufung oder zusätzliche Einheit wird nur vorgeschlagen, nie automatisch übernommen.</p></div><span>{athleteAssessment.specializationLabel}</span></div>
+            <div className="coach-athlete-model-heading"><div><p className="eyebrow">Athletenmodell</p><h2>{athleteAssessment.observedLabel} · Belastungsverträglichkeit {athleteAssessment.tolerance.label}</h2><p className="muted">Dein Coach lernt aus deiner tatsächlichen Routine. Eine höhere Einstufung oder zusätzliche Einheit wird nur vorgeschlagen, nie automatisch übernommen.</p></div><span>{athleteAssessment.specializationLabel}</span></div>
             <div className="coach-athlete-model-metrics"><div><small>Läufe/Woche</small><strong>{athleteAssessment.metrics.runsPerWeek.toFixed(1)}</strong></div><div><small>km/Woche</small><strong>{athleteAssessment.metrics.weeklyKm.toFixed(0)}</strong></div><div><small>Longrun</small><strong>{athleteAssessment.metrics.longestRun.toFixed(1)} km</strong></div><div><small>Höhenmeter</small><strong>{athleteAssessment.metrics.weeklyElevation.toFixed(0)} hm</strong></div></div>
             <p><b>Progressionsrichtung:</b> {athleteAssessment.progressionFocus}</p>
           </Card>
@@ -672,7 +651,7 @@ export default function Coach() {
             <p className="mobility-focus-summary"><b>Aktiv:</b> {focusAreaIds.length ? focusAreaIds.map(focusAreaLabel).join(" · ") : "Standard / ausgewogen"} <span>Die Auswahl wird in deiner Cloud-Konfiguration gespeichert.</span></p>
             {focusPickerOpen && (
               <div className="mobility-focus-editor">
-                <p className="muted">Optional und für jeden Nutzer frei einstellbar. Ohne Auswahl erzeugt EYM ein ausgewogenes Standard-Workout. Mit Schwerpunkten kommen je nach verfügbarer Zeit ein bis zwei passende Übungen zusätzlich in den Ablauf.</p>
+                <p className="muted">Optional und für jeden Nutzer frei einstellbar. Ohne Auswahl entsteht ein ausgewogenes Standard-Workout. Mit Schwerpunkten kommen je nach verfügbarer Zeit ein bis zwei passende Übungen zusätzlich in den Ablauf.</p>
                 <div className="mobility-focus-picker">
                   <button type="button" className={!focusAreaIds.length ? "selected standard" : "standard"} onClick={() => { setFocusEditorOpen(true); updateMobility({ focusAreaIds: [] }); setRunner(null); }}>
                     <strong>Standard / ausgewogen</strong>
@@ -724,7 +703,7 @@ export default function Coach() {
               <div>
                 <p className="eyebrow">Stabi & Mobility Workout</p>
                 <h2>{todayMobilityPlan ? `Heute geplant: ${todayMobilityPlan.title}` : workout.title}</h2>
-                <p className="muted">Physio-Übungen haben Vorrang. Danach berücksichtigt EYM deine persönlichen Schwerpunkte, Tagesform, Zeit und vorhandenes Material.</p>
+                <p className="muted">Physio-Übungen haben Vorrang. Danach berücksichtigt dein Coach deine persönlichen Schwerpunkte, Tagesform, Zeit und vorhandenes Material.</p>
               </div>
             </div>
             <div className="mobility-workout-summary">
@@ -783,7 +762,7 @@ export default function Coach() {
               </div>
               <label className="mobility-timer-toggle"><input type="checkbox" checked={longerPreparationForUnknown} onChange={(event) => { updateMobility({ longerPreparationForUnknown: event.target.checked }); setRunner(null); }} /><span><b>Unbekannte Übungen länger vorbereiten</b><small>Markierte Physio-Übungen gelten automatisch als bekannt. Weitere Übungen kannst du in der Anleitung als bekannt markieren.</small></span></label>
               <label className="mobility-timer-toggle"><input type="checkbox" checked={audioEnabled} onChange={(event) => updateMobility({ audioEnabled: event.target.checked })} /><span><b>Signaltöne im Workout</b><small>Deutlich hörbarer 3–2–1-Countdown vor Start und Ende sowie eigene Töne für Seitenwechsel und Workout-Abschluss.</small></span></label>
-              <label className="mobility-timer-toggle"><input type="checkbox" checked={voiceCues} disabled={!audioEnabled} onChange={(event) => updateMobility({ voiceCues: event.target.checked })} /><span><b>Seitenwechsel ansagen</b><small>Bei Seitstütz, Pallof Press, Sprunggelenkübungen und weiteren beidseitigen Übungen sagt EYM die nächste Seite an.</small></span></label>
+              <label className="mobility-timer-toggle"><input type="checkbox" checked={voiceCues} disabled={!audioEnabled} onChange={(event) => updateMobility({ voiceCues: event.target.checked })} /><span><b>Seitenwechsel ansagen</b><small>Bei Seitstütz, Pallof Press, Sprunggelenkübungen und weiteren beidseitigen Übungen wird die nächste Seite angesagt.</small></span></label>
               <div className="mobility-audio-actions"><button type="button" onClick={() => playWorkoutAudioDemo()}>Countdown & Ende testen</button><span className="mobility-audio-status">Spielt 3–2–1, Start und Abschluss einmal vor. Die Seitenansage bleibt im Workout aktiv.</span></div>
               <p>Die gewählte Zeit ist reine Bewegungszeit. Vorbereitung und Wechsel kommen zusätzlich hinzu; die voraussichtliche Gesamtdauer siehst du oben. Die zuerst gewählte schwächere Seite erhält nicht automatisch mehr Belastung, sondern wird nur zuerst ausgeführt.</p>
             </details>

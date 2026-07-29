@@ -311,7 +311,7 @@ export default function Mission() {
           <Card className="hero wide mission-empty-state">
             <p className="eyebrow">Deine Mission</p>
             <h2>Noch kein Hauptziel hinterlegt</h2>
-            <p className="muted">Lege dein persönliches Ziel, das Datum und optional eine Distanz fest. EYM richtet Coach, Analytics und künftige Wochenplanungen danach aus.</p>
+            <p className="muted">Lege dein persönliches Ziel, das Datum und optional eine Distanz fest. Coach, Analyse und künftige Wochenplanungen richten sich danach aus.</p>
             <button type="button" className="primary compact-primary" onClick={() => { setEditingId(null); setDraft({ ...emptyEvent, isMainTarget: true, priority: "A" }); setShowEditor(true); }}>Hauptziel anlegen</button>
           </Card>
         )}

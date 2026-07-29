@@ -33,7 +33,7 @@ export function buildCoachFactPacket(coach = {}) {
       fact(
         "week-load",
         "Wochenbelastung",
-        week.projected != null ? `${week.projected} projizierter EYM-Load` : "Noch offen",
+        week.projected != null ? `${week.projected} projizierter Belastungswert` : "Noch offen",
         week.average ? `Jüngster Vergleichsrahmen ${week.average}` : "Noch kein belastbarer Vergleichsrahmen",
         "Plan und absolvierte Aktivitäten",
       ),
@@ -101,7 +101,7 @@ export function answerCoachQuestion(coach = {}, questionKey = "why") {
     return {
       key: questionKey,
       title: `Einordnung für ${targetName}`,
-      answer: `${analytics.specificity?.text || "EYM kann die Zielnähe erst mit weiteren Trainingswochen bewerten."} Als relevante Schwerpunkte erkennt EYM aktuell: ${focus}. Daraus entsteht ein Vorschlag, aber keine automatische Änderung deiner Woche.`,
+      answer: `${analytics.specificity?.text || "Die Zielnähe kann erst mit weiteren Trainingswochen bewertet werden."} Dein Coach erkennt aktuell diese Schwerpunkte: ${focus}. Daraus entsteht ein Vorschlag, aber keine automatische Änderung deiner Woche.`,
       evidence: selectFacts(packet, ["goal-specificity", "fuel-practice", "volume-trend"]),
       protection: packet.protection,
     };
@@ -111,7 +111,7 @@ export function answerCoachQuestion(coach = {}, questionKey = "why") {
     return {
       key: questionKey,
       title: "So belastbar ist die aktuelle Aussage",
-      answer: `${analytics.confidence?.text || "Die Datenabdeckung ist noch offen."} Je mehr Distanz, Dauer, Herzfrequenz, externe Belastungswerte und kurze Reviews zusammenkommen, desto genauer kann EYM objektive und subjektive Signale vergleichen.`,
+      answer: `${analytics.confidence?.text || "Die Datenabdeckung ist noch offen."} Je mehr Distanz, Dauer, Herzfrequenz, externe Belastungswerte und kurze Reviews zusammenkommen, desto genauer kann dein Coach objektive und subjektive Signale vergleichen.`,
       evidence: selectFacts(packet, ["data-confidence", "review-coverage"]),
       protection: packet.protection,
     };
@@ -129,7 +129,7 @@ export function answerCoachQuestion(coach = {}, questionKey = "why") {
 export function buildGroundedCoachContext(coach = {}) {
   const packet = buildCoachFactPacket(coach);
   return {
-    instruction: "Erkläre ausschließlich die gelieferten EYM-Fakten. Erfinde keine Messwerte, stelle keine medizinische Diagnose und ändere keinen Trainingsplan.",
+    instruction: "Erkläre ausschließlich die gelieferten Coach-Fakten. Erfinde keine Messwerte, stelle keine medizinische Diagnose und ändere keinen Trainingsplan.",
     ...packet,
   };
 }

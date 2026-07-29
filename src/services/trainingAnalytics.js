@@ -7,6 +7,11 @@ import {
 } from "./activityUtils.js";
 import { activitiesWithGroups } from "./activityGroups.js";
 import { goalRequirements } from "./scienceCoach.js";
+import {
+  hasReviewCoverage,
+  reviewCoverageSummary,
+  reviewEntriesForActivity,
+} from "./reviewCoverage.js";
 
 const DAY = 86400000;
 
@@ -154,13 +159,13 @@ function goalSpecificity(goal, metrics) {
   };
 }
 
-function dataConfidence(runs, reviews) {
+function dataConfidence(runs, reviewCoverage) {
   if (!runs.length) {
     return {
       score: 0,
       level: "low",
       label: "Noch keine Laufdaten",
-      text: "Nach dem ersten Import kann EYM Datenabdeckung und Trends bewerten.",
+      text: "Nach dem ersten Import können Datenabdeckung und Trends bewertet werden.",
       coverage: {},
     };
   }
@@ -170,7 +175,7 @@ function dataConfidence(runs, reviews) {
     heartRate: share((activity) => numeric(activity.avgHr) > 0 || Boolean(activity.heartRateZones?.zones?.length)),
     load: share((activity) => numeric(activity.trainingLoad) > 0 || numeric(activity.trimp) > 0),
     elevation: share((activity) => activity.elevation != null || activity.elevationGain != null),
-    reviews: share((activity) => Boolean(reviews?.[activity.id])),
+    reviews: reviewCoverage.ratio ?? 0,
     weather: share((activity) => activity.weather?.temperature != null || activity.temperature != null),
   };
   const score = Math.round(
@@ -186,7 +191,7 @@ function dataConfidence(runs, reviews) {
     score,
     level,
     label: level === "high" ? "Hohe Datentiefe" : level === "medium" ? "Solide Datengrundlage" : "Eingeschränkte Datengrundlage",
-    text: `${Math.round(coverage.reviews * 100)} % der Läufe besitzen ein Review, ${Math.round(coverage.heartRate * 100)} % Herzfrequenzdaten und ${Math.round(coverage.load * 100)} % einen externen Belastungswert.`,
+    text: `${Math.round(coverage.heartRate * 100)} % der Läufe enthalten Herzfrequenzdaten und ${Math.round(coverage.load * 100)} % einen externen Belastungswert.`,
     coverage,
   };
 }
@@ -195,6 +200,7 @@ export function buildTrainingAnalytics(state = {}, now = new Date(), weekCount =
   const safeWeekCount = Math.max(4, Math.min(16, Number(weekCount) || 8));
   const canonical = preferredActivities(state.activities || [], { hideStrava: Boolean(state.intervals?.connected) });
   const activities = activitiesWithGroups(canonical, state.activityGroups || []);
+  const allActivities = [...(state.activities || []), ...activities];
   const currentWeek = startOfIsoWeek(now);
   const firstWeek = new Date(currentWeek);
   firstWeek.setDate(firstWeek.getDate() - (safeWeekCount - 1) * 7);
@@ -212,7 +218,7 @@ export function buildTrainingAnalytics(state = {}, now = new Date(), weekCount =
     const entries = runs.filter((activity) => activityTimestamp(activity) >= start && activityTimestamp(activity) < end);
     const plan = (state.plan || []).filter((item) => !item.archived && isPlannedRun(item) && item.date >= isoDate(start) && item.date < isoDate(end));
     const completedPlan = plan.filter((item) => item.completed || item.matchedActivityId);
-    const reviewed = entries.filter((activity) => state.reviews?.[activity.id]);
+    const reviewed = entries.filter((activity) => hasReviewCoverage(activity, state.reviews || {}, allActivities));
     return {
       key: isoDate(start),
       start,
@@ -239,15 +245,26 @@ export function buildTrainingAnalytics(state = {}, now = new Date(), weekCount =
     quality: runs.filter((activity) => runningIntensity(activity) === "quality").length,
     long: runs.filter((activity) => runningIntensity(activity) === "long").length,
   };
-  const reviewedRuns = runs.filter((activity) => state.reviews?.[activity.id]);
-  const warningReviews = reviewedRuns.filter((activity) => reviewWarning(state.reviews[activity.id]));
-  const stableReviews = reviewedRuns.filter((activity) => reviewStable(state.reviews[activity.id]));
-  const longFuelRuns = runs.filter((activity) => durationMinutes(activity) >= 90 && state.reviews?.[activity.id]);
-  const fuelTracked = longFuelRuns.filter((activity) => {
-    const review = state.reviews[activity.id];
-    return numeric(review.carbohydratesPerHour) > 0 || (Array.isArray(review.nutritionItems) && review.nutritionItems.length > 0);
+  const allReviewRuns = activities.filter(isRunningActivity);
+  const reviewCoverage = reviewCoverageSummary(state, allReviewRuns, {
+    allActivities,
+    now,
   });
-  const fuelInRange = fuelTracked.filter((activity) => state.reviews[activity.id]?.carbohydrateStatus === "good");
+  const reviewedRuns = reviewCoverage.reviewed;
+  const reviewsFor = (activity) => reviewEntriesForActivity(activity, state.reviews || {}, allActivities);
+  const warningReviews = reviewedRuns.filter((activity) => reviewsFor(activity).some(reviewWarning));
+  const stableReviews = reviewedRuns.filter((activity) => {
+    const entries = reviewsFor(activity);
+    return entries.length > 0 && entries.every(reviewStable);
+  });
+  const longFuelRuns = runs.filter((activity) => durationMinutes(activity) >= 90 && reviewsFor(activity).length > 0);
+  const fuelTracked = longFuelRuns.filter((activity) => {
+    return reviewsFor(activity).some((review) => (
+      numeric(review.carbohydratesPerHour) > 0
+      || (Array.isArray(review.nutritionItems) && review.nutritionItems.length > 0)
+    ));
+  });
+  const fuelInRange = fuelTracked.filter((activity) => reviewsFor(activity).some((review) => review.carbohydrateStatus === "good"));
   const plannedRuns = weeks.reduce((sum, week) => sum + week.plannedRuns, 0);
   const completedPlan = weeks.reduce((sum, week) => sum + week.completedPlan, 0);
   const activeWeeks = weeks.filter((week) => week.runs > 0).length;
@@ -268,6 +285,7 @@ export function buildTrainingAnalytics(state = {}, now = new Date(), weekCount =
     plannedRuns,
     completedPlan,
     reviewedRuns: reviewedRuns.length,
+    reviewEligibleRuns: reviewCoverage.eligible.length,
     stableReviews: stableReviews.length,
     warningReviews: warningReviews.length,
     fuelRuns: longFuelRuns.length,
@@ -277,7 +295,7 @@ export function buildTrainingAnalytics(state = {}, now = new Date(), weekCount =
   const goal = goalRequirements(state);
   const trend = volumeTrend(weeks);
   const specificity = goalSpecificity(goal, metrics);
-  const confidence = dataConfidence(runs, state.reviews || {});
+  const confidence = dataConfidence(runs, reviewCoverage);
 
   return {
     generatedAt: new Date(now).toISOString(),
@@ -290,5 +308,6 @@ export function buildTrainingAnalytics(state = {}, now = new Date(), weekCount =
     trend,
     specificity,
     confidence,
+    reviewCoverage,
   };
 }

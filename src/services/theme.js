@@ -1,8 +1,8 @@
 const PRESET_LIST = [
   {
     id: "eym-green",
-    label: "EYM Green",
-    description: "Das ursprüngliche spacige EYM-Grün.",
+    label: "Original Green",
+    description: "Das ursprüngliche spacige Grün.",
     primary: "#5ee494",
     secondary: "#75e8a6",
     background: "#07130d",

@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **3.7.7**
+Current app version: **3.7.8**
 
 **Eat your miles.**
 
@@ -180,7 +180,7 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 ## Personal ambient themes (v2.16)
 
 - Adds a user-specific appearance area under **Settings → Darstellung**.
-- Includes EYM Green, Miami, Ice Blue, Sunset, Violet and Amber presets.
+- Includes Original Green, Miami, Ice Blue, Sunset, Violet and Amber presets.
 - Custom mode supports separate primary and secondary colors.
 - Ambient glow can be enabled, disabled and adjusted from 0–100 percent.
 - Theme changes are previewed immediately and stored inside the existing user-specific `athlete_data.app_data` document.
@@ -219,7 +219,7 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 ## Nutrition-label OCR, sodium and compact Fuel reviews (v2.19)
 
 - Adds sodium per serving and per 100 g/ml to Fuel Lab products, review totals and Coach fuel summaries.
-- Drink powders can store product quantity per mixture, scoop count and the volume of finished drink. A review can therefore record the amount actually consumed in millilitres; EYM converts it to mixtures, carbohydrates, sodium, caffeine and stock usage.
+- Drink powders keep product portions and fluid separate. Reviews record the number of portions, the mixed volume per portion and the amount actually consumed. Carbohydrates and stock usage follow the product portions, while hydration follows the consumed millilitres.
 - Nutrition-table photos are processed locally in the browser with Tesseract.js. Recognized values are copied into editable fields and must be checked against the packaging before saving.
 - Stores the complete nutrition table (energy, carbohydrates, sugar, fat, protein, salt, sodium, magnesium, calcium, vitamin B1 and caffeine) while keeping only training-relevant values prominent.
 - Review fueling uses two explicit modes: select a product from Fuel Lab or enter a one-off item manually. Brand, product name and nutrients are hidden when a catalog product is selected.
@@ -455,6 +455,15 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 - Week, sessions, goals and analysis are grouped as tabs inside Training without changing their existing deep links.
 - Equipment is now a Settings section; the former `/equipment` route forwards to the new location.
 - Coach knowledge duplicates and the recommendation-history card are removed. HF and weather remain under Today, while Fuel Partner owns fuel learning.
+
+## Review baseline, coach clarity and mixed drinks v3.7.8
+
+- Review coverage starts at 1 July 2026 for established accounts and at the Supabase registration date for every new account. Older imported activities, future sessions and cancelled sessions do not lower the result.
+- Missing reviews are listed individually with a direct link to the exact activity review.
+- Visible system shorthand is replaced with natural Coach language. The redundant Coach questions block is removed.
+- Post-activity analysis leads with one clear summary, followed by load, execution and recovery consequence. Supporting measurements remain available on demand.
+- Drink-powder reviews separate portions from prepared and consumed fluid. One portion therefore keeps the same carbohydrates in a 500 ml or 650 ml bottle, while hydration is calculated from the amount actually consumed.
+- No database migration is required. Redeploy the `intervals` Supabase function after applying this version.
 
 For fresh installations that have not yet applied the athlete-image cleanup, run `supabase/migrations/20260722120000_athlete_images.sql` once. Afterwards run:
 

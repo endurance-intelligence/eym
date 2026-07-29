@@ -165,7 +165,7 @@ export default function Onboarding() {
           <div className="onboarding-sidebar-copy">
             <p className="eyebrow">Dein Start</p>
             <h2>Persönlich planen beginnt mit den richtigen Fragen.</h2>
-            <p>EYM baut einen belastbaren Ausgangspunkt auf. Nichts wird ungefragt in deinen Kalender geschrieben.</p>
+            <p>Dein Coach baut einen belastbaren Ausgangspunkt auf. Nichts wird ungefragt in deinen Kalender geschrieben.</p>
           </div>
           <ol className="onboarding-progress" aria-label="Onboarding-Fortschritt">
             {ONBOARDING_STEPS.map((item, index) => (
@@ -193,16 +193,16 @@ export default function Onboarding() {
             {currentStep.key === "profile" && (
               <>
                 <div className="onboarding-heading">
-                  <p className="eyebrow">Willkommen bei EYM</p>
+                  <p className="eyebrow">Willkommen bei Endurance Intelligence</p>
                   <h1>Ein Plan, der bei dir anfängt.</h1>
-                  <p>In wenigen Schritten lernt EYM deine Ausgangslage kennen. Nur dein Anzeigename ist hier Pflicht – die Körperdaten kannst du auch später ergänzen.</p>
+                  <p>In wenigen Schritten lernt dein Coach deine Ausgangslage kennen. Nur dein Anzeigename ist hier Pflicht – die Körperdaten kannst du auch später ergänzen.</p>
                 </div>
                 <div className="onboarding-highlight">
                   <span aria-hidden="true">✦</span>
                   <div><strong>Kein fertiger Standardplan</strong><p>Deine Angaben bilden den Startpunkt. Aktivitäten und Reviews machen das Modell danach Schritt für Schritt genauer.</p></div>
                 </div>
                 <div className="onboarding-form-grid">
-                  <label className="wide-field">Wie darf EYM dich ansprechen?
+                  <label className="wide-field">Wie darf dein Coach dich ansprechen?
                     <input autoFocus value={draft.displayName} maxLength="60" placeholder="z. B. Daniel" onChange={(event) => update("displayName", event.target.value)} />
                   </label>
                   <label>Geburtsdatum <span>optional</span>
@@ -214,7 +214,7 @@ export default function Onboarding() {
                   <label>Gewicht in kg <span>optional</span>
                     <input type="number" min="30" max="250" step="0.1" value={draft.weightKg} placeholder="z. B. 78,5" onChange={(event) => update("weightKg", numberOrBlank(event.target.value))} />
                   </label>
-                  <div className="onboarding-privacy-note"><b>Privat und änderbar</b><span>Diese Werte bleiben in deinem EYM-Profil und können jederzeit unter Settings → Profil geändert werden.</span></div>
+                  <div className="onboarding-privacy-note"><b>Privat und änderbar</b><span>Diese Werte bleiben in deinem Profil und können jederzeit unter Settings → Profil geändert werden.</span></div>
                 </div>
               </>
             )}
@@ -238,7 +238,7 @@ export default function Onboarding() {
                   <label><span>Kilometer pro Woche</span><input type="number" min="0" max="300" step="0.1" value={draft.weeklyKm} placeholder="z. B. 25" onChange={(event) => update("weeklyKm", numberOrBlank(event.target.value))} /><FieldNote>ungefährer 6-Wochen-Schnitt</FieldNote></label>
                   <label><span>Längster Lauf</span><input type="number" min="0" max="250" step="0.1" value={draft.longestRunKm} placeholder="z. B. 12" onChange={(event) => update("longestRunKm", numberOrBlank(event.target.value))} /><FieldNote>innerhalb der letzten 8 Wochen</FieldNote></label>
                 </div>
-                <div className="onboarding-info-strip"><b>Warum fragt EYM das?</b><span>Ohne importierte Historie verhindern diese Werte, dass ein neuer Wochenplan mit einem zu hohen pauschalen Kilometerumfang startet.</span></div>
+                <div className="onboarding-info-strip"><b>Warum fragt dein Coach das?</b><span>Ohne importierte Historie verhindern diese Werte, dass ein neuer Wochenplan mit einem zu hohen pauschalen Kilometerumfang startet.</span></div>
               </>
             )}
 
@@ -247,7 +247,7 @@ export default function Onboarding() {
                 <div className="onboarding-heading">
                   <p className="eyebrow">Dein Ziel</p>
                   <h1>Wofür trainierst du?</h1>
-                  <p>Ein konkretes Event schärft die Planung. Du kannst EYM aber genauso ohne Wettkampfziel nutzen und deine Mission später ergänzen.</p>
+                  <p>Ein konkretes Event schärft die Planung. Du kannst aber genauso ohne Wettkampfziel starten und deine Mission später ergänzen.</p>
                 </div>
                 <div className="onboarding-choice-grid mission-mode-grid" role="radiogroup" aria-label="Zielart">
                   <button type="button" role="radio" aria-checked={draft.missionMode === "event"} className={draft.missionMode === "event" ? "selected" : ""} onClick={() => selectMissionMode("event")}>
@@ -273,7 +273,7 @@ export default function Onboarding() {
                 ) : (
                   <div className="onboarding-empty-choice">
                     <span aria-hidden="true">○</span>
-                    <div><strong>Offen starten ist ein gültiges Ziel.</strong><p>EYM nutzt zunächst deine reale Belastungsbasis und deinen Wochenrahmen. Ein Event kann jederzeit ergänzt werden.</p></div>
+                    <div><strong>Offen starten ist ein gültiges Ziel.</strong><p>Dein Coach nutzt zunächst deine reale Belastungsbasis und deinen Wochenrahmen. Ein Event kann jederzeit ergänzt werden.</p></div>
                   </div>
                 )}
               </>
@@ -284,7 +284,7 @@ export default function Onboarding() {
                 <div className="onboarding-heading">
                   <p className="eyebrow">Deine Woche</p>
                   <h1>Was passt wirklich in deinen Alltag?</h1>
-                  <p>Du legst Obergrenze und mögliche Tage fest. EYM darf darunter bleiben, aber nicht einfach zusätzliche Lauftage erfinden.</p>
+                  <p>Du legst Obergrenze und mögliche Tage fest. Dein Coach darf darunter bleiben, aber nicht einfach zusätzliche Lauftage erfinden.</p>
                 </div>
 
                 <section className="onboarding-week-section">
@@ -349,7 +349,7 @@ export default function Onboarding() {
                 <div className="onboarding-heading">
                   <p className="eyebrow">Startklar</p>
                   <h1>Das ist dein Ausgangspunkt.</h1>
-                  <p>Prüfe kurz, was EYM übernehmen wird. Danach landest du im Briefing – ohne automatisch erzeugte Woche.</p>
+                  <p>Prüfe kurz, was übernommen wird. Danach landest du im Briefing – ohne automatisch erzeugte Woche.</p>
                 </div>
                 <div className="onboarding-summary-grid">
                   <article><span>Du</span><strong>{draft.displayName}</strong><p>{draft.birthDate ? `Geburtsdatum ${new Date(`${draft.birthDate}T12:00:00`).toLocaleDateString("de-DE")}` : "Körperdaten nur soweit angegeben"}</p></article>
@@ -360,7 +360,7 @@ export default function Onboarding() {
                 </div>
                 <label className="onboarding-progress-toggle">
                   <input type="checkbox" checked={draft.coachProgressionEnabled} onChange={(event) => update("coachProgressionEnabled", event.target.checked)} />
-                  <span><b>Behutsame Entwicklungsvorschläge erlauben</b><small>EYM darf später anhand deiner echten Daten einen passenden nächsten Rahmen vorschlagen. Es übernimmt ihn niemals automatisch und ändert keine aktive Woche.</small></span>
+                  <span><b>Behutsame Entwicklungsvorschläge erlauben</b><small>Dein Coach darf später anhand deiner echten Daten einen passenden nächsten Rahmen vorschlagen. Er übernimmt ihn niemals automatisch und ändert keine aktive Woche.</small></span>
                 </label>
                 <div className="onboarding-final-note">
                   <div><span>1</span><p><b>Keine automatische Planung</b><small>Du startest jede Wochenberechnung selbst.</small></p></div>
@@ -377,7 +377,7 @@ export default function Onboarding() {
               <span>Schritt {step + 1} von {ONBOARDING_STEPS.length}</span>
             </div>
             {message && <p role="alert">{message}</p>}
-            <button type="button" className="primary onboarding-next" onClick={next}>{step === ONBOARDING_STEPS.length - 1 ? "EYM starten" : "Weiter"} <span>→</span></button>
+            <button type="button" className="primary onboarding-next" onClick={next}>{step === ONBOARDING_STEPS.length - 1 ? "Jetzt starten" : "Weiter"} <span>→</span></button>
           </footer>
         </section>
       </section>

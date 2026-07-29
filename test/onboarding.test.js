@@ -94,6 +94,8 @@ test("completion writes the new profile and planning baseline without creating a
   assert.equal(completed.profile.displayName, "Alex");
   assert.equal(completed.profile.selfReportedWeeklyKm, 28);
   assert.equal(completed.profile.selfReportedLongestRunKm, 14);
+  assert.equal(completed.profile.reviewTrackingStartDate, "2026-07-28");
+  assert.equal(completed.profile.defaultBottleVolumeMl, 650);
   assert.equal(completed.planner.targetRunCount, 3);
   assert.deepEqual(completed.planner.runDays, ["Dienstag", "Donnerstag", "Sonntag"]);
   assert.equal(completed.planner.recurringCommitments[0].name, "Lauftreff");

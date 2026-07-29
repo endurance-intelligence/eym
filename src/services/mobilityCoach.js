@@ -62,7 +62,7 @@ export function mobilityCoachSuggestion(activities = [], reviews = {}, now = new
       id: `recovery-${localDateKey(now)}`,
       title: "Beweglichkeit & aktive Erholung priorisieren?",
       reason: "Mehrere aktuelle Lauf-Reviews melden müde Beine oder niedrige Energie.",
-      detail: "EYM schlägt für dieses Workout ruhige Hüft-, Sprunggelenk- und Wirbelsäulenmobilität statt zusätzlicher Kraftbelastung vor.",
+      detail: "Dein Coach schlägt für dieses Workout ruhige Hüft-, Sprunggelenk- und Wirbelsäulenmobilität statt zusätzlicher Kraftbelastung vor.",
     };
   }
 

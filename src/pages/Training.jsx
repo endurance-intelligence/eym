@@ -22,6 +22,11 @@ import {
   startOfIsoWeek,
 } from "../services/activityUtils";
 import { activitiesWithGroups, canGroupActivities, suggestedGroupName } from "../services/activityGroups";
+import {
+  hasReviewCoverage,
+  requiresWeeklyReview,
+  reviewTrackingStartDate,
+} from "../services/reviewCoverage";
 
 const monthFormatter = new Intl.DateTimeFormat("de-DE", { month: "long", year: "numeric" });
 const shortDateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit" });
@@ -72,6 +77,7 @@ export default function Training() {
     return requestedActivity && reviewKind(requestedActivity) ? requestedActivity : null;
   });
   const currentMonth = new Date().toISOString().slice(0, 7);
+  const reviewTrackingStart = reviewTrackingStartDate(state);
   const currentWeekKey = isoDateLocal(startOfIsoWeek(new Date()));
   const [openWeeks, setOpenWeeks] = useState(() => new Set([currentWeekKey]));
   const [openMonths, setOpenMonths] = useState(() => new Set([currentMonth]));
@@ -292,7 +298,11 @@ export default function Training() {
                       const isOpen = openWeeks.has(weekKey);
                       const distance = weekActivities.reduce((sum, activity) => sum + Number(activity.distance || 0), 0);
                       const duration = weekActivities.reduce((sum, activity) => sum + Number(activity.duration || 0), 0);
-                      const pendingReviews = weekActivities.filter((activity) => reviewKind(activity) && !state.reviews[activity.id]).length;
+                      const pendingReviews = weekActivities.filter((activity) => (
+                        activityDate(activity) >= reviewTrackingStart
+                        && requiresWeeklyReview(activity)
+                        && !hasReviewCoverage(activity, state.reviews, [...state.activities, ...activities, ...rawActivities])
+                      )).length;
                       return (
                         <div className={`training-week ${isOpen ? "open" : "collapsed"}`} key={weekKey}>
                           <button
@@ -317,6 +327,8 @@ export default function Training() {
                           {isOpen && <div className="activity-list" id={`training-week-${weekKey}`}>
                             {weekActivities.map((activity) => {
                               const kind = reviewKind(activity);
+                              const covered = kind && hasReviewCoverage(activity, state.reviews, [...state.activities, ...activities, ...rawActivities]);
+                              const tracked = activityDate(activity) >= reviewTrackingStart && requiresWeeklyReview(activity);
                               return (
                                 <article className={`activity-row ${kind ? "reviewable" : "no-review"} ${mergeSelection.includes(activity.id) ? "merge-selected" : ""} ${activity.isActivityGroup ? "activity-group-row" : ""} ${mergeMode && !activity.isActivityGroup && isRunningActivity(activity) ? "merge-candidate" : ""}`} key={activity.id}>
                                   {mergeMode && !activity.isActivityGroup && isRunningActivity(activity) && <button type="button" className="activity-merge-check" disabled={Boolean(state.reviews[activity.id])} onClick={() => toggleMergeActivity(activity)} aria-label={`${activity.name} auswählen`}>{mergeSelection.includes(activity.id) ? "✓" : "○"}</button>}
@@ -324,7 +336,7 @@ export default function Training() {
                                     <div><b>{activity.name}</b><span>{fmtDate(activityDate(activity))} · {sourceLabel(activity)} · {sportGroup(activity).label}{activity.isActivityGroup ? ` · ${activity.memberCount} Teile` : ""}{activity.weather?.temperature != null || activity.temperature != null ? ` · ${Math.round(Number(activity.weather?.temperature ?? activity.temperature))} °C` : ""}</span></div>
                                     <div className="activity-metrics"><strong>{Number(activity.distance || 0).toLocaleString("de-DE", { maximumFractionDigits: 2 })} km</strong><span>{hours(activity.duration)} · {Number(activity.distance || 0) > 0 ? pace(activity.distance, activity.duration) : "–"}</span></div>
                                     <div className="activity-secondary"><strong>{activity.elevation || 0} hm</strong><span>{activity.avgHr ? `Ø ${activity.avgHr} bpm` : "Kein Puls"}</span></div>
-                                    <em>{kind ? (state.reviews[activity.id] ? "✓ Review" : month.key === currentMonth ? "Review öffnen" : "Review optional") : "Kein Review nötig"}</em>
+                                    <em>{kind ? (covered ? "✓ Review" : tracked ? "Review öffnen" : "Review optional") : "Kein Review nötig"}</em>
                                   </button>
                                   <div className="activity-row-actions">
                                     <button className="activity-edit-button" onClick={() => setEditingName(activity)} aria-label={`${activity.name} umbenennen`} title="Trainingsname ändern"><span aria-hidden="true">✎</span><b>Name ändern</b></button>

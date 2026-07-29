@@ -53,7 +53,7 @@ function statusFromSignals(recoveryState, week) {
   return {
     level: "ok",
     tone: "good",
-    label: "Bereit",
+      label: "Plan passt",
     title: "Die aktuellen Signale passen zum bestehenden Plan",
   };
 }
@@ -85,7 +85,7 @@ export function buildCoachState(state = {}, now = new Date()) {
   ]);
 
   const recommendationText = status.level === "open"
-    ? "Bestehende Einheiten bleiben wie geplant. Ergänze nach dem nächsten relevanten Lauf ein kurzes Review, damit EYM Belastung und Erholung persönlicher einordnen kann."
+    ? "Bestehende Einheiten bleiben wie geplant. Ergänze nach dem nächsten relevanten Lauf ein kurzes Review, damit dein Coach Belastung und Erholung persönlicher einordnen kann."
     : dashboard.recommendation;
   const action = status.level === "adjust"
     ? { key: "review-week", label: "Woche gezielt prüfen", href: "/planner" }
@@ -117,7 +117,7 @@ export function buildCoachState(state = {}, now = new Date()) {
     outlook,
     mobility,
     goal,
-    protectionNote: "EYM ändert keinen bestehenden Wochenplan automatisch. Vorschläge werden erst nach deiner ausdrücklichen Auswahl wirksam.",
+    protectionNote: "Dein Coach ändert keinen bestehenden Wochenplan automatisch. Vorschläge werden erst nach deiner ausdrücklichen Auswahl wirksam.",
   };
 }
 

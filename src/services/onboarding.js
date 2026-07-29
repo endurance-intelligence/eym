@@ -129,7 +129,7 @@ export function createOnboardingDraft(state = {}) {
 
 export function onboardingStepError(stepKey, draft = {}) {
   if (stepKey === "profile" && !String(draft.displayName || "").trim()) {
-    return "Bitte sag EYM, wie es dich ansprechen darf.";
+    return "Bitte sag deinem Coach, wie er dich ansprechen darf.";
   }
 
   if (stepKey === "baseline") {
@@ -152,7 +152,7 @@ export function onboardingStepError(stepKey, draft = {}) {
 
   if (stepKey === "mission" && draft.missionMode === "event") {
     if (!String(draft.missionName || "").trim() || !draft.missionDate || numeric(draft.missionDistanceKm) <= 0) {
-      return "Für ein konkretes Ziel braucht EYM Name, Datum und Distanz.";
+      return "Für ein konkretes Ziel werden Name, Datum und Distanz benötigt.";
     }
   }
 
@@ -226,6 +226,8 @@ export function completeOnboardingState(
       selfReportedRunsPerWeek: bounded(draft.currentRunsPerWeek, 0, 7, 0),
       selfReportedWeeklyKm: bounded(draft.weeklyKm, 0, 300, 0),
       selfReportedLongestRunKm: bounded(draft.longestRunKm, 0, 250, 0),
+      reviewTrackingStartDate: state.profile?.reviewTrackingStartDate || localDateKey(now),
+      defaultBottleVolumeMl: numeric(state.profile?.defaultBottleVolumeMl, 650),
       coachProgressionEnabled: draft.coachProgressionEnabled !== false,
       progressionAcceptedAt: null,
     },

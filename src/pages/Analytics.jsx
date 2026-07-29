@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { Card, Metric, PageTitle } from "../components/UI";
 import TrainingSectionNav from "../components/SectionNav";
-import { preferredActivities, sportGroup } from "../services/activityUtils";
+import { activityDate, preferredActivities, sportGroup } from "../services/activityUtils";
 import { buildTrainingAnalytics } from "../services/trainingAnalytics";
 import { buildCoachState } from "../services/coachState";
 
@@ -56,6 +57,7 @@ export default function Analytics() {
   })), [activities, currentYear]);
   const maxWeekKm = Math.max(1, ...analytics.weeks.flatMap((week) => [week.km, week.plannedKm]));
   const totalIntensity = Object.values(analytics.intensity).reduce((sum, value) => sum + value, 0);
+  const reviewStartLabel = weekLabel.format(new Date(`${analytics.reviewCoverage.trackingStart}T12:00:00`));
 
   if (activities.length === 0) {
     return (
@@ -64,7 +66,7 @@ export default function Analytics() {
         <TrainingSectionNav />
         <Card>
           <h2>Noch keine Daten</h2>
-          <p className="muted">Importiere Garmin oder synchronisiere Intervals.icu. Danach zeigt EYM nicht nur Summen, sondern Umfang, Konstanz, Zielnähe und Datenqualität.</p>
+          <p className="muted">Importiere Garmin oder synchronisiere Intervals.icu. Danach siehst du neben Summen auch Umfang, Konstanz, Zielnähe und Datenqualität.</p>
         </Card>
       </>
     );
@@ -146,12 +148,25 @@ export default function Analytics() {
 
         <Card className="analytics-review-card">
           <p className="eyebrow">Reviews & Lernen</p>
-          <h2>{analytics.metrics.reviewedRuns}/{analytics.metrics.runs} Läufe bewertet</h2>
+          <h2>{analytics.reviewCoverage.reviewed.length}/{analytics.reviewCoverage.eligible.length} vollständig</h2>
           <div className="analytics-small-metrics">
             <span className="good"><b>{analytics.metrics.stableReviews}</b> stabil</span>
             <span className={analytics.metrics.warningReviews ? "warn" : ""}><b>{analytics.metrics.warningReviews}</b> Warnsignal</span>
           </div>
-          <p className="muted">Reviews verbinden objektive Belastung mit Beinen, Energie und Körpergefühl. Genau daraus entsteht die persönliche Coach-Einordnung.</p>
+          <p className="muted">Gezählt werden nur relevante Läufe seit {reviewStartLabel}. Ältere importierte Aktivitäten verändern die Quote nicht.</p>
+          {analytics.reviewCoverage.missing.length > 0 ? (
+            <div className="analytics-missing-reviews">
+              <strong>{analytics.reviewCoverage.missing.length} {analytics.reviewCoverage.missing.length === 1 ? "Review fehlt" : "Reviews fehlen"}</strong>
+              {analytics.reviewCoverage.missing.map((activity) => (
+                <Link to="/training" state={{ activityId: activity.id }} key={activity.id}>
+                  <span>{weekLabel.format(new Date(`${activityDate(activity)}T12:00:00`))} · {activity.name || activity.type || "Training"}</span>
+                  <b>Nachtragen →</b>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <div className="analytics-review-complete">✓ Alle relevanten Reviews seit {reviewStartLabel} sind vorhanden.</div>
+          )}
         </Card>
 
         <Card className="analytics-fuel-card">
@@ -161,16 +176,20 @@ export default function Analytics() {
             <span><b>{analytics.metrics.fuelInRange}</b> im Zielbereich</span>
             <span><b>{Math.max(0, analytics.metrics.fuelRuns - analytics.metrics.fuelTracked)}</b> ohne Fuel-Daten</span>
           </div>
-          <p className="muted">Nur Läufe ab 90 Minuten zählen hier. EYM bewertet nicht das Produktmarketing, sondern deine dokumentierte Aufnahme und Verträglichkeit.</p>
+          <p className="muted">Nur Läufe ab 90 Minuten zählen hier. Bewertet werden deine dokumentierte Aufnahme und Verträglichkeit, nicht das Produktmarketing.</p>
         </Card>
 
         <Card className="wide analytics-confidence-card">
           <div>
-            <p className="eyebrow">Datenqualität</p>
-            <h2>{analytics.confidence.label} · {analytics.confidence.score}/100</h2>
+            <p className="eyebrow">Datengrundlage</p>
+            <h2>{analytics.confidence.label}</h2>
             <p className="muted">{analytics.confidence.text}</p>
           </div>
-          <div className="analytics-confidence-scale"><i style={{ width: `${analytics.confidence.score}%` }} /></div>
+          <div className="analytics-confidence-facts">
+            <span><small>Reviews</small><strong>{analytics.reviewCoverage.reviewed.length}/{analytics.reviewCoverage.eligible.length}</strong></span>
+            <span><small>Herzfrequenz</small><strong>{percentage(analytics.confidence.coverage.heartRate)}</strong></span>
+            <span><small>Belastungswert</small><strong>{percentage(analytics.confidence.coverage.load)}</strong></span>
+          </div>
         </Card>
 
         <details className="wide analytics-year-disclosure">

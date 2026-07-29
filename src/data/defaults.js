@@ -24,6 +24,8 @@ export const defaultState = {
     selfReportedRunsPerWeek: 0,
     selfReportedWeeklyKm: "",
     selfReportedLongestRunKm: "",
+    reviewTrackingStartDate: "",
+    defaultBottleVolumeMl: 650,
     coachProgressionEnabled: true,
     progressionAcceptedAt: null,
   },

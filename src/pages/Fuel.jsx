@@ -203,7 +203,7 @@ export default function Fuel() {
     if (!result.found) {
       setProduct((current) => ({ ...current, barcode: result.barcode || current.barcode, catalogContributionPending: true }));
       setScanStatus("not-found");
-      setScanMessage("Das Produkt fehlt im offenen Katalog. Ergänze die Angaben und Fotos einmal in EYM. Danach kannst du die Daten direkt zu Open Food Facts beitragen.");
+      setScanMessage("Das Produkt fehlt im offenen Katalog. Ergänze die Angaben und Fotos einmal im Fuel Lab. Danach kannst du die Daten direkt zu Open Food Facts beitragen.");
       return;
     }
     setProduct((current) => ({
@@ -373,7 +373,7 @@ export default function Fuel() {
           [item.id]: {
             tone: "warn",
             message: item.barcode
-              ? "Der Barcode fehlt bei Open Food Facts. Ergänze die Produktdaten und sende sie anschließend direkt aus EYM."
+              ? "Der Barcode fehlt bei Open Food Facts. Ergänze die Produktdaten und sende sie anschließend direkt aus dem Fuel Lab."
               : "Über Marke und Produktname wurde kein eindeutiger Treffer gefunden. Ergänze einen Barcode oder Verpackungsfotos.",
           },
         }));
@@ -537,7 +537,7 @@ export default function Fuel() {
           contributionStatus: "submitted",
           catalogSubmittedAt: result.contributedAt || new Date().toISOString(),
           catalogProductUrl: result.productUrl || openFoodFactsContributionUrl(data.barcode),
-          source: item.source || "Open Food Facts · EYM Beitrag",
+          source: item.source || "Open Food Facts · eigener Beitrag",
           catalogCheckedAt: new Date().toISOString(),
         } : item),
       }));
@@ -557,7 +557,7 @@ export default function Fuel() {
       }));
       setContributionStatus("error");
       setScanStatus("error");
-      setScanMessage(`Die Daten wurden in EYM gespeichert, aber der Open-Food-Facts-Beitrag ist noch nicht raus: ${error.message || "Unbekannter Fehler"}`);
+      setScanMessage(`Die Daten wurden im Fuel Lab gespeichert, aber der Open-Food-Facts-Beitrag ist noch nicht raus: ${error.message || "Unbekannter Fehler"}`);
     }
   }
 
@@ -665,7 +665,7 @@ export default function Fuel() {
           <input ref={nutritionPhotoInput} className="visually-hidden" type="file" accept="image/*" capture="environment" onChange={(event) => supportingPhoto("nutritionImageUrl", event)} />
           <div className="fuel-photo-preview">{product.nutritionImageUrl ? <StoredImage value={product.nutritionImageUrl} alt="Nährwerttabelle" /> : <span>Nährwerte</span>}</div>
           <b>Nährwerttabelle</b>
-          <small>Foto aufnehmen – EYM liest Portion, Carbs, Natrium und weitere Werte aus.</small>
+          <small>Foto aufnehmen – Portion, Kohlenhydrate, Natrium und weitere Werte werden automatisch erkannt.</small>
           <div className="fuel-photo-button-row">
             <button type="button" onClick={() => nutritionPhotoInput.current?.click()}>{product.nutritionImageUrl ? "Foto ersetzen" : "Foto hinzufügen"}</button>
             {product.nutritionImageUrl && <button type="button" className="secondary" disabled={nutritionScanStatus === "loading"} onClick={() => analyzeNutritionPhoto(product.nutritionImageUrl)}>Neu erkennen</button>}
@@ -705,7 +705,7 @@ export default function Fuel() {
         </div>
 
         <div className="fuel-form-section wide fuel-essential-section">
-          <div className="fuel-section-heading"><div><p className="eyebrow">Essentiell für dein Training</p><h3>Das nutzt EYM für Reviews und Fuel-Feedback</h3></div><span>pro Portion / Mischung</span></div>
+          <div className="fuel-section-heading"><div><p className="eyebrow">Essentiell für dein Training</p><h3>Grundlage für Reviews und Fuel-Feedback</h3></div><span>pro Portion / Mischung</span></div>
           <div className="fuel-form-grid">
             <label>Kohlenhydrate (g)<input name="carbs" type="number" min="0" step="0.1" value={product.carbs} onChange={change} /></label>
             <label>Natrium (mg)<input name="sodium" type="number" min="0" step="1" value={product.sodium} onChange={change} /></label>
@@ -721,10 +721,10 @@ export default function Fuel() {
             <label>Produktmenge pro Portion<input name="servingQuantity" type="number" min="0" step="0.1" value={product.servingQuantity} onChange={change} placeholder="40" /></label>
             <label>Einheit<select name="servingUnit" value={product.servingUnit} onChange={change}>{servingUnits.map((unit) => <option key={unit}>{unit}</option>)}</select></label>
             <label>Messlöffel pro Portion<input name="scoopsPerServing" type="number" min="0" step="0.1" value={product.scoopsPerServing} onChange={change} placeholder="3" /></label>
-            <label>Ergibt fertiges Getränk (ml)<input name="preparedVolumeMl" type="number" min="0" step="1" value={product.preparedVolumeMl} onChange={change} placeholder="500" /></label>
+            <label>Mischvorschlag pro Portion (ml)<input name="preparedVolumeMl" type="number" min="0" step="1" value={product.preparedVolumeMl} onChange={change} placeholder="500" /></label>
             <label className="wide">Verzehrempfehlung<textarea name="consumptionRecommendation" value={product.consumptionRecommendation} onChange={change} placeholder="z. B. 150 ml alle 15 Minuten; vor, während und nach dem Training" /></label>
           </div>
-          {product.preparedVolumeMl && product.carbs !== "" && <div className="fuel-mix-preview"><b>Umrechnung im Review</b><span>100 ml enthalten ca. {(Number(product.carbs || 0) / Number(product.preparedVolumeMl || 1) * 100).toFixed(1)} g Kohlenhydrate{product.sodium !== "" ? ` und ${Math.round(Number(product.sodium || 0) / Number(product.preparedVolumeMl || 1) * 100)} mg Natrium` : ""}.</span></div>}
+          {product.preparedVolumeMl && product.carbs !== "" && <div className="fuel-mix-preview"><b>Getrennte Erfassung im Review</b><span>Eine Portion liefert {Number(product.carbs || 0).toFixed(1).replace(".0", "")} g Kohlenhydrate. Ob du sie in 500 oder 650 ml anmischst, wird separat erfasst.</span></div>}
         </div>
 
         <details className="fuel-form-section wide fuel-nutrition-details" open={nutritionScanStatus === "success"}>
@@ -743,7 +743,7 @@ export default function Fuel() {
 
         <div className="fuel-contribution-consent wide">
           <label><input type="checkbox" checked={contributionConsent} onChange={(event) => setContributionConsent(event.target.checked)} /><span>Ich bestätige, dass hochgeladene Fotos von mir stammen und unter der Open-Food-Facts-Lizenz geteilt werden dürfen.</span></label>
-          <small>Bestand, persönliche Bewertungen und Verträglichkeit bleiben ausschließlich in EYM.</small>
+          <small>Bestand, persönliche Bewertungen und Verträglichkeit bleiben ausschließlich in deinem privaten Fuel Lab.</small>
         </div>
 
         <div className="fuel-editor-actions wide">
@@ -780,7 +780,7 @@ export default function Fuel() {
           </div>
         </div>
         <div className="fuel-product-meta">
-          {item.preparedVolumeMl && <small>{item.servingQuantity ? `${item.servingQuantity} ${item.servingUnit || "g"}` : "1 Portion"}{item.scoopsPerServing ? ` · ${item.scoopsPerServing} Messlöffel` : ""} ergeben {item.preparedVolumeMl} ml fertiges Getränk.</small>}
+          {item.preparedVolumeMl && <small>{item.servingQuantity ? `${item.servingQuantity} ${item.servingUnit || "g"}` : "1 Portion"}{item.scoopsPerServing ? ` · ${item.scoopsPerServing} Messlöffel` : ""} · Mischvorschlag {item.preparedVolumeMl} ml.</small>}
           {item.consumptionRecommendation && <small>Empfehlung: {item.consumptionRecommendation}</small>}
           {item.barcode && <small className="fuel-barcode">Barcode {item.barcode}{item.source ? ` · ${item.source}` : ""}</small>}
           <small className="fuel-stock-start">Bestand seit {formatDate(`${item.stockTrackedFrom || new Date().toISOString().slice(0, 10)}T12:00:00`)}</small>
@@ -791,7 +791,7 @@ export default function Fuel() {
           {nutrientFields.map(([perServing, , label, unit]) => item[perServing] != null && <span key={perServing}><small>{label}</small><b>{item[perServing]} {unit}</b></span>)}
         </div></details>}
         {productNeedsContribution(item) && <div className="fuel-contribution-box">
-          <div><b>Produktdaten ergänzen</b><span>{item.barcode ? "Vervollständige Verpackungsdaten und Fotos. Danach kannst du den Beitrag direkt aus EYM senden." : "Ein Barcode oder Foto verbessert die Zuordnung und ermöglicht einen Beitrag zum offenen Katalog."}</span></div>
+          <div><b>Produktdaten ergänzen</b><span>{item.barcode ? "Vervollständige Verpackungsdaten und Fotos. Danach kannst du den Beitrag direkt aus dem Fuel Lab senden." : "Ein Barcode oder Foto verbessert die Zuordnung und ermöglicht einen Beitrag zum offenen Katalog."}</span></div>
           <div className="fuel-contribution-actions"><button type="button" onClick={() => editProduct(item, "Ergänze fehlende Angaben und Fotos. Lokale Daten bleiben unabhängig von Open Food Facts gespeichert.")}>Daten ergänzen</button>{item.barcode && <a href={openFoodFactsContributionUrl(item.barcode)} target="_blank" rel="noreferrer">Bei OFF öffnen ↗</a>}</div>
         </div>}
         {productStatuses[item.id] && <div className={`fuel-data-status ${productStatuses[item.id].tone}`}><span>{productStatuses[item.id].message}</span>{productStatuses[item.id].tone === "warn" && <button type="button" onClick={() => editProduct(item, productStatuses[item.id].message)}>Produktdaten ergänzen</button>}</div>}
