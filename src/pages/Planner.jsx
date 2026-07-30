@@ -970,6 +970,7 @@ export default function Planner() {
     const effectiveConfig = { ...config, ...overridePlanner, recurringCommitments: draftCommitments };
     const generated = generateWeekPlan({
       activities: canonicalActivities,
+      activityGroups: state.activityGroups,
       reviews: state.reviews,
       planHistory: state.plan,
       mission: state.mission,
@@ -1413,6 +1414,13 @@ export default function Planner() {
             </div>
             <span>{goalProfile.feasibility?.label || "Ziel wird geprüft"}</span>
           </div>
+          {goalProfile.experience && goalProfile.currentForm && goalProfile.targetGap && (
+            <div className="planner-goal-engine-context">
+              <div><small>Erfahrung</small><strong>{goalProfile.experience.label}</strong><p>{goalProfile.experience.summary}</p></div>
+              <div><small>Aktuelle Form</small><strong>{goalProfile.currentForm.label}</strong><p>{goalProfile.currentForm.summary}</p></div>
+              <div><small>Offene Aufgabe</small><strong>{goalProfile.targetGap.label}</strong><p>{goalProfile.targetGap.summary}</p></div>
+            </div>
+          )}
           <div className="planner-goal-engine-body">
             <div>
               <strong>Diese Fähigkeiten steuern den Plan</strong>
@@ -1426,6 +1434,7 @@ export default function Planner() {
             </div>
           </div>
           {goalProfile.feasibility?.summary && <p className="planner-goal-engine-summary">{goalProfile.feasibility.summary}</p>}
+          {goalProfile.preparation?.summary && <p className="planner-goal-engine-preparation"><strong>Warum so?</strong> {goalProfile.preparation.summary}</p>}
           {(goalProfile.constraintWarnings || []).map((warning) => <small className="planner-goal-warning" key={warning}>! {warning}</small>)}
         </Card>
       )}

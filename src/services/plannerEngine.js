@@ -1057,6 +1057,7 @@ function distributeEasyKilometers(plan, weekStart, target, fixedKm, config, phas
 
 export function generateWeekPlan({
   activities = [],
+  activityGroups = [],
   planHistory = [],
   mission,
   profile = {},
@@ -1081,6 +1082,8 @@ export function generateWeekPlan({
   const goalEngine = buildGoalEngine({
     mission,
     activities,
+    activityGroups,
+    reviews,
     profile,
     planner: config,
     referenceDate: weekStart,

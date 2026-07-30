@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **3.9.1**
+Current app version: **3.9.2**
 
 **Eat your miles.**
 
@@ -553,6 +553,18 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 - The Goal Engine uses recent imported activities when estimating the current gap. Missing benchmark data results in a checkpoint instead of a blind promise.
 - The route error screen no longer performs the same ineffective reload repeatedly. Recovery unregisters the app's stale service worker, clears old shell caches and loads a cache-busted current document while keeping athlete data untouched.
 - No database migration is required. Redeploy the `intervals` Supabase function after applying this version.
+
+## Transferable athlete history and target-gap planning v3.9.2
+
+- A newly added mission no longer resets the athlete to week one. The Goal Engine separates durable long-term experience, current form and the remaining target-specific gap.
+- The complete available running history now contributes marathon and ultra distances, longest distance and duration, Loop/Backyard sessions and qualifying back-to-back blocks. Explicitly grouped activity parts count as one effort.
+- Current form remains time-sensitive and uses recent weekly distance, run frequency, Longrun level, continuity, reviews and a detected monthly distance best. Old experience remains visible but cannot replace missing current fitness.
+- Recommended preparation weeks are reduced only by evidence-backed transferable fitness. The remaining calendar is described as specialization time when a suitable base already exists; a former ultra runner without current training is still rated conservatively.
+- B-priority goals inherit relevant work from an aligned later A goal. A Backyard milestone inside an Ultra build is therefore recognized as part of the same endurance preparation.
+- Finish and time goals keep separate gaps. A half-marathon finish can inherit a 15 km Longrun base, while a time goal still exposes the sustainable pace gap and requires an honest benchmark when effort is unclear.
+- Backyard missions without a concrete distance no longer receive a hidden 100 km assumption. The Coach develops the reachable distance from Loop blocks, current form and reviews.
+- Mission and Training show the evidence behind the verdict: long-term experience, current form, remaining task and the preparation logic.
+- No database migration or Supabase function deployment is required.
 
 For fresh installations that have not yet applied the athlete-image cleanup, run `supabase/migrations/20260722120000_athlete_images.sql` once. Afterwards run:
 

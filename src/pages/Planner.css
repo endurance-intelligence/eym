@@ -522,3 +522,13 @@
   .planner-goal-engine-heading>span{width:max-content;max-width:100%;white-space:normal}
   .planner-goal-engine-body{grid-template-columns:1fr}
 }
+
+/* v3.9.2 – visible evidence behind the Goal Engine decision */
+.planner-goal-engine-context{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.planner-goal-engine-context>div{display:grid;align-content:start;gap:5px;min-width:0;padding:12px;border:1px solid var(--border);border-radius:13px;background:var(--bg-card-alt)}
+.planner-goal-engine-context small{color:var(--muted);font-size:9px;font-weight:900;letter-spacing:.07em;text-transform:uppercase}
+.planner-goal-engine-context strong{color:var(--accent-bright);font-size:13px}
+.planner-goal-engine-context p{margin:0;color:var(--text-soft);font-size:11px;line-height:1.45}
+.planner-goal-engine-preparation{margin:0;padding:11px 13px;border-left:3px solid var(--accent);border-radius:0 11px 11px 0;background:var(--accent-surface);color:var(--text-soft);font-size:12px;line-height:1.5}
+.planner-goal-engine-preparation strong{color:var(--accent-bright)}
+@media(max-width:900px){.planner-goal-engine-context{grid-template-columns:1fr}}

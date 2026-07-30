@@ -100,10 +100,12 @@ export default function Mission() {
   const goalEngine = useMemo(() => buildGoalEngine({
     mission: { ...state.mission, milestones },
     activities: state.activities,
+    activityGroups: state.activityGroups,
+    reviews: state.reviews,
     profile: state.profile,
     planner: state.planner,
     referenceDate: new Date(),
-  }), [state.mission, state.activities, state.profile, state.planner, milestones]);
+  }), [state.mission, state.activities, state.activityGroups, state.reviews, state.profile, state.planner, milestones]);
 
   function change(event) {
     const { name, value, type, checked } = event.target;
@@ -398,8 +400,30 @@ export default function Mission() {
               <div><small>Zielart</small><strong>{{ finish: "Finish", time: "Zielzeit", pb: "Bestzeit", distance: "Distanz / Runden", training: "Vorbereitung" }[goalEngine.goalType] || goalEngine.goalType}</strong></div>
               <div><small>Zielpace</small><strong>{goalEngine.targetPaceLabel || "Nicht pacegesteuert"}</strong></div>
               <div><small>Wochenrahmen</small><strong>mind. {goalEngine.requiredRuns} passende Läufe</strong></div>
-              <div><small>Noch verfügbar</small><strong>{Math.max(0, Math.ceil(goalEngine.weeksLeft))} Wochen</strong></div>
+              <div><small>Noch verfügbar</small><strong>{goalEngine.preparation?.remainingWeeksLabel || `${Math.max(0, Math.ceil(goalEngine.weeksLeft))} Wochen`}</strong></div>
             </div>
+            <div className="mission-goal-engine-evidence">
+              <div>
+                <small>Langzeiterfahrung</small>
+                <strong>{goalEngine.experience.label}</strong>
+                <p>{goalEngine.experience.summary}</p>
+              </div>
+              <div>
+                <small>Aktuelle Form</small>
+                <strong>{goalEngine.currentForm.label}</strong>
+                <p>{goalEngine.currentForm.summary}</p>
+              </div>
+              <div>
+                <small>Zielspezifische Lücke</small>
+                <strong>{goalEngine.targetGap.label}</strong>
+                <p>{goalEngine.targetGap.summary}</p>
+              </div>
+            </div>
+            {goalEngine.preparation?.summary && (
+              <p className="mission-goal-engine-preparation">
+                <strong>Vorbereitungslogik:</strong> {goalEngine.preparation.summary}
+              </p>
+            )}
             <div className="mission-goal-engine-abilities">
               <strong>Dafür trainiert der Coach:</strong>
               <div>{goalEngine.abilities.map((ability) => <span key={ability}>{ability}</span>)}</div>

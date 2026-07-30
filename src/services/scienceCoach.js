@@ -174,6 +174,8 @@ export function goalRequirements(state, now = new Date()) {
   const engine = buildGoalEngine({
     mission: state.mission,
     activities: state.activities,
+    activityGroups: state.activityGroups,
+    reviews: state.reviews,
     profile: state.profile,
     planner: state.planner,
     referenceDate: now,
@@ -189,6 +191,11 @@ export function goalRequirements(state, now = new Date()) {
     phase: engine.phase,
     feasibility: engine.feasibility,
     requiredRuns: engine.requiredRuns,
+    experience: engine.experience,
+    currentForm: engine.currentForm,
+    preparation: engine.preparation,
+    targetGap: engine.targetGap,
+    strategicAlignment: engine.strategicAlignment,
     constraintWarnings: engine.constraintWarnings,
   };
 }
