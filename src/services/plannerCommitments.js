@@ -45,6 +45,22 @@ export function findCommitmentReplacementCandidate(plan = [], commitment = {}, d
   }) || null;
 }
 
+export function replacementLabelForAdjustment(draft, options = []) {
+  const replacementKey = draft?.replacementKey;
+  if (!replacementKey) return "";
+
+  const coachAlternative = draft?.coachAlternative;
+  if (coachAlternative?.key === replacementKey) {
+    return String(coachAlternative.label || "");
+  }
+
+  return String(
+    (Array.isArray(options) ? options : [])
+      .find((entry) => entry?.key === replacementKey)
+      ?.label || "",
+  );
+}
+
 export function buildCommitmentPlanEntry(commitment = {}, date = "", id = "") {
   const type = commitmentWorkoutType(commitment);
   return {

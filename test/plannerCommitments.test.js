@@ -5,6 +5,7 @@ import {
   buildCommitmentPlanEntry,
   findCommitmentReplacementCandidate,
   findCommitmentSlot,
+  replacementLabelForAdjustment,
 } from "../src/services/plannerCommitments.js";
 
 const commitment = {
@@ -71,4 +72,26 @@ test("week-only cancellation remains linked to the stored commitment", () => {
   assert.equal(entry.plannedCancellation, true);
   assert.equal(entry.missedReason, "Bewusst ausgelassen");
   assert.equal(entry.cancelledAt, "2026-07-27T08:00:00.000Z");
+});
+
+test("closed adjustment modal does not dereference a missing coach alternative", () => {
+  assert.equal(replacementLabelForAdjustment(null, []), "");
+  assert.equal(replacementLabelForAdjustment({
+    replacementKey: "preset:rest",
+    coachAlternative: null,
+  }, [
+    { key: "preset:rest", label: "Ruhetag / Erholung" },
+  ]), "Ruhetag / Erholung");
+});
+
+test("matching coach alternative supplies its concrete recommendation label", () => {
+  assert.equal(replacementLabelForAdjustment({
+    replacementKey: "sport:cycling",
+    coachAlternative: {
+      key: "sport:cycling",
+      label: "45 Minuten Rennrad locker",
+    },
+  }, [
+    { key: "sport:cycling", label: "Radfahren" },
+  ]), "45 Minuten Rennrad locker");
 });

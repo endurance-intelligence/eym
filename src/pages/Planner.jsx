@@ -26,6 +26,7 @@ import {
   buildCommitmentPlanEntry,
   findCommitmentReplacementCandidate,
   findCommitmentSlot,
+  replacementLabelForAdjustment,
 } from "../services/plannerCommitments";
 import {
   hasReviewCoverage,
@@ -450,10 +451,7 @@ export default function Planner() {
   const publishedWeek = config.intervalSync?.[weekKey] || null;
   const planChangedAfterPublish = Boolean(publishedWeek && publishedWeek.fingerprint !== currentPlanFingerprint);
   const adjustmentSelectedItems = adjustmentDraft?.selectedIds?.map((id) => weekPlan.find((item) => item.id === id)).filter(Boolean) || [];
-  const adjustmentReplacement = replacementOptions.find((entry) => entry.key === adjustmentDraft?.replacementKey);
-  const adjustmentReplacementLabel = adjustmentDraft?.coachAlternative?.key === adjustmentDraft?.replacementKey
-    ? adjustmentDraft.coachAlternative.label
-    : adjustmentReplacement?.label;
+  const adjustmentReplacementLabel = replacementLabelForAdjustment(adjustmentDraft, replacementOptions);
   const planningWeekPending = offsetWeeks >= 0 && weekPlan.length === 0;
   const planningWeekLocked = Boolean(planningWeekPending && previousWeekClosure && !previousWeekClosure.ready);
   const planningTargetLabel = offsetWeeks === 1 ? "Nächste Woche" : "Aktuelle Woche";
