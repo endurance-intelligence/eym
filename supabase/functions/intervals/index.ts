@@ -380,7 +380,7 @@ Deno.serve(async (request) => {
         return json({ message: "Ungültige Intervals.icu-Aktivitäts-ID." }, 400);
       }
       const streams = await intervalsGet(
-        `/activity/${encodeURIComponent(activityId)}/streams.json?types=latlng`,
+        `/activity/${encodeURIComponent(activityId)}/streams.json?types=latlng,distance,altitude,velocity_smooth,time`,
         apiKey,
       );
       return json({

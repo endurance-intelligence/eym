@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **3.9.2**
+Current app version: **3.9.3**
 
 **Eat your miles.**
 
@@ -565,6 +565,16 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 - Backyard missions without a concrete distance no longer receive a hidden 100 km assumption. The Coach develops the reachable distance from Loop blocks, current form and reviews.
 - Mission and Training show the evidence behind the verdict: long-term experience, current form, remaining task and the preparation logic.
 - No database migration or Supabase function deployment is required.
+
+## Interactive elevation and pace profile v3.9.3
+
+- GPS activity reviews now combine the route map with a measured elevation and pace profile in one card.
+- Moving across the profile with a mouse, finger or keyboard highlights the same route position on the map and shows distance, elevation, elapsed time and pace.
+- Road-bike reviews use speed in km/h instead of running pace in min/km.
+- The profile uses the Intervals.icu `latlng`, `distance`, `altitude`, `velocity_smooth` and `time` streams. Missing measurements remain missing and elevations are never estimated.
+- Activities with a route but without profile streams continue to show the map without an empty chart.
+- Stream data remains an on-demand, server-downsampled review payload and is not copied into the saved athlete profile.
+- No database migration is required. Redeploy the `intervals` Supabase function after applying this version.
 
 For fresh installations that have not yet applied the athlete-image cleanup, run `supabase/migrations/20260722120000_athlete_images.sql` once. Afterwards run:
 
