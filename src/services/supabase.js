@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { buildAuthRedirectUrl } from "./authRedirect";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://kxuwbjkyjngcgpkqopnh.supabase.co";
 const supabasePublishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "sb_publishable_XjmWgZ23j-G1NeyvZJTgMg_iI2STE3A";
@@ -28,7 +29,12 @@ function stateForCloud(state) {
 }
 
 export async function signUp(email, password) {
-  const { data, error } = await supabase.auth.signUp({ email, password });
+  const emailRedirectTo = buildAuthRedirectUrl(window.location.origin, import.meta.env.BASE_URL);
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: { emailRedirectTo },
+  });
   if (error) throw error;
   return data;
 }
@@ -41,7 +47,7 @@ export async function signIn(email, password) {
 
 
 export async function resetPassword(email) {
-  const redirectTo = `${window.location.origin}${import.meta.env.BASE_URL}`;
+  const redirectTo = buildAuthRedirectUrl(window.location.origin, import.meta.env.BASE_URL);
   const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
   if (error) throw error;
 }

@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **3.8.4**
+Current app version: **3.8.5**
 
 **Eat your miles.**
 
@@ -54,6 +54,8 @@ In Supabase Authentication → URL Configuration set:
 Site URL:     https://endurance-intelligence.github.io/eym/
 Redirect URL: https://endurance-intelligence.github.io/eym/**
 ```
+
+The signup and password-reset requests also send the exact project-aware callback URL. Supabase still requires the URL above in its redirect allowlist; otherwise it falls back to the configured Site URL.
 
 Deploy the Edge Functions from `supabase/functions` and apply the migrations from `supabase/migrations`.
 
@@ -519,6 +521,13 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 - The original owner account keeps using the former server-side Intervals.icu connection while the new personal credential storage is unavailable or an older personal ciphertext cannot be read. Other accounts remain isolated and never receive that fallback.
 - The recovery migration idempotently restores the credential table, grants and update trigger, then explicitly reloads the PostgREST schema cache. Existing connection rows are preserved.
 - Keep the existing `INTERVALS_CREDENTIALS_KEY`; do not generate a new value. Apply `20260729193000_intervals_connection_recovery.sql` and redeploy the `intervals` function.
+
+## GitHub Pages authentication redirect v3.8.5
+
+- Signup confirmation and password-reset emails now receive the full GitHub Pages callback including `/eym/` instead of relying only on the Supabase Site URL.
+- Both authentication flows share one callback builder so the repository subpath cannot be dropped independently.
+- Supabase Authentication → URL Configuration must use `https://endurance-intelligence.github.io/eym/` as Site URL and allow `https://endurance-intelligence.github.io/eym/**` as a Redirect URL.
+- Existing user data, Intervals.icu credentials and onboarding progress remain unchanged. No database migration or Supabase function deployment is required.
 
 For fresh installations that have not yet applied the athlete-image cleanup, run `supabase/migrations/20260722120000_athlete_images.sql` once. Afterwards run:
 
