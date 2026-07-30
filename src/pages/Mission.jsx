@@ -12,6 +12,15 @@ import {
   courseTypeLabel,
   eventCourseProfile,
 } from "../services/goalPlanning";
+import {
+  GOAL_DISCIPLINE_OPTIONS,
+  buildGoalEngine,
+  formatGoalDuration,
+  formatGoalDurationInput,
+  formatPaceSeconds,
+  inferGoalDiscipline,
+  parseGoalDurationSeconds,
+} from "../services/goalEngine";
 
 const emptyEvent = {
   name: "",
@@ -24,6 +33,7 @@ const emptyEvent = {
   isMainTarget: false,
   priority: "B",
   goalType: "finish",
+  goalDiscipline: "auto",
   targetTime: "",
   elevationGain: "",
   elevationLoss: "",
@@ -71,6 +81,9 @@ export default function Mission() {
       time: state.mission.time || "",
       location: state.mission.location || "",
       targetKm: state.mission.targetKm || 0,
+      goalType: state.mission.goalType || (state.mission.targetTime ? "time" : "finish"),
+      targetTime: state.mission.targetTime || "",
+      goalDiscipline: state.mission.goalDiscipline || "auto",
       courseType: state.mission.courseType || "",
       loopKm: state.mission.loopKm || 0,
       aidStationMode: state.mission.aidStationMode || "",
@@ -84,6 +97,13 @@ export default function Mission() {
   const mainTarget = activeMilestones.find((item) => item.isMainTarget) || activeMilestones[0];
   const upcomingMilestones = activeMilestones.filter((item) => item.id !== mainTarget?.id);
   const archivedMilestones = milestones.filter((item) => item.archived);
+  const goalEngine = useMemo(() => buildGoalEngine({
+    mission: { ...state.mission, milestones },
+    activities: state.activities,
+    profile: state.profile,
+    planner: state.planner,
+    referenceDate: new Date(),
+  }), [state.mission, state.activities, state.profile, state.planner, milestones]);
 
   function change(event) {
     const { name, value, type, checked } = event.target;
@@ -144,7 +164,10 @@ export default function Mission() {
         isMainTarget: Boolean(draft.isMainTarget),
         priority: draft.isMainTarget ? "A" : (draft.priority || "B"),
         goalType: draft.goalType || "finish",
-        targetTime: draft.targetTime || "",
+        goalDiscipline: draft.goalDiscipline || "auto",
+        targetTime: ["time", "pb"].includes(draft.goalType)
+          ? formatGoalDurationInput(draft.targetTime)
+          : "",
         elevationGain: draft.elevationGain === "" ? 0 : Number(draft.elevationGain),
         elevationLoss: draft.elevationLoss === "" ? 0 : Number(draft.elevationLoss),
         surface: draft.surface || "road",
@@ -172,6 +195,9 @@ export default function Mission() {
           time: mainTarget.time || "",
           location: mainTarget.location || "",
           targetKm: Number(mainTarget.targetKm) || 0,
+          goalType: mainTarget.goalType || "finish",
+          targetTime: mainTarget.targetTime || "",
+          goalDiscipline: mainTarget.goalDiscipline || "auto",
           courseType: mainTarget.courseType || "unspecified",
           loopKm: Number(mainTarget.loopKm) || 0,
           aidStationMode: mainTarget.aidStationMode || "unspecified",
@@ -200,7 +226,8 @@ export default function Mission() {
       isMainTarget: Boolean(item.isMainTarget),
       priority: item.priority || (item.isMainTarget ? "A" : "B"),
       goalType: item.goalType || (item.targetTime ? "time" : item.targetKm ? "distance" : "finish"),
-      targetTime: item.targetTime || "",
+      goalDiscipline: item.goalDiscipline || "auto",
+      targetTime: formatGoalDurationInput(item.targetTime),
       elevationGain: item.elevationGain ?? "",
       elevationLoss: item.elevationLoss ?? "",
       surface: item.surface || "road",
@@ -233,6 +260,9 @@ export default function Mission() {
             time: mainTarget.time || "",
             location: mainTarget.location || "",
             targetKm: Number(mainTarget.targetKm) || 0,
+            goalType: mainTarget.goalType || "finish",
+            targetTime: mainTarget.targetTime || "",
+            goalDiscipline: mainTarget.goalDiscipline || "auto",
             courseType: mainTarget.courseType || "unspecified",
             loopKm: Number(mainTarget.loopKm) || 0,
             aidStationMode: mainTarget.aidStationMode || "unspecified",
@@ -264,6 +294,9 @@ export default function Mission() {
             time: mainTarget.time || "",
             location: mainTarget.location || "",
             targetKm: Number(mainTarget.targetKm) || 0,
+            goalType: mainTarget.goalType || "finish",
+            targetTime: mainTarget.targetTime || "",
+            goalDiscipline: mainTarget.goalDiscipline || "auto",
             courseType: mainTarget.courseType || "unspecified",
             loopKm: Number(mainTarget.loopKm) || 0,
             aidStationMode: mainTarget.aidStationMode || "unspecified",
@@ -288,6 +321,12 @@ export default function Mission() {
   function eventCard(item, archived = false) {
     const forecast = forecasts[item.id];
     const courseProfile = eventCourseProfile(item);
+    const discipline = inferGoalDiscipline(item);
+    const disciplineLabel = GOAL_DISCIPLINE_OPTIONS.find((option) => option.value === discipline)?.label || "Allgemeine Ausdauer";
+    const targetSeconds = parseGoalDurationSeconds(item.targetTime);
+    const targetPace = targetSeconds > 0 && Number(item.targetKm || 0) > 0
+      ? formatPaceSeconds(targetSeconds / Number(item.targetKm))
+      : "";
     return (
       <Card key={item.id} className={item.isMainTarget ? "main-target-card" : ""}>
         <div className="card-heading-row">
@@ -296,7 +335,9 @@ export default function Mission() {
         </div>
         <p>{fmtDate(item.date)}{item.time ? ` · ${item.time} Uhr` : ""} · noch {daysUntil(item.date)} Tage</p>
         <p className="muted">{item.location || "Noch kein Ort hinterlegt"}</p>
-        {item.targetKm ? <p><strong>Ziel:</strong> {item.targetKm} km</p> : null}{item.goalType && <p><strong>Zielart:</strong> {{ finish: "Finish", time: "Zielzeit", pb: "Bestzeit", distance: "Distanz maximieren", training: "Vorbereitung" }[item.goalType] || item.goalType}{item.targetTime ? ` · ${item.targetTime}` : ""} · Priorität {item.priority || (item.isMainTarget ? "A" : "B")}</p>}{Number(item.elevationGain || 0) > 0 && <p><strong>Profil:</strong> {item.elevationGain} hm aufwärts · {item.surface || "gemischt"}</p>}
+        {item.targetKm ? <p><strong>Ziel:</strong> {item.targetKm} km</p> : null}
+        <p><strong>Zielprofil:</strong> {disciplineLabel}</p>
+        {item.goalType && <p><strong>Zielart:</strong> {{ finish: "Finish", time: "Zielzeit", pb: "Bestzeit", distance: "Distanz maximieren", training: "Vorbereitung" }[item.goalType] || item.goalType}{targetSeconds ? ` · ${formatGoalDuration(targetSeconds)}${targetPace ? ` · ${targetPace} min/km` : ""}` : ""} · Priorität {item.priority || (item.isMainTarget ? "A" : "B")}</p>}{Number(item.elevationGain || 0) > 0 && <p><strong>Profil:</strong> {item.elevationGain} hm aufwärts · {item.surface || "gemischt"}</p>}
         {courseProfile.courseType !== "unspecified" && <p><strong>Strecke:</strong> {courseTypeLabel(courseProfile.courseType)}{courseProfile.loopKm ? ` · ${String(courseProfile.loopKm).replace(".", ",")} km je Runde` : ""}{courseProfile.aidStationMode !== "unspecified" ? ` · ${aidStationLabel(courseProfile.aidStationMode)}` : ""}</p>}
         {item.isMainTarget && <p><strong>Vorbereitung ab:</strong> {fmtDate(item.preparationStartDate || preparationStartDate)}</p>}
         <div className="event-actions">
@@ -343,6 +384,34 @@ export default function Mission() {
           </Card>
         )}
 
+        {mainTarget && goalEngine.target && (
+          <Card className={`wide mission-goal-engine ${goalEngine.feasibility.status}`}>
+            <div className="mission-goal-engine-heading">
+              <div>
+                <p className="eyebrow">Goal Engine · aktive Plansteuerung</p>
+                <h2>{goalEngine.disciplineLabel} · {goalEngine.phase.label}</h2>
+                <p>{goalEngine.feasibility.summary}</p>
+              </div>
+              <span>{goalEngine.feasibility.label}</span>
+            </div>
+            <div className="mission-goal-engine-metrics">
+              <div><small>Zielart</small><strong>{{ finish: "Finish", time: "Zielzeit", pb: "Bestzeit", distance: "Distanz / Runden", training: "Vorbereitung" }[goalEngine.goalType] || goalEngine.goalType}</strong></div>
+              <div><small>Zielpace</small><strong>{goalEngine.targetPaceLabel || "Nicht pacegesteuert"}</strong></div>
+              <div><small>Wochenrahmen</small><strong>mind. {goalEngine.requiredRuns} passende Läufe</strong></div>
+              <div><small>Noch verfügbar</small><strong>{Math.max(0, Math.ceil(goalEngine.weeksLeft))} Wochen</strong></div>
+            </div>
+            <div className="mission-goal-engine-abilities">
+              <strong>Dafür trainiert der Coach:</strong>
+              <div>{goalEngine.abilities.map((ability) => <span key={ability}>{ability}</span>)}</div>
+            </div>
+            {(goalEngine.feasibility.reasons.length > 0 || goalEngine.constraintWarnings.length > 0) && (
+              <div className="mission-goal-engine-warnings">
+                {[...goalEngine.feasibility.reasons, ...goalEngine.constraintWarnings].map((reason) => <span key={reason}>! {reason}</span>)}
+              </div>
+            )}
+          </Card>
+        )}
+
         {!mainTarget && !showEditor && (
           <Card className="hero wide mission-empty-state">
             <p className="eyebrow">Deine Mission</p>
@@ -368,8 +437,9 @@ export default function Mission() {
               {placeSuggestions.length > 0 && <div className="place-suggestions" role="listbox" aria-label="Ortsvorschläge">{placeSuggestions.map((place) => <button key={place.id} type="button" role="option" aria-selected="false" onClick={() => selectPlace(place)}><strong>{place.name}</strong><span>{placeSuggestionSubtitle(place)}</span></button>)}</div>}
             </label>
             <label>Zieldistanz (km)<input name="targetKm" type="number" min="0" step="0.1" value={draft.targetKm} onChange={change} /></label>
+            <label>Zielprofil<select name="goalDiscipline" value={draft.goalDiscipline} onChange={change}>{GOAL_DISCIPLINE_OPTIONS.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select><small>Bei „automatisch“ nutzt der Coach Distanz, Name und Streckenformat.</small></label>
             <label>Zielart<select name="goalType" value={draft.goalType} onChange={change}><option value="finish">Teilnehmen und schaffen</option><option value="time">Mit Zielzeit absolvieren</option><option value="pb">Persönliche Bestzeit</option><option value="distance">Distanz / Zeit maximieren</option><option value="training">Trainings- oder Vorbereitungsevent</option></select></label>
-            {(draft.goalType === "time" || draft.goalType === "pb") && <label>Zielzeit<input name="targetTime" type="time" step="1" value={draft.targetTime} onChange={change} /></label>}
+            {(draft.goalType === "time" || draft.goalType === "pb") && <label>Zielzeit (hh:mm:ss)<input name="targetTime" type="text" inputMode="numeric" pattern="[0-9]{1,3}:[0-5][0-9]:[0-5][0-9]" placeholder="02:00:00" value={draft.targetTime} onChange={change} required /><small>5 km in 25 Minuten: 00:25:00 · Halbmarathon in 2 Stunden: 02:00:00</small></label>}
             <label>Priorität<select name="priority" value={draft.priority} onChange={change}><option value="A">A · Hauptevent</option><option value="B">B · wichtiges Zwischenziel</option><option value="C">C · Trainingswettkampf</option></select></label>
             <label>Höhenmeter aufwärts<input name="elevationGain" type="number" min="0" value={draft.elevationGain} onChange={change} /></label>
             <label>Höhenmeter abwärts<input name="elevationLoss" type="number" min="0" value={draft.elevationLoss} onChange={change} /></label>

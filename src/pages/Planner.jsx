@@ -128,6 +128,7 @@ function planFingerprint(plan) {
     optional: Boolean(item.optional),
     notes: item.notes || "",
     structuredWorkout: item.structuredWorkout || null,
+    goalWorkout: item.goalWorkout || null,
   })).sort((a, b) => `${a.date}${a.time}${a.id}`.localeCompare(`${b.date}${b.time}${b.id}`)));
 }
 
@@ -408,6 +409,10 @@ export default function Planner() {
   const scienceAssessment = unifiedCoach.week;
   const baseline = useMemo(() => athleteBaseline(state), [state]);
   const goalProfile = useMemo(() => goalRequirements(state), [state]);
+  const goalKeySessions = useMemo(
+    () => weekPlan.filter((item) => item.keySession && !item.raceEvent && !item.missedReason),
+    [weekPlan],
+  );
   const recurringCommitments = sortCommitments(
     Array.isArray(config.recurringCommitments)
       ? config.recurringCommitments.filter((entry) => entry.enabled !== false)
@@ -1006,6 +1011,7 @@ export default function Planner() {
         lastCycleWeek: generated.cycleWeek,
         lastRecoveryWeek: generated.recoveryWeek,
         lastPlanningTarget: generated.planningTarget || null,
+        lastGoalProfile: generated.goalProfile || null,
         lastLoopStrategy: generated.loopStrategy || null,
         lastEventWeek: generated.eventWeek || null,
       },
@@ -1017,7 +1023,9 @@ export default function Planner() {
         ? "Entlastungswoche"
         : `Aufbauwoche ${generated.cycleWeek}/3`;
     const readinessNotes = generated.readiness.notes.length ? ` ${generated.readiness.notes.join(" ")}` : "";
-    const targetLabel = generated.planningTarget?.name ? ` · Fokus ${generated.planningTarget.name}` : "";
+    const targetLabel = generated.planningTarget?.name
+      ? ` · Fokus ${generated.planningTarget.name}${generated.planningTarget.targetPaceLabel ? ` (${generated.planningTarget.targetPaceLabel})` : ""}`
+      : "";
     const loopLabel = generated.loopStrategy ? ` · Loop-Block ${generated.loopStrategy.loops} × ${String(generated.loopStrategy.loopKm).replace(".", ",")} km` : "";
     const scopeLabel = requestedDates.length ? `Ausgewählte Tage (${requestedDates.length}) neu geplant. ` : "";
     setStatus(`${scopeLabel}${generated.phase.label}${targetLabel} · ${loadLabel} · berechneter Laufrahmen ${generated.target} km${loopLabel}. Bereits gelaufen: ${actualRunningKm.toFixed(1)} km. ${generated.recoveryReason}${readinessNotes}`);
@@ -1397,6 +1405,32 @@ export default function Planner() {
         </div>
       </PageTitle>
       <TrainingSectionNav />
+      {goalProfile.target?.name && (
+        <Card className={`wide planner-goal-engine ${goalProfile.feasibility?.status || "open"}`}>
+          <div className="planner-goal-engine-heading">
+            <div>
+              <p className="eyebrow">Goal Engine · Wochenauftrag</p>
+              <h2>{goalProfile.target.name}</h2>
+              <p>{goalProfile.disciplineLabel} · {goalProfile.phase?.label || "Phase wird berechnet"}{goalProfile.targetPaceLabel ? ` · Zielpace ${goalProfile.targetPaceLabel}` : ""}</p>
+            </div>
+            <span>{goalProfile.feasibility?.label || "Ziel wird geprüft"}</span>
+          </div>
+          <div className="planner-goal-engine-body">
+            <div>
+              <strong>Diese Fähigkeiten steuern den Plan</strong>
+              <div className="planner-goal-engine-tags">{goalProfile.focus.map((focus) => <span key={focus}>{focus}</span>)}</div>
+            </div>
+            <div>
+              <strong>Schlüsseleinheiten dieser Woche</strong>
+              {goalKeySessions.length
+                ? <div className="planner-goal-key-sessions">{goalKeySessions.map((item) => <span key={item.id}>{item.day} · {item.title}</span>)}</div>
+                : <p className="muted">Noch keine Woche berechnet oder die aktuelle Woche ist bewusst entlastet.</p>}
+            </div>
+          </div>
+          {goalProfile.feasibility?.summary && <p className="planner-goal-engine-summary">{goalProfile.feasibility.summary}</p>}
+          {(goalProfile.constraintWarnings || []).map((warning) => <small className="planner-goal-warning" key={warning}>! {warning}</small>)}
+        </Card>
+      )}
       {offsetWeeks === 0 && ["adjust", "watch"].includes(unifiedCoach.level) && (
         <Card className={`wide planner-science-card ${unifiedCoach.level}`}>
           <div className="planner-science-heading">
@@ -1832,13 +1866,15 @@ export default function Planner() {
             <button type="button" className="close" onClick={() => setPlanningInfoOpen(false)}>×</button>
             <p className="eyebrow">Planlogik</p>
             <h2>So plant dein Coach deine Woche</h2>
-            <div className="planner-logic-flow">Mission <b>→</b> Historie <b>→</b> Belastung <b>→</b> Befinden <b>→</b> Wetter</div>
-            <p className="muted">Vor der ersten Planung werden Fixtermine, Trainingshistorie, Reviews und dein Check-in berücksichtigt. Sobald der Plan steht, wird er nicht automatisch neu berechnet. Änderungen erfolgen gezielt pro Einheit.</p>
+            <div className="planner-logic-flow">Hauptziel <b>→</b> Fähigkeiten <b>→</b> aktuelle Lücke <b>→</b> Phase <b>→</b> Woche</div>
+            <p className="muted">Zuerst bestimmen Distanz, Zielart, Zielzeit und Streckenprofil, was trainiert werden muss. Danach begrenzen Historie, Fixtermine, Reviews, Check-in und Wetter die konkrete Woche. Sobald der Plan steht, wird er nicht automatisch geändert.</p>
             <div className="form-grid">
               <label>Max. Außentemperatur<input type="number" value={config.maxOutdoorTemperature || 29} onChange={(event) => patchConfig({ maxOutdoorTemperature: Number(event.target.value) })} /></label>
               <label>Max. Böen in km/h<input type="number" value={config.maxWindGust || 55} onChange={(event) => patchConfig({ maxWindGust: Number(event.target.value) })} /></label>
               <label>Letzte Phase<input readOnly value={config.lastPhase || "Noch nicht berechnet"} /></label>
               <label>Letzter Laufrahmen<input readOnly value={config.lastTarget ? `${config.lastTarget} km` : "Noch nicht berechnet"} /></label>
+              <label>Zielprofil<input readOnly value={config.lastGoalProfile?.disciplineLabel || goalProfile.disciplineLabel || "Noch nicht berechnet"} /></label>
+              <label>Machbarkeit<input readOnly value={config.lastGoalProfile?.feasibility?.label || goalProfile.feasibility?.label || "Noch nicht geprüft"} /></label>
             </div>
             <div className="planner-protection-list">
               <span>✓ Aktive Wochen werden nur gezielt geändert</span>
@@ -1981,7 +2017,7 @@ export default function Planner() {
             <button type="button" className="close" onClick={() => setPlanningOpen(false)}>×</button>
             <p className="eyebrow">Intelligente Wochenplanung</p>
             <h2>Wie geht es dir – und wann hast du Zeit?</h2>
-            <p className="muted">Der Kilometerrahmen kommt aus deinem Hauptziel, den letzten Trainingswochen und diesem Check-in. Ein 3:1-Rhythmus ist nur das Grundgerüst; Erholungssignale können jederzeit eine frühere Entlastung auslösen.</p>
+            <p className="muted">Dein Hauptziel legt Fähigkeiten, Phase und notwendige Schlüsseleinheiten fest. Die letzten Trainingswochen und dieser Check-in bestimmen, wie viel davon aktuell sicher umsetzbar ist. Erholungssignale können jederzeit eine frühere Entlastung auslösen.</p>
 
             {(reasonCounts.fatigue > 0 || reasonCounts.pain > 0 || reasonCounts.illness > 0) && (
               <div className="planner-history-alert">

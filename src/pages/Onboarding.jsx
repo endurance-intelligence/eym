@@ -22,6 +22,7 @@ import {
   mergeIntervalsActivities,
   syncIntervalsActivities,
 } from "../services/intervals";
+import { GOAL_DISCIPLINE_OPTIONS } from "../services/goalEngine";
 import "./Onboarding.css";
 
 const WEEKDAYS = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"];
@@ -74,7 +75,7 @@ export default function Onboarding() {
   const progress = ((step + 1) / ONBOARDING_STEPS.length) * 100;
   const level = EXPERIENCE_OPTIONS.find((option) => option.value === draft.experienceLevel);
   const missionSummary = draft.missionMode === "event"
-    ? `${draft.missionName || "Event"} · ${draft.missionDistanceKm || "–"} km`
+    ? `${draft.missionName || "Event"} · ${draft.missionDistanceKm || "–"} km${["time", "pb"].includes(draft.missionGoalType) && draft.missionTargetTime ? ` · ${draft.missionTargetTime}` : ""}`
     : "Ohne festes Event starten";
   const sortedCommitments = useMemo(
     () => [...draft.recurringCommitments].sort((left, right) => {
@@ -425,7 +426,34 @@ export default function Onboarding() {
                     <label>Zieldistanz in km
                       <input type="number" min="1" max="500" step="0.1" value={draft.missionDistanceKm} placeholder="z. B. 42,2" onChange={(event) => update("missionDistanceKm", numberOrBlank(event.target.value))} />
                     </label>
-                    <div className="onboarding-privacy-note wide-field"><b>Details später verfeinern</b><span>Ort, Höhenmeter, Untergrund und Zielzeit kannst du danach im Bereich Mission ergänzen.</span></div>
+                    <label>Zielprofil
+                      <select value={draft.missionGoalDiscipline} onChange={(event) => update("missionGoalDiscipline", event.target.value)}>
+                        {GOAL_DISCIPLINE_OPTIONS.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
+                      </select>
+                    </label>
+                    <label>Zielart
+                      <select value={draft.missionGoalType} onChange={(event) => update("missionGoalType", event.target.value)}>
+                        <option value="finish">Distanz sicher schaffen</option>
+                        <option value="time">Mit Zielzeit absolvieren</option>
+                        <option value="pb">Persönliche Bestzeit</option>
+                        <option value="distance">Distanz / Runden maximieren</option>
+                      </select>
+                    </label>
+                    {["time", "pb"].includes(draft.missionGoalType) && (
+                      <label className="wide-field">Zielzeit (hh:mm:ss)
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          pattern="[0-9]{1,3}:[0-5][0-9]:[0-5][0-9]"
+                          value={draft.missionTargetTime}
+                          placeholder="z. B. 02:00:00"
+                          onChange={(event) => update("missionTargetTime", event.target.value)}
+                          required
+                        />
+                        <FieldNote>5 km in 25 Minuten: 00:25:00 · Halbmarathon in 2 Stunden: 02:00:00</FieldNote>
+                      </label>
+                    )}
+                    <div className="onboarding-privacy-note wide-field"><b>Dieses Ziel steuert den Plan</b><span>Der Coach leitet daraus Zielpace, benötigte Fähigkeiten, Trainingsphasen, Schlüsseleinheiten, Prüfungen und Tapering ab. Ort, Höhenmeter und Untergrund kannst du danach ergänzen.</span></div>
                   </div>
                 ) : (
                   <div className="onboarding-empty-choice">

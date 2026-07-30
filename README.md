@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **3.8.6**
+Current app version: **3.9.0**
 
 **Eat your miles.**
 
@@ -538,6 +538,20 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 - Weather-based cycling remains an alternative rather than an extra session. Long runs, Track, Loop training, key sessions and events are never selected for the swap.
 - Intervals.icu imports retain their available stream types. Opening a completed GPS activity review loads its latitude/longitude stream on demand and renders the route on an OpenStreetMap map with start and finish markers.
 - GPS routes are downsampled server-side for the review and are not copied into the saved athlete profile. Activities without a GPS route show no empty map.
+- No database migration is required. Redeploy the `intervals` Supabase function after applying this version.
+
+## Target-driven Goal Engine and app recovery v3.9.0
+
+- The Main Target now controls the full planning chain: discipline and goal type → required abilities → current gap → training phase → weekly key sessions → checkpoints and taper.
+- Dedicated profiles cover 5 km, 10 km, half marathon, marathon, ultra and Backyard goals. Finish goals and time goals deliberately receive different requirements and workouts.
+- A first 5 km finish uses progressive Run-Walk sessions and planned walking breaks instead of speed intervals. Every generated run remains beginner-safe until the imported baseline shows sufficient continuous running.
+- Time goals derive their target pace from distance and duration. Current activity performance is compared with that target before the Coach prescribes an adaptive working pace or reports that the goal is ambitious.
+- Half-marathon and marathon time goals receive benchmarks, threshold work, goal-pace blocks, progressive long runs and discipline-specific tapering. Long-run duration is calculated from distance instead of falling back to 60 minutes.
+- Ultra and Backyard finish goals prioritize time on feet, muscular durability, fueling, route or loop structure, pause routines and controlled back-to-back loading. They do not receive arbitrary speed sessions.
+- Goal-specific workouts export as structured Intervals.icu sessions with pace or effort only inside the work block; warm-up, recovery and cool-down remain target-free.
+- Onboarding and Mission now collect the target profile, finish/time intent and durations beyond 24 hours. Mission and Training show feasibility, phase, target pace, required abilities and the current week's key sessions.
+- The Goal Engine uses recent imported activities when estimating the current gap. Missing benchmark data results in a checkpoint instead of a blind promise.
+- The route error screen no longer performs the same ineffective reload repeatedly. Recovery unregisters the app's stale service worker, clears old shell caches and loads a cache-busted current document while keeping athlete data untouched.
 - No database migration is required. Redeploy the `intervals` Supabase function after applying this version.
 
 For fresh installations that have not yet applied the athlete-image cleanup, run `supabase/migrations/20260722120000_athlete_images.sql` once. Afterwards run:

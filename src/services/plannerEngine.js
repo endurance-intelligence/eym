@@ -2,12 +2,18 @@ import { reviewKind } from "./activityUtils.js";
 import {
   buildEventWeek,
   eventDurationMinutes,
-  eventCourseProfile,
   eventGoalLabel,
-  eventPolicy,
   eventRelation,
-  selectStrategicTarget,
 } from "./goalPlanning.js";
+import {
+  applyGoalWeekendSpecificity,
+  buildGoalEngine,
+  goalLongRunBounds,
+  goalSpecificSession,
+  isBeginnerFiveKGoal,
+  longRunGoalGuidance,
+  publicGoalSummary,
+} from "./goalEngine.js";
 
 const DAY_NAMES = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"];
 const DAY_INDEX = { Montag: 0, Dienstag: 1, Mittwoch: 2, Donnerstag: 3, Freitag: 4, Samstag: 5, Sonntag: 6 };
@@ -109,30 +115,6 @@ function recentLongestRun(activities, weekStart) {
   }, 0);
 }
 
-function daysToMission(mission, weekStart) {
-  if (!mission?.date) return 999;
-  return Math.ceil((new Date(`${mission.date}T12:00:00`) - weekStart) / DAY_MS);
-}
-
-function planningTarget(mission, weekStart) {
-  const selected = selectStrategicTarget(mission, weekStart);
-  if (!selected) return mission || {};
-  const text = String(selected.name || "").toLowerCase();
-  const courseProfile = eventCourseProfile(selected);
-  if (text.includes("backyard")) {
-    return {
-      ...selected,
-      ...courseProfile,
-      targetKm: Number(selected.targetKm || ((Number(selected.targetMinKm || 60) + Number(selected.targetMaxKm || 80)) / 2)),
-      targetMinKm: Number(selected.targetMinKm || 60),
-      targetMaxKm: Number(selected.targetMaxKm || 80),
-      goalKind: "backyard",
-    };
-  }
-  if (/heartbeat|fulda/.test(text)) return { ...selected, ...courseProfile, goalKind: "heartbeat" };
-  return { ...selected, ...courseProfile, goalKind: courseProfile.courseType === "loop" ? "loop" : "race" };
-}
-
 function loopTrainingPrescription(goal, daysLeft, longRun, cycle, recoveryWeek) {
   const loopKm = Number(goal?.loopKm || 0);
   if (!loopKm || recoveryWeek || daysLeft > 84 || daysLeft <= 14 || longRun < loopKm * 2) return null;
@@ -160,17 +142,6 @@ function loopTrainingPrescription(goal, daysLeft, longRun, cycle, recoveryWeek) 
       ? `Spezifischer Backyard-Block: jede Runde kontrolliert und die Geh-/Rundenroutine testen. ${supplyRoutine} Keine komplette 60–80-km-Generalprobe im Training erzwingen.`
       : `Spezifischer Loop-Block für ${goal?.name || "das Hauptziel"}: gleichmäßige Pace und kurze Stopps. ${supplyRoutine}`,
   };
-}
-
-function trainingPhase(daysLeft, priority = "A") {
-  const policy = eventPolicy(priority);
-  const taperDays = priority === "C" ? 7 : 14;
-  const taperFactor = priority === "A" ? 0.62 : priority === "B" ? 0.68 : 0.78;
-  if (daysLeft <= taperDays) return { key: "taper", label: `Taper für Priorität ${priority}`, factor: taperFactor, longShare: priority === "C" ? 0.27 : 0.24 };
-  if (daysLeft <= 35) return { key: "peak", label: "Peak & Absicherung", factor: 0.94, longShare: 0.31 };
-  if (daysLeft <= 84) return { key: "specific", label: "Zielspezifisch", factor: 1.03, longShare: 0.36 };
-  if (daysLeft <= 140) return { key: "build", label: "Aufbau", factor: 1.02, longShare: 0.33 };
-  return { key: "base", label: "Grundlage", factor: policy.priority === "C" ? 0.98 : 1, longShare: 0.3 };
 }
 
 function cycleWeek(mission, weekStart) {
@@ -898,9 +869,113 @@ function applyRecurringCommitments(plan, weekStart, config, mode = "all") {
   });
 }
 
+function addGoalSpecificWorkout(plan, weekStart, prescription, config, engine, longRunDay) {
+  if (!prescription) return;
+  const runningQuality = plan.filter((entry) => (
+    /orc\s*track|intervall|schwelle|threshold|tempo/i.test(`${entry.type || ""} ${entry.title || ""}`)
+    && isRunningPlanEntry(entry)
+  ));
+  const runLimit = Math.max(1, Math.min(7, Number(config.targetRunCount || 0) || 3));
+  const existingRuns = plan.filter(isRunningPlanEntry).length;
+  const canCarrySecondQuality = engine.mode === "time"
+    && ["half_marathon", "marathon"].includes(engine.discipline)
+    && engine.baseline.runDays >= 3.5
+    && runLimit >= 5;
+
+  if (runningQuality.length && !canCarrySecondQuality && prescription.goalSessionRole !== "run_walk_progression") {
+    const existing = runningQuality[0];
+    const index = plan.findIndex((entry) => entry.id === existing.id);
+    if (index >= 0) {
+      plan[index] = {
+        ...existing,
+        keySession: true,
+        goalSessionRole: "existing_quality",
+        goalTargetId: engine.target?.id || null,
+        notes: `${existing.notes || ""} Zielbezug ${engine.disciplineLabel}: Diese Einheit übernimmt den Qualitätsreiz der Woche. ${engine.targetPaceLabel ? `Das Wettkampfziel entspricht ${engine.targetPaceLabel}; den Vereinsinhalt trotzdem nicht eigenmächtig verschärfen.` : ""}`.trim(),
+      };
+    }
+    return;
+  }
+
+  const allowed = new Set(Array.isArray(config.runDays) ? config.runDays : []);
+  (config.recurringCommitments || [])
+    .filter((entry) => entry?.enabled !== false && entry.sport === "running")
+    .forEach((entry) => allowed.add(entry.weekday));
+  const doubleDays = new Set(config.doubleTrainingDays || []);
+  const preferred = ["Dienstag", "Donnerstag", "Freitag", "Mittwoch", "Samstag", "Montag", "Sonntag"];
+  const longIndex = DAY_INDEX[longRunDay];
+  const candidates = preferred
+    .filter((day) => allowed.has(day) && DAY_INDEX[day] !== longIndex)
+    .map((day) => {
+      const date = isoDate(dateForDay(weekStart, DAY_INDEX[day]));
+      const entries = plan.filter((entry) => entry.date === date && !["Stabi", "Mobility", "Ruhetag"].includes(entry.type));
+      const occupied = entries.length > 0;
+      const distanceFromLongRun = longIndex == null ? 3 : Math.abs(DAY_INDEX[day] - longIndex);
+      const adjacentPenalty = prescription.goalSessionRole === "run_walk_progression" ? 0 : distanceFromLongRun <= 1 ? 20 : 0;
+      const loadPenalty = entries.some((entry) => entry.commitmentLoad === "high" || /fußball|track|intervall|schwelle/.test(`${entry.type} ${entry.title}`.toLowerCase())) ? 40 : 0;
+      return {
+        day,
+        occupied,
+        score: adjacentPenalty + loadPenalty + (occupied && !doubleDays.has(day) ? 100 : 0),
+      };
+    })
+    .sort((left, right) => left.score - right.score);
+  const selected = candidates.find((candidate) => candidate.score < 100);
+  if (!selected) return;
+
+  if (existingRuns >= runLimit) {
+    const replaceableIndex = plan.findIndex((entry) => (
+      entry.type === "Easy Run"
+      && !entry.fixed
+      && !entry.commitmentId
+      && !entry.keySession
+    ));
+    if (replaceableIndex < 0) return;
+    plan.splice(replaceableIndex, 1);
+  }
+
+  const paired = selected.occupied;
+  plan.push(item(weekStart, DAY_INDEX[selected.day], {
+    time: paired ? "07:00" : "18:00",
+    ...prescription,
+    optional: false,
+    fixed: false,
+    spontaneous: true,
+    doubleSession: paired,
+    comboSession: false,
+    goalTargetId: engine.target?.id || null,
+    goalDiscipline: engine.discipline,
+    targetPaceLabel: engine.targetPaceLabel,
+  }));
+}
+
+function applyBeginnerFiveKRunWalk(plan, engine) {
+  if (!isBeginnerFiveKGoal(engine)) return plan;
+  return plan.map((entry) => {
+    if (
+      entry.fixed
+      || entry.raceEvent
+      || entry.goalSessionRole === "run_walk_progression"
+      || !["Easy Run", "Long Run", "Laufband"].includes(entry.type)
+    ) return entry;
+    const distance = Number(entry.distance || 0);
+    return {
+      ...entry,
+      type: "Easy Run",
+      title: `${distance} km Run-Walk locker`,
+      duration: Math.max(Number(entry.duration || 0), Math.round(distance * 9)),
+      goalSessionRole: entry.type === "Long Run" ? "run_walk_long" : "run_walk_easy",
+      goalTargetId: engine.target?.id || null,
+      goalDiscipline: engine.discipline,
+      notes: `${entry.notes || ""} Gehpause früh und geplant nutzen; Ziel ist sichere Regelmäßigkeit, nicht Tempo oder Durchbeißen.`.trim(),
+    };
+  });
+}
+
 function distributeEasyKilometers(plan, weekStart, target, fixedKm, config, phase, readiness, cycle, eventWeek = null) {
   const allowed = new Set(Array.isArray(config.runDays) ? config.runDays : []);
   const trueDoubleDays = new Set(config.doubleTrainingDays || []);
+  const existingQuality = plan.some((entry) => /orc\s*track|intervall|schwelle|threshold|tempo/i.test(`${entry.type || ""} ${entry.title || ""}`));
 
   function hasEnduranceSession(day) {
     const date = isoDate(dateForDay(weekStart, DAY_INDEX[day]));
@@ -956,7 +1031,7 @@ function distributeEasyKilometers(plan, weekStart, target, fixedKm, config, phas
     const rawDistance = Math.max(eventWeek ? 3 : 4, Math.round(remaining * weights[index]));
     const distance = eventWeek ? Math.min(eventWeek.easyRunCapKm, rawDistance) : rawDistance;
     const paired = hasEnduranceSession(day);
-    const quality = !eventWeek && day === "Freitag" && !paired && readiness.hardAllowed && ["build", "specific"].includes(phase.key) && cycle >= 2 && target >= 45;
+    const quality = !existingQuality && !eventWeek && day === "Freitag" && !paired && readiness.hardAllowed && ["build", "specific"].includes(phase.key) && cycle >= 2 && target >= 45;
     plan.push(item(weekStart, DAY_INDEX[day], {
       time: paired ? "07:00" : "18:00",
       title: quality ? `${distance} km mit Schwellenblock` : afterEvent ? `${distance} km Recovery optional` : `${distance} km locker`,
@@ -1003,10 +1078,17 @@ export function generateWeekPlan({
   const reportedWeeklyKm = boundedNumber(profile.selfReportedWeeklyKm, 0, 300, 0);
   const reportedLongestRun = boundedNumber(profile.selfReportedLongestRunKm, 0, 250, 0);
   const longestRecent = recentLongestRun(activities, historyCutoff) || reportedLongestRun;
-  const goal = planningTarget(mission, weekStart);
-  const daysLeft = daysToMission(goal, weekStart);
+  const goalEngine = buildGoalEngine({
+    mission,
+    activities,
+    profile,
+    planner: config,
+    referenceDate: weekStart,
+  });
+  const goal = goalEngine.target || {};
+  const daysLeft = goalEngine.daysLeft;
   const eventWeek = buildEventWeek(mission, weekStart);
-  const strategicPhase = trainingPhase(daysLeft, goal?.priority || (goal?.isMainTarget ? "A" : "B"));
+  const strategicPhase = goalEngine.phase;
   const phase = eventWeek
     ? { key: "event", label: eventWeek.phaseLabel, factor: 1, longShare: 0 }
     : strategicPhase;
@@ -1061,16 +1143,21 @@ export function generateWeekPlan({
   const saturdayKm = !eventWeek && fixedAppointments.saturdayMode !== "off" && phase.key !== "taper" && readiness.longRunAllowed
     ? Math.min(10, Math.max(recoveryWeek ? 5 : 6, Math.round(target * 0.13)))
     : 0;
-  const desiredLong = eventWeek ? 0 : Math.round(target * phase.longShare * (recoveryWeek ? 0.82 : 1));
+  const goalLongRun = goalLongRunBounds(goalEngine, target);
+  const desiredLong = eventWeek ? 0 : Math.round(target * goalLongRun.share * (recoveryWeek ? 0.82 : 1));
   const starterBaseline = !recentAverage && reportedWeeklyKmAvailable && reportedWeeklyKm < 20;
-  const minimumLongRun = starterBaseline ? (base >= 14 ? 6 : 4) : 12;
   const progressionCap = longestRecent > 0
-    ? Math.max(minimumLongRun, Math.round(longestRecent * 1.12))
+    ? Math.max(4, Math.round(longestRecent * 1.15))
     : starterBaseline
-      ? Math.max(minimumLongRun, Math.round(base * 0.55))
+      ? Math.max(4, Math.round(base * 0.45))
       : desiredLong;
   const longRun = !eventWeek && readiness.longRunAllowed
-    ? Math.max(minimumLongRun, Math.min(desiredLong, progressionCap, Number(config.maxLongRun || 38)))
+    ? Math.max(4, Math.min(
+      Math.max(goalLongRun.minimum, desiredLong),
+      progressionCap,
+      goalLongRun.maximum,
+      Number(config.maxLongRun || 38),
+    ))
     : 0;
   const loopPrescription = loopTrainingPrescription(goal, daysLeft, longRun, cycle, recoveryWeek);
 
@@ -1166,27 +1253,45 @@ export function generateWeekPlan({
       return !occupied || trueDoubleDays.has(day);
     });
 
+  const goalWorkout = goalSpecificSession(goalEngine, {
+    cycle,
+    recoveryWeek,
+    eventWeek,
+    hardAllowed: readiness.hardAllowed,
+    weeklyTarget: target,
+    targetRunCount: startingRunCount,
+  });
+  addGoalSpecificWorkout(plan, weekStart, goalWorkout, config, goalEngine, longRunDay);
+
   if (longRun > 0 && longRunDay) {
     const longRunDayIndex = DAY_INDEX[longRunDay];
     const longRunWeather = weatherDecision(weatherForDate(forecast, dateForDay(weekStart, longRunDayIndex)), config);
     const plannedLongDistance = loopPrescription?.distance || longRun;
+    const longRunGuidance = longRunGoalGuidance(goalEngine, plannedLongDistance, cycle);
     plan.push(item(weekStart, longRunDayIndex, {
       time: longRunWeather?.tooHot ? "07:00" : "09:00",
       title: loopPrescription?.title || `${longRun} km Longrun`,
       type: longRunWeather?.indoor ? "Laufband" : loopPrescription ? "Loop-Training" : "Long Run",
       distance: plannedLongDistance,
+      duration: longRunGuidance.duration,
       notes: longRunWeather?.indoor
-        ? `Wetteranpassung: ${longRunWeather.tooHot ? "früh starten oder Laufband" : "bei Sturm/Gewitter nach innen wechseln"}. Fuel und Trinken testen.`
-        : loopPrescription?.notes || "Ruhig und kontrolliert. Fuel, Trinken und Zeit auf den Beinen testen.",
+        ? `Wetteranpassung: ${longRunWeather.tooHot ? "früh starten oder Laufband" : "bei Sturm/Gewitter nach innen wechseln"}. ${longRunGuidance.notes}`
+        : `${loopPrescription?.notes || ""} ${longRunGuidance.notes}`.trim(),
       optional: false,
       weatherAdjusted: Boolean(longRunWeather?.indoor),
       loopTraining: loopPrescription || null,
       targetEventId: goal?.id || null,
+      goalTargetId: goal?.id || null,
+      goalDiscipline: goalEngine.discipline,
+      goalSessionRole: loopPrescription ? "course_specific_long_run" : "long_run",
+      keySession: true,
     }));
   }
 
   const fixedKm = plan.reduce((sum, entry) => sum + Number(entry.distance || 0), 0);
   distributeEasyKilometers(plan, weekStart, target, fixedKm, config, phase, readiness, cycle, eventWeek);
+  plan = applyGoalWeekendSpecificity(plan, goalEngine, { cycle, recoveryWeek });
+  plan = applyBeginnerFiveKRunWalk(plan, goalEngine);
   applyExtraOrcTrack(plan, weekStart, fixedAppointments.extraOrcTrackDay, config);
   applyRecurringCommitments(plan, weekStart, config, "non-running");
   addStrengthSessions(plan, weekStart, config, readiness);
@@ -1337,7 +1442,7 @@ export function generateWeekPlan({
     recoveryReason,
     readiness,
     daysLeft,
-    planningTarget: goal ? {
+    planningTarget: goalEngine.target ? {
       id: goal.id,
       name: goal.name,
       date: goal.date,
@@ -1351,7 +1456,13 @@ export function generateWeekPlan({
       aidStationMode: goal.aidStationMode,
       priority: goal.priority || (goal.isMainTarget ? "A" : "B"),
       goalType: goal.goalType || "finish",
+      targetTime: goal.targetTime || "",
+      goalDiscipline: goalEngine.discipline,
+      disciplineLabel: goalEngine.disciplineLabel,
+      targetPaceLabel: goalEngine.targetPaceLabel,
+      feasibility: goalEngine.feasibility,
     } : null,
+    goalProfile: publicGoalSummary(goalEngine),
     eventWeek: eventWeek ? {
       weekStart: eventWeek.weekStart,
       priority: eventWeek.priority,

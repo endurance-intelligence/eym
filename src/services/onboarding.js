@@ -1,4 +1,9 @@
-export const ONBOARDING_VERSION = 2;
+import {
+  formatGoalDurationInput,
+  parseGoalDurationSeconds,
+} from "./goalEngine.js";
+
+export const ONBOARDING_VERSION = 3;
 export const ONBOARDING_STEPS = [
   { key: "profile", label: "Über dich" },
   { key: "intervals", label: "Daten verbinden" },
@@ -128,6 +133,9 @@ export function createOnboardingDraft(state = {}) {
     missionName: "",
     missionDate: "",
     missionDistanceKm: "",
+    missionGoalType: "finish",
+    missionTargetTime: "",
+    missionGoalDiscipline: "auto",
     targetRunCount: 2,
     runDays: [],
     stabiCount: 1,
@@ -170,6 +178,9 @@ export function onboardingStepError(stepKey, draft = {}) {
   if (stepKey === "mission" && draft.missionMode === "event") {
     if (!String(draft.missionName || "").trim() || !draft.missionDate || numeric(draft.missionDistanceKm) <= 0) {
       return "Für ein konkretes Ziel werden Name, Datum und Distanz benötigt.";
+    }
+    if (["time", "pb"].includes(draft.missionGoalType) && parseGoalDurationSeconds(draft.missionTargetTime) <= 0) {
+      return "Für ein Zeit- oder Bestzeitziel wird eine gültige Zielzeit im Format hh:mm:ss benötigt.";
     }
   }
 
@@ -242,8 +253,11 @@ function goalFromDraft(draft, preparationStartDate, idFactory) {
     preparationStartDate,
     isMainTarget: true,
     priority: "A",
-    goalType: "finish",
-    targetTime: "",
+    goalType: draft.missionGoalType || "finish",
+    targetTime: ["time", "pb"].includes(draft.missionGoalType)
+      ? formatGoalDurationInput(draft.missionTargetTime)
+      : "",
+    goalDiscipline: draft.missionGoalDiscipline || "auto",
     elevationGain: 0,
     elevationLoss: 0,
     surface: "road",
@@ -298,6 +312,9 @@ export function completeOnboardingState(
           time: goal.time,
           location: "",
           targetKm: goal.targetKm,
+          goalType: goal.goalType,
+          targetTime: goal.targetTime,
+          goalDiscipline: goal.goalDiscipline,
           preparationStartDate: goal.preparationStartDate,
           milestones: [goal],
         }

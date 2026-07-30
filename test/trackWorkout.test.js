@@ -235,6 +235,54 @@ test("generated interval and threshold edges stay free of pace targets", () => {
   assert.doesNotMatch(threshold, /(?:warmup|cooldown)[^\n]*Pace/);
 });
 
+test("Goal Engine workouts keep pace targets inside their work blocks", () => {
+  const description = intervalDescription({
+    type: "Schwellenlauf",
+    title: "HM-Arbeits-Pace",
+    goalWorkout: {
+      warmupMinutes: 15,
+      cooldownMinutes: 10,
+      blocks: [{
+        label: "HM-Arbeits-Pace",
+        repeats: 3,
+        workMinutes: 12,
+        recoveryMinutes: 3,
+        targetPace: "5:41",
+        toleranceSeconds: 12,
+        effort: "Z3 HR",
+      }],
+    },
+  });
+
+  assert.match(description, /HM-Arbeits-Pace 3x/);
+  assert.match(description, /- 12m 5:29-5:53\/km Pace intensity=interval/);
+  assert.match(description, /- 3m intensity=recovery/);
+  assert.doesNotMatch(description, /(?:warmup|recovery|cooldown)[^\n]*Pace/);
+});
+
+test("run-walk prescriptions export planned recovery instead of synthetic pace", () => {
+  const description = intervalDescription({
+    type: "Easy Run",
+    title: "Run-Walk",
+    goalWorkout: {
+      warmupMinutes: 5,
+      cooldownMinutes: 5,
+      blocks: [{
+        label: "Run-Walk",
+        repeats: 8,
+        workMinutes: 2,
+        recoveryMinutes: 2,
+        effort: "Z2 HR",
+      }],
+    },
+  });
+
+  assert.match(description, /Run-Walk 8x/);
+  assert.match(description, /- 2m Z2 HR intensity=interval/);
+  assert.match(description, /- 2m intensity=recovery/);
+  assert.doesNotMatch(description, /Pace/);
+});
+
 test("named templates survive archive normalization and can be copied into a workout", () => {
   const template = buildTrackWorkoutTemplate({
     id: "mix-1200-800",

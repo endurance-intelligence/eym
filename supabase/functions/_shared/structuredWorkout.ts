@@ -36,7 +36,7 @@ function formatPace(value: number) {
 function paceTarget(step: Record<string, unknown>) {
   const targetSeconds = paceSeconds(step.targetPace);
   if (targetSeconds == null) return "Z5 Pace";
-  const tolerance = safeInteger(step.paceToleranceSeconds, 1, 60, 5);
+  const tolerance = safeInteger(step.paceToleranceSeconds ?? step.toleranceSeconds, 1, 60, 5);
   const faster = formatPace(Math.max(120, targetSeconds - tolerance));
   const slower = formatPace(targetSeconds + tolerance);
   return `${faster}-${slower}/km Pace`;
@@ -79,6 +79,44 @@ function structuredTrackDescription(input: Record<string, unknown>) {
   return lines.join("\n");
 }
 
+function safeLabel(value: unknown, fallback: string) {
+  const cleaned = String(value || "").replace(/[\r\n]+/g, " ").trim().slice(0, 80);
+  return cleaned || fallback;
+}
+
+function safeEffort(value: unknown) {
+  const match = String(value || "").trim().match(/^Z([1-5])\s+(HR|Pace)$/i);
+  return match ? `Z${match[1]} ${match[2].toUpperCase() === "HR" ? "HR" : "Pace"}` : "Z3 HR";
+}
+
+function goalWorkoutDescription(input: Record<string, unknown>) {
+  const warmupMinutes = safeInteger(input.warmupMinutes, 0, 60, 15);
+  const cooldownMinutes = safeInteger(input.cooldownMinutes, 0, 60, 10);
+  const blocks = (Array.isArray(input.blocks) ? input.blocks : [])
+    .slice(0, 6)
+    .map((raw) => raw && typeof raw === "object" ? raw as Record<string, unknown> : {});
+  const lines = [
+    "Warm-up",
+    `- ${warmupMinutes}m intensity=warmup`,
+    "",
+  ];
+  blocks.forEach((block, index) => {
+    const repeats = safeInteger(block.repeats, 1, 30, 1);
+    const workMeters = safeInteger(block.workMeters, 0, 10000, 0);
+    const workMinutes = safeInteger(block.workMinutes, 0, 180, 0);
+    const recoveryMinutes = safeInteger(block.recoveryMinutes, 0, 60, 0);
+    const workToken = workMeters > 0 ? `${workMeters}mtr` : `${Math.max(1, workMinutes)}m`;
+    const target = paceSeconds(block.targetPace) != null ? paceTarget(block) : safeEffort(block.effort);
+    const label = safeLabel(block.label, `Hauptteil ${index + 1}`);
+    lines.push(repeats > 1 ? `${label} ${repeats}x` : label);
+    lines.push(`- ${workToken} ${target} intensity=interval`);
+    if (recoveryMinutes > 0 && repeats > 1) lines.push(`- ${recoveryMinutes}m intensity=recovery`);
+    lines.push("");
+  });
+  lines.push("Cool-down", `- ${cooldownMinutes}m intensity=cooldown`);
+  return lines.join("\n");
+}
+
 export function isProvisionalTrackPlanItem(item: Record<string, unknown>) {
   const text = `${item.type || ""} ${item.title || ""}`.toLowerCase();
   const structuredWorkout = item.structuredWorkout;
@@ -101,6 +139,11 @@ export function intervalDescription(item: Record<string, unknown>) {
   const duration = safeMinutes(item.duration, Math.max(30, Math.round(Number(item.distance || 0) * 6.3)));
   const distance = Math.max(0, Number(item.distance || 0));
   const structuredWorkout = item.structuredWorkout;
+  const goalWorkout = item.goalWorkout;
+
+  if (goalWorkout && typeof goalWorkout === "object") {
+    return goalWorkoutDescription(goalWorkout as Record<string, unknown>);
+  }
 
   if (structuredWorkout && typeof structuredWorkout === "object" && /orc\s*track|intervall|interval|sprint/.test(text)) {
     return structuredTrackDescription(structuredWorkout as Record<string, unknown>);

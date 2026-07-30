@@ -88,6 +88,17 @@ test("onboarding validates a realistic weekly frame", () => {
   assert.match(onboardingStepError("week", { ...draft, runDays: ["Dienstag"] }), /mindestens 3/);
   assert.match(onboardingStepError("baseline", { ...draft, weeklyKm: "" }), /drei Trainingswerte/);
   assert.match(onboardingStepError("intervals", { ...draft, intervalsConnected: false }), /Intervals\.icu/);
+  assert.match(onboardingStepError("mission", {
+    ...draft,
+    missionGoalType: "time",
+    missionTargetTime: "02:99:00",
+  }), /Zielzeit/);
+  assert.equal(onboardingStepError("mission", {
+    ...draft,
+    missionGoalType: "time",
+    missionTargetTime: "02:00:00",
+    missionGoalDiscipline: "half_marathon",
+  }), "");
 });
 
 test("recent Intervals activities provide the six and eight week onboarding baseline", () => {
@@ -116,6 +127,7 @@ test("completion writes the new profile and planning baseline without creating a
   });
 
   assert.equal(completed.onboarding.status, "completed");
+  assert.equal(completed.onboarding.version, 3);
   assert.equal(completed.profile.displayName, "Alex");
   assert.equal(completed.profile.selfReportedWeeklyKm, 28);
   assert.equal(completed.profile.selfReportedLongestRunKm, 14);
@@ -129,4 +141,22 @@ test("completion writes the new profile and planning baseline without creating a
   assert.equal(completed.intervals.connected, true);
   assert.deepEqual(completed.plan, state.plan);
   assert.deepEqual(completed.reviews, state.reviews);
+});
+
+test("onboarding persists the target profile and time that drive the first plan", () => {
+  const completed = completeOnboardingState(emptyState(), {
+    ...validDraft(),
+    missionGoalType: "time",
+    missionTargetTime: "02:00:00",
+    missionGoalDiscipline: "half_marathon",
+  }, {
+    now: new Date("2026-07-28T08:30:00.000Z"),
+    idFactory: () => "hm-goal",
+  });
+
+  assert.equal(completed.mission.goalType, "time");
+  assert.equal(completed.mission.targetTime, "02:00:00");
+  assert.equal(completed.mission.goalDiscipline, "half_marathon");
+  assert.equal(completed.mission.milestones[0].targetTime, "02:00:00");
+  assert.equal(completed.mission.milestones[0].preparationStartDate, "2026-07-28");
 });

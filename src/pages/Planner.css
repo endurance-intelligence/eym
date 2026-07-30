@@ -499,3 +499,26 @@
   .planner-workout.no-marker .planner-actions{grid-column:1}
   .planner-review-cue{grid-column:2;justify-self:start}
 }
+
+/* v3.9.0 – target-driven weekly planning */
+.planner-goal-engine{display:grid;gap:16px;margin-bottom:20px;border-color:color-mix(in srgb,var(--accent) 48%,var(--border));background:linear-gradient(145deg,color-mix(in srgb,var(--accent-surface) 76%,var(--bg-card)),var(--bg-card))}
+.planner-goal-engine.ambitious,.planner-goal-engine.needs_benchmark{border-color:rgba(250,204,21,.42)}
+.planner-goal-engine.stretch,.planner-goal-engine.incomplete{border-color:rgba(248,113,113,.5)}
+.planner-goal-engine-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}
+.planner-goal-engine-heading h2{margin:4px 0 6px}
+.planner-goal-engine-heading p{margin:0;color:var(--text-soft)}
+.planner-goal-engine-heading>span{padding:8px 11px;border:1px solid var(--border-strong);border-radius:999px;color:var(--accent-bright);font-size:12px;font-weight:900;white-space:nowrap}
+.planner-goal-engine-body{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.planner-goal-engine-body>div{display:grid;align-content:start;gap:10px;padding:14px;border:1px solid var(--border);border-radius:14px;background:var(--bg-card-alt)}
+.planner-goal-engine-tags{display:flex;flex-wrap:wrap;gap:7px}
+.planner-goal-engine-tags span{padding:6px 9px;border-radius:999px;background:var(--accent-surface);color:var(--muted-bright);font-size:11px}
+.planner-goal-key-sessions{display:grid;gap:6px}
+.planner-goal-key-sessions span{padding-left:10px;border-left:2px solid var(--accent);color:var(--text-soft);font-size:13px}
+.planner-goal-engine-summary{margin:0;color:var(--text-soft)}
+.planner-goal-warning{display:block;padding:9px 11px;border-left:3px solid #facc15;background:rgba(250,204,21,.07);color:#f2dca8}
+@media(max-width:760px){
+  .planner-goal-engine{padding:17px 15px}
+  .planner-goal-engine-heading{display:grid}
+  .planner-goal-engine-heading>span{width:max-content;max-width:100%;white-space:normal}
+  .planner-goal-engine-body{grid-template-columns:1fr}
+}

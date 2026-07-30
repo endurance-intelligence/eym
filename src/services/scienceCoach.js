@@ -1,5 +1,6 @@
 import { activityTimestamp, isRunningActivity, preferredActivities } from "./activityUtils.js";
 import { DEFAULT_REPLACEMENT_SPORTS } from "./configuration.js";
+import { buildGoalEngine } from "./goalEngine.js";
 
 const DAY = 86400000;
 
@@ -169,32 +170,27 @@ export function athleteBaseline(state) {
   return { selected, observed, weeklyKm, runDays, longest, elevationWeekly, source: hasRunData ? "activities" : "profile" };
 }
 
-export function goalRequirements(state) {
-  const milestones = (state.mission?.milestones || []).filter((item) => !item.archived);
-  const target = milestones.find((item) => item.isMainTarget) || milestones.find((item) => item.priority === "A") || milestones[0] || state.mission || {};
-  const name = `${target.name || ""}`.toLowerCase();
-  const distance = numeric(target.targetKm);
-  const elevation = numeric(target.elevationGain);
-  const goalType = target.goalType || (target.targetTime ? "time" : distance ? "distance" : "finish");
-  let discipline = "endurance";
-  let focus = ["aerobe Basis", "progressiver Umfang", "Erholung"];
-  if (/ultra|backyard/.test(name) || distance >= 50) {
-    discipline = "ultra";
-    focus = ["Zeit auf den Beinen", "Back-to-Back-Belastung", "Fueling", "muskuläre Robustheit"];
-  } else if (/hermann|trail|berg/.test(name) || elevation >= 400) {
-    discipline = "hilly";
-    focus = ["Bergauf-Kraftausdauer", "kontrolliertes Bergablaufen", "profilierte Longruns", "Höhenmeter"];
-  } else if (distance && distance <= 5.5) {
-    discipline = "5k";
-    focus = ["VO₂max", "Schwelle", "Laufökonomie", "Zieltempo"];
-  } else if (distance > 0 && distance <= 10.5) {
-    discipline = "10k";
-    focus = ["Schwelle", "VO₂max", "Tempoausdauer"];
-  } else if (distance >= 40 && distance < 50) {
-    discipline = "marathon";
-    focus = ["Longruns", "Marathonpace", "Fueling", "Tempoausdauer"];
-  }
-  return { target, discipline, focus, goalType };
+export function goalRequirements(state, now = new Date()) {
+  const engine = buildGoalEngine({
+    mission: state.mission,
+    activities: state.activities,
+    profile: state.profile,
+    planner: state.planner,
+    referenceDate: now,
+  });
+  return {
+    target: engine.target || {},
+    discipline: engine.discipline,
+    disciplineLabel: engine.disciplineLabel,
+    focus: engine.abilities,
+    goalType: engine.goalType,
+    targetPaceLabel: engine.targetPaceLabel,
+    workingPaceLabel: engine.workingPaceLabel,
+    phase: engine.phase,
+    feasibility: engine.feasibility,
+    requiredRuns: engine.requiredRuns,
+    constraintWarnings: engine.constraintWarnings,
+  };
 }
 
 export function currentWeekAssessment(state, now = new Date()) {
