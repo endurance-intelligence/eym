@@ -301,7 +301,7 @@ export function recovery(reviews, activities) {
       ...metrics,
       label: "Mit Vorsicht",
       tone: "warn",
-      text: `Die letzten Bewertungen zeigen ${reasons.length ? reasons.join(" und ") : "gemischte Erholungswerte"}. Die geplante Einheit ist möglich, aber ohne zusätzlichen Tempodruck.`,
+      text: `Die letzten Bewertungen zeigen ${reasons.length ? reasons.join(" und ") : "gemischte Erholungswerte"}. Die Einheit kann stattfinden. Wenn du heute entlasten möchtest, schlägt dir der Coach im Wochenplan eine konkrete Alternative vor – du kannst sie übernehmen oder ändern.`,
     };
   }
 

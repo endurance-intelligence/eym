@@ -323,7 +323,7 @@ export default function Briefing() {
         </Card>
 
 
-        {["adjust", "watch"].includes(coach.level) && <Card className={`wide science-coach-alert ${coach.level}`}><div><p className="eyebrow">Coach · gemeinsame Bewertung</p><h2>{coach.recommendation.title}</h2><p>{coach.recommendation.text}</p><small>{coach.protectionNote}</small></div><Link className="button-link" to="/planner">Vorschläge im Wochenplan prüfen</Link></Card>}
+        {["adjust", "watch"].includes(coach.level) && <Card className={`wide science-coach-alert ${coach.level}`}><div><p className="eyebrow">Coach · gemeinsame Bewertung</p><h2>{coach.recommendation.title}</h2><p>{coach.recommendation.text}</p><small>{coach.protectionNote}</small></div><Link className="button-link" to="/planner">Coach-Alternativen prüfen</Link></Card>}
 
         <div className="wide briefing-summary-grid">
           <Link className="briefing-card-link" to="/mission" aria-label="Mission öffnen">

@@ -39,7 +39,7 @@ function statusFromSignals(recoveryState, week) {
       level: "watch",
       tone: "warn",
       label: "Aufmerksam steuern",
-      title: "Training ist möglich – ohne zusätzlichen Druck",
+      title: "Plan beibehalten oder eine Einheit anpassen?",
     };
   }
   if (!recoveryState.reviewed) {
@@ -90,7 +90,7 @@ export function buildCoachState(state = {}, now = new Date()) {
   const action = status.level === "adjust"
     ? { key: "review-week", label: "Woche gezielt prüfen", href: "/planner" }
     : status.level === "watch"
-      ? { key: "keep-easy", label: "Plan kontrolliert fortsetzen", href: "/planner" }
+      ? { key: "check-alternatives", label: "Coach-Alternativen prüfen", href: "/planner" }
       : { key: "keep-plan", label: "Plan beibehalten", href: "/planner" };
   const signature = `${status.level}|${week.reasons.join("|")}|${recoveryState.label}|${analytics.trend.direction}|${mobility?.id || ""}`;
   const recommendation = {

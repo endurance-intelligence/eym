@@ -5,6 +5,7 @@ import {
   intervalsStorageMessage,
   readableIntervalsError,
 } from "../_shared/intervalsErrors.ts";
+import { intervalsRoutePayload } from "../_shared/intervalsRoute.ts";
 import { intervalDescription, isGuidedPlanItem, isProvisionalTrackPlanItem } from "../_shared/structuredWorkout.ts";
 import { intervalsStartDateLocal } from "../_shared/plannerTiming.ts";
 
@@ -371,6 +372,21 @@ Deno.serve(async (request) => {
       const gear = await intervalsGet(`/athlete/${athleteId}/gear`, apiKey);
       if (!Array.isArray(gear)) throw new Error("Intervals.icu hat keine gültige Ausrüstungsliste geliefert.");
       return json({ gear, syncedAt: new Date().toISOString() });
+    }
+
+    if (action === "activity-route") {
+      const activityId = String(body.activityId || "").trim();
+      if (!/^[a-zA-Z0-9_-]{1,160}$/.test(activityId)) {
+        return json({ message: "Ungültige Intervals.icu-Aktivitäts-ID." }, 400);
+      }
+      const streams = await intervalsGet(
+        `/activity/${encodeURIComponent(activityId)}/streams.json?types=latlng`,
+        apiKey,
+      );
+      return json({
+        activityId,
+        ...intervalsRoutePayload(streams),
+      });
     }
 
     if (action === "sync") {

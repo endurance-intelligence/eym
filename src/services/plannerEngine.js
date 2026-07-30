@@ -378,6 +378,95 @@ function weatherDecision(weather, config) {
   return { tooHot, tooWindy, storm, indoor: tooHot || tooWindy || storm };
 }
 
+function hasCyclingAlternative(config = {}) {
+  return Array.isArray(config.replacementSports) && config.replacementSports.includes("cycling");
+}
+
+function cyclingWeatherCandidate(entry, config = {}) {
+  const weather = entry?.weatherForecast;
+  if (!weather) return null;
+  const weatherCode = Number(weather.weatherCode);
+  const rainChance = Number(weather.rainChance ?? 100);
+  const maxGust = Number(weather.maxGust ?? 999);
+  const maxTemp = Number(weather.maxTemp);
+  const precipitation = (weatherCode >= 51 && weatherCode <= 67)
+    || (weatherCode >= 80 && weatherCode <= 82)
+    || weatherCode >= 95;
+  const windLimit = Math.min(40, Number(config.maxWindGust || 55));
+  const temperatureLimit = Number(config.maxOutdoorTemperature || 29);
+  if (
+    precipitation
+    || rainChance > 30
+    || maxGust > windLimit
+    || !Number.isFinite(maxTemp)
+    || maxTemp < 8
+    || maxTemp > temperatureLimit
+  ) return null;
+
+  const dayPreference = { Samstag: 0, Sonntag: 2, Freitag: 4 }[entry.day] ?? 6;
+  const temperaturePenalty = Math.abs(maxTemp - 18);
+  return {
+    entry,
+    weather,
+    score: rainChance * 2 + maxGust + temperaturePenalty + dayPreference,
+  };
+}
+
+export function suggestRoadCyclingAlternative(plan = [], config = {}, context = {}) {
+  if (!hasCyclingAlternative(config) || context.eventWeek) return plan;
+  if (context.readiness?.hardAllowed === false) return plan;
+  if (["recovering", "symptoms"].includes(config.checkin?.illness)) return plan;
+
+  const eligible = plan
+    .filter((entry) => (
+      entry.type === "Easy Run"
+      && ["Freitag", "Samstag", "Sonntag"].includes(entry.day)
+      && !entry.fixed
+      && !entry.commitmentId
+      && !entry.eventProtection
+      && !entry.raceEvent
+      && !entry.keySession
+      && !entry.loopTraining
+      && !entry.completed
+      && !entry.missedReason
+    ))
+    .map((entry) => cyclingWeatherCandidate(entry, config))
+    .filter(Boolean)
+    .sort((left, right) => left.score - right.score);
+
+  const recommendation = eligible[0];
+  if (!recommendation) return plan;
+
+  const duration = Math.max(
+    45,
+    Math.min(120, Math.round((Number(recommendation.entry.duration || 45) * 1.3) / 5) * 5),
+  );
+  const weather = recommendation.weather;
+  const day = recommendation.entry.day;
+  const reason = `${day} bietet laut Vorhersage das passendste Rennradfenster: `
+    + `${weather.maxTemp} °C · ${weather.rainChance} % Regenrisiko · Böen ${weather.maxGust} km/h. `
+    + "Der lockere Lauf bleibt stehen, bis du den Tausch bestätigst.";
+
+  return plan.map((entry) => entry.id === recommendation.entry.id ? {
+    ...entry,
+    coachAlternative: {
+      source: "weather-cycling",
+      key: "sport:cycling",
+      label: "Lockere Rennradrunde",
+      title: `${duration} min Rennrad locker`,
+      duration,
+      reason,
+      weather: {
+        date: weather.date,
+        weatherCode: weather.weatherCode,
+        maxTemp: weather.maxTemp,
+        maxGust: weather.maxGust,
+        rainChance: weather.rainChance,
+      },
+    },
+  } : entry);
+}
+
 function item(weekStart, dayIndex, values) {
   const date = dateForDay(weekStart, dayIndex);
   const fixed = Boolean(values.fixed);
@@ -1225,6 +1314,7 @@ export function generateWeekPlan({
       },
     } : entry;
   });
+  plan = suggestRoadCyclingAlternative(plan, config, { eventWeek, readiness });
   plan.sort((a, b) => `${a.date}${a.time || ""}`.localeCompare(`${b.date}${b.time || ""}`));
   if (eventWeek) {
     const plannedRunningKm = plan

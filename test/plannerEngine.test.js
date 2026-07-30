@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { generateWeekPlan, reviewGuidance } from "../src/services/plannerEngine.js";
+import {
+  generateWeekPlan,
+  reviewGuidance,
+  suggestRoadCyclingAlternative,
+} from "../src/services/plannerEngine.js";
 
 test("planner respects a generic stored commitment without personal defaults", () => {
   const future = new Date();
@@ -198,6 +202,93 @@ test("planned runs keep the matching weather snapshot for Fuel Partner guidance"
     plannedRun.weatherForecast.maxTemp,
     forecast.find((day) => day.date === plannedRun.date).maxTemp,
   );
+});
+
+test("coach recommends the best Friday-to-Sunday road-bike window only as an alternative", () => {
+  const plan = [
+    {
+      id: "friday-easy",
+      day: "Freitag",
+      date: "2026-07-31",
+      title: "8 km locker",
+      type: "Easy Run",
+      duration: 52,
+      fixed: false,
+      weatherForecast: { date: "2026-07-31", weatherCode: 2, maxTemp: 20, maxGust: 29, rainChance: 20 },
+    },
+    {
+      id: "saturday-easy",
+      day: "Samstag",
+      date: "2026-08-01",
+      title: "7 km locker",
+      type: "Easy Run",
+      duration: 45,
+      fixed: false,
+      weatherForecast: { date: "2026-08-01", weatherCode: 1, maxTemp: 19, maxGust: 18, rainChance: 5 },
+    },
+    {
+      id: "sunday-long",
+      day: "Sonntag",
+      date: "2026-08-02",
+      title: "18 km Longrun",
+      type: "Long Run",
+      duration: 120,
+      fixed: false,
+      keySession: true,
+      weatherForecast: { date: "2026-08-02", weatherCode: 0, maxTemp: 18, maxGust: 10, rainChance: 0 },
+    },
+  ];
+
+  const result = suggestRoadCyclingAlternative(plan, {
+    replacementSports: ["running", "cycling"],
+    maxOutdoorTemperature: 29,
+    maxWindGust: 55,
+    checkin: { illness: "healthy" },
+  }, { readiness: { hardAllowed: true }, eventWeek: null });
+
+  assert.equal(result.find((item) => item.id === "friday-easy").coachAlternative, undefined);
+  const recommendation = result.find((item) => item.id === "saturday-easy").coachAlternative;
+  assert.ok(recommendation);
+  assert.equal(recommendation.key, "sport:cycling");
+  assert.equal(recommendation.source, "weather-cycling");
+  assert.match(recommendation.title, /Rennrad locker/);
+  assert.match(recommendation.reason, /Samstag/);
+  assert.match(recommendation.reason, /bleibt stehen.*bestätigst/i);
+  assert.equal(result.find((item) => item.id === "sunday-long").coachAlternative, undefined);
+  assert.equal(result.find((item) => item.id === "saturday-easy").type, "Easy Run");
+});
+
+test("road-bike weather advice needs an enabled sport, safe weather and an unprotected easy run", () => {
+  const base = [{
+    id: "weekend-easy",
+    day: "Samstag",
+    date: "2026-08-01",
+    title: "8 km locker",
+    type: "Easy Run",
+    duration: 50,
+    fixed: false,
+    weatherForecast: { date: "2026-08-01", weatherCode: 63, maxTemp: 18, maxGust: 16, rainChance: 75 },
+  }];
+  const withoutCycling = suggestRoadCyclingAlternative(base, {
+    replacementSports: ["running"],
+  }, { readiness: { hardAllowed: true } });
+  assert.equal(withoutCycling[0].coachAlternative, undefined);
+
+  const badWeather = suggestRoadCyclingAlternative(base, {
+    replacementSports: ["running", "cycling"],
+    checkin: { illness: "healthy" },
+  }, { readiness: { hardAllowed: true } });
+  assert.equal(badWeather[0].coachAlternative, undefined);
+
+  const protectedRun = suggestRoadCyclingAlternative([{
+    ...base[0],
+    weatherForecast: { date: "2026-08-01", weatherCode: 1, maxTemp: 19, maxGust: 18, rainChance: 5 },
+    eventProtection: true,
+  }], {
+    replacementSports: ["cycling"],
+    checkin: { illness: "healthy" },
+  }, { readiness: { hardAllowed: true }, eventWeek: null });
+  assert.equal(protectedRun[0].coachAlternative, undefined);
 });
 
 const goalAwareMission = {

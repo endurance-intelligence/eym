@@ -54,6 +54,24 @@ test("unified coach gives recovery warnings precedence over a neutral week", () 
   assert.ok(result.recommendation.evidence.length >= 2);
 });
 
+test("watch state offers an explicit optional plan adjustment instead of vague pressure wording", () => {
+  const state = stateWithRuns();
+  state.reviews = {
+    recent: { legs: 6, energy: 6, rpe: 5, overallFeeling: 6 },
+    previous: { legs: 6, energy: 6, rpe: 5, overallFeeling: 6 },
+    older: { legs: 6, energy: 6, rpe: 5, overallFeeling: 6 },
+  };
+
+  const result = buildCoachState(state, new Date("2026-08-10T12:00:00"));
+
+  assert.equal(result.level, "watch");
+  assert.equal(result.title, "Plan beibehalten oder eine Einheit anpassen?");
+  assert.equal(result.recommendation.action.label, "Coach-Alternativen prüfen");
+  assert.match(result.recovery.text, /konkrete Alternative/);
+  assert.match(result.recovery.text, /übernehmen oder ändern/);
+  assert.doesNotMatch(`${result.title} ${result.recovery.text}`, /Druck|Tempodruck/);
+});
+
 test("recommendation feedback is stable and can be linked to the next reviewed run", () => {
   const recommendation = buildCoachState(stateWithRuns(), new Date("2026-07-24T12:00:00")).recommendation;
   const entry = recommendationFeedbackEntry(recommendation, "helpful", new Date("2026-07-24T13:00:00"));

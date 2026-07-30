@@ -17,6 +17,7 @@ import {
 } from "../services/fuelNutrition";
 import { activityCoachAssessment } from "../services/activityCoach";
 import { fuelRecommendationFromState, plannedWorkoutForActivity } from "../services/fuelPlanner";
+import ActivityRouteMap from "./ActivityRouteMap";
 import "./ReviewModal.css";
 
 const emptyNutritionItem = (mode = "catalog") => ({
@@ -537,6 +538,8 @@ export default function ReviewModal({ activity, onClose }) {
             {review.notes && <p className="review-summary-notes"><b>Notiz:</b> {review.notes}</p>}
           </section>
 
+          <ActivityRouteMap activity={activity} />
+
           <section className="review-summary-coach">
             <div className="review-summary-section-heading">
               <div><small>Coach-Einschätzung</small><strong>Das sagt dein Coach</strong></div>
@@ -570,6 +573,7 @@ export default function ReviewModal({ activity, onClose }) {
         <p className="eyebrow">{kind === "strength" ? reviewKindLabel(activity) : enduranceTitle}</p>
         <h2>{activity.name}</h2>
         {activity.isActivityGroup && <div className="review-group-summary"><strong>{activity.memberCount} Teilaktivitäten zusammengefasst</strong><span>{Number(activity.distance || 0).toFixed(1)} km · {activity.elevation || 0} hm · {Math.round(Number(activity.duration || 0))} min</span></div>}
+        <ActivityRouteMap activity={activity} />
 
         {kind === "endurance" ? (
           <>

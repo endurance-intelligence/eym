@@ -1,4 +1,5 @@
 import { activityTimestamp, isRunningActivity, preferredActivities } from "./activityUtils.js";
+import { DEFAULT_REPLACEMENT_SPORTS } from "./configuration.js";
 
 const DAY = 86400000;
 
@@ -41,6 +42,103 @@ function plannedLoad(item) {
   const elevation = numeric(item?.elevationGain || item?.plannedElevationGain);
   const distance = numeric(item?.distance);
   return Math.round((minutes * intensityFactor(`${item?.title || ""} ${item?.type || ""}`)) + distance * 1.6 + elevation / 35);
+}
+
+function plannedSport(item = {}) {
+  const value = `${item.title || ""} ${item.type || ""}`.toLowerCase();
+  if (/track|intervall|schwelle|tempo|run|lauf|backyard|ultra/.test(value)) return "running";
+  if (/bike|cycl|rad/.test(value)) return "cycling";
+  if (/row|rud/.test(value)) return "rowing";
+  if (/swim|schwimm/.test(value)) return "swimming";
+  if (/mobility|mobilität|stabi|yoga|kraft/.test(value)) return "mobility";
+  if (/football|fußball/.test(value)) return "football";
+  return "other";
+}
+
+function availableAlternativeKeys(state = {}) {
+  const configured = state.planner?.replacementSports;
+  const allowed = new Set(Array.isArray(configured) && configured.length ? configured : DEFAULT_REPLACEMENT_SPORTS);
+  const keys = new Set(["preset:rest"]);
+  if (allowed.has("running")) keys.add("preset:easy-run");
+  ["cycling", "rowing", "mobility", "swimming", "football", "strength"].forEach((sport) => {
+    if (allowed.has(sport)) keys.add(`sport:${sport}`);
+  });
+  return keys;
+}
+
+const alternativeDetails = {
+  "preset:easy-run": {
+    label: "Lockerer Zone-2-Lauf",
+    reason: "Ersetzt den Qualitätsreiz durch lockere aerobe Arbeit und erhält den Laufrhythmus.",
+  },
+  "sport:cycling": {
+    label: "Locker Rad fahren",
+    reason: "Senkt die Stoßbelastung fürs Laufen, erhält aber den lockeren Ausdauerreiz.",
+  },
+  "sport:rowing": {
+    label: "Locker rudern",
+    reason: "Nimmt Laufbelastung heraus und hält einen kontrollierten aeroben Reiz.",
+  },
+  "sport:mobility": {
+    label: "Mobility / Stabi",
+    reason: "Entlastet Beine und Kreislauf, ohne den Trainingstag komplett zu streichen.",
+  },
+  "sport:swimming": {
+    label: "Locker schwimmen",
+    reason: "Entlastet die Laufmuskulatur und erhält eine ruhige Ausdauereinheit.",
+  },
+  "sport:football": {
+    label: "Fußball",
+    reason: "Nutzt deinen vorhandenen Fixtermin als Ersatz, bleibt aber selbst ein intensiver Reiz.",
+  },
+  "sport:strength": {
+    label: "Leichtes Krafttraining",
+    reason: "Ersetzt die Ausdauereinheit durch einen kontrollierten, kurzen Kraftreiz.",
+  },
+  "preset:rest": {
+    label: "Ruhetag / Erholung",
+    reason: "Ein freier Tag schafft den größten Erholungseffekt vor der nächsten Schlüsseleinheit.",
+  },
+};
+
+function firstAvailable(keys, preferences) {
+  return preferences.find((key) => keys.has(key)) || "preset:rest";
+}
+
+export function coachAlternativeFor(item = {}, context = {}) {
+  const available = context.availableKeys instanceof Set
+    ? context.availableKeys
+    : new Set(context.availableKeys || ["preset:rest"]);
+  const sport = plannedSport(item);
+  const hard = intensityFactor(`${item.title || ""} ${item.type || ""}`) >= 1.2;
+  const primary = Number(context.index || 0) === 0;
+  const overload = context.level === "adjust" || numeric(context.ratio) >= 1.5 || numeric(context.lowReviews) >= 2;
+
+  if (primary && overload) {
+    let reason = alternativeDetails["preset:rest"].reason;
+    if (numeric(context.ratio) >= 1.5) {
+      reason = "Die projizierte Belastung liegt deutlich über deinem jüngsten Rahmen. Ein freier Tag senkt sie am zuverlässigsten.";
+    } else if (numeric(context.lowReviews) >= 2) {
+      reason = "Mehrere aktuelle Reviews melden müde Beine oder wenig Energie. Ein freier Tag schützt die nächste Schlüsseleinheit.";
+    }
+    return { key: "preset:rest", ...alternativeDetails["preset:rest"], reason };
+  }
+
+  let preferences;
+  if (sport === "running" && hard) {
+    preferences = ["preset:easy-run", "sport:cycling", "sport:rowing", "sport:mobility", "preset:rest"];
+  } else if (sport === "running") {
+    preferences = ["sport:cycling", "sport:rowing", "sport:mobility", "sport:swimming", "preset:rest"];
+  } else if (["cycling", "rowing", "swimming"].includes(sport)) {
+    preferences = ["sport:mobility", "preset:easy-run", "preset:rest"];
+  } else if (sport === "mobility") {
+    preferences = ["preset:rest", "sport:cycling", "preset:easy-run"];
+  } else {
+    preferences = ["sport:cycling", "preset:easy-run", "sport:mobility", "preset:rest"];
+  }
+
+  const key = firstAvailable(available, preferences);
+  return { key, ...alternativeDetails[key] };
 }
 
 function startOfWeek(date = new Date()) {
@@ -125,12 +223,26 @@ export function currentWeekAssessment(state, now = new Date()) {
   if (hard.length >= 3) reasons.push(`${hard.length} belastende Reize liegen in der verbleibenden Woche`);
   if (lowReviews >= 2) reasons.push("mehrere aktuelle Reviews melden müde Beine oder niedrige Energie");
   const level = reasons.length >= 2 || ratio >= 1.5 ? "adjust" : reasons.length ? "watch" : "ok";
+  const availableKeys = availableAlternativeKeys(state);
   const candidates = [...open].sort((a,b)=>plannedLoad(b)-plannedLoad(a)).slice(0,3).map(item => ({
     id: item.id,
     title: item.title,
     date: item.date,
     load: plannedLoad(item),
-    suggestion: /long/i.test(`${item.title} ${item.type}`) ? "Distanz um 15–25 % reduzieren" : /track|intervall|schwelle|tempo/i.test(`${item.title} ${item.type}`) ? "Intensität reduzieren oder durch lockeren Lauf ersetzen" : "kürzen, verschieben oder als Regeneration gestalten",
-  }));
+    type: item.type,
+  })).map((item, index) => {
+    const coachAlternative = coachAlternativeFor(item, {
+      availableKeys,
+      index,
+      level,
+      ratio,
+      lowReviews,
+    });
+    return {
+      ...item,
+      coachAlternative,
+      suggestion: `${coachAlternative.label}. ${coachAlternative.reason}`,
+    };
+  });
   return { level, reasons, average: Math.round(average), projected: Math.round(projected), ratio, candidates };
 }

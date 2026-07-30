@@ -87,7 +87,7 @@ function adjustmentReplacementOptions(planner = {}) {
   const allowed = new Set(planner.replacementSports?.length ? planner.replacementSports : DEFAULT_REPLACEMENT_SPORTS);
   const options = [];
   if (allowed.has("running")) {
-    options.push({ key: "preset:easy-run", label: "Alternativer lockerer Lauf", sport: "running", type: "Easy Run", preserveDistance: true });
+    options.push({ key: "preset:easy-run", label: "Lockerer Zone-2-Lauf", sport: "running", type: "Easy Run", preserveDistance: true });
   }
   SPORT_OPTIONS.filter((entry) => allowed.has(entry.value) && entry.value !== "running" && entry.value !== "other").forEach((entry) => {
     options.push({ key: `sport:${entry.value}`, label: entry.label, sport: entry.value, type: replacementWorkoutType(entry.value), preserveDistance: false });
@@ -446,6 +446,9 @@ export default function Planner() {
   const planChangedAfterPublish = Boolean(publishedWeek && publishedWeek.fingerprint !== currentPlanFingerprint);
   const adjustmentSelectedItems = adjustmentDraft?.selectedIds?.map((id) => weekPlan.find((item) => item.id === id)).filter(Boolean) || [];
   const adjustmentReplacement = replacementOptions.find((entry) => entry.key === adjustmentDraft?.replacementKey);
+  const adjustmentReplacementLabel = adjustmentDraft?.coachAlternative?.key === adjustmentDraft?.replacementKey
+    ? adjustmentDraft.coachAlternative.label
+    : adjustmentReplacement?.label;
   const planningWeekPending = offsetWeeks >= 0 && weekPlan.length === 0;
   const planningWeekLocked = Boolean(planningWeekPending && previousWeekClosure && !previousWeekClosure.ready);
   const planningTargetLabel = offsetWeeks === 1 ? "Nächste Woche" : "Aktuelle Woche";
@@ -517,7 +520,7 @@ export default function Planner() {
     openPlanning();
   }
 
-  function openAdjustment(preselectedId = "", preferredAction = "replace", preferredReplacementKey = "") {
+  function openAdjustment(preselectedId = "", preferredAction = "replace", preferredReplacementKey = "", coachAlternative = null) {
     const adjustable = weekPlan.filter((item) => !item.completed && (!item.missedReason || item.plannedCancellation) && (offsetWeeks > 0 || item.date >= todayKey));
     const initialId = preselectedId || adjustable.find((item) => normalizedType(`${item.type} ${item.title}`) === "running")?.id || adjustable[0]?.id || "";
     const initial = adjustable.find((item) => item.id === initialId);
@@ -533,6 +536,7 @@ export default function Planner() {
       moveSpontaneous: initial ? isSpontaneousWorkout(initial) : true,
       cancelReason: initial?.missedReason || "Termin fiel aus",
       cancelNote: initial?.missedNote || "",
+      coachAlternative,
     });
     setAdjustmentOpen(true);
   }
@@ -602,6 +606,7 @@ export default function Planner() {
             plannedCancellation: true,
             cancelledAt,
             intervalsPublishedAt: null,
+            coachAlternative: null,
           };
         }
         if (adjustmentDraft.action === "move") {
@@ -619,15 +624,23 @@ export default function Planner() {
             plannedCancellation: false,
             cancelledAt: null,
             intervalsPublishedAt: null,
+            coachAlternative: null,
           };
         }
         if (!option) return item;
         const originalDistance = Number(item.distance || 0);
         const nextDistance = option.preserveDistance ? originalDistance : Number(option.distance || 0);
-        const nextDuration = Number(option.duration || item.duration || 60);
-        const title = option.key === "preset:easy-run"
+        const selectedCoachAlternative = adjustmentDraft.coachAlternative?.key === option.key
+          ? adjustmentDraft.coachAlternative
+          : null;
+        const nextDuration = selectedCoachAlternative?.duration != null
+          ? Number(selectedCoachAlternative.duration)
+          : option.duration != null
+            ? Number(option.duration)
+            : Number(item.duration || 60);
+        const title = selectedCoachAlternative?.title || (option.key === "preset:easy-run"
           ? `${nextDistance || originalDistance || 5} km locker`
-          : option.title || option.label;
+          : selectedCoachAlternative?.label || option.title || option.label);
         const fixed = Boolean(option.commitmentId);
         return {
           ...item,
@@ -648,6 +661,7 @@ export default function Planner() {
           plannedCancellation: false,
           cancelledAt: null,
           intervalsPublishedAt: null,
+          coachAlternative: null,
           replacedWorkout: { title: item.title, type: item.type, distance: originalDistance },
           notes: `Wochenanpassung: ${item.title} wurde durch ${title} ersetzt. Andere Einheiten an diesem Tag bleiben unverändert.`,
         };
@@ -1383,7 +1397,48 @@ export default function Planner() {
         </div>
       </PageTitle>
       <TrainingSectionNav />
-      {offsetWeeks === 0 && ["adjust", "watch"].includes(unifiedCoach.level) && <Card className={`wide planner-science-card ${unifiedCoach.level}`}><div className="planner-science-heading"><div><p className="eyebrow">Gemeinsame Coach-Bewertung</p><h2>{unifiedCoach.recommendation.title}</h2></div><span>Dein Coach schlägt vor · du entscheidest</span></div><p>{unifiedCoach.recommendation.text}</p><div className="planner-science-context"><span>Gewöhnung: {baseline.runDays.toFixed(1)} Lauftage/Woche · {baseline.weeklyKm.toFixed(0)} km/Woche</span><span>Zielprofil: {goalProfile.focus.join(" · ")}</span><span>Projizierter Load: {scienceAssessment.projected} · jüngster Rahmen: {scienceAssessment.average || "noch offen"}</span></div>{scienceAssessment.candidates.length > 0 && <div className="planner-science-suggestions">{scienceAssessment.candidates.map((item) => <article key={item.id}><b>{item.title}</b><span>{item.date}</span><p>{item.suggestion}</p><button type="button" onClick={() => openAdjustment(item.id, "replace")}>Diese Einheit anpassen</button></article>)}</div>}<small>{unifiedCoach.protectionNote} Auch spezifische Belastungsblöcke und Back-to-Back-Einheiten können bewusst richtig sein.</small></Card>}
+      {offsetWeeks === 0 && ["adjust", "watch"].includes(unifiedCoach.level) && (
+        <Card className={`wide planner-science-card ${unifiedCoach.level}`}>
+          <div className="planner-science-heading">
+            <div><p className="eyebrow">Gemeinsame Coach-Bewertung</p><h2>{unifiedCoach.recommendation.title}</h2></div>
+            <span>Dein Coach schlägt vor · du entscheidest</span>
+          </div>
+          <p>{unifiedCoach.recommendation.text}</p>
+          <div className="planner-science-context">
+            <span>Gewöhnung: {baseline.runDays.toFixed(1)} Lauftage/Woche · {baseline.weeklyKm.toFixed(0)} km/Woche</span>
+            <span>Zielprofil: {goalProfile.focus.join(" · ")}</span>
+            <span>Projizierter Load: {scienceAssessment.projected} · jüngster Rahmen: {scienceAssessment.average || "noch offen"}</span>
+          </div>
+          {scienceAssessment.candidates.length > 0 && (
+            <div className="planner-science-suggestions">
+              {scienceAssessment.candidates.map((candidate, index) => (
+                <article className={index === 0 ? "recommended" : ""} key={candidate.id}>
+                  <div className="planner-science-suggestion-heading">
+                    <div><b>{candidate.title}</b><span>{candidate.date}</span></div>
+                    <em>{index === 0 ? "Coach-Empfehlung" : "Weitere Option"}</em>
+                  </div>
+                  <p className="planner-science-alternative">
+                    <strong>{candidate.coachAlternative?.label || "Alternative prüfen"}</strong>
+                    <small>{candidate.coachAlternative?.reason || candidate.suggestion}</small>
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => openAdjustment(
+                      candidate.id,
+                      "replace",
+                      candidate.coachAlternative?.key || "",
+                      candidate.coachAlternative || null,
+                    )}
+                  >
+                    Vorschlag prüfen
+                  </button>
+                </article>
+              ))}
+            </div>
+          )}
+          <small>{unifiedCoach.protectionNote} Du kannst jeden Coach-Vorschlag ändern oder den bestehenden Plan unverändert lassen.</small>
+        </Card>
+      )}
 
       <div className="planner-week-nav">
         <button disabled={offsetWeeks === 0 && !previousWeekHasPlan} title={offsetWeeks === 0 && !previousWeekHasPlan ? "Keine ältere geplante Woche vorhanden" : "Vorherige Woche"} onClick={() => { setOffsetWeeks((value) => value - 1); setForecast([]); setStatus(""); }}>←</button>
@@ -1634,6 +1689,26 @@ export default function Planner() {
                       {matched && <small>{matched.name || item.actualTitle}</small>}
                       {item.missedReason && <small>Grund: {item.missedReason}{item.missedNote ? ` · ${item.missedNote}` : ""}</small>}
                       {item.notes && !isCancelled && <small>{item.notes}</small>}
+                      {item.coachAlternative?.source === "weather-cycling" && !matched && !completed && !isCancelled && !isMissed && (
+                        <div className="planner-weather-alternative">
+                          <div>
+                            <span>Coach-Alternative · Wetter</span>
+                            <strong>{item.coachAlternative.label}</strong>
+                            <small>{item.coachAlternative.reason}</small>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => openAdjustment(
+                              item.id,
+                              "replace",
+                              item.coachAlternative.key,
+                              item.coachAlternative,
+                            )}
+                          >
+                            Vorschlag prüfen
+                          </button>
+                        </div>
+                      )}
                       {fuelRecommendation && !matched && !item.completed && !isCancelled && !isMissed && (
                         <Link
                           className={`planner-fuel-hint ${fuelRecommendation.warnings.length ? "warn" : ""}`}
@@ -1724,6 +1799,12 @@ export default function Planner() {
 
               <section className="planner-adjustment-change">
                 <h3>2. Änderung festlegen</h3>
+                {adjustmentDraft.coachAlternative && (
+                  <div className="setup-note planner-coach-alternative">
+                    <strong>Coach-Vorschlag: {adjustmentDraft.coachAlternative.label}</strong>
+                    <span>{adjustmentDraft.coachAlternative.reason} Du kannst unten trotzdem jede andere freigegebene Alternative wählen.</span>
+                  </div>
+                )}
                 <div className="planner-adjustment-actions">
                   <button type="button" className={adjustmentDraft.action === "replace" ? "selected" : ""} onClick={() => setAdjustmentDraft({ ...adjustmentDraft, action: "replace" })}>Ersetzen</button>
                   <button type="button" className={adjustmentDraft.action === "move" ? "selected" : ""} onClick={() => setAdjustmentDraft({ ...adjustmentDraft, action: "move" })}>Verschieben</button>
@@ -1738,7 +1819,7 @@ export default function Planner() {
 
             <section className="planner-adjustment-preview">
               <div><p className="eyebrow">3. Änderung prüfen</p><h3>Das wird geändert</h3></div>
-              {adjustmentSelectedItems.length ? <div className="planner-adjustment-preview-list">{adjustmentSelectedItems.map((item) => <article key={item.id}><div><strong>{item.day || new Intl.DateTimeFormat("de-DE", { weekday: "long" }).format(new Date(`${item.date}T12:00:00`))} · {workoutTimingLabel(item)}</strong><span>{item.title}</span></div><b>→</b><div><strong>{adjustmentDraft.action === "replace" ? adjustmentReplacement?.label || "Ersatz auswählen" : adjustmentDraft.action === "move" ? `${adjustmentDraft.moveDate || "Datum wählen"} · ${adjustmentMoveTimingLabel(item, adjustmentDraft)}` : "Wird als ausgefallen markiert"}</strong><span>{adjustmentDraft.action === "replace" ? "Andere Einheiten des Tages bleiben erhalten" : adjustmentDraft.action === "move" ? "Inhalt der Einheit bleibt gleich" : adjustmentDraft.cancelReason || "Grund auswählen"}</span></div></article>)}</div> : <p className="muted">Wähle links mindestens eine Einheit aus. Danach siehst du hier die konkrete Auswirkung.</p>}
+              {adjustmentSelectedItems.length ? <div className="planner-adjustment-preview-list">{adjustmentSelectedItems.map((item) => <article key={item.id}><div><strong>{item.day || new Intl.DateTimeFormat("de-DE", { weekday: "long" }).format(new Date(`${item.date}T12:00:00`))} · {workoutTimingLabel(item)}</strong><span>{item.title}</span></div><b>→</b><div><strong>{adjustmentDraft.action === "replace" ? adjustmentReplacementLabel || "Ersatz auswählen" : adjustmentDraft.action === "move" ? `${adjustmentDraft.moveDate || "Datum wählen"} · ${adjustmentMoveTimingLabel(item, adjustmentDraft)}` : "Wird als ausgefallen markiert"}</strong><span>{adjustmentDraft.action === "replace" ? "Andere Einheiten des Tages bleiben erhalten" : adjustmentDraft.action === "move" ? "Inhalt der Einheit bleibt gleich" : adjustmentDraft.cancelReason || "Grund auswählen"}</span></div></article>)}</div> : <p className="muted">Wähle links mindestens eine Einheit aus. Danach siehst du hier die konkrete Auswirkung.</p>}
               <div className="planner-adjustment-scope-note">Nicht ausgewählte Einheiten und Tage bleiben unverändert. Die Woche wird nicht neu berechnet.</div>
             </section>
           </form>

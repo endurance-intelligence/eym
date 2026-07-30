@@ -45,6 +45,10 @@ export async function fetchIntervalsGear() {
   return invokeIntervals("gear");
 }
 
+export async function fetchIntervalsActivityRoute(activityId) {
+  return invokeIntervals("activity-route", { activityId });
+}
+
 export async function syncIntervalsActivities(after = "2025-01-01") {
   return invokeIntervals("sync", { after });
 }
@@ -94,6 +98,16 @@ function activityCoordinates(activity) {
   const lat = coordinateValue(activity, ["start_latitude", "start_lat", "icu_start_latitude", "latitude"]);
   const lon = coordinateValue(activity, ["start_longitude", "start_lng", "start_lon", "icu_start_longitude", "longitude"]);
   return lat != null && lon != null ? { lat, lon } : null;
+}
+
+function activityStreamTypes(activity) {
+  if (Array.isArray(activity?.stream_types)) {
+    return activity.stream_types.map((entry) => String(entry).toLowerCase());
+  }
+  if (typeof activity?.stream_types === "string") {
+    return activity.stream_types.split(",").map((entry) => entry.trim().toLowerCase()).filter(Boolean);
+  }
+  return [];
 }
 
 function sourceWeather(activity) {
@@ -183,6 +197,8 @@ export function mapIntervalsActivity(activity) {
   const durationSeconds = Number(activity.moving_time || activity.icu_recording_time || activity.elapsed_time || 0);
   const sourceName = String(activity.name || "Intervals.icu Aktivität");
   const type = activity.type || "Workout";
+  const coordinates = activityCoordinates(activity);
+  const streamTypes = activityStreamTypes(activity);
   return {
     id: `intervals-${activity.id}`,
     intervalsId: String(activity.id || ""),
@@ -224,7 +240,13 @@ export function mapIntervalsActivity(activity) {
     category: isRunningType(type) ? "running" : "cross-training",
     temperature: activity.average_temp ?? activity.avg_temp ?? activity.icu_average_temp ?? null,
     weather: sourceWeather(activity),
-    coordinates: activityCoordinates(activity),
+    coordinates,
+    streamTypes,
+    hasGpsRoute: streamTypes.length
+      ? streamTypes.includes("latlng")
+      : coordinates
+        ? true
+        : null,
     location: activity.location || activity.city || "",
     source: "intervals",
     sources: ["intervals"],

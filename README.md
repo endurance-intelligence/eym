@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **3.8.5**
+Current app version: **3.8.6**
 
 **Eat your miles.**
 
@@ -528,6 +528,17 @@ Deploy the new function and configure these Supabase secrets before enabling aut
 - Both authentication flows share one callback builder so the repository subpath cannot be dropped independently.
 - Supabase Authentication → URL Configuration must use `https://endurance-intelligence.github.io/eym/` as Site URL and allow `https://endurance-intelligence.github.io/eym/**` as a Redirect URL.
 - Existing user data, Intervals.icu credentials and onboarding progress remain unchanged. No database migration or Supabase function deployment is required.
+
+## Coach alternatives, weather cycling and activity routes v3.8.6
+
+- Readiness warnings no longer use the vague phrase “without additional pressure”. The Coach asks whether the athlete wants to keep the planned session or replace one affected unit.
+- Every flagged unit receives one concrete, preselected Coach alternative based on the current load and reviews: an easy Zone 2 run, an enabled cross-training sport or a rest day. The athlete can keep the original plan or choose any other enabled replacement.
+- The Coach never changes an active week automatically. Only the explicitly confirmed unit is replaced; all other sessions and days stay unchanged.
+- When cycling is enabled as a replacement sport, the planner can recommend one easy Friday-to-Sunday run as a road-bike alternative. It selects the best suitable forecast and does not offer cycling in rain, strong wind, illness or an event-protected week.
+- Weather-based cycling remains an alternative rather than an extra session. Long runs, Track, Loop training, key sessions and events are never selected for the swap.
+- Intervals.icu imports retain their available stream types. Opening a completed GPS activity review loads its latitude/longitude stream on demand and renders the route on an OpenStreetMap map with start and finish markers.
+- GPS routes are downsampled server-side for the review and are not copied into the saved athlete profile. Activities without a GPS route show no empty map.
+- No database migration is required. Redeploy the `intervals` Supabase function after applying this version.
 
 For fresh installations that have not yet applied the athlete-image cleanup, run `supabase/migrations/20260722120000_athlete_images.sql` once. Afterwards run:
 
