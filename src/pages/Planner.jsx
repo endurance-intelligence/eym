@@ -19,8 +19,15 @@ import { activitiesWithGroups } from "../services/activityGroups";
 import { completedActivityDestination } from "../services/briefingNavigation";
 import { publishIntervalsWeek } from "../services/intervals";
 import { DEFAULT_REPLACEMENT_SPORTS, SPORT_OPTIONS, sortCommitments, sportLabel } from "../services/configuration";
-import { athleteBaseline, goalRequirements } from "../services/scienceCoach";
+import { goalRequirements } from "../services/scienceCoach";
 import { buildCoachState } from "../services/coachState";
+import {
+  clearCoachSuggestionDecision,
+  coachSuggestionDecision,
+  coachSuggestionDecisionKey,
+  updateCoachSuggestionDecisions,
+  visibleCoachSuggestions,
+} from "../services/coachSuggestions";
 import {
   buildCancelledCommitmentPlanEntry,
   buildCommitmentPlanEntry,
@@ -432,12 +439,7 @@ export default function Planner() {
   );
   const unifiedCoach = useMemo(() => buildCoachState(state), [state]);
   const scienceAssessment = unifiedCoach.week;
-  const baseline = useMemo(() => athleteBaseline(state), [state]);
   const goalProfile = useMemo(() => goalRequirements(state), [state]);
-  const goalKeySessions = useMemo(
-    () => weekPlan.filter((item) => item.keySession && !item.raceEvent && !item.missedReason),
-    [weekPlan],
-  );
   const recurringCommitments = sortCommitments(
     Array.isArray(config.recurringCommitments)
       ? config.recurringCommitments.filter((entry) => entry.enabled !== false)
@@ -471,6 +473,19 @@ export default function Planner() {
     [futurePlan],
   );
   const weekKey = isoDate(weekStart);
+  const coachSuggestionDecisions = config.coachSuggestionDecisions || {};
+  const coachSuggestionContext = {
+    weekKey,
+    recommendationId: unifiedCoach.recommendation.id,
+  };
+  const activeCoachSuggestions = visibleCoachSuggestions(
+    scienceAssessment.candidates,
+    coachSuggestionDecisions,
+    coachSuggestionContext,
+  );
+  const coachAlertCause = scienceAssessment.reasons.some((reason) => /review|müde|energie/i.test(reason))
+    ? "aufgrund deiner aktuellen Reviews"
+    : "aufgrund der aktuellen Wochenbelastung";
   const currentPlanFingerprint = useMemo(() => planFingerprint(publishablePlan), [publishablePlan]);
   const publishedWeek = config.intervalSync?.[weekKey] || null;
   const planChangedAfterPublish = Boolean(publishedWeek && publishedWeek.fingerprint !== currentPlanFingerprint);
@@ -624,6 +639,104 @@ export default function Planner() {
     }));
   }
 
+  function replacementWorkout(item, option, coachAlternative = null) {
+    if (!option) return item;
+    const originalDistance = Number(item.distance || 0);
+    const nextDistance = option.preserveDistance ? originalDistance : Number(option.distance || 0);
+    const nextDuration = coachAlternative?.duration != null
+      ? Number(coachAlternative.duration)
+      : option.duration != null
+        ? Number(option.duration)
+        : Number(item.duration || 60);
+    const title = coachAlternative?.title || (option.key === "preset:easy-run"
+      ? `${nextDistance || originalDistance || 5} km locker`
+      : coachAlternative?.label || option.title || option.label);
+    const fixed = Boolean(option.commitmentId);
+    const replaced = {
+      ...item,
+      title,
+      type: option.type,
+      distance: nextDistance,
+      duration: nextDuration,
+      optional: false,
+      fixed,
+      spontaneous: !fixed,
+      time: fixed ? option.time || item.time || "18:00" : "",
+      commitmentId: option.commitmentId || null,
+      choicePending: false,
+      choiceOptions: null,
+      missedReason: "",
+      missedNote: "",
+      missedMeta: {},
+      plannedCancellation: false,
+      cancelledAt: null,
+      intervalsPublishedAt: null,
+      coachAlternative: null,
+      replacedWorkout: { title: item.title, type: item.type, distance: originalDistance },
+      notes: `Wochenanpassung: ${item.title} wurde durch ${title} ersetzt. Andere Einheiten an diesem Tag bleiben unverändert.`,
+    };
+    if (isTrackWorkout(replaced)) return { ...replaced, loopTraining: null, paceGuidance: null };
+    if (isLoopWorkout(replaced)) return normalizeLoopWorkoutItem({ ...replaced, structuredWorkout: null, paceGuidance: null });
+    const plain = { ...replaced, structuredWorkout: null, loopTraining: null, paceGuidance: null };
+    return supportsWorkoutPaceGuidance(plain) ? prepareWorkoutPaceGuidance(plain) : plain;
+  }
+
+  function coachDecisionKey(candidate) {
+    return coachSuggestionDecisionKey({ ...coachSuggestionContext, candidate });
+  }
+
+  function applyCoachSuggestion(candidate) {
+    const option = replacementOptions.find((entry) => entry.key === candidate?.coachAlternative?.key);
+    const item = weekPlan.find((entry) => entry.id === candidate?.id);
+    if (!item || !option) return;
+    const decisionKey = coachDecisionKey(candidate);
+    setState((current) => ({
+      ...current,
+      plan: current.plan.map((entry) => entry.id === item.id
+        ? replacementWorkout(entry, option, candidate.coachAlternative)
+        : entry),
+      planner: {
+        ...current.planner,
+        coachSuggestionDecisions: updateCoachSuggestionDecisions(
+          current.planner?.coachSuggestionDecisions,
+          decisionKey,
+          "accepted",
+        ),
+      },
+    }));
+    setStatus(`Coach-Vorschlag übernommen: ${item.title} wurde durch ${candidate.coachAlternative.label} ersetzt. Der übrige Wochenplan blieb unverändert.`);
+  }
+
+  function rejectCoachSuggestion(candidate) {
+    const decisionKey = coachDecisionKey(candidate);
+    setState((current) => ({
+      ...current,
+      planner: {
+        ...current.planner,
+        coachSuggestionDecisions: updateCoachSuggestionDecisions(
+          current.planner?.coachSuggestionDecisions,
+          decisionKey,
+          "rejected",
+        ),
+      },
+    }));
+    setStatus(`Coach-Vorschlag für ${candidate.title} abgelehnt. Die Einheit bleibt unverändert.`);
+  }
+
+  function reconsiderCoachSuggestion(candidate) {
+    const decisionKey = coachDecisionKey(candidate);
+    setState((current) => ({
+      ...current,
+      planner: {
+        ...current.planner,
+        coachSuggestionDecisions: clearCoachSuggestionDecision(
+          current.planner?.coachSuggestionDecisions,
+          decisionKey,
+        ),
+      },
+    }));
+  }
+
   function applyUnitAdjustment(event) {
     event.preventDefault();
     if (!adjustmentDraft?.selectedIds?.length) return;
@@ -667,43 +780,10 @@ export default function Planner() {
           };
         }
         if (!option) return item;
-        const originalDistance = Number(item.distance || 0);
-        const nextDistance = option.preserveDistance ? originalDistance : Number(option.distance || 0);
         const selectedCoachAlternative = adjustmentDraft.coachAlternative?.key === option.key
           ? adjustmentDraft.coachAlternative
           : null;
-        const nextDuration = selectedCoachAlternative?.duration != null
-          ? Number(selectedCoachAlternative.duration)
-          : option.duration != null
-            ? Number(option.duration)
-            : Number(item.duration || 60);
-        const title = selectedCoachAlternative?.title || (option.key === "preset:easy-run"
-          ? `${nextDistance || originalDistance || 5} km locker`
-          : selectedCoachAlternative?.label || option.title || option.label);
-        const fixed = Boolean(option.commitmentId);
-        return {
-          ...item,
-          title,
-          type: option.type,
-          distance: nextDistance,
-          duration: nextDuration,
-          optional: false,
-          fixed,
-          spontaneous: !fixed,
-          time: fixed ? option.time || item.time || "18:00" : "",
-          commitmentId: option.commitmentId || null,
-          choicePending: false,
-          choiceOptions: null,
-          missedReason: "",
-          missedNote: "",
-          missedMeta: {},
-          plannedCancellation: false,
-          cancelledAt: null,
-          intervalsPublishedAt: null,
-          coachAlternative: null,
-          replacedWorkout: { title: item.title, type: item.type, distance: originalDistance },
-          notes: `Wochenanpassung: ${item.title} wurde durch ${title} ersetzt. Andere Einheiten an diesem Tag bleiben unverändert.`,
-        };
+        return replacementWorkout(item, option, selectedCoachAlternative);
       }),
     }));
     const actionLabel = adjustmentDraft.action === "cancel" ? "als ausgefallen markiert" : adjustmentDraft.action === "move" ? "verschoben" : "angepasst";
@@ -1593,109 +1673,44 @@ export default function Planner() {
       </PageTitle>
       <TrainingSectionNav />
       {goalProfile.target?.name && (
-        <Card className={`wide planner-goal-engine ${goalProfile.feasibility?.status || "open"}`}>
-          <div className="planner-goal-engine-heading">
-            <div>
-              <p className="eyebrow">Goal Engine · Wochenauftrag</p>
-              <h2>{goalProfile.target.name}</h2>
-              <p>{goalProfile.disciplineLabel} · {goalProfile.phase?.label || "Phase wird berechnet"}{goalProfile.targetPaceLabel ? ` · Zielpace ${goalProfile.targetPaceLabel}` : ""}</p>
-            </div>
-            <span>{goalProfile.feasibility?.label || "Ziel wird geprüft"}</span>
+        <Link
+          className={`planner-goal-strip ${goalProfile.feasibility?.status || "open"}`}
+          to="/mission"
+          aria-label={`${goalProfile.target.name}: Ziel und Goal Engine öffnen`}
+        >
+          <div className="planner-goal-strip-main">
+            <span>Engine Goal</span>
+            <strong>{goalProfile.target.name}</strong>
+            <small>{goalProfile.disciplineLabel} · {goalProfile.phase?.label || "Phase wird berechnet"}</small>
           </div>
-
-          {goalProfile.feasibility?.summary && (
-            <div className="planner-goal-engine-lead">
-              <span>Coach-Einschätzung</span>
-              <p>{goalProfile.feasibility.summary}</p>
-            </div>
-          )}
-
-          {goalProfile.experience && goalProfile.currentForm && goalProfile.targetGap && (
-            <div className="planner-goal-engine-snapshot" aria-label="Planungsgrundlage">
-              <div><small>Erfahrung</small><strong>{goalProfile.experience.label}</strong></div>
-              <div><small>Aktuelle Form</small><strong>{goalProfile.currentForm.label}</strong></div>
-              <div><small>Offene Aufgabe</small><strong>{goalProfile.targetGap.label}</strong></div>
-            </div>
-          )}
-
-          <div className="planner-goal-engine-body">
-            <div>
-              <strong>Trainingsfokus</strong>
-              <div className="planner-goal-engine-tags">{goalProfile.focus.map((focus) => <span key={focus}>{focus}</span>)}</div>
-            </div>
-            <div>
-              <strong>Schlüsseleinheiten dieser Woche</strong>
-              {goalKeySessions.length
-                ? <div className="planner-goal-key-sessions">{goalKeySessions.map((item) => <span key={item.id}>{item.day} · {item.title}</span>)}</div>
-                : <p className="muted">Noch keine Woche berechnet oder die aktuelle Woche ist bewusst entlastet.</p>}
-            </div>
-          </div>
-
-          {(goalProfile.experience && goalProfile.currentForm && goalProfile.targetGap) || goalProfile.preparation?.summary ? (
-            <details className="planner-goal-engine-details">
-              <summary><span>Berechnungsgrundlage und Coach-Erklärung</span><b>Details anzeigen</b></summary>
-              <div className="planner-goal-engine-details-body">
-                {goalProfile.experience && goalProfile.currentForm && goalProfile.targetGap && (
-                  <div className="planner-goal-engine-context">
-                    <div><small>Erfahrung</small><strong>{goalProfile.experience.label}</strong><p>{goalProfile.experience.summary}</p></div>
-                    <div><small>Aktuelle Form</small><strong>{goalProfile.currentForm.label}</strong><p>{goalProfile.currentForm.summary}</p></div>
-                    <div><small>Offene Aufgabe</small><strong>{goalProfile.targetGap.label}</strong><p>{goalProfile.targetGap.summary}</p></div>
-                  </div>
-                )}
-                {goalProfile.preparation?.summary && <p className="planner-goal-engine-preparation"><strong>Warum so?</strong> {goalProfile.preparation.summary}</p>}
-              </div>
-            </details>
-          ) : null}
-
-          {(goalProfile.constraintWarnings || []).map((warning) => <small className="planner-goal-warning" key={warning}>! {warning}</small>)}
-        </Card>
+          <span className="planner-goal-strip-status">{goalProfile.feasibility?.label || "Ziel wird geprüft"}</span>
+          <b>Ziel öffnen →</b>
+        </Link>
       )}
-      {offsetWeeks === 0 && ["adjust", "watch"].includes(unifiedCoach.level) && (
-        <Card className={`wide planner-science-card ${unifiedCoach.level}`}>
-          <div className="planner-science-heading">
-            <div><p className="eyebrow">Gemeinsame Coach-Bewertung</p><h2>{unifiedCoach.recommendation.title}</h2></div>
-            <span>Dein Coach schlägt vor · du entscheidest</span>
-          </div>
-          <p className="planner-science-copy">{unifiedCoach.recommendation.text}</p>
 
-          <details className="planner-science-details">
-            <summary><span>Warum empfiehlt der Coach das?</span><b>Grundlage anzeigen</b></summary>
-            <div className="planner-science-context">
-              <span>Gewöhnung: {baseline.runDays.toFixed(1)} Lauftage/Woche · {baseline.weeklyKm.toFixed(0)} km/Woche</span>
-              <span>Zielprofil: {goalProfile.focus.join(" · ")}</span>
-              <span>Projizierter Load: {scienceAssessment.projected} · jüngster Rahmen: {scienceAssessment.average || "noch offen"}</span>
+      {offsetWeeks === 0 && ["adjust", "watch"].includes(unifiedCoach.level) && activeCoachSuggestions.length > 0 && (
+        <details className={`planner-coach-alert ${unifiedCoach.level}`}>
+          <summary>
+            <div>
+              <span>Coach-Update</span>
+              <strong>Dein Coach schlägt {coachAlertCause} {activeCoachSuggestions.length === 1 ? "eine Änderung" : `${activeCoachSuggestions.length} Änderungen`} vor.</strong>
             </div>
-          </details>
-
-          {scienceAssessment.candidates.length > 0 && (
-            <div className="planner-science-suggestions">
-              {scienceAssessment.candidates.map((candidate, index) => (
-                <article className={index === 0 ? "recommended" : ""} key={candidate.id}>
-                  <div className="planner-science-suggestion-heading">
-                    <div><b>{candidate.title}</b><span>{candidate.date}</span></div>
-                    <em>{index === 0 ? "Coach-Empfehlung" : "Weitere Option"}</em>
-                  </div>
-                  <p className="planner-science-alternative">
-                    <strong>{candidate.coachAlternative?.label || "Alternative prüfen"}</strong>
-                    <small>{candidate.coachAlternative?.reason || candidate.suggestion}</small>
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => openAdjustment(
-                      candidate.id,
-                      "replace",
-                      candidate.coachAlternative?.key || "",
-                      candidate.coachAlternative || null,
-                    )}
-                  >
-                    Vorschlag prüfen
-                  </button>
-                </article>
+            <b>Ansehen</b>
+          </summary>
+          <div className="planner-coach-alert-body">
+            <p>{unifiedCoach.recommendation.text}</p>
+            <div className="planner-coach-alert-list">
+              {activeCoachSuggestions.map((candidate) => (
+                <a href={`#planner-workout-${candidate.id}`} key={candidate.id}>
+                  <span>{candidate.title}</span>
+                  <strong>→ {candidate.coachAlternative?.label || "Alternative prüfen"}</strong>
+                  <small>{candidate.coachAlternative?.reason || candidate.suggestion}</small>
+                </a>
               ))}
             </div>
-          )}
-          <small className="planner-science-protection">{unifiedCoach.protectionNote} Du kannst jeden Coach-Vorschlag ändern oder den bestehenden Plan unverändert lassen.</small>
-        </Card>
+            <small>Die Empfehlung steht zusätzlich direkt an der betroffenen Einheit. Dort kannst du sie sofort annehmen oder ablehnen.</small>
+          </div>
+        </details>
       )}
 
       <div className="planner-week-nav">
@@ -1885,10 +1900,15 @@ export default function Planner() {
                 const trackTemplateLabel = trackWorkoutTemplateLabel(item.structuredWorkout);
                 const paceLabel = loopWorkoutPaceLabel(item) || workoutPaceLabel(item, { includeSource: true });
                 const loopLabel = loopWorkoutCompactLabel(item);
+                const coachCandidate = scienceAssessment.candidates.find((candidate) => candidate.id === item.id) || null;
+                const coachCandidateDecision = coachCandidate
+                  ? coachSuggestionDecision(coachSuggestionDecisions, coachDecisionKey(coachCandidate))
+                  : null;
                 const className = `planner-workout ${completed ? "completed" : ""} ${isMissed ? "missed" : ""} ${isCancelled ? "cancelled" : ""} ${hasStateMarker ? "" : "no-marker"}`;
                 return (
                   <div
                     className={`${className} ${reviewDestination ? "planner-workout-review-open" : ""}`}
+                    id={`planner-workout-${item.id}`}
                     key={item.id}
                     role={reviewDestination ? "button" : undefined}
                     tabIndex={reviewDestination ? 0 : undefined}
@@ -1950,6 +1970,28 @@ export default function Planner() {
                       {matched && <small>{matched.name || item.actualTitle}</small>}
                       {item.missedReason && <small>Grund: {item.missedReason}{item.missedNote ? ` · ${item.missedNote}` : ""}</small>}
                       {item.notes && !isCancelled && <small>{item.notes}</small>}
+                      {coachCandidate && !matched && !completed && !isCancelled && !isMissed && !coachCandidateDecision && (
+                        <div className="planner-coach-inline">
+                          <div>
+                            <span>Coach empfiehlt</span>
+                            <strong>{coachCandidate.coachAlternative?.label || "Alternative prüfen"}</strong>
+                            <small>{coachCandidate.coachAlternative?.reason || coachCandidate.suggestion}</small>
+                          </div>
+                          <div className="planner-coach-inline-actions">
+                            <button type="button" className="primary" onClick={() => applyCoachSuggestion(coachCandidate)}>Annehmen</button>
+                            <button type="button" onClick={() => rejectCoachSuggestion(coachCandidate)}>Ablehnen</button>
+                          </div>
+                        </div>
+                      )}
+                      {coachCandidate && coachCandidateDecision?.status === "rejected" && !matched && !completed && !isCancelled && !isMissed && (
+                        <div className="planner-coach-inline dismissed">
+                          <div>
+                            <span>Coach-Vorschlag abgelehnt</span>
+                            <small>Die bestehende Einheit bleibt unverändert im Wochenplan.</small>
+                          </div>
+                          <button type="button" onClick={() => reconsiderCoachSuggestion(coachCandidate)}>Neu prüfen</button>
+                        </div>
+                      )}
                       {item.coachAlternative?.source === "weather-cycling" && !matched && !completed && !isCancelled && !isMissed && (
                         <div className="planner-weather-alternative">
                           <div>

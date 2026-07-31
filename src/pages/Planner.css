@@ -877,3 +877,150 @@
 .planner-loop-row-label{color:var(--accent-bright)!important}
 @media(max-width:900px){.planner-loop-metrics{grid-template-columns:1fr 1fr}.planner-loop-matchplan{grid-template-columns:1fr 1fr}}
 @media(max-width:720px){.planner-loop-heading,.planner-loop-control{display:grid}.planner-loop-heading>span{justify-self:start}.planner-loop-control .planner-pace-mode{display:grid;grid-template-columns:1fr;width:100%}.planner-loop-pace-mode{grid-template-columns:1fr!important}.planner-loop-matchplan{grid-template-columns:1fr}.planner-loop-metrics{grid-template-columns:1fr 1fr}}
+
+/* v3.9.8 – compact goal context and inline coach decisions */
+.planner-goal-strip{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto auto;
+  align-items:center;
+  gap:14px;
+  margin:0 0 10px;
+  padding:11px 14px;
+  border:1px solid color-mix(in srgb,var(--accent) 42%,var(--border));
+  border-radius:13px;
+  background:linear-gradient(100deg,color-mix(in srgb,var(--accent-surface) 72%,var(--bg-card)),var(--bg-card));
+  color:var(--text);
+  text-decoration:none;
+  transition:border-color .16s ease,background .16s ease,transform .16s ease;
+}
+.planner-goal-strip:hover,.planner-goal-strip:focus-visible{
+  border-color:var(--accent-border-strong);
+  background:linear-gradient(100deg,color-mix(in srgb,var(--accent-surface-strong) 68%,var(--bg-card)),var(--bg-card));
+  transform:translateY(-1px);
+}
+.planner-goal-strip:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.planner-goal-strip-main{display:flex;align-items:baseline;gap:8px;min-width:0}
+.planner-goal-strip-main>span{
+  flex:none;
+  color:var(--accent-bright);
+  font-size:9px;
+  font-weight:900;
+  letter-spacing:.09em;
+  text-transform:uppercase;
+}
+.planner-goal-strip-main>strong{overflow:hidden;font-size:15px;text-overflow:ellipsis;white-space:nowrap}
+.planner-goal-strip-main>small{overflow:hidden;color:var(--muted);font-size:11px;text-overflow:ellipsis;white-space:nowrap}
+.planner-goal-strip-status{
+  max-width:300px;
+  padding:5px 8px;
+  border:1px solid var(--accent-border);
+  border-radius:999px;
+  color:var(--accent-bright);
+  font-size:9px;
+  font-weight:800;
+  text-align:center;
+}
+.planner-goal-strip>b{color:var(--accent-bright);font-size:10px;white-space:nowrap}
+.planner-goal-strip.ambitious,.planner-goal-strip.needs_benchmark{border-color:rgba(250,204,21,.42)}
+.planner-goal-strip.stretch,.planner-goal-strip.incomplete{border-color:rgba(248,113,113,.5)}
+
+.planner-coach-alert{
+  overflow:hidden;
+  margin:0 0 14px;
+  border:1px solid var(--accent-border-strong);
+  border-radius:13px;
+  background:color-mix(in srgb,var(--accent-surface) 50%,var(--bg-card));
+}
+.planner-coach-alert.adjust{border-color:rgba(248,113,113,.52)}
+.planner-coach-alert>summary{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+  min-height:50px;
+  padding:10px 14px;
+  cursor:pointer;
+  list-style:none;
+}
+.planner-coach-alert>summary::-webkit-details-marker{display:none}
+.planner-coach-alert>summary>div{display:flex;align-items:baseline;gap:9px;min-width:0}
+.planner-coach-alert>summary span{
+  flex:none;
+  color:var(--accent-bright);
+  font-size:9px;
+  font-weight:900;
+  letter-spacing:.09em;
+  text-transform:uppercase;
+}
+.planner-coach-alert>summary strong{font-size:13px;line-height:1.35}
+.planner-coach-alert>summary>b{color:var(--accent-bright);font-size:10px;white-space:nowrap}
+.planner-coach-alert[open]>summary{border-bottom:1px solid var(--border)}
+.planner-coach-alert[open]>summary>b{font-size:0}
+.planner-coach-alert[open]>summary>b::after{content:"Schließen";font-size:10px}
+.planner-coach-alert-body{display:grid;gap:10px;padding:12px 14px 14px}
+.planner-coach-alert-body>p{max-width:950px;margin:0;color:var(--text-soft);font-size:12px;line-height:1.45}
+.planner-coach-alert-body>small{color:var(--muted);font-size:10px}
+.planner-coach-alert-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.planner-coach-alert-list>a{
+  display:grid;
+  gap:3px;
+  min-width:0;
+  padding:9px 10px;
+  border:1px solid var(--border);
+  border-radius:10px;
+  background:var(--bg-card-alt);
+  color:var(--text);
+  text-decoration:none;
+}
+.planner-coach-alert-list>a:hover{border-color:var(--accent-border-strong);background:var(--accent-surface)}
+.planner-coach-alert-list span{overflow:hidden;color:var(--muted);font-size:9px;text-overflow:ellipsis;white-space:nowrap}
+.planner-coach-alert-list strong{color:var(--accent-bright);font-size:12px}
+.planner-coach-alert-list small{color:var(--muted-bright);font-size:10px;line-height:1.35}
+
+.planner-workout{scroll-margin-top:90px}
+.planner-coach-inline{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin-top:9px;
+  padding:9px 10px;
+  border:1px solid var(--accent-border-strong);
+  border-radius:11px;
+  background:color-mix(in srgb,var(--accent-surface) 72%,var(--bg-input));
+}
+.planner-coach-inline>div:first-child{display:grid;gap:2px;min-width:0}
+.planner-coach-inline>div:first-child>span{
+  color:var(--accent-bright);
+  font-size:8px;
+  font-weight:900;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+}
+.planner-coach-inline>div:first-child>strong{color:var(--text);font-size:12px}
+.planner-coach-inline>div:first-child>small{margin:0;color:var(--muted-bright);font-size:10px;line-height:1.35}
+.planner-coach-inline-actions{display:flex;flex:none;gap:6px}
+.planner-coach-inline button{padding:6px 9px;font-size:9px;white-space:nowrap}
+.planner-coach-inline.dismissed{
+  border-color:var(--border);
+  background:var(--bg-input);
+  opacity:.78;
+}
+.planner-coach-inline.dismissed>button{flex:none}
+
+@media(max-width:900px){
+  .planner-coach-alert-list{grid-template-columns:1fr}
+  .planner-goal-strip-status{display:none}
+}
+@media(max-width:700px){
+  .planner-goal-strip{grid-template-columns:minmax(0,1fr) auto;gap:8px;padding:10px 12px}
+  .planner-goal-strip-main{display:grid;gap:2px}
+  .planner-goal-strip-main>strong,.planner-goal-strip-main>small{white-space:normal}
+  .planner-goal-strip>b{grid-column:2;grid-row:1/-1;align-self:center}
+  .planner-coach-alert>summary{align-items:flex-start;padding:10px 12px}
+  .planner-coach-alert>summary>div{display:grid;gap:3px}
+  .planner-coach-alert-body{padding:11px 12px 12px}
+  .planner-coach-inline{align-items:stretch;flex-direction:column}
+  .planner-coach-inline-actions{display:grid;grid-template-columns:1fr 1fr}
+  .planner-coach-inline-actions button{width:100%}
+}
