@@ -3,34 +3,51 @@ import { Link } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { Card, Metric, PageTitle } from "../components/UI";
 import TrainingSectionNav from "../components/SectionNav";
-import { activityDate, preferredActivities, sportGroup } from "../services/activityUtils";
+import { activityDate, preferredActivities } from "../services/activityUtils";
 import { buildTrainingAnalytics } from "../services/trainingAnalytics";
 import { buildCoachState } from "../services/coachState";
+import { buildYearStats, formatActivityDistance } from "../services/yearActivityStats";
 
 const weekLabel = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit" });
 
-function sportBreakdown(activities) {
-  const grouped = new Map();
-  activities.forEach((activity) => {
-    const group = sportGroup(activity);
-    grouped.set(group.key, { key: group.key, label: group.label, count: (grouped.get(group.key)?.count || 0) + 1 });
-  });
-  return [...grouped.values()].sort((a, b) => b.count - a.count);
-}
-
-function yearStats(activities, year) {
-  const filtered = activities.filter((activity) => Number(activity.date?.slice(0, 4)) === year);
-  return {
-    count: filtered.length,
-    distance: filtered.reduce((sum, activity) => sum + Number(activity.distance || 0), 0),
-    duration: filtered.reduce((sum, activity) => sum + Number(activity.duration || 0), 0),
-    elevation: filtered.reduce((sum, activity) => sum + Number(activity.elevation || 0), 0),
-    sports: sportBreakdown(filtered),
-  };
-}
-
 function percentage(value) {
   return value == null ? "–" : `${Math.round(value * 100)} %`;
+}
+
+function SportBreakdown({ year, sports, selectedKey, onSelect }) {
+  const selected = sports.find((sport) => sport.key === selectedKey) || null;
+
+  return (
+    <div className="sport-breakdown-shell">
+      <div className="sport-breakdown" aria-label={`Sportarten ${year}`}>
+        {sports.map((sport) => {
+          const selectedSport = selected?.key === sport.key;
+          return (
+            <button
+              type="button"
+              className={`sport-breakdown-item ${selectedSport ? "selected" : ""}`}
+              key={sport.key}
+              aria-expanded={selectedSport}
+              aria-controls={`sport-breakdown-detail-${year}`}
+              onClick={() => onSelect(selectedSport ? null : sport.key)}
+            >
+              <span>{sport.label}</span>
+              <strong>{sport.count}</strong>
+            </button>
+          );
+        })}
+      </div>
+      {selected && (
+        <div className="sport-breakdown-detail" id={`sport-breakdown-detail-${year}`} role="status">
+          <div>
+            <small>{selected.label} · {year}</small>
+            <strong>{formatActivityDistance(selected.distance)}</strong>
+          </div>
+          <span>{selected.count} {selected.count === 1 ? "Einheit" : "Einheiten"}</span>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function IntensityRow({ label, value, total, tone }) {
@@ -46,6 +63,7 @@ function IntensityRow({ label, value, total, tone }) {
 export default function Analytics() {
   const { state } = useApp();
   const [weekCount, setWeekCount] = useState(8);
+  const [selectedYearSports, setSelectedYearSports] = useState({});
   const now = useMemo(() => new Date(), []);
   const activities = useMemo(() => preferredActivities(state.activities), [state.activities]);
   const analytics = useMemo(() => buildTrainingAnalytics(state, now, weekCount), [state, now, weekCount]);
@@ -53,7 +71,7 @@ export default function Analytics() {
   const currentYear = now.getFullYear();
   const yearRows = useMemo(() => [currentYear - 1, currentYear].map((year) => ({
     year,
-    stats: yearStats(activities, year),
+    stats: buildYearStats(activities, year),
   })), [activities, currentYear]);
   const maxWeekKm = Math.max(1, ...analytics.weeks.flatMap((week) => [week.km, week.plannedKm]));
   const totalIntensity = Object.values(analytics.intensity).reduce((sum, value) => sum + value, 0);
@@ -204,9 +222,12 @@ export default function Analytics() {
                   <Metric label="Zeit" value={`${Math.round(stats.duration / 60)} h`} />
                   <Metric label="Höhenmeter" value={`${Math.round(stats.elevation)} hm`} />
                 </div>
-                <div className="sport-breakdown" aria-label={`Sportarten ${year}`}>
-                  {stats.sports.map((sport) => <div className="sport-breakdown-item" key={sport.key}><span>{sport.label}</span><strong>{sport.count}</strong></div>)}
-                </div>
+                <SportBreakdown
+                  year={year}
+                  sports={stats.sports}
+                  selectedKey={selectedYearSports[year] || null}
+                  onSelect={(key) => setSelectedYearSports((current) => ({ ...current, [year]: key }))}
+                />
               </Card>
             ))}
           </div>

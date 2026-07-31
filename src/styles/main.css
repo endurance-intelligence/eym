@@ -941,3 +941,41 @@ button:focus-visible,a:focus-visible,summary:focus-visible{
 .mission-loop-plan small{color:var(--muted);font-size:9px;font-weight:900;letter-spacing:.07em;text-transform:uppercase}.mission-loop-plan strong{font-size:13px}.mission-loop-plan p{grid-column:1/-1;margin:2px 2px;color:var(--muted);font-size:11px;line-height:1.45}
 @media(max-width:680px){.mission-loop-plan,.mission-loop-plan.match-plan{grid-template-columns:1fr 1fr}}
 @media(max-width:460px){.mission-loop-plan,.mission-loop-plan.match-plan{grid-template-columns:1fr}}
+
+/* v3.9.7 – interactive year totals and cleaner Fuel Lab product cards */
+.sport-breakdown-shell{display:grid;gap:10px}
+.sport-breakdown{gap:8px;margin-top:18px;padding-top:16px}
+.sport-breakdown-item{appearance:none;font:inherit;color:inherit;transition:border-color .18s ease,background .18s ease,transform .18s ease;white-space:nowrap}
+.sport-breakdown-item:hover{transform:translateY(-1px);border-color:var(--accent-border-strong);background:var(--accent-surface-strong)}
+.sport-breakdown-item.selected{border-color:var(--accent);background:var(--accent-surface-strong);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 35%,transparent)}
+.sport-breakdown-item.selected span,.sport-breakdown-item.selected strong{color:var(--accent-bright)}
+.sport-breakdown-detail{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:11px 13px;border:1px solid var(--accent-border);border-radius:12px;background:var(--accent-surface)}
+.sport-breakdown-detail>div{display:grid;gap:2px}.sport-breakdown-detail small{color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.08em}.sport-breakdown-detail strong{font-size:20px}.sport-breakdown-detail>span{color:var(--muted-bright);font-size:12px;white-space:nowrap}
+
+.fuel-grid{grid-template-columns:repeat(3,minmax(0,1fr));align-items:stretch}
+.fuel-product-card-compact{gap:13px;height:100%;padding:18px;align-content:start}
+.fuel-product-head{grid-template-columns:auto minmax(0,1fr) auto;align-items:start;gap:12px}
+.fuel-product-head .fuel-product-image{width:70px;height:78px;border-radius:12px}
+.fuel-product-copy h2{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;min-height:2.24em;max-height:2.24em;margin:3px 0 0;font-size:20px;line-height:1.12;overflow:hidden}
+.fuel-card-actions{align-items:flex-start}.fuel-card-actions .action-menu>summary{min-width:42px;min-height:40px;padding:7px 10px}
+.fuel-nutrition-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+.fuel-nutrition-summary>span{display:grid;gap:3px;min-width:0;padding:9px 10px;border:1px solid var(--border);border-radius:11px;background:var(--bg-input)}
+.fuel-nutrition-summary small{color:var(--muted);font-size:10px;white-space:nowrap}.fuel-nutrition-summary strong{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fuel-product-details{overflow:hidden;border:1px solid var(--border);border-radius:12px;background:var(--bg-input)}
+.fuel-product-details>summary{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;cursor:pointer;list-style:none;color:var(--text-soft);font-size:12px;font-weight:800}
+.fuel-product-details>summary::-webkit-details-marker{display:none}.fuel-product-details>summary::after{content:"⌄";color:var(--accent-bright);transition:transform .18s ease}.fuel-product-details[open]>summary::after{transform:rotate(180deg)}
+.fuel-product-details>summary small{margin-left:auto;color:var(--muted);font-size:10px;font-weight:600;white-space:nowrap}
+.fuel-product-detail-body{display:grid;gap:10px;padding:0 12px 12px;border-top:1px solid var(--border)}
+.fuel-product-detail-body .fuel-product-meta{padding-top:11px;border-top:0}
+.fuel-product-detail-body .fuel-barcode{margin-top:0}
+.fuel-product-detail-body .fuel-card-nutrition-details{margin:0}
+.fuel-contribution-box{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px;padding:10px 11px}
+.fuel-contribution-box b{font-size:12px}.fuel-contribution-box span{font-size:11px;line-height:1.35}
+.fuel-contribution-actions{display:flex!important;align-items:center;justify-content:flex-end;gap:6px}
+.fuel-contribution-actions button,.fuel-contribution-actions a{min-height:36px;padding:7px 9px!important;font-size:11px;white-space:nowrap}
+.fuel-stock-row{margin-top:auto;padding:11px 12px}.fuel-stock-row strong{font-size:22px}
+.fuel-low-stock-row{margin-top:-3px}
+
+@media(max-width:1100px){.fuel-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:700px){.fuel-grid{grid-template-columns:1fr}.sport-breakdown-detail{align-items:flex-start;flex-direction:column;gap:4px}.fuel-product-copy h2{min-height:0;max-height:none}}
+@media(max-width:460px){.fuel-nutrition-summary{grid-template-columns:1fr}.fuel-contribution-box{grid-template-columns:1fr}.fuel-contribution-actions{justify-content:stretch}.fuel-contribution-actions>*{flex:1;text-align:center}}

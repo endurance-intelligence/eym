@@ -761,17 +761,13 @@ export default function Fuel() {
           <div className="fuel-product-copy">
             <p className="eyebrow">{item.category}</p>
             <h2 title={item.brand ? `${item.brand} ${item.name}` : item.name}>{item.brand ? `${item.brand} ${item.name}` : item.name}</h2>
-            <div className="fuel-stats"><b>{item.carbs} g Carbs</b><span>{item.sodium != null ? `${Math.round(Number(item.sodium))} mg Natrium` : "Natrium offen"}</span><span>{item.caffeine != null ? `${Math.round(Number(item.caffeine))} mg Koffein` : "Koffein offen"}</span></div>
           </div>
           <div className="fuel-card-actions">
-            <button type="button" className="fuel-refresh-button" onClick={() => refreshProduct(item)} disabled={productStatuses[item.id]?.tone === "loading"} title={item.barcode ? "Produktname und Nährwerte per Barcode prüfen" : "Produktdaten anhand von Marke und Name suchen"}>
-              {productStatuses[item.id]?.tone === "loading" ? "Prüfe …" : "↻ Daten"}
-            </button>
             <details className="action-menu fuel-card-menu">
               <summary aria-label="Produktaktionen" title="Produktaktionen">•••</summary>
               <div className="action-menu-panel">
                 <button type="button" onClick={(event) => { editProduct(item); event.currentTarget.closest("details")?.removeAttribute("open"); }}>Bearbeiten</button>
-                <button type="button" onClick={(event) => { refreshProduct(item); event.currentTarget.closest("details")?.removeAttribute("open"); }}>Produktdaten prüfen</button>
+                <button type="button" disabled={productStatuses[item.id]?.tone === "loading"} onClick={(event) => { refreshProduct(item); event.currentTarget.closest("details")?.removeAttribute("open"); }}>{productStatuses[item.id]?.tone === "loading" ? "Produktdaten werden geprüft …" : "Produktdaten prüfen"}</button>
                 <button type="button" onClick={(event) => { openPriceFinder(item); event.currentTarget.closest("details")?.removeAttribute("open"); }}>Preis finden</button>
                 <button type="button" onClick={(event) => { archive(item.id); event.currentTarget.closest("details")?.removeAttribute("open"); }}>Archivieren</button>
                 <button type="button" className="danger-button" onClick={(event) => { remove(item.id); event.currentTarget.closest("details")?.removeAttribute("open"); }}>Dauerhaft löschen</button>
@@ -779,20 +775,36 @@ export default function Fuel() {
             </details>
           </div>
         </div>
-        <div className="fuel-product-meta">
-          {item.preparedVolumeMl && <small>{item.servingQuantity ? `${item.servingQuantity} ${item.servingUnit || "g"}` : "1 Portion"}{item.scoopsPerServing ? ` · ${item.scoopsPerServing} Messlöffel` : ""} · Mischvorschlag {item.preparedVolumeMl} ml.</small>}
-          {item.consumptionRecommendation && <small>Empfehlung: {item.consumptionRecommendation}</small>}
-          {item.barcode && <small className="fuel-barcode">Barcode {item.barcode}{item.source ? ` · ${item.source}` : ""}</small>}
-          <small className="fuel-stock-start">Bestand seit {formatDate(`${item.stockTrackedFrom || new Date().toISOString().slice(0, 10)}T12:00:00`)}</small>
-          {item.catalogCheckedAt && <small>Produktdaten geprüft am {formatDate(item.catalogCheckedAt)}{item.catalogCompleteness != null ? ` · Katalog ${Math.round(Number(item.catalogCompleteness) * 100)} % vollständig` : ""}</small>}
-          {item.catalogSubmittedAt && <small>Zu Open Food Facts beigetragen am {formatDate(item.catalogSubmittedAt)}</small>}
+
+        <div className="fuel-nutrition-summary" aria-label="Nährwerte pro Portion">
+          <span><small>Carbs</small><strong>{Number(item.carbs || 0)} g</strong></span>
+          <span><small>Natrium</small><strong>{item.sodium != null ? `${Math.round(Number(item.sodium))} mg` : "offen"}</strong></span>
+          <span><small>Koffein</small><strong>{item.caffeine != null ? `${Math.round(Number(item.caffeine))} mg` : "offen"}</strong></span>
         </div>
-        {(item.energyKcal != null || item.sugar != null || item.salt != null || item.magnesium != null || item.calcium != null) && <details className="fuel-card-nutrition-details"><summary>Vollständige Nährwerte</summary><div>
-          {nutrientFields.map(([perServing, , label, unit]) => item[perServing] != null && <span key={perServing}><small>{label}</small><b>{item[perServing]} {unit}</b></span>)}
-        </div></details>}
+
+        <details className="fuel-product-details">
+          <summary>
+            <span>Produktdetails</span>
+            <small>{item.catalogCompleteness != null ? `${Math.round(Number(item.catalogCompleteness) * 100)} % Katalog` : item.barcode ? "Barcode vorhanden" : "Daten offen"}</small>
+          </summary>
+          <div className="fuel-product-detail-body">
+            <div className="fuel-product-meta">
+              {item.preparedVolumeMl && <small>{item.servingQuantity ? `${item.servingQuantity} ${item.servingUnit || "g"}` : "1 Portion"}{item.scoopsPerServing ? ` · ${item.scoopsPerServing} Messlöffel` : ""} · Mischvorschlag {item.preparedVolumeMl} ml.</small>}
+              {item.consumptionRecommendation && <small>Empfehlung: {item.consumptionRecommendation}</small>}
+              {item.barcode && <small className="fuel-barcode">Barcode {item.barcode}{item.source ? ` · ${item.source}` : ""}</small>}
+              <small className="fuel-stock-start">Bestand seit {formatDate(`${item.stockTrackedFrom || new Date().toISOString().slice(0, 10)}T12:00:00`)}</small>
+              {item.catalogCheckedAt && <small>Produktdaten geprüft am {formatDate(item.catalogCheckedAt)}{item.catalogCompleteness != null ? ` · Katalog ${Math.round(Number(item.catalogCompleteness) * 100)} % vollständig` : ""}</small>}
+              {item.catalogSubmittedAt && <small>Zu Open Food Facts beigetragen am {formatDate(item.catalogSubmittedAt)}</small>}
+            </div>
+            {(item.energyKcal != null || item.sugar != null || item.salt != null || item.magnesium != null || item.calcium != null) && <details className="fuel-card-nutrition-details"><summary>Vollständige Nährwerte</summary><div>
+              {nutrientFields.map(([perServing, , label, unit]) => item[perServing] != null && <span key={perServing}><small>{label}</small><b>{item[perServing]} {unit}</b></span>)}
+            </div></details>}
+          </div>
+        </details>
+
         {productNeedsContribution(item) && <div className="fuel-contribution-box">
-          <div><b>Produktdaten ergänzen</b><span>{item.barcode ? "Vervollständige Verpackungsdaten und Fotos. Danach kannst du den Beitrag direkt aus dem Fuel Lab senden." : "Ein Barcode oder Foto verbessert die Zuordnung und ermöglicht einen Beitrag zum offenen Katalog."}</span></div>
-          <div className="fuel-contribution-actions"><button type="button" onClick={() => editProduct(item, "Ergänze fehlende Angaben und Fotos. Lokale Daten bleiben unabhängig von Open Food Facts gespeichert.")}>Daten ergänzen</button>{item.barcode && <a href={openFoodFactsContributionUrl(item.barcode)} target="_blank" rel="noreferrer">Bei OFF öffnen ↗</a>}</div>
+          <div><b>Produktdaten unvollständig</b><span>{item.barcode ? "Verpackungsdaten oder Fotos fehlen noch." : "Barcode oder Foto für eine bessere Zuordnung ergänzen."}</span></div>
+          <div className="fuel-contribution-actions"><button type="button" onClick={() => editProduct(item, "Ergänze fehlende Angaben und Fotos. Lokale Daten bleiben unabhängig von Open Food Facts gespeichert.")}>Daten ergänzen</button>{item.barcode && <a href={openFoodFactsContributionUrl(item.barcode)} target="_blank" rel="noreferrer">OFF öffnen ↗</a>}</div>
         </div>}
         {productStatuses[item.id] && <div className={`fuel-data-status ${productStatuses[item.id].tone}`}><span>{productStatuses[item.id].message}</span>{productStatuses[item.id].tone === "warn" && <button type="button" onClick={() => editProduct(item, productStatuses[item.id].message)}>Produktdaten ergänzen</button>}</div>}
         <div className="fuel-stock-row">
