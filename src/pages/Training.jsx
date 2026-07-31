@@ -256,7 +256,7 @@ export default function Training() {
         </div>
       </Card>
 
-      <Card>
+      <Card className="training-history-card">
         <div className="training-toolbar">
           <div>
             <strong>{activities.length} Einheiten</strong>

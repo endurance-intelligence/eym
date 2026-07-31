@@ -1414,16 +1414,25 @@ export default function Planner() {
             </div>
             <span>{goalProfile.feasibility?.label || "Ziel wird geprüft"}</span>
           </div>
-          {goalProfile.experience && goalProfile.currentForm && goalProfile.targetGap && (
-            <div className="planner-goal-engine-context">
-              <div><small>Erfahrung</small><strong>{goalProfile.experience.label}</strong><p>{goalProfile.experience.summary}</p></div>
-              <div><small>Aktuelle Form</small><strong>{goalProfile.currentForm.label}</strong><p>{goalProfile.currentForm.summary}</p></div>
-              <div><small>Offene Aufgabe</small><strong>{goalProfile.targetGap.label}</strong><p>{goalProfile.targetGap.summary}</p></div>
+
+          {goalProfile.feasibility?.summary && (
+            <div className="planner-goal-engine-lead">
+              <span>Coach-Einschätzung</span>
+              <p>{goalProfile.feasibility.summary}</p>
             </div>
           )}
+
+          {goalProfile.experience && goalProfile.currentForm && goalProfile.targetGap && (
+            <div className="planner-goal-engine-snapshot" aria-label="Planungsgrundlage">
+              <div><small>Erfahrung</small><strong>{goalProfile.experience.label}</strong></div>
+              <div><small>Aktuelle Form</small><strong>{goalProfile.currentForm.label}</strong></div>
+              <div><small>Offene Aufgabe</small><strong>{goalProfile.targetGap.label}</strong></div>
+            </div>
+          )}
+
           <div className="planner-goal-engine-body">
             <div>
-              <strong>Diese Fähigkeiten steuern den Plan</strong>
+              <strong>Trainingsfokus</strong>
               <div className="planner-goal-engine-tags">{goalProfile.focus.map((focus) => <span key={focus}>{focus}</span>)}</div>
             </div>
             <div>
@@ -1433,8 +1442,23 @@ export default function Planner() {
                 : <p className="muted">Noch keine Woche berechnet oder die aktuelle Woche ist bewusst entlastet.</p>}
             </div>
           </div>
-          {goalProfile.feasibility?.summary && <p className="planner-goal-engine-summary">{goalProfile.feasibility.summary}</p>}
-          {goalProfile.preparation?.summary && <p className="planner-goal-engine-preparation"><strong>Warum so?</strong> {goalProfile.preparation.summary}</p>}
+
+          {(goalProfile.experience && goalProfile.currentForm && goalProfile.targetGap) || goalProfile.preparation?.summary ? (
+            <details className="planner-goal-engine-details">
+              <summary><span>Berechnungsgrundlage und Coach-Erklärung</span><b>Details anzeigen</b></summary>
+              <div className="planner-goal-engine-details-body">
+                {goalProfile.experience && goalProfile.currentForm && goalProfile.targetGap && (
+                  <div className="planner-goal-engine-context">
+                    <div><small>Erfahrung</small><strong>{goalProfile.experience.label}</strong><p>{goalProfile.experience.summary}</p></div>
+                    <div><small>Aktuelle Form</small><strong>{goalProfile.currentForm.label}</strong><p>{goalProfile.currentForm.summary}</p></div>
+                    <div><small>Offene Aufgabe</small><strong>{goalProfile.targetGap.label}</strong><p>{goalProfile.targetGap.summary}</p></div>
+                  </div>
+                )}
+                {goalProfile.preparation?.summary && <p className="planner-goal-engine-preparation"><strong>Warum so?</strong> {goalProfile.preparation.summary}</p>}
+              </div>
+            </details>
+          ) : null}
+
           {(goalProfile.constraintWarnings || []).map((warning) => <small className="planner-goal-warning" key={warning}>! {warning}</small>)}
         </Card>
       )}
@@ -1444,12 +1468,17 @@ export default function Planner() {
             <div><p className="eyebrow">Gemeinsame Coach-Bewertung</p><h2>{unifiedCoach.recommendation.title}</h2></div>
             <span>Dein Coach schlägt vor · du entscheidest</span>
           </div>
-          <p>{unifiedCoach.recommendation.text}</p>
-          <div className="planner-science-context">
-            <span>Gewöhnung: {baseline.runDays.toFixed(1)} Lauftage/Woche · {baseline.weeklyKm.toFixed(0)} km/Woche</span>
-            <span>Zielprofil: {goalProfile.focus.join(" · ")}</span>
-            <span>Projizierter Load: {scienceAssessment.projected} · jüngster Rahmen: {scienceAssessment.average || "noch offen"}</span>
-          </div>
+          <p className="planner-science-copy">{unifiedCoach.recommendation.text}</p>
+
+          <details className="planner-science-details">
+            <summary><span>Warum empfiehlt der Coach das?</span><b>Grundlage anzeigen</b></summary>
+            <div className="planner-science-context">
+              <span>Gewöhnung: {baseline.runDays.toFixed(1)} Lauftage/Woche · {baseline.weeklyKm.toFixed(0)} km/Woche</span>
+              <span>Zielprofil: {goalProfile.focus.join(" · ")}</span>
+              <span>Projizierter Load: {scienceAssessment.projected} · jüngster Rahmen: {scienceAssessment.average || "noch offen"}</span>
+            </div>
+          </details>
+
           {scienceAssessment.candidates.length > 0 && (
             <div className="planner-science-suggestions">
               {scienceAssessment.candidates.map((candidate, index) => (
@@ -1477,7 +1506,7 @@ export default function Planner() {
               ))}
             </div>
           )}
-          <small>{unifiedCoach.protectionNote} Du kannst jeden Coach-Vorschlag ändern oder den bestehenden Plan unverändert lassen.</small>
+          <small className="planner-science-protection">{unifiedCoach.protectionNote} Du kannst jeden Coach-Vorschlag ändern oder den bestehenden Plan unverändert lassen.</small>
         </Card>
       )}
 
