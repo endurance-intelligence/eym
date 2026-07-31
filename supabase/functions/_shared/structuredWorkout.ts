@@ -1,3 +1,5 @@
+import { paceTargetForPlanItem } from "./workoutPace.ts";
+
 function safeMinutes(value: unknown, fallback = 60) {
   const parsed = Math.round(Number(value || fallback));
   return Math.max(1, Math.min(24 * 60, Number.isFinite(parsed) ? parsed : fallback));
@@ -198,9 +200,10 @@ export function intervalDescription(item: Record<string, unknown>) {
     return `- ${duration}m Z2 HR`;
   }
 
+  const paceTarget = paceTargetForPlanItem(item);
   if (distance > 0) {
     const roundedDistance = Number(distance.toFixed(1));
-    return `- ${roundedDistance}km Z2 Pace`;
+    return `- ${roundedDistance}km${paceTarget ? ` ${paceTarget}` : ""}`;
   }
-  return `- ${duration}m Z2 Pace`;
+  return `- ${duration}m${paceTarget ? ` ${paceTarget}` : ""}`;
 }

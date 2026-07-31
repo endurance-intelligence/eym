@@ -60,6 +60,14 @@ import {
   fuelRecommendationFromState,
   isFuelRelevantWorkout,
 } from "../services/fuelPlanner";
+import {
+  coachPaceGuidance,
+  normalizeWorkoutPaceGuidance,
+  paceRangeDurationMinutes,
+  prepareWorkoutPaceGuidance,
+  supportsWorkoutPaceGuidance,
+  workoutPaceLabel,
+} from "../services/workoutPace";
 import "./Planner.css";
 
 const dayFormatter = new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" });
@@ -130,6 +138,7 @@ function planFingerprint(plan) {
     notes: item.notes || "",
     structuredWorkout: item.structuredWorkout || null,
     goalWorkout: item.goalWorkout || null,
+    paceGuidance: item.paceGuidance || null,
   })).sort((a, b) => `${a.date}${a.time}${a.id}`.localeCompare(`${b.date}${b.time}${b.id}`)));
 }
 
@@ -154,10 +163,11 @@ function createBlank(weekStart) {
 }
 
 function prepareWorkoutForEditing(item) {
-  if (!isTrackWorkout(item)) return item;
+  const prepared = prepareWorkoutPaceGuidance(item);
+  if (!isTrackWorkout(prepared)) return prepared;
   return {
-    ...item,
-    structuredWorkout: trackWorkoutForEditing(item.structuredWorkout),
+    ...prepared,
+    structuredWorkout: trackWorkoutForEditing(prepared.structuredWorkout),
   };
 }
 
@@ -464,6 +474,13 @@ export default function Planner() {
   const editingTrackDistance = editingTrackWorkout
     ? trackWorkoutDistance(editingTrackWorkout)
     : null;
+  const editingSupportsPaceGuidance = Boolean(editing && supportsWorkoutPaceGuidance(editing));
+  const editingCoachPaceGuidance = editingSupportsPaceGuidance
+    ? coachPaceGuidance({ ...editing, paceGuidance: null })
+    : null;
+  const editingPaceMode = editing?.paceGuidance?.mode || editingCoachPaceGuidance?.mode || "none";
+  const editingRecommendedFaster = editing?.paceGuidance?.recommendedFaster || editingCoachPaceGuidance?.faster || "";
+  const editingRecommendedSlower = editing?.paceGuidance?.recommendedSlower || editingCoachPaceGuidance?.slower || "";
 
   useEffect(() => {
     if (!modalVisible) return undefined;
@@ -1098,8 +1115,12 @@ export default function Planner() {
       structuredWorkout: isTrackWorkout(editing)
         ? normalizeTrackWorkout(editing.structuredWorkout)
         : null,
+      paceGuidance: normalizeWorkoutPaceGuidance(editing),
       weatherForecast,
     });
+    if (next.paceGuidance?.mode === "range") {
+      next.duration = paceRangeDurationMinutes(next.distance, next.paceGuidance) || next.duration;
+    }
     setState((current) => ({
       ...current,
       plan: current.plan.some((item) => item.id === next.id)
@@ -1155,9 +1176,99 @@ export default function Planner() {
   function updateEditingType(type) {
     setEditing((current) => {
       const next = { ...current, type };
-      return isTrackWorkout(next)
-        ? { ...next, structuredWorkout: current?.structuredWorkout || trackWorkoutForEditing() }
-        : { ...next, structuredWorkout: null };
+      if (isTrackWorkout(next)) {
+        return { ...next, structuredWorkout: current?.structuredWorkout || trackWorkoutForEditing(), paceGuidance: null };
+      }
+      const plain = { ...next, structuredWorkout: null };
+      return supportsWorkoutPaceGuidance(plain)
+        ? prepareWorkoutPaceGuidance(plain)
+        : { ...plain, paceGuidance: null };
+    });
+  }
+
+  function setPaceGuidanceMode(mode) {
+    setEditing((current) => {
+      if (!current || !supportsWorkoutPaceGuidance(current)) return current;
+      const coach = coachPaceGuidance({ ...current, paceGuidance: null });
+      const existing = current.paceGuidance || {};
+      if (mode === "none") {
+        return {
+          ...current,
+          paceGuidance: {
+            mode: "none",
+            source: "manual",
+            recommendedFaster: existing.recommendedFaster || coach?.recommendedFaster || coach?.faster || "",
+            recommendedSlower: existing.recommendedSlower || coach?.recommendedSlower || coach?.slower || "",
+            coachReason: existing.coachReason || coach?.coachReason || "",
+          },
+        };
+      }
+      const faster = existing.faster || existing.recommendedFaster || coach?.faster || "";
+      const slower = existing.slower || existing.recommendedSlower || coach?.slower || "";
+      return {
+        ...current,
+        paceGuidance: {
+          mode: "range",
+          faster,
+          slower,
+          recommendedFaster: existing.recommendedFaster || coach?.recommendedFaster || coach?.faster || faster,
+          recommendedSlower: existing.recommendedSlower || coach?.recommendedSlower || coach?.slower || slower,
+          source: existing.source === "manual" ? "manual" : "coach",
+          coachReason: existing.coachReason || coach?.coachReason || "",
+        },
+      };
+    });
+  }
+
+  function updatePaceGuidance(field, value) {
+    setEditing((current) => ({
+      ...current,
+      paceGuidance: {
+        ...(current?.paceGuidance || coachPaceGuidance({ ...current, paceGuidance: null }) || {}),
+        mode: "range",
+        [field]: value,
+        source: "manual",
+      },
+    }));
+  }
+
+  function commitPaceGuidance() {
+    setEditing((current) => {
+      if (!current || !supportsWorkoutPaceGuidance(current)) return current;
+      const guidance = normalizeWorkoutPaceGuidance(current);
+      if (!guidance) return current;
+      return {
+        ...current,
+        paceGuidance: guidance,
+        duration: guidance.mode === "range"
+          ? paceRangeDurationMinutes(current.distance, guidance) || current.duration
+          : current.duration,
+      };
+    });
+  }
+
+  function restoreCoachPaceGuidance() {
+    setEditing((current) => {
+      if (!current || !supportsWorkoutPaceGuidance(current)) return current;
+      const existing = current.paceGuidance || {};
+      const coach = coachPaceGuidance({ ...current, paceGuidance: null });
+      const faster = existing.recommendedFaster || coach?.faster || "";
+      const slower = existing.recommendedSlower || coach?.slower || "";
+      if (!faster || !slower) return { ...current, paceGuidance: coach };
+      const guidance = {
+        mode: "range",
+        faster,
+        slower,
+        recommendedFaster: faster,
+        recommendedSlower: slower,
+        source: "coach",
+        coachReason: coach?.coachReason || existing.coachReason || "",
+      };
+      return {
+        ...current,
+        paceGuidance: guidance,
+        duration: paceRangeDurationMinutes(current.distance, guidance) || current.duration,
+      };
     });
   }
 
@@ -1695,6 +1806,7 @@ export default function Planner() {
                 const hasStateMarker = completed || isCancelled || canComplete;
                 const fuelRecommendation = fuelRecommendations.get(item.id);
                 const trackTemplateLabel = trackWorkoutTemplateLabel(item.structuredWorkout);
+                const paceLabel = workoutPaceLabel(item, { includeSource: true });
                 const className = `planner-workout ${completed ? "completed" : ""} ${isMissed ? "missed" : ""} ${isCancelled ? "cancelled" : ""} ${hasStateMarker ? "" : "no-marker"}`;
                 return (
                   <div
@@ -1755,7 +1867,7 @@ export default function Planner() {
                         {matched && <em>{String(matched.source || item.actualSource || "Garmin").toUpperCase()}</em>}
                       </div>
                       <h3>{item.title}</h3>
-                      <p>{item.type}{trackTemplateLabel ? ` · ${trackTemplateLabel}` : ""}{item.distance ? ` · ${item.distance} km geplant` : ""}{matched && Number(matched.distance || item.actualDistance || 0) ? ` · ${Number(matched.distance || item.actualDistance).toFixed(1)} km erledigt` : ""}{item.duration ? ` · ${item.duration} min` : ""}</p>
+                      <p>{item.type}{trackTemplateLabel ? ` · ${trackTemplateLabel}` : ""}{item.distance ? ` · ${item.distance} km geplant` : ""}{matched && Number(matched.distance || item.actualDistance || 0) ? ` · ${Number(matched.distance || item.actualDistance).toFixed(1)} km erledigt` : ""}{item.duration ? ` · ${item.duration} min` : ""}{paceLabel ? ` · ${paceLabel}` : ""}</p>
                       {matched && <small>{matched.name || item.actualTitle}</small>}
                       {item.missedReason && <small>Grund: {item.missedReason}{item.missedNote ? ` · ${item.missedNote}` : ""}</small>}
                       {item.notes && !isCancelled && <small>{item.notes}</small>}
@@ -1941,6 +2053,41 @@ export default function Planner() {
               <label>Distanz in km<input type="number" min="0" step="0.1" value={editing.distance} onChange={(event) => setEditing({ ...editing, distance: event.target.value })} /></label>
               <label>Dauer in Minuten<input type="number" min="0" value={editing.duration} onChange={(event) => setEditing({ ...editing, duration: event.target.value })} /></label>
             </div>
+            {editingSupportsPaceGuidance && (
+              <section className="planner-pace-guidance">
+                <div className="planner-pace-guidance-heading">
+                  <div>
+                    <p className="eyebrow">Pace-Steuerung</p>
+                    <h3>Coach-Empfehlung und Garmin-Ziel</h3>
+                    <p>Die gleiche Pace, die du hier siehst, wird an Intervals.icu und anschließend an Garmin übertragen. Damit stimmen Plan, Dauer und Hinweistöne überein.</p>
+                  </div>
+                  <div className="planner-pace-mode" role="group" aria-label="Pace-Ziel für Garmin">
+                    <button type="button" className={editingPaceMode === "range" ? "selected" : ""} disabled={!editingRecommendedFaster || !editingRecommendedSlower} onClick={() => setPaceGuidanceMode("range")}>Pace-Bereich</button>
+                    <button type="button" className={editingPaceMode === "none" ? "selected" : ""} onClick={() => setPaceGuidanceMode("none")}>Ohne Pace-Ziel</button>
+                  </div>
+                </div>
+                {editingPaceMode === "range" ? (
+                  <>
+                    <div className="form-grid planner-pace-fields">
+                      <label>Schneller Rand /km<input type="text" inputMode="decimal" pattern="[0-9]{1,2}[:.,][0-5][0-9]" placeholder="z. B. 6:00" value={editing.paceGuidance?.faster || editingRecommendedFaster} onChange={(event) => updatePaceGuidance("faster", event.target.value)} onBlur={commitPaceGuidance} /></label>
+                      <label>Langsamer Rand /km<input type="text" inputMode="decimal" pattern="[0-9]{1,2}[:.,][0-5][0-9]" placeholder="z. B. 6:30" value={editing.paceGuidance?.slower || editingRecommendedSlower} onChange={(event) => updatePaceGuidance("slower", event.target.value)} onBlur={commitPaceGuidance} /></label>
+                    </div>
+                    <div className="planner-pace-preview">
+                      <div><small>Garmin erhält</small><strong>{editing.paceGuidance?.faster || editingRecommendedFaster}–{editing.paceGuidance?.slower || editingRecommendedSlower}/km</strong></div>
+                      <span>Die geplante Dauer wird beim Speichern aus der Mitte des Bereichs berechnet.</span>
+                    </div>
+                    {editingRecommendedFaster && editingRecommendedSlower && (
+                      <button type="button" className="planner-pace-reset" onClick={restoreCoachPaceGuidance}>Coach-Vorschlag {editingRecommendedFaster}–{editingRecommendedSlower}/km wiederherstellen</button>
+                    )}
+                  </>
+                ) : (
+                  <div className="planner-pace-preview no-target">
+                    <div><small>Garmin erhält</small><strong>Kein Pace-Ziel</strong></div>
+                    <span>Distanz und Trainingsschritt bleiben erhalten, aber die Uhr gibt keine Zu-schnell- oder Zu-langsam-Alarme aus.</span>
+                  </div>
+                )}
+              </section>
+            )}
             {editingTrackWorkout && (
               <section className="planner-track-builder">
                 <div>

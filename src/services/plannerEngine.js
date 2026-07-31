@@ -14,6 +14,7 @@ import {
   longRunGoalGuidance,
   publicGoalSummary,
 } from "./goalEngine.js";
+import { applyPlanPaceGuidance } from "./workoutPace.js";
 
 const DAY_NAMES = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"];
 const DAY_INDEX = { Montag: 0, Dienstag: 1, Mittwoch: 2, Donnerstag: 3, Freitag: 4, Samstag: 5, Sonntag: 6 };
@@ -1423,6 +1424,7 @@ export function generateWeekPlan({
     } : entry;
   });
   plan = suggestRoadCyclingAlternative(plan, config, { eventWeek, readiness });
+  plan = applyPlanPaceGuidance(plan);
   plan.sort((a, b) => `${a.date}${a.time || ""}`.localeCompare(`${b.date}${b.time || ""}`));
   if (eventWeek) {
     const plannedRunningKm = plan
