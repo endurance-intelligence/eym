@@ -68,6 +68,18 @@ import {
   supportsWorkoutPaceGuidance,
   workoutPaceLabel,
 } from "../services/workoutPace";
+import {
+  LOOP_CONTROL_MODES,
+  LOOP_MODES,
+  LOOP_PACE_MODES,
+  formatLoopDuration,
+  isLoopWorkout,
+  loopControlLabel,
+  loopModeLabel,
+  loopWorkoutCompactLabel,
+  loopWorkoutPaceLabel,
+  normalizeLoopWorkoutItem,
+} from "../services/loopWorkout";
 import "./Planner.css";
 
 const dayFormatter = new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" });
@@ -139,6 +151,7 @@ function planFingerprint(plan) {
     structuredWorkout: item.structuredWorkout || null,
     goalWorkout: item.goalWorkout || null,
     paceGuidance: item.paceGuidance || null,
+    loopTraining: item.loopTraining || null,
   })).sort((a, b) => `${a.date}${a.time}${a.id}`.localeCompare(`${b.date}${b.time}${b.id}`)));
 }
 
@@ -163,7 +176,8 @@ function createBlank(weekStart) {
 }
 
 function prepareWorkoutForEditing(item) {
-  const prepared = prepareWorkoutPaceGuidance(item);
+  const loopPrepared = isLoopWorkout(item) ? normalizeLoopWorkoutItem(item) : item;
+  const prepared = prepareWorkoutPaceGuidance(loopPrepared);
   if (!isTrackWorkout(prepared)) return prepared;
   return {
     ...prepared,
@@ -474,6 +488,11 @@ export default function Planner() {
   const editingTrackDistance = editingTrackWorkout
     ? trackWorkoutDistance(editingTrackWorkout)
     : null;
+  const editingLoopWorkout = editing && isLoopWorkout(editing)
+    ? normalizeLoopWorkoutItem(editing)
+    : null;
+  const editingLoop = editingLoopWorkout?.loopTraining || null;
+  const editingLoopPaceMode = editingLoop?.paceMode || LOOP_PACE_MODES.NONE;
   const editingSupportsPaceGuidance = Boolean(editing && supportsWorkoutPaceGuidance(editing));
   const editingCoachPaceGuidance = editingSupportsPaceGuidance
     ? coachPaceGuidance({ ...editing, paceGuidance: null })
@@ -1103,19 +1122,20 @@ export default function Planner() {
   function saveWorkout(event) {
     event.preventDefault();
     if (!editing?.title.trim()) return;
-    const date = new Date(`${editing.date}T12:00:00`);
-    const weatherForecast = forecast.find((day) => day.date === editing.date)
-      || (editing.weatherForecast?.date === editing.date ? editing.weatherForecast : null);
+    const preparedEditing = isLoopWorkout(editing) ? normalizeLoopWorkoutItem(editing) : editing;
+    const date = new Date(`${preparedEditing.date}T12:00:00`);
+    const weatherForecast = forecast.find((day) => day.date === preparedEditing.date)
+      || (preparedEditing.weatherForecast?.date === preparedEditing.date ? preparedEditing.weatherForecast : null);
     const next = normalizeWorkoutTiming({
-      ...editing,
+      ...preparedEditing,
       day: new Intl.DateTimeFormat("de-DE", { weekday: "long" }).format(date),
-      distance: Number(editing.distance || 0),
-      duration: Number(editing.duration || 60),
-      title: editing.title.trim(),
-      structuredWorkout: isTrackWorkout(editing)
-        ? normalizeTrackWorkout(editing.structuredWorkout)
+      distance: Number(preparedEditing.distance || 0),
+      duration: Number(preparedEditing.duration || 60),
+      title: preparedEditing.title.trim(),
+      structuredWorkout: isTrackWorkout(preparedEditing)
+        ? normalizeTrackWorkout(preparedEditing.structuredWorkout)
         : null,
-      paceGuidance: normalizeWorkoutPaceGuidance(editing),
+      paceGuidance: normalizeWorkoutPaceGuidance(preparedEditing),
       weatherForecast,
     });
     if (next.paceGuidance?.mode === "range") {
@@ -1177,12 +1197,69 @@ export default function Planner() {
     setEditing((current) => {
       const next = { ...current, type };
       if (isTrackWorkout(next)) {
-        return { ...next, structuredWorkout: current?.structuredWorkout || trackWorkoutForEditing(), paceGuidance: null };
+        return { ...next, structuredWorkout: current?.structuredWorkout || trackWorkoutForEditing(), paceGuidance: null, loopTraining: null };
       }
-      const plain = { ...next, structuredWorkout: null };
+      if (isLoopWorkout(next)) {
+        return normalizeLoopWorkoutItem({
+          ...next,
+          structuredWorkout: null,
+          paceGuidance: null,
+          loopTraining: current?.loopTraining || {
+            loops: 2,
+            loopKm: Number(current?.distance || 0) > 0 ? Number(current.distance) / 2 : 6.7,
+            mode: /backyard/i.test(`${type} ${current?.title || ""}`) ? LOOP_MODES.FIXED_INTERVAL : LOOP_MODES.FREE,
+            intervalMinutes: 60,
+            controlMode: LOOP_CONTROL_MODES.MANUAL_LAP,
+            paceMode: LOOP_PACE_MODES.NONE,
+          },
+        });
+      }
+      const plain = { ...next, structuredWorkout: null, loopTraining: null };
       return supportsWorkoutPaceGuidance(plain)
         ? prepareWorkoutPaceGuidance(plain)
         : { ...plain, paceGuidance: null };
+    });
+  }
+
+  function updateLoopTraining(field, value) {
+    setEditing((current) => ({
+      ...current,
+      loopTraining: {
+        ...(current?.loopTraining || {}),
+        [field]: value,
+      },
+    }));
+  }
+
+  function commitLoopTraining() {
+    setEditing((current) => current ? normalizeLoopWorkoutItem(current) : current);
+  }
+
+  function setLoopPaceMode(mode) {
+    setEditing((current) => {
+      if (!current) return current;
+      const normalized = normalizeLoopWorkoutItem(current);
+      return normalizeLoopWorkoutItem({
+        ...normalized,
+        loopTraining: {
+          ...normalized.loopTraining,
+          paceMode: mode,
+        },
+      });
+    });
+  }
+
+  function setLoopControlMode(mode) {
+    setEditing((current) => {
+      if (!current) return current;
+      const normalized = normalizeLoopWorkoutItem(current);
+      return normalizeLoopWorkoutItem({
+        ...normalized,
+        loopTraining: {
+          ...normalized.loopTraining,
+          controlMode: mode,
+        },
+      });
     });
   }
 
@@ -1806,7 +1883,8 @@ export default function Planner() {
                 const hasStateMarker = completed || isCancelled || canComplete;
                 const fuelRecommendation = fuelRecommendations.get(item.id);
                 const trackTemplateLabel = trackWorkoutTemplateLabel(item.structuredWorkout);
-                const paceLabel = workoutPaceLabel(item, { includeSource: true });
+                const paceLabel = loopWorkoutPaceLabel(item) || workoutPaceLabel(item, { includeSource: true });
+                const loopLabel = loopWorkoutCompactLabel(item);
                 const className = `planner-workout ${completed ? "completed" : ""} ${isMissed ? "missed" : ""} ${isCancelled ? "cancelled" : ""} ${hasStateMarker ? "" : "no-marker"}`;
                 return (
                   <div
@@ -1868,6 +1946,7 @@ export default function Planner() {
                       </div>
                       <h3>{item.title}</h3>
                       <p>{item.type}{trackTemplateLabel ? ` · ${trackTemplateLabel}` : ""}{item.distance ? ` · ${item.distance} km geplant` : ""}{matched && Number(matched.distance || item.actualDistance || 0) ? ` · ${Number(matched.distance || item.actualDistance).toFixed(1)} km erledigt` : ""}{item.duration ? ` · ${item.duration} min` : ""}{paceLabel ? ` · ${paceLabel}` : ""}</p>
+                      {loopLabel && !matched && <small className="planner-loop-row-label">{loopLabel}</small>}
                       {matched && <small>{matched.name || item.actualTitle}</small>}
                       {item.missedReason && <small>Grund: {item.missedReason}{item.missedNote ? ` · ${item.missedNote}` : ""}</small>}
                       {item.notes && !isCancelled && <small>{item.notes}</small>}
@@ -2050,9 +2129,78 @@ export default function Planner() {
                 </>}
               <label>Titel<input value={editing.title} onChange={(event) => setEditing({ ...editing, title: event.target.value })} required /></label>
               <label>Typ<select value={editing.type} onChange={(event) => updateEditingType(event.target.value)}>{workoutTypes.map((type) => <option key={type}>{type}</option>)}</select></label>
-              <label>Distanz in km<input type="number" min="0" step="0.1" value={editing.distance} onChange={(event) => setEditing({ ...editing, distance: event.target.value })} /></label>
-              <label>Dauer in Minuten<input type="number" min="0" value={editing.duration} onChange={(event) => setEditing({ ...editing, duration: event.target.value })} /></label>
+              {!editingLoopWorkout && <label>Distanz in km<input type="number" min="0" step="0.1" value={editing.distance} onChange={(event) => setEditing({ ...editing, distance: event.target.value })} /></label>}
+              {!editingLoopWorkout && <label>Dauer in Minuten<input type="number" min="0" value={editing.duration} onChange={(event) => setEditing({ ...editing, duration: event.target.value })} /></label>}
             </div>
+            {editingLoopWorkout && editingLoop && (
+              <section className="planner-loop-guidance">
+                <div className="planner-loop-heading">
+                  <div>
+                    <p className="eyebrow">Runden-Workout</p>
+                    <h3>Offizieller Rundenpunkt statt GPS-Zufall</h3>
+                    <p>Die Rundenlänge bleibt eine Planungsgröße. Standardmäßig wechselst du Runde und Pause am echten Start-/Zielpunkt mit der LAP-Taste, damit Toilettenwege und GPS-Abweichungen nichts verschieben.</p>
+                  </div>
+                  <span>{loopModeLabel(editingLoop.mode)}</span>
+                </div>
+
+                <div className="planner-loop-metrics">
+                  <div><small>Runden</small><strong>{editingLoop.loops}</strong></div>
+                  <div><small>Je Runde planerisch</small><strong>{String(editingLoop.loopKm).replace(".", ",")} km</strong></div>
+                  <div><small>Gesamtdistanz</small><strong>{String(editingLoopWorkout.distance).replace(".", ",")} km</strong></div>
+                  <div><small>Trainingsblock</small><strong>{formatLoopDuration(editingLoopWorkout.duration, { compact: true })}</strong></div>
+                </div>
+
+                <div className="form-grid planner-loop-fields">
+                  <label>Rundenzahl<input type="number" min="1" max="30" step="1" value={editing.loopTraining?.loops ?? editingLoop.loops} onChange={(event) => updateLoopTraining("loops", event.target.value)} onBlur={commitLoopTraining} /></label>
+                  <label>Rundenlänge für die Planung (km)<input type="number" min="0.1" max="100" step="0.1" value={editing.loopTraining?.loopKm ?? editingLoop.loopKm} onChange={(event) => updateLoopTraining("loopKm", event.target.value)} onBlur={commitLoopTraining} /></label>
+                  <label>Rundenformat<select value={editing.loopTraining?.mode || editingLoop.mode} onChange={(event) => updateLoopTraining("mode", event.target.value)} onBlur={commitLoopTraining}><option value={LOOP_MODES.FIXED_INTERVAL}>Fester Starttakt · Backyard</option><option value={LOOP_MODES.TIME_LIMIT}>Gesamtzeitlimit · Heartbeat/Stundenlauf</option><option value={LOOP_MODES.FREE}>Freier Rundkurs</option></select></label>
+                  {editingLoop.mode === LOOP_MODES.FIXED_INTERVAL && <label>Starttakt je Runde (Minuten)<input type="number" min="10" max="240" step="1" value={editing.loopTraining?.intervalMinutes ?? editingLoop.intervalMinutes} onChange={(event) => updateLoopTraining("intervalMinutes", event.target.value)} onBlur={commitLoopTraining} /><small>{editingLoop.loops} Runden ergeben einen Block von {formatLoopDuration(editingLoopWorkout.duration, { compact: true })}.</small></label>}
+                  {editingLoop.mode === LOOP_MODES.TIME_LIMIT && <>
+                    <label>Event-Zeitlimit (hh:mm:ss)<input type="text" inputMode="numeric" pattern="[0-9]{1,3}:[0-5][0-9]:[0-5][0-9]" value={editing.loopTraining?.eventTimeLimit ?? editingLoop.eventTimeLimit} onChange={(event) => updateLoopTraining("eventTimeLimit", event.target.value)} onBlur={commitLoopTraining} /></label>
+                    <label>Zieldistanz des Events (km)<input type="number" min="0.1" step="0.1" value={editing.loopTraining?.targetKm ?? editingLoop.targetKm} onChange={(event) => updateLoopTraining("targetKm", event.target.value)} onBlur={commitLoopTraining} /></label>
+                    <label>Geplanter Boxenstopp (Minuten)<input type="number" min="0" max="60" step="0.5" value={editing.loopTraining?.plannedStopMinutes ?? editingLoop.plannedStopMinutes} onChange={(event) => updateLoopTraining("plannedStopMinutes", event.target.value)} onBlur={commitLoopTraining} /></label>
+                  </>}
+                </div>
+
+                <div className="planner-loop-control">
+                  <div><p className="eyebrow">Garmin-Rundensteuerung</p><h4>{loopControlLabel(editingLoop.controlMode)}</h4></div>
+                  <div className="planner-pace-mode" role="group" aria-label="Rundenende auf Garmin">
+                    <button type="button" className={editingLoop.controlMode === LOOP_CONTROL_MODES.MANUAL_LAP ? "selected" : ""} onClick={() => setLoopControlMode(LOOP_CONTROL_MODES.MANUAL_LAP)}>Manuell per LAP</button>
+                    <button type="button" className={editingLoop.controlMode === LOOP_CONTROL_MODES.AUTOMATIC_DISTANCE ? "selected" : ""} onClick={() => setLoopControlMode(LOOP_CONTROL_MODES.AUTOMATIC_DISTANCE)}>Automatisch nach Distanz</button>
+                  </div>
+                </div>
+                {editingLoop.controlMode === LOOP_CONTROL_MODES.AUTOMATIC_DISTANCE && <p className="planner-loop-warning">Bei offiziellen Rundenevents kann Garmin durch Toilettenwege, Verpflegungsbewegung oder GPS-Abweichungen zu früh umschalten. Manuelle LAP-Steuerung ist deshalb der Standard.</p>}
+
+                <div className="planner-loop-control pace-control">
+                  <div><p className="eyebrow">Pace-Vorgabe</p><h4>{loopWorkoutPaceLabel(editingLoopWorkout, { includeNone: true })}</h4></div>
+                  <div className="planner-pace-mode planner-loop-pace-mode" role="group" aria-label="Pace-Ziel für das Loop-Workout">
+                    <button type="button" className={editingLoopPaceMode === LOOP_PACE_MODES.NONE ? "selected" : ""} onClick={() => setLoopPaceMode(LOOP_PACE_MODES.NONE)}>Keine Vorgabe</button>
+                    <button type="button" className={editingLoopPaceMode === LOOP_PACE_MODES.COACH ? "selected" : ""} disabled={!editingLoop.coachFaster || !editingLoop.coachSlower} onClick={() => setLoopPaceMode(LOOP_PACE_MODES.COACH)}>Coach-Empfehlung</button>
+                    <button type="button" className={editingLoopPaceMode === LOOP_PACE_MODES.CUSTOM ? "selected" : ""} onClick={() => setLoopPaceMode(LOOP_PACE_MODES.CUSTOM)}>Eigener Bereich</button>
+                  </div>
+                </div>
+                {editingLoopPaceMode === LOOP_PACE_MODES.CUSTOM && <div className="form-grid planner-pace-fields">
+                  <label>Schneller Rand /km<input type="text" inputMode="decimal" pattern="[0-9]{1,2}[:.,][0-5][0-9]" placeholder={editingLoop.coachFaster || "7:00"} value={editing.loopTraining?.faster || ""} onChange={(event) => updateLoopTraining("faster", event.target.value)} onBlur={commitLoopTraining} /></label>
+                  <label>Langsamer Rand /km<input type="text" inputMode="decimal" pattern="[0-9]{1,2}[:.,][0-5][0-9]" placeholder={editingLoop.coachSlower || "7:40"} value={editing.loopTraining?.slower || ""} onChange={(event) => updateLoopTraining("slower", event.target.value)} onBlur={commitLoopTraining} /></label>
+                </div>}
+                {editingLoopPaceMode === LOOP_PACE_MODES.COACH && <div className="planner-pace-preview"><div><small>Garmin erhält</small><strong>{editingLoop.coachFaster}–{editingLoop.coachSlower}/km</strong></div><span>Der Coach setzt nur den Pace-Bereich. Rundenende und Pause bleiben weiterhin LAP-gesteuert.</span></div>}
+                {editingLoopPaceMode === LOOP_PACE_MODES.NONE && <div className="planner-pace-preview no-target"><div><small>Garmin erhält</small><strong>Kein Pace-Ziel</strong></div><span>Die Uhr führt nur durch Runde und Boxenstopp. Du steuerst das Backyard-/Ultra-Pacing intuitiv.</span></div>}
+
+                <div className="planner-loop-garmin-flow">
+                  {Array.from({ length: Math.min(editingLoop.loops, 4) }, (_, index) => <span key={index}><b>Runde {index + 1}</b><small>{editingLoop.controlMode === LOOP_CONTROL_MODES.MANUAL_LAP ? "bis LAP" : `${String(editingLoop.loopKm).replace(".", ",")} km automatisch`}</small>{index < editingLoop.loops - 1 && <em>Pause bis LAP</em>}</span>)}
+                  {editingLoop.loops > 4 && <span><b>+ {editingLoop.loops - 4} Runden</b><small>gleicher Ablauf</small></span>}
+                </div>
+
+                {editingLoop.mode === LOOP_MODES.TIME_LIMIT && editingLoop.matchPlan && <div className="planner-loop-matchplan">
+                  <div><small>Event-Zeitlimit</small><strong>{formatLoopDuration(editingLoop.matchPlan.timeLimitMinutes, { compact: true })}</strong></div>
+                  <div><small>Budget je Runde</small><strong>{formatLoopDuration(editingLoop.matchPlan.averageLoopBudgetMinutes)}</strong></div>
+                  <div><small>Boxenstopp</small><strong>{String(editingLoop.matchPlan.plannedStopMinutes).replace(".", ",")} min</strong></div>
+                  <div><small>Laufbudget je Runde</small><strong>{formatLoopDuration(editingLoop.matchPlan.runBudgetMinutes)}</strong></div>
+                  <div><small>Späteste Ø-Pace ohne Puffer</small><strong>{editingLoop.matchPlan.requiredPace}/km</strong></div>
+                  <p>{editingLoop.matchPlan.targetLoops} offizielle Runden ergeben {String(editingLoop.matchPlan.plannedDistanceKm).replace(".", ",")} km{Math.abs(editingLoop.matchPlan.distanceDeltaKm) >= 0.05 ? ` und bilden das ${String(editingLoop.matchPlan.targetKm).replace(".", ",")}-km-Ziel praxisnah ab` : ""}. Die Pace ist die rechnerische Obergrenze ohne Sicherheitspuffer. Diese Rechnung bleibt in der App; Garmin schaltet nicht nach theoretischen GPS-Kilometern um.</p>
+                </div>}
+              </section>
+            )}
             {editingSupportsPaceGuidance && (
               <section className="planner-pace-guidance">
                 <div className="planner-pace-guidance-heading">

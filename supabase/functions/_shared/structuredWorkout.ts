@@ -119,6 +119,50 @@ function goalWorkoutDescription(input: Record<string, unknown>) {
   return lines.join("\n");
 }
 
+function loopPaceTarget(input: Record<string, unknown>) {
+  const mode = String(input.paceMode || "none");
+  if (mode === "none") return "";
+  const fasterValue = mode === "coach" ? input.coachFaster : input.faster;
+  const slowerValue = mode === "coach" ? input.coachSlower : input.slower;
+  const fasterSeconds = paceSeconds(fasterValue);
+  const slowerSeconds = paceSeconds(slowerValue);
+  if (fasterSeconds == null || slowerSeconds == null) return "";
+  const faster = formatPace(Math.min(fasterSeconds, slowerSeconds));
+  const slower = formatPace(Math.max(fasterSeconds, slowerSeconds));
+  return `${slower}-${faster}/km Pace`;
+}
+
+function loopWorkoutDescription(item: Record<string, unknown>) {
+  const raw = item.loopTraining && typeof item.loopTraining === "object"
+    ? item.loopTraining as Record<string, unknown>
+    : {};
+  const loops = safeInteger(raw.loops, 1, 30, 2);
+  const loopKm = Math.max(0.1, Math.min(100, Number(raw.loopKm || Number(item.distance || 0) / loops || 6.7)));
+  const controlMode = raw.controlMode === "automatic_distance" ? "automatic_distance" : "manual_lap";
+  const target = loopPaceTarget(raw);
+  const runMinutes = safeMinutes(raw.estimatedRunMinutesPerLoop, Math.max(20, Math.round(loopKm * 7.5)));
+  const intervalMinutes = safeMinutes(raw.intervalMinutes, 60);
+  const plannedStopMinutes = safeMinutes(raw.plannedStopMinutes, 3);
+  const pauseMinutes = String(raw.mode || "") === "fixed_interval"
+    ? Math.max(1, intervalMinutes - runMinutes)
+    : plannedStopMinutes;
+  const lines: string[] = [];
+
+  for (let index = 0; index < loops; index += 1) {
+    lines.push(`Runde ${index + 1}`);
+    lines.push(controlMode === "manual_lap"
+      ? `- Press lap ${runMinutes}m${target ? ` ${target}` : ""} intensity=active`
+      : `- ${Number(loopKm.toFixed(1))}km${target ? ` ${target}` : ""} intensity=active`);
+    if (index < loops - 1) {
+      lines.push("");
+      lines.push(`Boxenstopp ${index + 1}`);
+      lines.push(`- Press lap ${pauseMinutes}m intensity=recovery`);
+      lines.push("");
+    }
+  }
+  return lines.join("\n");
+}
+
 export function isProvisionalTrackPlanItem(item: Record<string, unknown>) {
   const text = `${item.type || ""} ${item.title || ""}`.toLowerCase();
   const structuredWorkout = item.structuredWorkout;
@@ -142,6 +186,10 @@ export function intervalDescription(item: Record<string, unknown>) {
   const distance = Math.max(0, Number(item.distance || 0));
   const structuredWorkout = item.structuredWorkout;
   const goalWorkout = item.goalWorkout;
+
+  if (item.loopTraining && typeof item.loopTraining === "object") {
+    return loopWorkoutDescription(item);
+  }
 
   if (goalWorkout && typeof goalWorkout === "object") {
     return goalWorkoutDescription(goalWorkout as Record<string, unknown>);

@@ -11,6 +11,7 @@ import { buildCoachState } from "../services/coachState";
 import { workoutSortTime, workoutTimingLabel } from "../services/plannerTime";
 import { briefingWorkoutDestination } from "../services/briefingNavigation";
 import { workoutPaceLabel } from "../services/workoutPace";
+import { isLoopWorkout, loopWorkoutCompactLabel, loopWorkoutPaceLabel } from "../services/loopWorkout";
 
 const dayLabel = new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" });
 const todayLabel = new Intl.DateTimeFormat("de-DE", { weekday: "long", day: "2-digit", month: "long" });
@@ -62,7 +63,8 @@ function plannedMetrics(item) {
     workoutTimingLabel(item),
     Number(item.distance || 0) > 0 ? `${compactNumber(item.distance)} km` : "",
     Number(item.duration || 0) > 0 ? `${Math.round(Number(item.duration))} min` : "",
-    workoutPaceLabel(item),
+    isLoopWorkout(item) ? loopWorkoutPaceLabel(item) : workoutPaceLabel(item),
+    isLoopWorkout(item) ? loopWorkoutCompactLabel(item) : "",
     item.optional ? "optional" : "",
   ].filter(Boolean).join(" · ");
 }
@@ -207,7 +209,7 @@ function weekRows(plan, activities) {
         title: matched?.name || item.actualTitle || item.title,
         detail: [
           item.distance ? `${Number(matched?.distance || item.actualDistance || item.distance).toFixed(1)} km` : "",
-          !matched && !item.completed ? workoutPaceLabel(item) : "",
+          !matched && !item.completed ? (isLoopWorkout(item) ? loopWorkoutPaceLabel(item) : workoutPaceLabel(item)) : "",
           item.optional ? "optional" : "",
           item.missedReason ? `ausgefallen: ${item.missedReason}` : "",
         ].filter(Boolean).join(" · "),

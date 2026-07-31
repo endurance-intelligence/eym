@@ -933,3 +933,11 @@ button:focus-visible,a:focus-visible,summary:focus-visible{
   .training-week{padding:0 10px}
   .training-week.open{padding-bottom:10px}
 }
+
+/* v3.9.6 – event loop formats and match-plan snapshot */
+.mission-loop-plan{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:12px 0;padding:10px;border:1px solid var(--accent-border);border-radius:13px;background:color-mix(in srgb,var(--accent-surface) 50%,transparent)}
+.mission-loop-plan.match-plan{grid-template-columns:repeat(3,minmax(0,1fr))}
+.mission-loop-plan span{display:grid;gap:3px;padding:9px 10px;border-radius:10px;background:var(--bg-card-alt)}
+.mission-loop-plan small{color:var(--muted);font-size:9px;font-weight:900;letter-spacing:.07em;text-transform:uppercase}.mission-loop-plan strong{font-size:13px}.mission-loop-plan p{grid-column:1/-1;margin:2px 2px;color:var(--muted);font-size:11px;line-height:1.45}
+@media(max-width:680px){.mission-loop-plan,.mission-loop-plan.match-plan{grid-template-columns:1fr 1fr}}
+@media(max-width:460px){.mission-loop-plan,.mission-loop-plan.match-plan{grid-template-columns:1fr}}

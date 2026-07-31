@@ -15,6 +15,7 @@ import {
   publicGoalSummary,
 } from "./goalEngine.js";
 import { applyPlanPaceGuidance } from "./workoutPace.js";
+import { LOOP_CONTROL_MODES, LOOP_PACE_MODES, isLoopWorkout, normalizeLoopWorkoutItem } from "./loopWorkout.js";
 
 const DAY_NAMES = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"];
 const DAY_INDEX = { Montag: 0, Dienstag: 1, Mittwoch: 2, Donnerstag: 3, Freitag: 4, Samstag: 5, Sonntag: 6 };
@@ -138,10 +139,18 @@ function loopTrainingPrescription(goal, daysLeft, longRun, cycle, recoveryWeek) 
     loops,
     loopKm,
     distance,
+    mode: goal.loopMode,
+    intervalMinutes: Number(goal.loopIntervalMinutes || 60),
+    eventTimeLimit: goal.eventTimeLimit || "",
+    eventTimeLimitMinutes: Number(goal.eventTimeLimitMinutes || 0),
+    targetKm: Number(goal.targetKm || 0),
+    plannedStopMinutes: Number(goal.plannedStopMinutes ?? (goal.goalKind === "backyard" ? 8 : 3)),
+    controlMode: LOOP_CONTROL_MODES.MANUAL_LAP,
+    paceMode: LOOP_PACE_MODES.NONE,
     title: `${loops} × ${loopLabel} km${goal?.name ? ` · ${goal.name}` : " Loop-Training"}`,
     notes: goal.goalKind === "backyard"
-      ? `Spezifischer Backyard-Block: jede Runde kontrolliert und die Geh-/Rundenroutine testen. ${supplyRoutine} Keine komplette 60–80-km-Generalprobe im Training erzwingen.`
-      : `Spezifischer Loop-Block für ${goal?.name || "das Hauptziel"}: gleichmäßige Pace und kurze Stopps. ${supplyRoutine}`,
+      ? `Spezifischer Backyard-Block: jede Runde kontrolliert und die Geh-/Rundenroutine testen. ${supplyRoutine} Garmin-Runden und Pausen werden am echten Rundenpunkt manuell per LAP gesteuert.`
+      : `Spezifischer Loop-Block für ${goal?.name || "das Hauptziel"}: gleichmäßiger Rhythmus und kurze Stopps. ${supplyRoutine} Garmin-Runden und Boxenstopps werden am echten Rundenpunkt manuell per LAP gesteuert.`,
   };
 }
 
@@ -1272,18 +1281,30 @@ export function generateWeekPlan({
     const longRunWeather = weatherDecision(weatherForDate(forecast, dateForDay(weekStart, longRunDayIndex)), config);
     const plannedLongDistance = loopPrescription?.distance || longRun;
     const longRunGuidance = longRunGoalGuidance(goalEngine, plannedLongDistance, cycle);
+    const normalizedLoopItem = loopPrescription
+      ? normalizeLoopWorkoutItem({
+        title: loopPrescription.title,
+        type: "Loop-Training",
+        distance: plannedLongDistance,
+        duration: longRunGuidance.duration,
+        loopTraining: {
+          ...loopPrescription,
+          coachPaceSeconds: longRunGuidance.easyPaceSeconds,
+        },
+      })
+      : null;
     plan.push(item(weekStart, longRunDayIndex, {
       time: longRunWeather?.tooHot ? "07:00" : "09:00",
       title: loopPrescription?.title || `${longRun} km Longrun`,
       type: longRunWeather?.indoor ? "Laufband" : loopPrescription ? "Loop-Training" : "Long Run",
-      distance: plannedLongDistance,
-      duration: longRunGuidance.duration,
+      distance: normalizedLoopItem?.distance || plannedLongDistance,
+      duration: normalizedLoopItem?.duration || longRunGuidance.duration,
       notes: longRunWeather?.indoor
         ? `Wetteranpassung: ${longRunWeather.tooHot ? "früh starten oder Laufband" : "bei Sturm/Gewitter nach innen wechseln"}. ${longRunGuidance.notes}`
         : `${loopPrescription?.notes || ""} ${longRunGuidance.notes}`.trim(),
       optional: false,
       weatherAdjusted: Boolean(longRunWeather?.indoor),
-      loopTraining: loopPrescription || null,
+      loopTraining: normalizedLoopItem?.loopTraining || null,
       targetEventId: goal?.id || null,
       goalTargetId: goal?.id || null,
       goalDiscipline: goalEngine.discipline,
@@ -1398,6 +1419,26 @@ export function generateWeekPlan({
       const factor = adjustableTarget / generatedRunKm;
       plan = plan.map((entry) => {
         if (!adjustableRunEntries.some((runEntry) => runEntry.id === entry.id)) return entry;
+        if (isLoopWorkout(entry)) {
+          const normalized = normalizeLoopWorkoutItem(entry);
+          const originalLoops = Number(normalized.loopTraining?.loops || 1);
+          const loopKm = Number(normalized.loopTraining?.loopKm || 0);
+          const minimumLoops = originalLoops >= 2 ? 2 : 1;
+          const adjustedLoops = loopKm > 0
+            ? Math.max(minimumLoops, Math.min(originalLoops, Math.round((Number(entry.distance || 0) * factor) / loopKm)))
+            : originalLoops;
+          const adjustedLoop = normalizeLoopWorkoutItem({
+            ...normalized,
+            loopTraining: {
+              ...normalized.loopTraining,
+              loops: adjustedLoops,
+            },
+          });
+          return {
+            ...adjustedLoop,
+            notes: `${entry.notes} Bereits absolvierte Laufkilometer dieser Woche wurden berücksichtigt; der Loop-Block bleibt in vollständigen offiziellen Runden erhalten.`,
+          };
+        }
         const adjusted = Math.max(entry.optional ? 0 : 3, Math.round(Number(entry.distance || 0) * factor));
         return {
           ...entry,
@@ -1458,6 +1499,11 @@ export function generateWeekPlan({
       goalKind: goal.goalKind,
       courseType: goal.courseType,
       loopKm: goal.loopKm,
+      loopMode: goal.loopMode,
+      loopIntervalMinutes: goal.loopIntervalMinutes,
+      eventTimeLimit: goal.eventTimeLimit,
+      eventTimeLimitMinutes: goal.eventTimeLimitMinutes,
+      plannedStopMinutes: goal.plannedStopMinutes,
       aidStationMode: goal.aidStationMode,
       priority: goal.priority || (goal.isMainTarget ? "A" : "B"),
       goalType: goal.goalType || "finish",

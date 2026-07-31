@@ -1,3 +1,5 @@
+import { LOOP_MODES, inferLoopMode, parseLoopDurationMinutes } from "./loopWorkout.js";
+
 const DAY_MS = 86400000;
 
 const COURSE_TYPE_LABELS = {
@@ -5,6 +7,12 @@ const COURSE_TYPE_LABELS = {
   loop: "Rundenkurs",
   out_and_back: "Hin und zurück",
   point_to_point: "A nach B",
+};
+
+const LOOP_MODE_LABELS = {
+  [LOOP_MODES.FIXED_INTERVAL]: "Fester Starttakt",
+  [LOOP_MODES.TIME_LIMIT]: "Gesamtzeitlimit",
+  [LOOP_MODES.FREE]: "Freier Rundkurs",
 };
 
 const AID_STATION_LABELS = {
@@ -59,10 +67,11 @@ function eventKey(event) {
 export function eventCourseProfile(event = {}) {
   const input = event || {};
   const text = String(input.name || "").toLowerCase();
-  const explicitLoopKm = Math.max(0, Number(input.loopKm || 0));
+  const storedLoopKm = Math.max(0, Number(input.loopKm || 0));
   const legacyBackyard = text.includes("backyard");
   const legacyHeartbeat = /heartbeat|fulda/.test(text);
-  const inferredLoopKm = legacyBackyard ? 6.7 : legacyHeartbeat ? 6 : 0;
+  const explicitLoopKm = legacyHeartbeat && Math.abs(storedLoopKm - 6) < 0.01 ? 6.2 : storedLoopKm;
+  const inferredLoopKm = legacyBackyard ? 6.7 : legacyHeartbeat ? 6.2 : 0;
   const storedCourseType = String(input.courseType || "");
   const courseType = COURSE_TYPE_LABELS[storedCourseType]
     ? storedCourseType
@@ -76,11 +85,34 @@ export function eventCourseProfile(event = {}) {
       ? "every_loop"
       : "unspecified";
 
+  const loopMode = courseType === "loop"
+    ? inferLoopMode({ ...input, loopMode: input.loopMode || (legacyBackyard ? LOOP_MODES.FIXED_INTERVAL : legacyHeartbeat ? LOOP_MODES.TIME_LIMIT : "") })
+    : LOOP_MODES.FREE;
+  const loopIntervalMinutes = loopMode === LOOP_MODES.FIXED_INTERVAL
+    ? Math.max(10, Number(input.loopIntervalMinutes || 60))
+    : 0;
+  const eventTimeLimit = loopMode === LOOP_MODES.TIME_LIMIT
+    ? String(input.eventTimeLimit || (legacyHeartbeat ? "14:00:00" : ""))
+    : "";
+  const eventTimeLimitMinutes = parseLoopDurationMinutes(eventTimeLimit);
+  const plannedStopMinutes = loopMode === LOOP_MODES.TIME_LIMIT
+    ? Math.max(0, Number(input.plannedStopMinutes ?? 3))
+    : 0;
+
   return {
     courseType,
     loopKm: courseType === "loop" ? explicitLoopKm || inferredLoopKm : 0,
     aidStationMode,
+    loopMode,
+    loopIntervalMinutes,
+    eventTimeLimit,
+    eventTimeLimitMinutes,
+    plannedStopMinutes,
   };
+}
+
+export function loopModeLabel(value) {
+  return LOOP_MODE_LABELS[value] || LOOP_MODE_LABELS[LOOP_MODES.FREE];
 }
 
 export function courseTypeLabel(value) {

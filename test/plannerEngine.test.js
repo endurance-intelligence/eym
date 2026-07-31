@@ -417,6 +417,28 @@ test("outside the C event week the planner keeps training toward B without an ea
   assert.ok(result.plan.some((item) => item.type === "Long Run" || item.type === "Loop-Training"));
 });
 
+test("generated Backyard blocks preserve exact decimal loop distance and the full start interval", () => {
+  const result = generateWeekPlan({
+    mission: goalAwareMission,
+    profile: {
+      selfReportedRunsPerWeek: 5,
+      selfReportedWeeklyKm: 50,
+      selfReportedLongestRunKm: 24,
+    },
+    config: goalAwareConfig,
+    today: new Date("2026-08-10T12:00:00"),
+  });
+
+  const loop = result.plan.find((item) => item.type === "Loop-Training");
+  assert.ok(loop);
+  assert.equal(loop.loopTraining.mode, "fixed_interval");
+  assert.equal(loop.loopTraining.controlMode, "manual_lap");
+  assert.equal(loop.loopTraining.paceMode, "none");
+  assert.equal(loop.distance, Number((loop.loopTraining.loops * 6.7).toFixed(1)));
+  assert.equal(loop.duration, loop.loopTraining.loops * 60);
+  assert.match(loop.title, new RegExp(`^${loop.loopTraining.loops} × 6,7 km`));
+});
+
 test("an explicit B-priority loop course creates a loop workout without relying on its name", () => {
   const result = generateWeekPlan({
     mission: {

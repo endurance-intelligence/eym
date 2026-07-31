@@ -856,3 +856,24 @@
 .planner-pace-preview.no-target strong{color:var(--text)}
 .planner-pace-reset{justify-self:start;padding:8px 10px;background:transparent;color:var(--accent-bright);font-size:12px}
 @media(max-width:720px){.planner-pace-guidance-heading{display:grid}.planner-pace-mode{display:grid;grid-template-columns:1fr 1fr;width:100%}.planner-pace-mode button{white-space:normal}.planner-pace-preview{align-items:flex-start;flex-direction:column}.planner-pace-preview span{text-align:left}.planner-pace-reset{width:100%;white-space:normal}}
+
+/* v3.9.6 – manual loop control and time-limited ultra match plans */
+.planner-loop-guidance{display:grid;gap:16px;margin-top:18px;padding:18px;border:1px solid var(--accent-border-strong);border-radius:17px;background:linear-gradient(145deg,var(--surface),var(--bg-card-alt))}
+.planner-loop-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}
+.planner-loop-heading h3{margin:2px 0 6px}.planner-loop-heading p:last-child{max-width:760px;margin:0;color:var(--muted);line-height:1.5}
+.planner-loop-heading>span{flex:none;padding:7px 10px;border:1px solid var(--accent-border);border-radius:999px;background:var(--accent-surface);color:var(--accent-bright);font-size:11px;font-weight:900}
+.planner-loop-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px}
+.planner-loop-metrics>div,.planner-loop-matchplan>div{display:grid;gap:4px;padding:12px 13px;border:1px solid var(--border);border-radius:12px;background:var(--bg-sidebar)}
+.planner-loop-metrics small,.planner-loop-matchplan small{color:var(--muted);font-size:9px;font-weight:900;letter-spacing:.08em;text-transform:uppercase}
+.planner-loop-metrics strong{font-size:18px}.planner-loop-fields{margin:0}
+.planner-loop-control{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:13px 14px;border:1px solid var(--border);border-radius:13px;background:color-mix(in srgb,var(--bg-sidebar) 86%,transparent)}
+.planner-loop-control h4{margin:3px 0 0}.planner-loop-control .eyebrow{margin:0}.planner-loop-control.pace-control{align-items:flex-start}
+.planner-loop-pace-mode{flex-wrap:wrap;justify-content:flex-end}.planner-loop-warning{margin:0;padding:11px 13px;border-left:3px solid var(--warning,#f5c451);border-radius:0 10px 10px 0;background:color-mix(in srgb,var(--warning,#f5c451) 10%,transparent);color:var(--muted-bright);font-size:12px;line-height:1.45}
+.planner-loop-garmin-flow{display:flex;align-items:stretch;gap:8px;overflow-x:auto;padding-bottom:3px}
+.planner-loop-garmin-flow span{display:grid;min-width:142px;gap:3px;padding:11px 12px;border:1px solid var(--border);border-radius:12px;background:var(--bg-input)}
+.planner-loop-garmin-flow small{color:var(--muted)}.planner-loop-garmin-flow em{margin-top:5px;color:var(--accent-bright);font-size:10px;font-style:normal;font-weight:800}
+.planner-loop-matchplan{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px;padding:13px;border:1px solid var(--accent-border);border-radius:14px;background:color-mix(in srgb,var(--accent-surface) 55%,transparent)}
+.planner-loop-matchplan strong{font-size:15px}.planner-loop-matchplan p{grid-column:1/-1;margin:2px 0 0;color:var(--muted);font-size:12px;line-height:1.45}
+.planner-loop-row-label{color:var(--accent-bright)!important}
+@media(max-width:900px){.planner-loop-metrics{grid-template-columns:1fr 1fr}.planner-loop-matchplan{grid-template-columns:1fr 1fr}}
+@media(max-width:720px){.planner-loop-heading,.planner-loop-control{display:grid}.planner-loop-heading>span{justify-self:start}.planner-loop-control .planner-pace-mode{display:grid;grid-template-columns:1fr;width:100%}.planner-loop-pace-mode{grid-template-columns:1fr!important}.planner-loop-matchplan{grid-template-columns:1fr}.planner-loop-metrics{grid-template-columns:1fr 1fr}}

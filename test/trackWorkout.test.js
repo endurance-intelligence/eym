@@ -308,3 +308,49 @@ test("named templates survive archive normalization and can be copied into a wor
   assert.equal(workout.templateName, "1200/800 Mix");
   assert.equal(workout.steps[2].value, 800);
 });
+
+test("loop workouts default to LAP-controlled rounds and pauses without GPS distance endings", () => {
+  const description = intervalDescription({
+    type: "Loop-Training",
+    title: "2 × 6,7 km · Backyard Ultra",
+    distance: 13.4,
+    duration: 120,
+    loopTraining: {
+      loops: 2,
+      loopKm: 6.7,
+      mode: "fixed_interval",
+      intervalMinutes: 60,
+      controlMode: "manual_lap",
+      paceMode: "none",
+      estimatedRunMinutesPerLoop: 50,
+    },
+  });
+
+  assert.match(description, /Runde 1\n- Press lap 50m intensity=active/);
+  assert.match(description, /Boxenstopp 1\n- Press lap 10m intensity=recovery/);
+  assert.match(description, /Runde 2\n- Press lap 50m intensity=active/);
+  assert.doesNotMatch(description, /- 6\.7km/);
+  assert.equal(description.match(/Press lap/g)?.length, 3);
+});
+
+test("automatic distance remains an explicit opt-in for loop workouts", () => {
+  const description = intervalDescription({
+    type: "Loop-Training",
+    title: "2 × 6,7 km",
+    loopTraining: {
+      loops: 2,
+      loopKm: 6.7,
+      mode: "fixed_interval",
+      intervalMinutes: 60,
+      controlMode: "automatic_distance",
+      paceMode: "custom",
+      faster: "7:10",
+      slower: "7:50",
+      estimatedRunMinutesPerLoop: 50,
+    },
+  });
+
+  assert.match(description, /- 6\.7km 7:50-7:10\/km Pace intensity=active/);
+  assert.equal(description.match(/- 6\.7km/g)?.length, 2);
+  assert.match(description, /Boxenstopp 1\n- Press lap 10m intensity=recovery/);
+});
