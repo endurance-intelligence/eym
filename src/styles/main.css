@@ -1055,7 +1055,7 @@ button:focus-visible,a:focus-visible,summary:focus-visible{
 .today-card.premium-briefing-card{
   grid-template-columns:minmax(0,1.45fr) minmax(300px,.92fr);
   grid-template-areas:
-    "today-heading side"
+    "today-heading today-heading"
     "today-list side";
   gap:14px 20px;
   padding:18px;
@@ -1074,9 +1074,9 @@ button:focus-visible,a:focus-visible,summary:focus-visible{
   top:auto;
   height:auto;
   display:grid;
-  grid-template-rows:auto 1fr;
+  align-content:start;
   gap:12px;
-  padding:2px 0 2px 18px;
+  padding:4px 0 2px 18px;
   border-left:1px solid color-mix(in srgb,var(--border) 86%,transparent);
 }
 .today-card.premium-briefing-card .today-card-actions{
@@ -1207,4 +1207,19 @@ button:focus-visible,a:focus-visible,summary:focus-visible{
 }
 @media(max-width:720px){
   .today-card.premium-briefing-card .today-card-actions{align-items:flex-end}
+}
+
+
+/* v3.9.20 – briefing cleanup: one weekly entry point and cleaner alignment */
+.today-card.premium-briefing-card .today-card-heading{
+  grid-column:1 / -1;
+}
+.today-card.premium-briefing-card .today-side-panel{
+  align-self:start;
+}
+.today-card.premium-briefing-card .today-upcoming-preview{
+  padding-top:2px;
+}
+.today-card.premium-briefing-card .today-upcoming-heading{
+  margin-bottom:4px;
 }

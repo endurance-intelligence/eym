@@ -333,9 +333,6 @@ export default function Briefing() {
             {today.items.map((item) => <TodayWorkoutRow item={item} key={item.id} />)}
           </div>
           <div className="today-side-panel">
-            <div className="today-card-actions">
-              <Link to="/planner">Wochenplan öffnen →</Link>
-            </div>
             <div className="today-upcoming-preview">
               <div className="today-upcoming-heading"><div><p className="eyebrow">Als Nächstes</p><strong>Morgen · {todayLabel.format(upcoming.date)}</strong></div><span>Preview</span></div>
               <div className="today-upcoming-items">
