@@ -102,6 +102,85 @@ const reasonOptions = ["Termin fiel aus", "Keine Zeit", "Müde", "Schmerzen", "K
 const cancellationReasonOptions = ["Termin fiel aus", "Keine Zeit", "Müde", "Schmerzen", "Krankheit", "Wetter", "Bewusst ausgelassen", "Sonstiges"];
 const plannerDays = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"];
 
+function PlannerActionIcon({ name }) {
+  const common = {
+    width: 16,
+    height: 16,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.8,
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+    "aria-hidden": true,
+  };
+
+  if (name === "edit") {
+    return (
+      <svg {...common}>
+        <path d="M12 20h9" />
+        <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" />
+      </svg>
+    );
+  }
+  if (name === "cancel") {
+    return (
+      <svg {...common}>
+        <rect x="3" y="5" width="18" height="16" rx="2" />
+        <path d="M16 3v4M8 3v4M3 10h18M9 14l6 6M15 14l-6 6" />
+      </svg>
+    );
+  }
+  if (name === "archive") {
+    return (
+      <svg {...common}>
+        <path d="M3 6h18" />
+        <path d="M5 6v14h14V6" />
+        <path d="M9 10h6" />
+        <path d="M4 3h16v3H4z" />
+      </svg>
+    );
+  }
+  if (name === "restore") {
+    return (
+      <svg {...common}>
+        <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+        <path d="M3 3v5h5" />
+      </svg>
+    );
+  }
+  if (name === "target") {
+    return (
+      <svg {...common}>
+        <circle cx="12" cy="12" r="9" />
+        <circle cx="12" cy="12" r="5" />
+        <circle cx="12" cy="12" r="1" />
+      </svg>
+    );
+  }
+  return (
+    <svg {...common}>
+      <path d="M12 9v4" />
+      <path d="M12 17h.01" />
+      <path d="M10.3 3.7 2.6 17a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.7a2 2 0 0 0-3.4 0Z" />
+    </svg>
+  );
+}
+
+function PlannerIconAction({ icon, label, className = "", onClick }) {
+  return (
+    <button
+      type="button"
+      className={`planner-icon-action ${className}`.trim()}
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+    >
+      <PlannerActionIcon name={icon} />
+    </button>
+  );
+}
+
 function eventProtectionDays(priority) {
   return { A: 5, B: 4, C: 3 }[priority] || 3;
 }
@@ -2157,14 +2236,51 @@ export default function Planner() {
                     {!completed && (
                       <>
                         <div className="planner-actions planner-actions-desktop" aria-label={`${item.title}: Aktionen`}>
-                          {isMissed && <button className="danger" onClick={() => openMissed(item)}>Grund angeben</button>}
+                          {isMissed && (
+                            <PlannerIconAction
+                              icon="warning"
+                              label="Grund angeben"
+                              className="danger"
+                              onClick={() => openMissed(item)}
+                            />
+                          )}
                           {isCancelled
-                            ? <button onClick={() => restoreCancelledWorkout(item)}>Wieder einplanen</button>
+                            ? (
+                              <PlannerIconAction
+                                icon="restore"
+                                label="Wieder einplanen"
+                                onClick={() => restoreCancelledWorkout(item)}
+                              />
+                            )
                             : item.raceEvent
-                              ? <button onClick={() => navigate("/mission")}>Ziel öffnen</button>
-                              : <button onClick={() => openWorkoutEditor(item)}>Bearbeiten</button>}
-                          {!isPastWeek && !isCancelled && <button onClick={() => openAdjustment(item.id, "cancel")}>Fällt aus</button>}
-                          {!item.raceEvent && <button onClick={() => updateWorkout(item.id, { archived: true })}>Archiv</button>}
+                              ? (
+                                <PlannerIconAction
+                                  icon="target"
+                                  label="Ziel öffnen"
+                                  onClick={() => navigate("/mission")}
+                                />
+                              )
+                              : (
+                                <PlannerIconAction
+                                  icon="edit"
+                                  label="Bearbeiten"
+                                  onClick={() => openWorkoutEditor(item)}
+                                />
+                              )}
+                          {!isPastWeek && !isCancelled && (
+                            <PlannerIconAction
+                              icon="cancel"
+                              label="Als ausgefallen markieren"
+                              onClick={() => openAdjustment(item.id, "cancel")}
+                            />
+                          )}
+                          {!item.raceEvent && (
+                            <PlannerIconAction
+                              icon="archive"
+                              label="Archivieren"
+                              onClick={() => updateWorkout(item.id, { archived: true })}
+                            />
+                          )}
                         </div>
                         <details className="planner-actions-menu">
                           <summary aria-label={`${item.title}: Aktionen öffnen`} title="Aktionen">•••</summary>

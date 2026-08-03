@@ -1385,3 +1385,61 @@
     grid-template-columns:repeat(2,minmax(0,1fr));
   }
 }
+
+/* v3.9.15 – balanced approval actions and compact workout icon controls */
+.planner-week-dashboard>.planner-plan-approval .planner-plan-approval-actions{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:7px;
+  width:100%;
+}
+.planner-week-dashboard>.planner-plan-approval .planner-plan-approval-actions button{
+  width:100%;
+  min-height:34px;
+  padding:7px 9px;
+  text-align:center;
+}
+.planner-week-dashboard>.planner-plan-approval.accepted .planner-plan-approval-actions{
+  grid-template-columns:1fr;
+}
+.planner-actions-desktop{
+  display:flex;
+  gap:5px;
+  max-width:none;
+  padding:3px;
+  border:1px solid color-mix(in srgb,var(--border) 82%,transparent);
+  border-radius:11px;
+  background:color-mix(in srgb,var(--bg-input) 84%,transparent);
+}
+.planner-actions .planner-icon-action{
+  display:grid;
+  width:31px;
+  height:31px;
+  min-width:31px;
+  place-items:center;
+  padding:0;
+  border:1px solid transparent;
+  border-radius:8px;
+  background:transparent;
+  color:var(--muted-bright);
+  line-height:1;
+  transition:background .15s ease,border-color .15s ease,color .15s ease,transform .15s ease;
+}
+.planner-actions .planner-icon-action svg{display:block;width:15px;height:15px}
+.planner-actions .planner-icon-action:hover,
+.planner-actions .planner-icon-action:focus-visible{
+  border-color:var(--accent-border);
+  background:var(--accent-surface);
+  color:var(--accent-bright);
+  transform:translateY(-1px);
+}
+.planner-actions .planner-icon-action:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.planner-actions .planner-icon-action.danger:hover,
+.planner-actions .planner-icon-action.danger:focus-visible{
+  border-color:rgba(248,113,113,.5);
+  background:rgba(248,113,113,.1);
+  color:var(--danger-bright,#ff9a90);
+}
+@media(max-width:620px){
+  .planner-actions-desktop{display:none}
+}
