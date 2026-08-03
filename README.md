@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **3.9.9**
+Current app version: **3.9.10**
 
 **Eat your miles.**
 

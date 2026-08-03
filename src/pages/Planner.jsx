@@ -2422,7 +2422,7 @@ export default function Planner() {
                 <h3>Welche Termine stehen wirklich?</h3>
                 <p className="muted">Deine wiederkehrenden Termine kommen aus den Settings. Eine Absage gilt nur für diese Woche und ändert die Grundkonfiguration nicht.</p>
               </div>
-              {planningDraft.recurringCommitments?.length ? planningDraft.recurringCommitments.map((commitment) => (
+              {planningDraft.recurringCommitments?.length ? sortCommitments(planningDraft.recurringCommitments).map((commitment) => (
                 <label className="planner-fixed-toggle" key={commitment.id}>
                   <input type="checkbox" checked={commitment.activeThisWeek !== false} onChange={(event) => updateWeeklyCommitment(commitment.id, event.target.checked)} />
                   <span><b>{commitment.weekday} · {commitment.name}</b><small>{commitment.time || "flexibel"} · {sportLabel(commitment.sport)} · Belastung {commitment.load === "high" ? "hoch" : commitment.load === "low" ? "niedrig" : "mittel"}</small></span>
