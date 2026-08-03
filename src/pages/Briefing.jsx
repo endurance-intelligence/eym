@@ -322,20 +322,28 @@ export default function Briefing() {
         </section>
       )}
       <div className="grid briefing-grid">
-        <Card className="wide today-card">
+        <Card className="wide today-card premium-briefing-card">
           <div className="today-card-heading">
-            <div><p className="eyebrow">Heute · {todayLabel.format(new Date())}</p><h2>{today.headline}</h2></div>
-            <div className="today-card-actions"><span className={`today-summary ${today.open ? "planned" : today.done ? "done" : "rest"}`}>{today.open ? `${today.open} offen` : today.done ? `${today.done} erledigt` : "Regeneration"}</span><Link to="/planner">Wochenplan öffnen →</Link></div>
+            <div>
+              <p className="eyebrow">Heute · {todayLabel.format(new Date())}</p>
+              <h2>{today.headline}</h2>
+            </div>
           </div>
           <div className="today-workout-list">
             {today.items.map((item) => <TodayWorkoutRow item={item} key={item.id} />)}
           </div>
-          <div className="today-upcoming-preview">
-            <div className="today-upcoming-heading"><div><p className="eyebrow">Als Nächstes</p><strong>Morgen · {todayLabel.format(upcoming.date)}</strong></div><span>Preview</span></div>
-            <div className="today-upcoming-items">
-              {upcoming.items.map((item) => <div className={`today-upcoming-item ${item.tone}`} key={item.id}><span>{item.status}</span><div><b>{item.title}</b>{item.detail && <small>{item.detail}</small>}</div></div>)}
+          <aside className="today-side-panel">
+            <div className="today-card-actions">
+              <span className={`today-summary ${today.open ? "planned" : today.done ? "done" : "rest"}`}>{today.open ? `${today.open} offen` : today.done ? `${today.done} erledigt` : "Regeneration"}</span>
+              <Link to="/planner">Wochenplan öffnen →</Link>
             </div>
-          </div>
+            <div className="today-upcoming-preview">
+              <div className="today-upcoming-heading"><div><p className="eyebrow">Als Nächstes</p><strong>Morgen · {todayLabel.format(upcoming.date)}</strong></div><span>Preview</span></div>
+              <div className="today-upcoming-items">
+                {upcoming.items.map((item) => <div className={`today-upcoming-item ${item.tone}`} key={item.id}><span>{item.status}</span><div><b>{item.title}</b>{item.detail && <small>{item.detail}</small>}</div></div>)}
+              </div>
+            </div>
+          </aside>
         </Card>
 
 
