@@ -1225,3 +1225,163 @@
   .planner-plan-approval-actions button{width:100%}
   .planner-plan-approval.accepted .planner-plan-approval-actions{grid-template-columns:1fr}
 }
+
+/* v3.9.14 – repair compact weekly dashboard at normal desktop widths */
+.planner-week-dashboard{
+  grid-template-columns:minmax(220px,1fr) minmax(270px,1.08fr) minmax(230px,1fr) minmax(270px,1.08fr);
+  gap:10px;
+}
+.planner-week-dashboard>.planner-goal-strip,
+.planner-week-dashboard>.planner-plan-approval,
+.planner-week-dashboard>.planner-coach-alert,
+.planner-week-dashboard>.planner-week-logic{
+  min-width:0;
+  min-height:122px;
+  height:122px;
+}
+.planner-week-dashboard>.planner-goal-strip{
+  grid-template-columns:minmax(0,1fr) auto;
+  grid-template-rows:1fr auto;
+  align-items:start;
+  gap:8px;
+  padding:13px;
+}
+.planner-week-dashboard>.planner-goal-strip .planner-goal-strip-main{
+  grid-column:1/-1;
+  align-content:start;
+}
+.planner-week-dashboard>.planner-goal-strip .planner-goal-strip-main>strong{
+  font-size:17px;
+  line-height:1.15;
+  white-space:normal;
+}
+.planner-week-dashboard>.planner-goal-strip .planner-goal-strip-main>small{
+  display:-webkit-box;
+  overflow:hidden;
+  -webkit-box-orient:vertical;
+  -webkit-line-clamp:2;
+  line-height:1.35;
+  white-space:normal;
+}
+.planner-week-dashboard>.planner-goal-strip>b{
+  grid-column:1/-1;
+  align-self:end;
+  justify-self:start;
+}
+.planner-week-dashboard>.planner-plan-approval{
+  grid-template-columns:1fr;
+  grid-template-rows:1fr auto;
+  align-items:start;
+  gap:8px;
+  padding:13px;
+}
+.planner-week-dashboard>.planner-plan-approval .planner-plan-approval-copy>strong{
+  font-size:16px;
+}
+.planner-week-dashboard>.planner-plan-approval .planner-plan-approval-copy>small{
+  display:-webkit-box;
+  overflow:hidden;
+  -webkit-box-orient:vertical;
+  -webkit-line-clamp:2;
+  line-height:1.35;
+}
+.planner-week-dashboard>.planner-plan-approval .planner-plan-approval-actions{
+  display:flex;
+  align-self:end;
+  justify-content:flex-start;
+  width:100%;
+}
+.planner-week-dashboard>.planner-plan-approval .planner-plan-approval-actions button{
+  min-width:0;
+  padding:7px 10px;
+  font-size:11px;
+}
+.planner-week-dashboard>.planner-coach-alert>summary{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  grid-template-rows:1fr auto;
+  align-items:start;
+  gap:7px 10px;
+  min-height:100%;
+  padding:13px;
+}
+.planner-week-dashboard>.planner-coach-alert>summary>div{
+  grid-column:1/-1;
+  min-width:0;
+}
+.planner-week-dashboard>.planner-coach-alert>summary strong{
+  font-size:15px;
+  line-height:1.25;
+}
+.planner-week-dashboard>.planner-coach-alert>summary small{
+  display:-webkit-box;
+  overflow:hidden;
+  color:var(--muted);
+  font-size:10px;
+  line-height:1.35;
+  -webkit-box-orient:vertical;
+  -webkit-line-clamp:2;
+}
+.planner-week-dashboard>.planner-coach-alert>summary>b{
+  grid-column:1/-1;
+  align-self:end;
+  justify-self:start;
+}
+.planner-week-dashboard>.planner-week-logic>summary{
+  grid-template-columns:1fr;
+  grid-template-rows:auto auto 1fr auto;
+  min-height:100%;
+  gap:6px;
+  padding:13px;
+}
+.planner-week-dashboard>.planner-week-logic .planner-week-logic-lead>strong{
+  font-size:16px;
+  line-height:1.2;
+}
+.planner-week-dashboard>.planner-week-logic .planner-week-logic-lead>small{
+  display:none;
+}
+.planner-week-dashboard>.planner-week-logic .planner-week-logic-metrics{
+  display:flex;
+  gap:5px;
+  justify-content:flex-start;
+  overflow:hidden;
+}
+.planner-week-dashboard>.planner-week-logic .planner-week-logic-metrics>span{
+  padding:4px 7px;
+  font-size:8px;
+}
+.planner-week-dashboard>.planner-week-logic .planner-week-logic-metrics b{
+  font-size:10px;
+}
+.planner-week-dashboard>.planner-week-logic .planner-week-logic-toggle{
+  align-self:end;
+  justify-self:start;
+}
+.planner-week-dashboard>.planner-coach-alert[open],
+.planner-week-dashboard>.planner-week-logic[open]{
+  height:auto;
+  min-height:0;
+}
+.planner-week-dashboard>.planner-coach-alert[open]>summary,
+.planner-week-dashboard>.planner-week-logic[open]>summary{
+  min-height:0;
+}
+@media(max-width:1180px){
+  .planner-week-dashboard{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+  .planner-week-dashboard>.planner-goal-strip,
+  .planner-week-dashboard>.planner-plan-approval,
+  .planner-week-dashboard>.planner-coach-alert,
+  .planner-week-dashboard>.planner-week-logic{
+    height:auto;
+    min-height:112px;
+  }
+}
+@media(max-width:720px){
+  .planner-week-dashboard{grid-template-columns:1fr}
+  .planner-week-dashboard>.planner-plan-approval .planner-plan-approval-actions{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+}

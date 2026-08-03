@@ -1748,7 +1748,6 @@ export default function Planner() {
               <strong>{goalProfile.target.name}</strong>
               <small>{goalProfile.disciplineLabel} · {goalProfile.phase?.label || "Phase wird berechnet"}</small>
             </div>
-            <span className="planner-goal-strip-status">{goalProfile.feasibility?.label || "Ziel wird geprüft"}</span>
             <b>Ziel öffnen →</b>
           </Link>
         )}
@@ -1757,12 +1756,12 @@ export default function Planner() {
           <section className={`planner-plan-approval ${weekApprovalState}`}>
             <div className="planner-plan-approval-copy">
               <span>Wochenplan</span>
-              <strong>{weekAccepted ? "Plan angenommen" : weekApprovalState === WEEK_APPROVAL_STATES.CHANGED ? "Plan wurde seit der Annahme geändert" : "Plan ist berechnet und wartet auf deine Freigabe"}</strong>
+              <strong>{weekAccepted ? "Plan angenommen" : weekApprovalState === WEEK_APPROVAL_STATES.CHANGED ? "Änderungen prüfen" : "Plan freigeben"}</strong>
               <small>{weekAccepted
-                ? `Angenommen am ${acceptedAtLabel}. Garmin erhält nur diesen bestätigten Stand.`
+                ? `Bestätigt am ${acceptedAtLabel} · bereit für Garmin.`
                 : weekApprovalState === WEEK_APPROVAL_STATES.CHANGED
-                  ? "Prüfe die Änderungen kurz und bestätige den aktuellen Stand erneut."
-                  : "Schau dir Einheiten, Belastung und Coach-Hinweise an. Danach kannst du den Plan annehmen oder komplett neu berechnen."}</small>
+                  ? "Der bestätigte Plan wurde verändert."
+                  : "Einheiten prüfen und anschließend bestätigen."}</small>
             </div>
             <div className="planner-plan-approval-actions">
               {!weekAccepted && <button type="button" className="primary" onClick={acceptCurrentWeek}>{weekApprovalState === WEEK_APPROVAL_STATES.CHANGED ? "Erneut annehmen" : "Plan annehmen"}</button>}
@@ -1776,7 +1775,8 @@ export default function Planner() {
             <summary>
               <div>
                 <span>Coach-Update</span>
-                <strong>Dein Coach schlägt {coachAlertCause} {activeCoachSuggestions.length === 1 ? "eine Änderung" : `${activeCoachSuggestions.length} Änderungen`} vor.</strong>
+                <strong>{activeCoachSuggestions.length === 1 ? "1 Änderung vorgeschlagen" : `${activeCoachSuggestions.length} Änderungen vorgeschlagen`}</strong>
+                <small>{coachAlertCause}</small>
               </div>
               <b>Ansehen</b>
             </summary>
@@ -1805,11 +1805,11 @@ export default function Planner() {
                 <small>{scienceAssessment.loadBand?.summary || "Belastung und Erholung werden aus Plan, Aktivitäten und Reviews zusammengeführt."}</small>
               </div>
               <div className="planner-week-logic-metrics">
-                <span><b>{config.lastTarget || "–"}</b> km Laufrahmen</span>
-                <span><b>{fixedSessionCount}</b> Fixtermine</span>
-                <span><b>{scienceAssessment.hardCount ?? keySessionCount}</b> offene Belastungsreize</span>
+                <span><b>{config.lastTarget || "–"}</b> km</span>
+                <span><b>{fixedSessionCount}</b> Termine</span>
+                <span><b>{scienceAssessment.hardCount ?? keySessionCount}</b> Reize</span>
               </div>
-              <b className="planner-week-logic-toggle">Warum dieser Plan?</b>
+              <b className="planner-week-logic-toggle">Details →</b>
             </summary>
             <div className="planner-week-logic-body">
               <article>
