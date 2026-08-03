@@ -1736,104 +1736,106 @@ export default function Planner() {
         </div>
       </PageTitle>
       <TrainingSectionNav />
-      {goalProfile.target?.name && (
-        <Link
-          className={`planner-goal-strip ${goalProfile.feasibility?.status || "open"}`}
-          to="/mission"
-          aria-label={`${goalProfile.target.name}: Ziel und Goal Engine öffnen`}
-        >
-          <div className="planner-goal-strip-main">
-            <span>Engine Goal</span>
-            <strong>{goalProfile.target.name}</strong>
-            <small>{goalProfile.disciplineLabel} · {goalProfile.phase?.label || "Phase wird berechnet"}</small>
-          </div>
-          <span className="planner-goal-strip-status">{goalProfile.feasibility?.label || "Ziel wird geprüft"}</span>
-          <b>Ziel öffnen →</b>
-        </Link>
-      )}
+      <section className="planner-week-dashboard">
+        {goalProfile.target?.name && (
+          <Link
+            className={`planner-goal-strip ${goalProfile.feasibility?.status || "open"}`}
+            to="/mission"
+            aria-label={`${goalProfile.target.name}: Ziel und Goal Engine öffnen`}
+          >
+            <div className="planner-goal-strip-main">
+              <span>Engine Goal</span>
+              <strong>{goalProfile.target.name}</strong>
+              <small>{goalProfile.disciplineLabel} · {goalProfile.phase?.label || "Phase wird berechnet"}</small>
+            </div>
+            <span className="planner-goal-strip-status">{goalProfile.feasibility?.label || "Ziel wird geprüft"}</span>
+            <b>Ziel öffnen →</b>
+          </Link>
+        )}
 
-      {!isPastWeek && weekPlan.length > 0 && (
-        <section className={`planner-plan-approval ${weekApprovalState}`}>
-          <div className="planner-plan-approval-copy">
-            <span>Wochenplan</span>
-            <strong>{weekAccepted ? "Plan angenommen" : weekApprovalState === WEEK_APPROVAL_STATES.CHANGED ? "Plan wurde seit der Annahme geändert" : "Plan ist berechnet und wartet auf deine Freigabe"}</strong>
-            <small>{weekAccepted
-              ? `Angenommen am ${acceptedAtLabel}. Garmin erhält nur diesen bestätigten Stand.`
-              : weekApprovalState === WEEK_APPROVAL_STATES.CHANGED
-                ? "Prüfe die Änderungen kurz und bestätige den aktuellen Stand erneut."
-                : "Schau dir Einheiten, Belastung und Coach-Hinweise an. Danach kannst du den Plan annehmen oder komplett neu berechnen."}</small>
-          </div>
-          <div className="planner-plan-approval-actions">
-            {!weekAccepted && <button type="button" className="primary" onClick={acceptCurrentWeek}>{weekApprovalState === WEEK_APPROVAL_STATES.CHANGED ? "Erneut annehmen" : "Plan annehmen"}</button>}
-            <button type="button" onClick={replanCurrentWeek}>Neu planen</button>
-          </div>
-        </section>
-      )}
+        {!isPastWeek && weekPlan.length > 0 && (
+          <section className={`planner-plan-approval ${weekApprovalState}`}>
+            <div className="planner-plan-approval-copy">
+              <span>Wochenplan</span>
+              <strong>{weekAccepted ? "Plan angenommen" : weekApprovalState === WEEK_APPROVAL_STATES.CHANGED ? "Plan wurde seit der Annahme geändert" : "Plan ist berechnet und wartet auf deine Freigabe"}</strong>
+              <small>{weekAccepted
+                ? `Angenommen am ${acceptedAtLabel}. Garmin erhält nur diesen bestätigten Stand.`
+                : weekApprovalState === WEEK_APPROVAL_STATES.CHANGED
+                  ? "Prüfe die Änderungen kurz und bestätige den aktuellen Stand erneut."
+                  : "Schau dir Einheiten, Belastung und Coach-Hinweise an. Danach kannst du den Plan annehmen oder komplett neu berechnen."}</small>
+            </div>
+            <div className="planner-plan-approval-actions">
+              {!weekAccepted && <button type="button" className="primary" onClick={acceptCurrentWeek}>{weekApprovalState === WEEK_APPROVAL_STATES.CHANGED ? "Erneut annehmen" : "Plan annehmen"}</button>}
+              <button type="button" onClick={replanCurrentWeek}>Neu planen</button>
+            </div>
+          </section>
+        )}
 
-      {offsetWeeks === 0 && ["adjust", "watch"].includes(unifiedCoach.level) && activeCoachSuggestions.length > 0 && (
-        <details className={`planner-coach-alert ${unifiedCoach.level}`}>
-          <summary>
-            <div>
-              <span>Coach-Update</span>
-              <strong>Dein Coach schlägt {coachAlertCause} {activeCoachSuggestions.length === 1 ? "eine Änderung" : `${activeCoachSuggestions.length} Änderungen`} vor.</strong>
+        {offsetWeeks === 0 && ["adjust", "watch"].includes(unifiedCoach.level) && activeCoachSuggestions.length > 0 && (
+          <details className={`planner-coach-alert ${unifiedCoach.level}`}>
+            <summary>
+              <div>
+                <span>Coach-Update</span>
+                <strong>Dein Coach schlägt {coachAlertCause} {activeCoachSuggestions.length === 1 ? "eine Änderung" : `${activeCoachSuggestions.length} Änderungen`} vor.</strong>
+              </div>
+              <b>Ansehen</b>
+            </summary>
+            <div className="planner-coach-alert-body">
+              <p>{unifiedCoach.recommendation.text}</p>
+              <div className="planner-coach-alert-list">
+                {activeCoachSuggestions.map((candidate) => (
+                  <a href={`#planner-workout-${candidate.id}`} key={candidate.id}>
+                    <span>{candidate.title}</span>
+                    <strong>→ {candidate.coachAlternative?.label || "Alternative prüfen"}</strong>
+                    <small>{candidate.coachAlternative?.reason || candidate.suggestion}</small>
+                  </a>
+                ))}
+              </div>
+              <small>Die Empfehlung steht zusätzlich direkt an der betroffenen Einheit. Dort kannst du sie sofort annehmen oder ablehnen.</small>
             </div>
-            <b>Ansehen</b>
-          </summary>
-          <div className="planner-coach-alert-body">
-            <p>{unifiedCoach.recommendation.text}</p>
-            <div className="planner-coach-alert-list">
-              {activeCoachSuggestions.map((candidate) => (
-                <a href={`#planner-workout-${candidate.id}`} key={candidate.id}>
-                  <span>{candidate.title}</span>
-                  <strong>→ {candidate.coachAlternative?.label || "Alternative prüfen"}</strong>
-                  <small>{candidate.coachAlternative?.reason || candidate.suggestion}</small>
-                </a>
-              ))}
-            </div>
-            <small>Die Empfehlung steht zusätzlich direkt an der betroffenen Einheit. Dort kannst du sie sofort annehmen oder ablehnen.</small>
-          </div>
-        </details>
-      )}
+          </details>
+        )}
 
-      {offsetWeeks === 0 && weekPlan.length > 0 && (
-        <details className={`planner-week-logic ${scienceAssessment.loadBand?.tone || "neutral"}`}>
-          <summary>
-            <div className="planner-week-logic-lead">
-              <span>Wochenbelastung</span>
-              <strong>{loadComparisonLabel} · {scienceAssessment.loadBand?.label || "Wird eingeordnet"}</strong>
-              <small>{scienceAssessment.loadBand?.summary || "Belastung und Erholung werden aus Plan, Aktivitäten und Reviews zusammengeführt."}</small>
+        {offsetWeeks === 0 && weekPlan.length > 0 && (
+          <details className={`planner-week-logic ${scienceAssessment.loadBand?.tone || "neutral"}`}>
+            <summary>
+              <div className="planner-week-logic-lead">
+                <span>Wochenbelastung</span>
+                <strong>{loadComparisonLabel} · {scienceAssessment.loadBand?.label || "Wird eingeordnet"}</strong>
+                <small>{scienceAssessment.loadBand?.summary || "Belastung und Erholung werden aus Plan, Aktivitäten und Reviews zusammengeführt."}</small>
+              </div>
+              <div className="planner-week-logic-metrics">
+                <span><b>{config.lastTarget || "–"}</b> km Laufrahmen</span>
+                <span><b>{fixedSessionCount}</b> Fixtermine</span>
+                <span><b>{scienceAssessment.hardCount ?? keySessionCount}</b> offene Belastungsreize</span>
+              </div>
+              <b className="planner-week-logic-toggle">Warum dieser Plan?</b>
+            </summary>
+            <div className="planner-week-logic-body">
+              <article>
+                <span>Belastungsrechnung</span>
+                <strong>{scienceAssessment.projected} Punkte geplant · jüngstes Mittel {scienceAssessment.average || "–"} aus {scienceAssessment.baselineWeeks || 0} Wochen</strong>
+                <p>{scienceAssessment.completed} Punkte sind bereits absolviert, {scienceAssessment.remaining} Punkte liegen noch vor dir. Der Coach-Load-Index verbindet Dauer, Sportart, Distanz, Höhenmeter und vorhandene Reviews; er ist ein transparenter Steuerungswert und kein medizinischer Messwert.</p>
+              </article>
+              <article>
+                <span>Fixtermine & Doppeltraining</span>
+                <strong>Freie Tage werden vor harten Fixterminen belegt</strong>
+                <p>Ein freigegebener Doppeltrainingstag ist nur eine Erlaubnis, kein Planungsauftrag. Auf einen harten ORC-Track- oder Fußballtag setzt der Coach keinen zusätzlichen generierten Lauf. Eine zweite Einheit wird zuerst auf einen freien Tag verschoben.</p>
+              </article>
+              <article>
+                <span>Zielspezifität</span>
+                <strong>{specificWeekEntry ? specificWeekEntry.title : goalProfile.target?.name || "Aktuelles Hauptziel"}</strong>
+                <p>{loopExplanation}</p>
+              </article>
+              <article>
+                <span>Coach-Anpassungen</span>
+                <strong>Flexible Einheiten zuerst, Fixtermine zuletzt</strong>
+                <p>Lehnst du eine Empfehlung ab, bleibt die Einheit bestehen und der nächste flexible Kandidat wird angeboten. Gruppen- und Vereinstermine werden nur vorgeschlagen, wenn flexible Änderungen die Belastung nicht ausreichend senken.</p>
+              </article>
             </div>
-            <div className="planner-week-logic-metrics">
-              <span><b>{config.lastTarget || "–"}</b> km Laufrahmen</span>
-              <span><b>{fixedSessionCount}</b> Fixtermine</span>
-              <span><b>{scienceAssessment.hardCount ?? keySessionCount}</b> offene Belastungsreize</span>
-            </div>
-            <b className="planner-week-logic-toggle">Warum dieser Plan?</b>
-          </summary>
-          <div className="planner-week-logic-body">
-            <article>
-              <span>Belastungsrechnung</span>
-              <strong>{scienceAssessment.projected} Punkte geplant · jüngstes Mittel {scienceAssessment.average || "–"} aus {scienceAssessment.baselineWeeks || 0} Wochen</strong>
-              <p>{scienceAssessment.completed} Punkte sind bereits absolviert, {scienceAssessment.remaining} Punkte liegen noch vor dir. Der Coach-Load-Index verbindet Dauer, Sportart, Distanz, Höhenmeter und vorhandene Reviews; er ist ein transparenter Steuerungswert und kein medizinischer Messwert.</p>
-            </article>
-            <article>
-              <span>Fixtermine & Doppeltraining</span>
-              <strong>Freie Tage werden vor harten Fixterminen belegt</strong>
-              <p>Ein freigegebener Doppeltrainingstag ist nur eine Erlaubnis, kein Planungsauftrag. Auf einen harten ORC-Track- oder Fußballtag setzt der Coach keinen zusätzlichen generierten Lauf. Eine zweite Einheit wird zuerst auf einen freien Tag verschoben.</p>
-            </article>
-            <article>
-              <span>Zielspezifität</span>
-              <strong>{specificWeekEntry ? specificWeekEntry.title : goalProfile.target?.name || "Aktuelles Hauptziel"}</strong>
-              <p>{loopExplanation}</p>
-            </article>
-            <article>
-              <span>Coach-Anpassungen</span>
-              <strong>Flexible Einheiten zuerst, Fixtermine zuletzt</strong>
-              <p>Lehnst du eine Empfehlung ab, bleibt die Einheit bestehen und der nächste flexible Kandidat wird angeboten. Gruppen- und Vereinstermine werden nur vorgeschlagen, wenn flexible Änderungen die Belastung nicht ausreichend senken.</p>
-            </article>
-          </div>
-        </details>
-      )}
+          </details>
+        )}
+      </section>
 
       <div className="planner-week-nav">
         <button disabled={offsetWeeks === 0 && !previousWeekHasPlan} title={offsetWeeks === 0 && !previousWeekHasPlan ? "Keine ältere geplante Woche vorhanden" : "Vorherige Woche"} onClick={() => { setOffsetWeeks((value) => value - 1); setForecast([]); setStatus(""); }}>←</button>

@@ -878,6 +878,44 @@
 @media(max-width:900px){.planner-loop-metrics{grid-template-columns:1fr 1fr}.planner-loop-matchplan{grid-template-columns:1fr 1fr}}
 @media(max-width:720px){.planner-loop-heading,.planner-loop-control{display:grid}.planner-loop-heading>span{justify-self:start}.planner-loop-control .planner-pace-mode{display:grid;grid-template-columns:1fr;width:100%}.planner-loop-pace-mode{grid-template-columns:1fr!important}.planner-loop-matchplan{grid-template-columns:1fr}.planner-loop-metrics{grid-template-columns:1fr 1fr}}
 
+/* v3.9.13 – compact weekly overview cards */
+.planner-week-dashboard{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:12px;
+  align-items:start;
+  margin:0 0 14px;
+}
+.planner-week-dashboard>.planner-goal-strip,
+.planner-week-dashboard>.planner-plan-approval,
+.planner-week-dashboard>.planner-coach-alert,
+.planner-week-dashboard>.planner-week-logic{margin:0;height:100%}
+.planner-week-dashboard>.planner-goal-strip,
+.planner-week-dashboard>.planner-plan-approval,
+.planner-week-dashboard>.planner-coach-alert,
+.planner-week-dashboard>.planner-week-logic>summary{min-height:78px}
+.planner-week-dashboard>.planner-goal-strip{align-content:center}
+.planner-week-dashboard>.planner-goal-strip .planner-goal-strip-main{display:grid;gap:2px;align-items:start}
+.planner-week-dashboard>.planner-goal-strip .planner-goal-strip-main>strong,
+.planner-week-dashboard>.planner-goal-strip .planner-goal-strip-main>small{white-space:normal}
+.planner-week-dashboard>.planner-plan-approval{display:grid;grid-template-columns:minmax(0,1fr) auto;align-content:center}
+.planner-week-dashboard>.planner-plan-approval .planner-plan-approval-copy>small{white-space:normal}
+.planner-week-dashboard>.planner-coach-alert>summary>div{display:grid;gap:3px;align-items:start}
+.planner-week-dashboard>.planner-week-logic>summary{grid-template-columns:minmax(0,1fr);gap:8px;align-content:start}
+.planner-week-dashboard>.planner-week-logic .planner-week-logic-metrics{justify-content:flex-start}
+.planner-week-dashboard>.planner-week-logic .planner-week-logic-toggle{justify-self:start}
+.planner-week-dashboard>.planner-coach-alert[open],
+.planner-week-dashboard>.planner-week-logic[open]{grid-column:1/-1;height:auto}
+@media(max-width:1180px){
+  .planner-week-dashboard{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:720px){
+  .planner-week-dashboard{grid-template-columns:1fr}
+  .planner-week-dashboard>.planner-plan-approval{grid-template-columns:1fr}
+  .planner-week-dashboard>.planner-plan-approval .planner-plan-approval-actions{width:100%}
+  .planner-week-dashboard>.planner-week-logic>summary{padding:10px 12px}
+}
+
 /* v3.9.8 – compact goal context and inline coach decisions */
 .planner-goal-strip{
   display:grid;
