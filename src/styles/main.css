@@ -1332,3 +1332,114 @@ button:focus-visible,a:focus-visible,summary:focus-visible{
     padding-top:14px;
   }
 }
+
+
+/* v3.9.25 – identical hero columns and matching headings */
+.today-card.premium-briefing-card{
+  display:block;
+  padding:18px;
+}
+.today-columns-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  align-items:start;
+  min-width:0;
+}
+.today-hero-column{
+  display:grid;
+  grid-template-rows:auto auto;
+  align-content:start;
+  gap:14px;
+  min-width:0;
+}
+.today-hero-column-current{
+  padding-right:20px;
+}
+.today-card.premium-briefing-card .today-side-panel{
+  grid-area:auto;
+  align-self:start;
+  display:grid;
+  grid-template-columns:minmax(0,1fr);
+  grid-template-rows:auto auto;
+  align-content:start;
+  gap:14px;
+  min-width:0;
+  padding:0 0 0 20px;
+  border-top:0;
+  border-left:1px solid color-mix(in srgb,var(--border) 86%,transparent);
+}
+.today-card.premium-briefing-card .today-card-heading,
+.today-card.premium-briefing-card .today-upcoming-heading-hero{
+  position:relative;
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  min-width:0;
+  min-height:58px;
+  margin:0;
+  padding:2px 0 0;
+}
+.today-card.premium-briefing-card .today-card-heading{
+  grid-area:auto;
+  grid-column:auto;
+}
+.today-card.premium-briefing-card .today-card-heading > div,
+.today-card.premium-briefing-card .today-upcoming-heading-hero > div{
+  display:grid;
+  align-content:start;
+  gap:0;
+  min-width:0;
+}
+.today-card.premium-briefing-card .today-card-heading .eyebrow,
+.today-card.premium-briefing-card .today-upcoming-heading-hero .eyebrow{
+  margin:0 0 4px;
+}
+.today-card.premium-briefing-card .today-card-heading h2,
+.today-card.premium-briefing-card .today-upcoming-heading-hero h2{
+  margin:0;
+  font-size:clamp(23px,2.3vw,32px);
+  line-height:1.12;
+  text-transform:none;
+}
+.today-card.premium-briefing-card .today-upcoming-heading-hero{
+  padding-right:70px;
+}
+.today-card.premium-briefing-card .today-upcoming-heading-hero > span{
+  position:absolute;
+  top:6px;
+  right:0;
+  margin:0;
+}
+.today-card.premium-briefing-card .today-workout-list,
+.today-card.premium-briefing-card .today-upcoming-preview{
+  align-self:start;
+  min-width:0;
+  width:100%;
+  padding:0;
+}
+.today-card.premium-briefing-card .today-upcoming-items{
+  width:100%;
+}
+@media(max-width:1040px){
+  .today-columns-grid{
+    grid-template-columns:1fr;
+    gap:14px;
+  }
+  .today-hero-column-current{
+    padding-right:0;
+  }
+  .today-card.premium-briefing-card .today-side-panel{
+    padding:14px 0 0;
+    border-top:1px solid color-mix(in srgb,var(--border) 86%,transparent);
+    border-left:0;
+  }
+}
+@media(max-width:560px){
+  .today-card.premium-briefing-card .today-upcoming-heading-hero{
+    padding-right:0;
+  }
+  .today-card.premium-briefing-card .today-upcoming-heading-hero > span{
+    position:static;
+    margin-top:6px;
+  }
+}

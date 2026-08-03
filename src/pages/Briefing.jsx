@@ -323,24 +323,32 @@ export default function Briefing() {
       )}
       <div className="grid briefing-grid">
         <Card className="wide today-card premium-briefing-card">
-          <div className="today-card-heading">
-            <div>
-              <p className="eyebrow">Heute · {todayLabel.format(new Date())}</p>
-              <h2>{today.headline}</h2>
-            </div>
-          </div>
-          <div className="today-content-grid">
-            <div className="today-workout-list">
-              {today.items.map((item) => <TodayWorkoutRow item={item} key={item.id} />)}
-            </div>
-            <div className="today-side-panel">
+          <div className="today-columns-grid">
+            <section className="today-hero-column today-hero-column-current" aria-label="Heutige Einheiten">
+              <div className="today-card-heading">
+                <div>
+                  <p className="eyebrow">Heute · {todayLabel.format(new Date())}</p>
+                  <h2>{today.headline}</h2>
+                </div>
+              </div>
+              <div className="today-workout-list">
+                {today.items.map((item) => <TodayWorkoutRow item={item} key={item.id} />)}
+              </div>
+            </section>
+            <section className="today-hero-column today-side-panel" aria-label="Als Nächstes">
+              <div className="today-upcoming-heading today-upcoming-heading-hero">
+                <div>
+                  <p className="eyebrow">Als Nächstes</p>
+                  <h2>Morgen · {todayLabel.format(upcoming.date)}</h2>
+                </div>
+                <span>Preview</span>
+              </div>
               <div className="today-upcoming-preview">
-                <div className="today-upcoming-heading"><div><p className="eyebrow">Als Nächstes</p><strong>Morgen · {todayLabel.format(upcoming.date)}</strong></div><span>Preview</span></div>
                 <div className="today-upcoming-items">
                   {upcoming.items.map((item) => <div className={`today-upcoming-item ${item.tone}`} key={item.id}><span>{item.status}</span><div><b>{item.title}</b>{item.detail && <small>{item.detail}</small>}</div></div>)}
                 </div>
               </div>
-            </div>
+            </section>
           </div>
         </Card>
 
