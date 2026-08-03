@@ -1024,3 +1024,77 @@
   .planner-coach-inline-actions{display:grid;grid-template-columns:1fr 1fr}
   .planner-coach-inline-actions button{width:100%}
 }
+
+/* v3.9.9 – keep workout actions in the unit header instead of centering them beside long content */
+.planner-workout{align-items:start}
+.planner-check{align-self:center}
+.planner-workout-main{min-width:0}
+.planner-actions{
+  align-self:start;
+  justify-self:end;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+  max-width:320px;
+}
+.planner-review-cue{
+  align-self:start;
+  padding-top:2px;
+}
+.planner-actions-menu{display:none}
+
+@media(max-width:620px){
+  .planner-workout{
+    grid-template-columns:auto minmax(0,1fr) auto;
+    align-items:start;
+  }
+  .planner-workout.no-marker{grid-template-columns:minmax(0,1fr) auto}
+  .planner-actions-desktop{display:none}
+  .planner-actions-menu{
+    display:block;
+    align-self:start;
+    justify-self:end;
+    position:relative;
+  }
+  .planner-actions-menu>summary{
+    display:grid;
+    width:34px;
+    height:30px;
+    place-items:center;
+    padding:0;
+    border:1px solid var(--border);
+    border-radius:10px;
+    background:var(--bg-input);
+    color:var(--accent-bright);
+    cursor:pointer;
+    font-size:14px;
+    font-weight:900;
+    list-style:none;
+  }
+  .planner-actions-menu>summary::-webkit-details-marker{display:none}
+  .planner-actions-menu[open]{grid-column:1/-1;width:100%}
+  .planner-actions-menu[open]>summary{justify-self:end;margin-left:auto}
+  .planner-actions-menu>div{display:none}
+  .planner-actions-menu[open]>div{
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:7px;
+    margin-top:8px;
+    padding:9px;
+    border:1px solid var(--border);
+    border-radius:11px;
+    background:var(--bg-input);
+  }
+  .planner-actions-menu button{
+    width:100%;
+    padding:9px 8px;
+    border:1px solid var(--border);
+    border-radius:9px;
+    background:var(--bg-card-alt);
+    color:var(--text-soft);
+    font-size:10px;
+    text-align:center;
+  }
+  .planner-actions-menu button.danger{border-color:rgba(248,113,113,.52);color:var(--danger-bright,#ff9a90)}
+  .planner-review-cue{grid-column:3;grid-row:1;justify-self:end}
+  .planner-workout.no-marker .planner-review-cue{grid-column:2}
+}

@@ -2031,16 +2031,31 @@ export default function Planner() {
                     </div>
                     {reviewDestination && <span className="planner-review-cue">Review →</span>}
                     {!completed && (
-                      <div className="planner-actions">
-                        {isMissed && <button className="danger" onClick={() => openMissed(item)}>Grund angeben</button>}
-                        {isCancelled
-                          ? <button onClick={() => restoreCancelledWorkout(item)}>Wieder einplanen</button>
-                          : item.raceEvent
-                            ? <button onClick={() => navigate("/mission")}>Ziel öffnen</button>
-                            : <button onClick={() => openWorkoutEditor(item)}>Bearbeiten</button>}
-                        {!isPastWeek && !isCancelled && <button onClick={() => openAdjustment(item.id, "cancel")}>Fällt aus</button>}
-                        {!item.raceEvent && <button onClick={() => updateWorkout(item.id, { archived: true })}>Archiv</button>}
-                      </div>
+                      <>
+                        <div className="planner-actions planner-actions-desktop" aria-label={`${item.title}: Aktionen`}>
+                          {isMissed && <button className="danger" onClick={() => openMissed(item)}>Grund angeben</button>}
+                          {isCancelled
+                            ? <button onClick={() => restoreCancelledWorkout(item)}>Wieder einplanen</button>
+                            : item.raceEvent
+                              ? <button onClick={() => navigate("/mission")}>Ziel öffnen</button>
+                              : <button onClick={() => openWorkoutEditor(item)}>Bearbeiten</button>}
+                          {!isPastWeek && !isCancelled && <button onClick={() => openAdjustment(item.id, "cancel")}>Fällt aus</button>}
+                          {!item.raceEvent && <button onClick={() => updateWorkout(item.id, { archived: true })}>Archiv</button>}
+                        </div>
+                        <details className="planner-actions-menu">
+                          <summary aria-label={`${item.title}: Aktionen öffnen`} title="Aktionen">•••</summary>
+                          <div>
+                            {isMissed && <button className="danger" onClick={() => openMissed(item)}>Grund angeben</button>}
+                            {isCancelled
+                              ? <button onClick={() => restoreCancelledWorkout(item)}>Wieder einplanen</button>
+                              : item.raceEvent
+                                ? <button onClick={() => navigate("/mission")}>Ziel öffnen</button>
+                                : <button onClick={() => openWorkoutEditor(item)}>Bearbeiten</button>}
+                            {!isPastWeek && !isCancelled && <button onClick={() => openAdjustment(item.id, "cancel")}>Fällt aus</button>}
+                            {!item.raceEvent && <button onClick={() => updateWorkout(item.id, { archived: true })}>Archiv</button>}
+                          </div>
+                        </details>
+                      </>
                     )}
                   </div>
                 );
