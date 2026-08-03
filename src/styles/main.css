@@ -1070,6 +1070,9 @@ button:focus-visible,a:focus-visible,summary:focus-visible{
 .today-card.premium-briefing-card .today-card-heading h2{font-size:clamp(23px,2.3vw,32px);line-height:1.12}
 .today-side-panel{
   grid-area:side;
+  position:static;
+  top:auto;
+  height:auto;
   display:grid;
   grid-template-rows:auto 1fr;
   gap:12px;

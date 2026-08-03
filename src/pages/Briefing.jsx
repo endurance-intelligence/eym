@@ -332,7 +332,7 @@ export default function Briefing() {
           <div className="today-workout-list">
             {today.items.map((item) => <TodayWorkoutRow item={item} key={item.id} />)}
           </div>
-          <aside className="today-side-panel">
+          <div className="today-side-panel">
             <div className="today-card-actions">
               <span className={`today-summary ${today.open ? "planned" : today.done ? "done" : "rest"}`}>{today.open ? `${today.open} offen` : today.done ? `${today.done} erledigt` : "Regeneration"}</span>
               <Link to="/planner">Wochenplan öffnen →</Link>
@@ -343,7 +343,7 @@ export default function Briefing() {
                 {upcoming.items.map((item) => <div className={`today-upcoming-item ${item.tone}`} key={item.id}><span>{item.status}</span><div><b>{item.title}</b>{item.detail && <small>{item.detail}</small>}</div></div>)}
               </div>
             </div>
-          </aside>
+          </div>
         </Card>
 
 
