@@ -1223,3 +1223,52 @@ button:focus-visible,a:focus-visible,summary:focus-visible{
 .today-card.premium-briefing-card .today-upcoming-heading{
   margin-bottom:4px;
 }
+
+
+/* v3.9.21 – align Today and Next on one optical axis */
+.today-card.premium-briefing-card{
+  grid-template-columns:1fr;
+  grid-template-areas:
+    "today-heading"
+    "today-content";
+  gap:16px;
+}
+.today-card.premium-briefing-card .today-card-heading{
+  grid-area:today-heading;
+  grid-column:auto;
+}
+.today-content-grid{
+  grid-area:today-content;
+  display:grid;
+  grid-template-columns:minmax(0,1.45fr) minmax(300px,.92fr);
+  gap:20px;
+  align-items:center;
+  min-width:0;
+}
+.today-card.premium-briefing-card .today-workout-list{
+  grid-area:auto;
+  align-self:center;
+  min-width:0;
+}
+.today-card.premium-briefing-card .today-side-panel{
+  grid-area:auto;
+  align-self:stretch;
+  display:grid;
+  align-content:center;
+  min-width:0;
+  padding:0 0 0 20px;
+}
+.today-card.premium-briefing-card .today-upcoming-preview{
+  width:100%;
+}
+@media(max-width:1040px){
+  .today-content-grid{
+    grid-template-columns:1fr;
+    gap:14px;
+  }
+  .today-card.premium-briefing-card .today-side-panel{
+    padding:14px 0 0;
+    border-left:0;
+    border-top:1px solid color-mix(in srgb,var(--border) 86%,transparent);
+  }
+}

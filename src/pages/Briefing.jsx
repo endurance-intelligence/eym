@@ -329,14 +329,16 @@ export default function Briefing() {
               <h2>{today.headline}</h2>
             </div>
           </div>
-          <div className="today-workout-list">
-            {today.items.map((item) => <TodayWorkoutRow item={item} key={item.id} />)}
-          </div>
-          <div className="today-side-panel">
-            <div className="today-upcoming-preview">
-              <div className="today-upcoming-heading"><div><p className="eyebrow">Als Nächstes</p><strong>Morgen · {todayLabel.format(upcoming.date)}</strong></div><span>Preview</span></div>
-              <div className="today-upcoming-items">
-                {upcoming.items.map((item) => <div className={`today-upcoming-item ${item.tone}`} key={item.id}><span>{item.status}</span><div><b>{item.title}</b>{item.detail && <small>{item.detail}</small>}</div></div>)}
+          <div className="today-content-grid">
+            <div className="today-workout-list">
+              {today.items.map((item) => <TodayWorkoutRow item={item} key={item.id} />)}
+            </div>
+            <div className="today-side-panel">
+              <div className="today-upcoming-preview">
+                <div className="today-upcoming-heading"><div><p className="eyebrow">Als Nächstes</p><strong>Morgen · {todayLabel.format(upcoming.date)}</strong></div><span>Preview</span></div>
+                <div className="today-upcoming-items">
+                  {upcoming.items.map((item) => <div className={`today-upcoming-item ${item.tone}`} key={item.id}><span>{item.status}</span><div><b>{item.title}</b>{item.detail && <small>{item.detail}</small>}</div></div>)}
+                </div>
               </div>
             </div>
           </div>
