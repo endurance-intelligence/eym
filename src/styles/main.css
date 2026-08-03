@@ -1277,3 +1277,18 @@ button:focus-visible,a:focus-visible,summary:focus-visible{
     border-top:1px solid color-mix(in srgb,var(--border) 86%,transparent);
   }
 }
+
+
+/* v3.9.23 – prevent the nested upcoming preview from using the old grid area */
+.today-card.premium-briefing-card .today-side-panel{
+  grid-template-columns:minmax(0,1fr);
+}
+.today-card.premium-briefing-card .today-upcoming-preview{
+  grid-area:auto;
+  justify-self:stretch;
+  min-width:0;
+  width:100%;
+}
+.today-card.premium-briefing-card .today-upcoming-items{
+  width:100%;
+}
