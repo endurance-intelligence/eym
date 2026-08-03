@@ -1292,3 +1292,43 @@ button:focus-visible,a:focus-visible,summary:focus-visible{
 .today-card.premium-briefing-card .today-upcoming-items{
   width:100%;
 }
+
+
+/* v3.9.24 – balance the upcoming heading with the main today heading */
+.today-card.premium-briefing-card .today-content-grid{
+  align-items:start;
+}
+.today-card.premium-briefing-card .today-workout-list,
+.today-card.premium-briefing-card .today-side-panel{
+  align-self:start;
+}
+.today-card.premium-briefing-card .today-side-panel{
+  align-content:start;
+  padding-top:6px;
+}
+.today-card.premium-briefing-card .today-upcoming-heading{
+  align-items:flex-start;
+  margin-bottom:10px;
+}
+.today-card.premium-briefing-card .today-upcoming-heading .eyebrow{
+  margin:0 0 4px;
+}
+.today-card.premium-briefing-card .today-upcoming-heading strong{
+  display:block;
+  font-size:clamp(23px,2.3vw,32px);
+  line-height:1.12;
+  text-transform:none;
+}
+.today-card.premium-briefing-card .today-upcoming-heading > div{
+  display:grid;
+  align-content:start;
+  gap:0;
+}
+.today-card.premium-briefing-card .today-upcoming-heading > span{
+  margin-top:6px;
+}
+@media(max-width:1040px){
+  .today-card.premium-briefing-card .today-side-panel{
+    padding-top:14px;
+  }
+}
