@@ -295,6 +295,17 @@ export default function Briefing() {
       ? `Getrunken ${latestReview.drinkMl} ml · geschätztes Defizit ${hydrationState.deficit} ml.`
       : hydrationState.reason
     : "Review offen – Körpergefühl und Trinkmenge ergänzen.";
+  const coachNeedsAction = ["adjust", "watch"].includes(coach.level);
+  const coachStatusTitle = coach.level === "ok"
+    ? "Alles im grünen Bereich"
+    : coach.level === "open"
+      ? "Plan steht – Review noch offen"
+      : coach.recommendation.title;
+  const coachStatusText = coach.level === "ok"
+    ? "Belastung und Erholung passen aktuell zusammen. Plan wie vorgesehen fortsetzen."
+    : coach.level === "open"
+      ? "Der Plan bleibt bestehen. Nach dem nächsten relevanten Lauf kurz bewerten."
+      : "Dein Coach hat Alternativen vorbereitet. Es wird nichts automatisch geändert.";
 
   return (
     <>
@@ -328,7 +339,14 @@ export default function Briefing() {
         </Card>
 
 
-        {["adjust", "watch"].includes(coach.level) && <Card className={`wide science-coach-alert ${coach.level}`}><div><p className="eyebrow">Coach · gemeinsame Bewertung</p><h2>{coach.recommendation.title}</h2><p>{coach.recommendation.text}</p><small>{coach.protectionNote}</small></div><Link className="button-link" to="/planner">Coach-Alternativen prüfen</Link></Card>}
+        <Card className={`wide science-coach-alert briefing-coach-status ${coach.level}`}>
+          <div className="briefing-coach-status-copy">
+            <p className="eyebrow">Coach-Check</p>
+            <h2>{coachStatusTitle}</h2>
+            <p>{coachStatusText}</p>
+          </div>
+          <Link className="button-link" to="/planner">{coachNeedsAction ? "Alternativen prüfen" : "Plan ansehen"}</Link>
+        </Card>
 
         <div className="wide briefing-summary-grid">
           <Link className="briefing-card-link" to="/mission" aria-label="Mission öffnen">

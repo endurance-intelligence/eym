@@ -131,13 +131,13 @@ function PlannerActionIcon({ name }) {
       </svg>
     );
   }
-  if (name === "archive") {
+  if (name === "remove") {
     return (
       <svg {...common}>
-        <path d="M3 6h18" />
-        <path d="M5 6v14h14V6" />
-        <path d="M9 10h6" />
-        <path d="M4 3h16v3H4z" />
+        <path d="M4 7h16" />
+        <path d="M9 7V4h6v3" />
+        <path d="m7 7 1 13h8l1-13" />
+        <path d="M10 11v5M14 11v5" />
       </svg>
     );
   }
@@ -1382,6 +1382,13 @@ export default function Planner() {
     setState((current) => ({ ...current, plan: current.plan.map((item) => item.id === id ? { ...item, ...patch } : item) }));
   }
 
+  function removeManualWorkout(item) {
+    if (!item || item.source !== "manual") return;
+    if (!window.confirm(`„${item.title}“ wirklich aus dem Wochenplan entfernen? Die Einheit wird nicht als ausgefallen gewertet.`)) return;
+    updateWorkout(item.id, { archived: true });
+    setStatus(`„${item.title}“ wurde aus dem Wochenplan entfernt.`);
+  }
+
   function openWorkoutEditor(item) {
     setEditing(prepareWorkoutForEditing(item));
   }
@@ -2107,6 +2114,7 @@ export default function Planner() {
                 const coachCandidateDecision = coachCandidate
                   ? coachSuggestionDecision(coachSuggestionDecisions, coachDecisionKey(coachCandidate))
                   : null;
+                const canRemoveFromPlan = item.source === "manual" && !item.raceEvent;
                 const className = `planner-workout ${completed ? "completed" : ""} ${isMissed ? "missed" : ""} ${isCancelled ? "cancelled" : ""} ${hasStateMarker ? "" : "no-marker"}`;
                 return (
                   <div
@@ -2274,11 +2282,12 @@ export default function Planner() {
                               onClick={() => openAdjustment(item.id, "cancel")}
                             />
                           )}
-                          {!item.raceEvent && (
+                          {canRemoveFromPlan && (
                             <PlannerIconAction
-                              icon="archive"
-                              label="Archivieren"
-                              onClick={() => updateWorkout(item.id, { archived: true })}
+                              icon="remove"
+                              label="Aus Wochenplan entfernen"
+                              className="danger"
+                              onClick={() => removeManualWorkout(item)}
                             />
                           )}
                         </div>
@@ -2292,7 +2301,7 @@ export default function Planner() {
                                 ? <button onClick={() => navigate("/mission")}>Ziel öffnen</button>
                                 : <button onClick={() => openWorkoutEditor(item)}>Bearbeiten</button>}
                             {!isPastWeek && !isCancelled && <button onClick={() => openAdjustment(item.id, "cancel")}>Fällt aus</button>}
-                            {!item.raceEvent && <button onClick={() => updateWorkout(item.id, { archived: true })}>Archiv</button>}
+                            {canRemoveFromPlan && <button className="danger" onClick={() => removeManualWorkout(item)}>Aus Wochenplan entfernen</button>}
                           </div>
                         </details>
                       </>
