@@ -27,6 +27,18 @@ function paceSeconds(value) {
   return seconds >= 120 && seconds <= 1200 ? seconds : null;
 }
 
+export function formatTrackPaceInput(value) {
+  const raw = String(value ?? "").trim().replace(/[.,]/g, ":").replace(/[^0-9:]/g, "");
+  if (!raw) return "";
+  if (raw.includes(":")) {
+    const [minutes = "", seconds = ""] = raw.split(":", 2);
+    return `${minutes.slice(0, 2)}:${seconds.slice(0, 2)}`;
+  }
+  if (raw.length < 3) return raw.slice(0, 2);
+  const digits = raw.slice(0, 4);
+  return `${digits.slice(0, -2)}:${digits.slice(-2)}`;
+}
+
 function formatPaceSeconds(value) {
   const seconds = Math.max(0, Math.round(Number(value) || 0));
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
@@ -73,7 +85,11 @@ export function normalizeTrackRounds(value) {
 }
 
 export function normalizeTrackStep(input = {}, fallbackKind = "work") {
-  const kind = input.kind === "recovery" ? "recovery" : fallbackKind === "recovery" ? "recovery" : "work";
+  const kind = input.kind === "recovery"
+    ? "recovery"
+    : input.kind === "work"
+      ? "work"
+      : fallbackKind === "recovery" ? "recovery" : "work";
   const unit = input.unit === "time" ? "time" : "distance";
   const paceRange = trackPaceRange(input);
   return {

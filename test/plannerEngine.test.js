@@ -547,3 +547,101 @@ test("a training-like C event does not force a recovery week, while a depleted e
   assert.equal(depleted.hardAllowed, false);
   assert.match(depleted.notes.join(" "), /Event-Review meldet deutliche Erschöpfung/);
 });
+
+test("fatigue keeps the football title unchanged and offers recovery separately", () => {
+  const result = generateWeekPlan({
+    mission: { id: "goal", name: "50 km Lauf", date: "2026-11-21", targetKm: 50, milestones: [] },
+    profile: { selfReportedRunsPerWeek: 4, selfReportedWeeklyKm: 42, selfReportedLongestRunKm: 24 },
+    offsetWeeks: 1,
+    today: new Date("2026-07-27T12:00:00"),
+    config: {
+      checkin: { energy: 2, fatigue: "worse", illness: "healthy", pain: "none", painLevel: 0 },
+      recurringCommitments: [{
+        id: "football-monday",
+        name: "Fußball",
+        sport: "football",
+        weekday: "Montag",
+        time: "19:00",
+        durationMinutes: 90,
+        load: "high",
+        conflictMode: "exclusive",
+        enabled: true,
+      }],
+      fixedAppointments: { football: false, orcRun: false, saturdayMode: "off" },
+      targetRunCount: 4,
+      stabiCount: 0,
+      rowingCount: 0,
+      runDays: ["Dienstag", "Donnerstag", "Sonntag"],
+      maxLongRun: 30,
+    },
+  });
+
+  const football = result.plan.find((item) => item.commitmentId === "football-monday");
+  assert.ok(football);
+  assert.equal(football.title, "Fußball");
+  assert.equal(football.optional, true);
+  assert.equal(football.readinessRestricted, true);
+  assert.doesNotMatch(football.title, /nur bei guten Beinen/i);
+  assert.match(football.notes, /Ruhetag/);
+});
+
+test("double-training permission does not add an easy run to a hard ORC Track day", () => {
+  const result = generateWeekPlan({
+    mission: { id: "backyard", name: "Backyard Ultra", date: "2026-09-26", targetKm: 100, priority: "B", goalType: "finish", milestones: [] },
+    profile: { selfReportedRunsPerWeek: 5, selfReportedWeeklyKm: 46, selfReportedLongestRunKm: 30 },
+    offsetWeeks: 1,
+    today: new Date("2026-07-27T12:00:00"),
+    config: {
+      checkin: { energy: 4, fatigue: "better", illness: "healthy", pain: "none", painLevel: 0 },
+      recurringCommitments: [{
+        id: "orc-track-tuesday",
+        name: "ORC Track",
+        sport: "running",
+        workoutType: "ORC Track",
+        weekday: "Dienstag",
+        time: "19:00",
+        distanceKm: 8,
+        durationMinutes: 60,
+        load: "high",
+        conflictMode: "exclusive",
+        enabled: true,
+      }],
+      fixedAppointments: { football: false, orcRun: false, saturdayMode: "off" },
+      targetRunCount: 5,
+      stabiCount: 1,
+      stabiDays: ["Dienstag"],
+      rowingCount: 0,
+      runDays: ["Dienstag", "Donnerstag", "Freitag", "Sonntag"],
+      doubleTrainingDays: ["Dienstag"],
+      maxLongRun: 32,
+    },
+  });
+
+  const tuesdayRuns = result.plan.filter((item) => item.day === "Dienstag" && /run|lauf|track|intervall|schwelle|tempo|backyard/i.test(`${item.type} ${item.title}`));
+  assert.equal(tuesdayRuns.length, 1);
+  assert.equal(tuesdayRuns[0].commitmentId, "orc-track-tuesday");
+  assert.equal(result.plan.some((item) => item.day === "Dienstag" && item.type === "Easy Run"), false);
+  assert.ok(result.plan.some((item) => ["Donnerstag", "Freitag"].includes(item.day) && item.type === "Easy Run"));
+});
+
+test("planner stores a readable reason for the current loop-training decision", () => {
+  const result = generateWeekPlan({
+    mission: { id: "backyard", name: "Backyard Ultra", date: "2026-09-26", targetKm: 100, priority: "B", goalType: "finish", loopKm: 6.7, loopMode: "clocked_loop", milestones: [] },
+    profile: { selfReportedRunsPerWeek: 5, selfReportedWeeklyKm: 46, selfReportedLongestRunKm: 30 },
+    offsetWeeks: 1,
+    today: new Date("2026-07-27T12:00:00"),
+    config: {
+      recurringCommitments: [],
+      fixedAppointments: { football: false, orcRun: false, saturdayMode: "off" },
+      targetRunCount: 5,
+      stabiCount: 0,
+      rowingCount: 0,
+      runDays: ["Dienstag", "Donnerstag", "Freitag", "Sonntag"],
+      maxLongRun: 32,
+    },
+  });
+
+  assert.equal(typeof result.loopDecision.reason, "string");
+  assert.ok(result.loopDecision.reason.length > 20);
+  assert.equal(typeof result.loopDecision.scheduled, "boolean");
+});

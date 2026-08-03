@@ -117,12 +117,24 @@ function recentLongestRun(activities, weekStart) {
   }, 0);
 }
 
-function loopTrainingPrescription(goal, daysLeft, longRun, cycle, recoveryWeek) {
+function loopTrainingDecision(goal, daysLeft, longRun, cycle, recoveryWeek) {
   const loopKm = Number(goal?.loopKm || 0);
-  if (!loopKm || recoveryWeek || daysLeft > 84 || daysLeft <= 14 || longRun < loopKm * 2) return null;
+  const eventName = goal?.name || "das Rundenziel";
+  const base = {
+    scheduled: false,
+    eventName,
+    loopKm,
+    reason: "",
+    prescription: null,
+  };
+  if (!loopKm) return { ...base, reason: "Für das Ziel ist keine offizielle Rundenlänge hinterlegt; deshalb wird kein künstlicher Loop-Block erzeugt." };
+  if (recoveryWeek) return { ...base, reason: `Diese Woche ist bewusst entlastet. ${eventName} bleibt über einen lockeren zielspezifischen Longrun präsent, der vollständige Loop-Block folgt in einer belastbaren Woche.` };
+  if (daysLeft > 84) return { ...base, reason: `Der Wettkampf ist noch mehr als zwölf Wochen entfernt. Zunächst wird die allgemeine Ausdauer aufgebaut; vollständige ${String(loopKm).replace(".", ",")}-km-Runden werden später häufiger.` };
+  if (daysLeft <= 14) return { ...base, reason: "In den letzten zwei Wochen wird kein großer Loop-Block mehr erzwungen; Frische und vorhandene Routine haben Vorrang." };
+  if (longRun < loopKm * 2) return { ...base, reason: `Der sichere Longrun-Rahmen dieser Woche liegt unter zwei vollständigen Runden. Deshalb bleibt die Einheit zielspezifisch, ohne eine unvollständige Runde zu konstruieren.` };
   const alternatingWeek = Math.floor(daysLeft / 7) % 2 === 0;
   const specificEnough = daysLeft <= 49 || alternatingWeek || cycle === 3;
-  if (!specificEnough) return null;
+  if (!specificEnough) return { ...base, reason: `Diese Woche trainiert den zielspezifischen Dauerreiz ohne festen Loop-Block. Die vollständige Rundenprobe wird im Wechsel mit normalen Longruns gesetzt, damit nicht jeder lange Lauf dieselbe Belastung erzeugt.` };
   const desiredLoops = daysLeft > 56 ? 3 : daysLeft > 35 ? 4 : 5;
   const availableLoops = Math.max(2, Math.floor(longRun / loopKm));
   const loops = Math.max(2, Math.min(desiredLoops, availableLoops, goal.goalKind === "backyard" ? 6 : 7));
@@ -135,7 +147,7 @@ function loopTrainingPrescription(goal, daysLeft, longRun, cycle, recoveryWeek) 
       : goal.aidStationMode === "self_supported"
         ? "Die geplante Selbstversorgung und das komplette Material mitführen."
         : "Pausen- und Fuel-Routine passend zum Event testen.";
-  return {
+  const prescription = {
     loops,
     loopKm,
     distance,
@@ -151,6 +163,12 @@ function loopTrainingPrescription(goal, daysLeft, longRun, cycle, recoveryWeek) 
     notes: goal.goalKind === "backyard"
       ? `Spezifischer Backyard-Block: jede Runde kontrolliert und die Geh-/Rundenroutine testen. ${supplyRoutine} Garmin-Runden und Pausen werden am echten Rundenpunkt manuell per LAP gesteuert.`
       : `Spezifischer Loop-Block für ${goal?.name || "das Hauptziel"}: gleichmäßiger Rhythmus und kurze Stopps. ${supplyRoutine} Garmin-Runden und Boxenstopps werden am echten Rundenpunkt manuell per LAP gesteuert.`,
+  };
+  return {
+    ...base,
+    scheduled: true,
+    reason: `${loops} vollständige Runden passen in den sicheren Longrun-Rahmen und setzen diese Woche den geplanten spezifischen Rundenreiz.`,
+    prescription,
   };
 }
 
@@ -986,27 +1004,46 @@ function distributeEasyKilometers(plan, weekStart, target, fixedKm, config, phas
   const allowed = new Set(Array.isArray(config.runDays) ? config.runDays : []);
   const trueDoubleDays = new Set(config.doubleTrainingDays || []);
   const existingQuality = plan.some((entry) => /orc\s*track|intervall|schwelle|threshold|tempo/i.test(`${entry.type || ""} ${entry.title || ""}`));
+  const preference = ["Donnerstag", "Freitag", "Dienstag", "Mittwoch", "Sonntag", "Samstag", "Montag"];
 
-  function hasEnduranceSession(day) {
+  function dayEntries(day) {
     const date = isoDate(dateForDay(weekStart, DAY_INDEX[day]));
-    return plan.some((entry) => entry.date === date && !["Stabi", "Ruhetag"].includes(entry.type));
+    return plan.filter((entry) => entry.date === date && !["Stabi", "Mobility", "Ruhetag"].includes(entry.type));
   }
 
-  const candidates = [
-    "Dienstag",
-    "Donnerstag",
-    "Freitag",
-    "Mittwoch",
-    "Samstag",
-    "Sonntag",
-    "Montag",
-  ].filter((day) => {
-    if (!allowed.has(day) || (hasEnduranceSession(day) && !trueDoubleDays.has(day))) return false;
-    if (!eventWeek) return true;
-    const date = isoDate(dateForDay(weekStart, DAY_INDEX[day]));
-    const relation = eventRelation(date, eventWeek);
-    return !relation || ![0, 1].includes(relation.days);
-  });
+  function isHardEntry(entry) {
+    return entry.commitmentLoad === "high"
+      || /fußball|football|orc\s*track|intervall|schwelle|threshold|tempo|wettkampf|race/i.test(`${entry.type || ""} ${entry.title || ""}`);
+  }
+
+  const hardDayIndexes = new Set(plan
+    .filter(isHardEntry)
+    .map((entry) => DAY_INDEX[entry.day])
+    .filter((value) => value !== undefined));
+
+  const candidates = preference
+    .filter((day) => allowed.has(day))
+    .map((day) => {
+      const entries = dayEntries(day);
+      const occupied = entries.length > 0;
+      const hard = entries.some(isHardEntry);
+      const date = isoDate(dateForDay(weekStart, DAY_INDEX[day]));
+      const relation = eventRelation(date, eventWeek);
+      const eventBlocked = Boolean(relation && [0, 1].includes(relation.days));
+      const doubleAllowed = occupied && trueDoubleDays.has(day);
+      const safeDouble = doubleAllowed && !hard;
+      const adjacentHard = [...hardDayIndexes].some((index) => Math.abs(index - DAY_INDEX[day]) === 1);
+      return {
+        day,
+        occupied,
+        hard,
+        eventBlocked,
+        safeDouble,
+        score: (occupied ? 100 : 0) + (adjacentHard ? 12 : 0) + preference.indexOf(day),
+      };
+    })
+    .filter((candidate) => !candidate.eventBlocked && (!candidate.occupied || candidate.safeDouble))
+    .sort((left, right) => left.score - right.score);
 
   const remaining = Math.max(0, target - fixedKm);
   const defaultDesiredSessions = target >= 75 ? 3 : remaining > 12 ? 2 : 1;
@@ -1034,30 +1071,32 @@ function distributeEasyKilometers(plan, weekStart, target, fixedKm, config, phas
             const totalWeight = raw.reduce((sum, value) => sum + value, 0);
             return raw.map((value) => value / totalWeight);
           })();
-  candidates.slice(0, sessionCount).forEach((day, index) => {
+  candidates.slice(0, sessionCount).forEach((candidate, index) => {
+    const day = candidate.day;
     const date = isoDate(dateForDay(weekStart, DAY_INDEX[day]));
     const relation = eventRelation(date, eventWeek);
     const afterEvent = Boolean(relation && relation.days < 0);
     const rawDistance = Math.max(eventWeek ? 3 : 4, Math.round(remaining * weights[index]));
-    const distance = eventWeek ? Math.min(eventWeek.easyRunCapKm, rawDistance) : rawDistance;
-    const paired = hasEnduranceSession(day);
+    const normalDistance = eventWeek ? Math.min(eventWeek.easyRunCapKm, rawDistance) : rawDistance;
+    const distance = candidate.occupied ? Math.min(6, normalDistance) : normalDistance;
+    const paired = candidate.occupied;
     const quality = !existingQuality && !eventWeek && day === "Freitag" && !paired && readiness.hardAllowed && ["build", "specific"].includes(phase.key) && cycle >= 2 && target >= 45;
     plan.push(item(weekStart, DAY_INDEX[day], {
       time: paired ? "07:00" : "18:00",
-      title: quality ? `${distance} km mit Schwellenblock` : afterEvent ? `${distance} km Recovery optional` : `${distance} km locker`,
+      title: quality ? `${distance} km mit Schwellenblock` : afterEvent ? `${distance} km Recovery optional` : paired ? `${distance} km Recovery locker` : `${distance} km locker`,
       type: quality ? "Schwellenlauf" : "Easy Run",
       distance,
-      duration: Math.round(distance * (afterEvent ? 7 : 6.4)),
+      duration: Math.round(distance * (afterEvent || paired ? 7 : 6.4)),
       notes: quality
         ? "Nur kontrolliert: Einlaufen, kurzer Schwellenblock und auslaufen."
         : afterEvent
           ? `Nur zur lockeren Erholung nach ${relation.event.name}. Bei schweren Beinen komplett auslassen.`
-        : paired
-          ? "Echter Doppeltrainingstag: sehr locker laufen und ausreichend Abstand zur zweiten Einheit lassen."
-          : eventWeek
-            ? `Locker im Frischerahmen für ${eventWeek.primary.name}. Keine Zusatzkilometer und keine ungeplante Intensität.`
-            : "Locker laufen, keine Pace erzwingen.",
-      optional: afterEvent || (index === sessionCount - 1 && target >= 55),
+          : paired
+            ? "Bewusst kleine zweite Einheit an einem freigegebenen Doppeltrainingstag. Eine Doppeleinheit ist eine Option, kein Muss; bei müden Beinen auslassen."
+            : eventWeek
+              ? `Locker im Frischerahmen für ${eventWeek.primary.name}. Keine Zusatzkilometer und keine ungeplante Intensität.`
+              : "Locker laufen, keine Pace erzwingen.",
+      optional: afterEvent || paired || (index === sessionCount - 1 && target >= 55),
       doubleSession: paired,
       comboSession: false,
       eventProtection: Boolean(eventWeek),
@@ -1172,7 +1211,8 @@ export function generateWeekPlan({
       Number(config.maxLongRun || 38),
     ))
     : 0;
-  const loopPrescription = loopTrainingPrescription(goal, daysLeft, longRun, cycle, recoveryWeek);
+  const loopDecision = loopTrainingDecision(goal, daysLeft, longRun, cycle, recoveryWeek);
+  const loopPrescription = loopDecision.prescription;
 
   const fridayWeather = weatherDecision(weatherForDate(forecast, dateForDay(weekStart, 4)), config);
   let plan = [];
@@ -1331,10 +1371,20 @@ export function generateWeekPlan({
           return { ...entry, type: "Easy Run", title: `${entry.distance} km locker`, notes: "Qualität wegen Check-in ausgesetzt. Nur locker laufen." };
         }
         if (entry.type === "Fußball") {
-          return { ...entry, optional: true, title: "Fußball nur bei guten Beinen", notes: "Check-in zeigt eingeschränkte Bereitschaft. Nur teilnehmen, wenn du dich beim Aufwärmen normal und beschwerdefrei fühlst." };
+          return {
+            ...entry,
+            optional: true,
+            readinessRestricted: true,
+            notes: "Der Fixtermin bleibt unverändert sichtbar. Wegen der aktuellen Erholungssignale empfiehlt der Coach als Alternative einen Ruhetag; die Entscheidung bleibt bei dir.",
+          };
         }
         if (entry.type === "ORC Track") {
-          return { ...entry, optional: true, title: "ORC Track sehr locker oder auslassen", notes: "Keine harte Bahn-/Tempoeinheit in dieser Woche." };
+          return {
+            ...entry,
+            optional: true,
+            readinessRestricted: true,
+            notes: "Der Fixtermin bleibt unverändert sichtbar. Wegen der aktuellen Erholungssignale empfiehlt der Coach eine lockere Alternative oder Erholung.",
+          };
         }
         if (entry.type === "Samstagsoption") {
           return { ...entry, type: "Easy Run", title: `${entry.distance} km locker`, choicePending: false, choiceOptions: null, notes: "Coach-Anpassung: kein ORC Track, nur lockerer Alternativlauf." };
@@ -1532,6 +1582,12 @@ export function generateWeekPlan({
       })),
     } : null,
     loopStrategy: loopPrescription,
+    loopDecision: {
+      scheduled: loopDecision.scheduled,
+      eventName: loopDecision.eventName,
+      loopKm: loopDecision.loopKm,
+      reason: loopDecision.reason,
+    },
     history: history.map((week) => ({ start: isoDate(week.start), km: Math.round(week.km * 10) / 10 })),
     weatherNote: fridayWeather?.indoor ? "Freitag wetterbedingt angepasst." : "",
   };

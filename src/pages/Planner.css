@@ -1098,3 +1098,59 @@
   .planner-review-cue{grid-column:3;grid-row:1;justify-self:end}
   .planner-workout.no-marker .planner-review-cue{grid-column:2}
 }
+
+/* v3.9.11 – transparent weekly load logic and safer double-session planning */
+.planner-week-logic{
+  overflow:hidden;
+  margin:0 0 14px;
+  border:1px solid var(--border);
+  border-radius:13px;
+  background:color-mix(in srgb,var(--bg-card-alt) 82%,var(--bg-card));
+}
+.planner-week-logic.good{border-color:color-mix(in srgb,var(--success,#5ee494) 48%,var(--border))}
+.planner-week-logic.watch,.planner-week-logic.warn{border-color:rgba(250,204,21,.45)}
+.planner-week-logic.bad{border-color:rgba(248,113,113,.58)}
+.planner-week-logic>summary{
+  display:grid;
+  grid-template-columns:minmax(260px,1.25fr) auto auto;
+  gap:16px;
+  align-items:center;
+  min-height:62px;
+  padding:11px 14px;
+  cursor:pointer;
+  list-style:none;
+}
+.planner-week-logic>summary::-webkit-details-marker{display:none}
+.planner-week-logic-lead{display:grid;gap:2px;min-width:0}
+.planner-week-logic-lead>span,.planner-week-logic-body article>span{
+  color:var(--accent-bright);
+  font-size:9px;
+  font-weight:900;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+}
+.planner-week-logic-lead>strong{font-size:14px}
+.planner-week-logic-lead>small{overflow:hidden;color:var(--muted);font-size:10px;text-overflow:ellipsis;white-space:nowrap}
+.planner-week-logic-metrics{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}
+.planner-week-logic-metrics>span{padding:6px 8px;border:1px solid var(--border);border-radius:999px;background:var(--bg-input);color:var(--muted);font-size:9px;white-space:nowrap}
+.planner-week-logic-metrics b{color:var(--text);font-size:11px}
+.planner-week-logic-toggle{color:var(--accent-bright);font-size:10px;white-space:nowrap}
+.planner-week-logic[open]>summary{border-bottom:1px solid var(--border)}
+.planner-week-logic[open] .planner-week-logic-toggle{font-size:0}
+.planner-week-logic[open] .planner-week-logic-toggle::after{content:"Erklärung schließen";font-size:10px}
+.planner-week-logic-body{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:11px 14px 14px}
+.planner-week-logic-body article{display:grid;align-content:start;gap:4px;padding:11px 12px;border:1px solid var(--border);border-radius:11px;background:var(--bg-input)}
+.planner-week-logic-body article>strong{font-size:12px}
+.planner-week-logic-body article>p{margin:0;color:var(--muted-bright);font-size:10px;line-height:1.45}
+@media(max-width:900px){
+  .planner-week-logic>summary{grid-template-columns:minmax(0,1fr) auto}
+  .planner-week-logic-metrics{grid-column:1/-1;justify-content:flex-start}
+  .planner-week-logic-toggle{grid-column:2;grid-row:1;align-self:start}
+}
+@media(max-width:620px){
+  .planner-week-logic>summary{grid-template-columns:minmax(0,1fr) auto;gap:9px;padding:10px 12px}
+  .planner-week-logic-lead>small{white-space:normal}
+  .planner-week-logic-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+  .planner-week-logic-metrics>span{text-align:center;white-space:normal}
+  .planner-week-logic-body{grid-template-columns:1fr;padding:10px 12px 12px}
+}

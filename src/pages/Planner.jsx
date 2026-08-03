@@ -42,6 +42,7 @@ import {
 } from "../services/reviewCoverage";
 import {
   buildTrackWorkoutTemplate,
+  formatTrackPaceInput,
   isProvisionalTrackWorkout,
   isTrackWorkout,
   normalizeTrackRounds,
@@ -483,6 +484,18 @@ export default function Planner() {
     coachSuggestionDecisions,
     coachSuggestionContext,
   );
+  const loadPercent = Math.round(Number(scienceAssessment.ratio || 1) * 100);
+  const loadComparisonLabel = scienceAssessment.hasBaseline ? `${loadPercent} %` : "Vergleich noch offen";
+  const fixedSessionCount = weekPlan.filter((item) => !item.missedReason && (item.fixed || item.commitmentId)).length;
+  const keySessionCount = weekPlan.filter((item) => !item.missedReason && (item.keySession || /orc\s*track|intervall|schwelle|longrun|loop-training|backyard/i.test(`${item.type || ""} ${item.title || ""}`))).length;
+  const specificWeekEntry = weekPlan.find((item) => isLoopWorkout(item))
+    || weekPlan.find((item) => /backyard-spezifisch|zielspezifisch|rundenroutine|pausenroutine/i.test(`${item.notes || ""} ${item.title || ""}`));
+  const loopExplanation = config.lastLoopStrategy
+    ? `${config.lastLoopStrategy.loops} × ${String(config.lastLoopStrategy.loopKm).replace(".", ",")} km sind als vollständiger Loop-Block eingeplant.`
+    : config.lastLoopDecision?.reason
+      || (specificWeekEntry
+        ? `${specificWeekEntry.title} übernimmt diese Woche den zielspezifischen Dauerreiz. Ein vollständiger Loop-Block wird nicht in jede Woche gezwungen.`
+        : "Diese Woche enthält keinen vollständigen Loop-Block; die Begründung wird nach der nächsten Planberechnung gespeichert.");
   const coachAlertCause = scienceAssessment.reasons.some((reason) => /review|müde|energie/i.test(reason))
     ? "aufgrund deiner aktuellen Reviews"
     : "aufgrund der aktuellen Wochenbelastung";
@@ -720,7 +733,10 @@ export default function Planner() {
         ),
       },
     }));
-    setStatus(`Coach-Vorschlag für ${candidate.title} abgelehnt. Die Einheit bleibt unverändert.`);
+    const nextCandidate = activeCoachSuggestions.find((entry) => entry.id !== candidate.id);
+    setStatus(nextCandidate
+      ? `Coach-Vorschlag für ${candidate.title} abgelehnt. Die Einheit bleibt unverändert; als Nächstes wird die flexible Alternative bei ${nextCandidate.title} angeboten.`
+      : `Coach-Vorschlag für ${candidate.title} abgelehnt. Die Einheit bleibt unverändert; es gibt aktuell keinen weiteren sinnvollen Tausch.`);
   }
 
   function reconsiderCoachSuggestion(candidate) {
@@ -1128,6 +1144,9 @@ export default function Planner() {
         lastPlanningTarget: generated.planningTarget || null,
         lastGoalProfile: generated.goalProfile || null,
         lastLoopStrategy: generated.loopStrategy || null,
+        lastLoopDecision: generated.loopDecision || null,
+        lastRecoveryReason: generated.recoveryReason || "",
+        lastReadiness: generated.readiness || null,
         lastEventWeek: generated.eventWeek || null,
       },
     }));
@@ -1709,6 +1728,46 @@ export default function Planner() {
               ))}
             </div>
             <small>Die Empfehlung steht zusätzlich direkt an der betroffenen Einheit. Dort kannst du sie sofort annehmen oder ablehnen.</small>
+          </div>
+        </details>
+      )}
+
+      {offsetWeeks === 0 && weekPlan.length > 0 && (
+        <details className={`planner-week-logic ${scienceAssessment.loadBand?.tone || "neutral"}`}>
+          <summary>
+            <div className="planner-week-logic-lead">
+              <span>Wochenbelastung</span>
+              <strong>{loadComparisonLabel} · {scienceAssessment.loadBand?.label || "Wird eingeordnet"}</strong>
+              <small>{scienceAssessment.loadBand?.summary || "Belastung und Erholung werden aus Plan, Aktivitäten und Reviews zusammengeführt."}</small>
+            </div>
+            <div className="planner-week-logic-metrics">
+              <span><b>{config.lastTarget || "–"}</b> km Laufrahmen</span>
+              <span><b>{fixedSessionCount}</b> Fixtermine</span>
+              <span><b>{scienceAssessment.hardCount ?? keySessionCount}</b> offene Belastungsreize</span>
+            </div>
+            <b className="planner-week-logic-toggle">Warum dieser Plan?</b>
+          </summary>
+          <div className="planner-week-logic-body">
+            <article>
+              <span>Belastungsrechnung</span>
+              <strong>{scienceAssessment.projected} Punkte geplant · jüngstes Mittel {scienceAssessment.average || "–"} aus {scienceAssessment.baselineWeeks || 0} Wochen</strong>
+              <p>{scienceAssessment.completed} Punkte sind bereits absolviert, {scienceAssessment.remaining} Punkte liegen noch vor dir. Der Coach-Load-Index verbindet Dauer, Sportart, Distanz, Höhenmeter und vorhandene Reviews; er ist ein transparenter Steuerungswert und kein medizinischer Messwert.</p>
+            </article>
+            <article>
+              <span>Fixtermine & Doppeltraining</span>
+              <strong>Freie Tage werden vor harten Fixterminen belegt</strong>
+              <p>Ein freigegebener Doppeltrainingstag ist nur eine Erlaubnis, kein Planungsauftrag. Auf einen harten ORC-Track- oder Fußballtag setzt der Coach keinen zusätzlichen generierten Lauf. Eine zweite Einheit wird zuerst auf einen freien Tag verschoben.</p>
+            </article>
+            <article>
+              <span>Zielspezifität</span>
+              <strong>{specificWeekEntry ? specificWeekEntry.title : goalProfile.target?.name || "Aktuelles Hauptziel"}</strong>
+              <p>{loopExplanation}</p>
+            </article>
+            <article>
+              <span>Coach-Anpassungen</span>
+              <strong>Flexible Einheiten zuerst, Fixtermine zuletzt</strong>
+              <p>Lehnst du eine Empfehlung ab, bleibt die Einheit bestehen und der nächste flexible Kandidat wird angeboten. Gruppen- und Vereinstermine werden nur vorgeschlagen, wenn flexible Änderungen die Belastung nicht ausreichend senken.</p>
+            </article>
           </div>
         </details>
       )}
@@ -2348,7 +2407,7 @@ export default function Planner() {
                 </div>
                 <div className="planner-track-sequence">
                   <div className="planner-track-sequence-heading">
-                    <div><strong>Schritte je Durchgang</strong><small>Die Reihenfolge wird genauso an Garmin übergeben.</small></div>
+                    <div><strong>Schritte je Durchgang</strong><small>Die Reihenfolge wird genauso an Garmin übergeben. Zwei Belastungsblöcke dürfen direkt aufeinanderfolgen; „510“ wird automatisch zu „5:10“.</small></div>
                     <span>{editingTrackWorkout.steps.length}/16</span>
                   </div>
                   {editingTrackWorkout.steps.map((step, index) => (
@@ -2357,7 +2416,7 @@ export default function Planner() {
                       <label>Abschnitt<select value={step.kind} onChange={(event) => updateTrackStep(index, "kind", event.target.value)}><option value="work">Belastung</option><option value="recovery">Pause</option></select></label>
                       <label>Einheit<select value={step.unit} onChange={(event) => updateTrackStep(index, "unit", event.target.value)}><option value="distance">Meter</option><option value="time">Sekunden</option></select></label>
                       <label>Wert<input type="number" min={step.unit === "distance" ? "20" : "5"} max={step.unit === "distance" ? "5000" : "3600"} value={step.value} onChange={(event) => updateTrackStep(index, "value", event.target.value)} onBlur={() => commitTrackStep(index)} /></label>
-                      <label>Ziel-Pace /km<input type="text" inputMode="decimal" pattern="[0-9]{1,2}[:.,][0-5][0-9]" placeholder="z. B. 4:40" title="Pace im Format 4:40 min/km" value={step.targetPace || ""} onChange={(event) => updateTrackStep(index, "targetPace", event.target.value)} onBlur={() => commitTrackStep(index)} /></label>
+                      <label>Ziel-Pace /km<input type="text" inputMode="numeric" pattern="[0-9]{1,2}[:.,][0-5][0-9]" placeholder="z. B. 4:40 oder 440" title="Pace als 4:40 oder 440 eingeben" value={step.targetPace || ""} onChange={(event) => updateTrackStep(index, "targetPace", formatTrackPaceInput(event.target.value))} onBlur={() => commitTrackStep(index)} /></label>
                       <label>Toleranz<select value={step.paceToleranceSeconds ?? 5} disabled={!step.targetPace} onChange={(event) => updateTrackStep(index, "paceToleranceSeconds", Number(event.target.value))}><option value="5">± 5 Sek.</option><option value="10">± 10 Sek.</option><option value="15">± 15 Sek.</option><option value="20">± 20 Sek.</option><option value="30">± 30 Sek.</option></select></label>
                       <div className="planner-track-step-actions">
                         <button type="button" onClick={() => moveTrackStep(index, -1)} disabled={index === 0} aria-label={`Schritt ${index + 1} nach oben`}>↑</button>

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   buildTrackWorkoutTemplate,
+  formatTrackPaceInput,
   isProvisionalTrackWorkout,
   isTrackWorkout,
   normalizeTrackPace,
@@ -353,4 +354,35 @@ test("automatic distance remains an explicit opt-in for loop workouts", () => {
   assert.match(description, /- 6\.7km 7:50-7:10\/km Pace intensity=active/);
   assert.equal(description.match(/- 6\.7km/g)?.length, 2);
   assert.match(description, /Boxenstopp 1\n- Press lap 10m intensity=recovery/);
+});
+
+test("mobile pace input formats raw digits without requiring a colon", () => {
+  assert.equal(formatTrackPaceInput("510"), "5:10");
+  assert.equal(formatTrackPaceInput("1045"), "10:45");
+  assert.equal(formatTrackPaceInput("4.50"), "4:50");
+  assert.equal(formatTrackPaceInput("4:"), "4:");
+});
+
+test("track workouts keep consecutive paced work blocks without inserting recovery", () => {
+  const workout = normalizeTrackWorkout({
+    rounds: 3,
+    steps: [
+      { kind: "work", unit: "distance", value: 2000, targetPace: "4:50", paceToleranceSeconds: 5 },
+      { kind: "work", unit: "distance", value: 1000, targetPace: "5:10", paceToleranceSeconds: 5 },
+    ],
+  });
+
+  assert.deepEqual(workout.steps.map((step) => step.kind), ["work", "work"]);
+  assert.match(trackWorkoutSummary(workout), /2000 m Belastung @ 4:50\/km/);
+  assert.match(trackWorkoutSummary(workout), /1000 m Belastung @ 5:10\/km/);
+
+  const description = intervalDescription({
+    type: "ORC Track",
+    title: "3 × 2000/1000 extensiv",
+    structuredWorkout: workout,
+  });
+  assert.match(description, /Hauptteil 3x/);
+  assert.match(description, /Belastung 2000mtr 4:45-4:55\/km Pace intensity=interval/);
+  assert.match(description, /Belastung 1000mtr 5:05-5:15\/km Pace intensity=interval/);
+  assert.doesNotMatch(description, /Pause/);
 });

@@ -45,6 +45,27 @@ function plannedLoad(item) {
   return Math.round((minutes * intensityFactor(`${item?.title || ""} ${item?.type || ""}`)) + distance * 1.6 + elevation / 35);
 }
 
+
+export function loadBandForRatio(ratio = 1, hasBaseline = true) {
+  const value = numeric(ratio) || 0;
+  if (!hasBaseline) {
+    return { key: "open", label: "Noch ohne belastbaren Vergleich", tone: "neutral", summary: "Für eine Einordnung fehlen noch mehrere vollständige Trainingswochen." };
+  }
+  if (value < 0.75) {
+    return { key: "recovery", label: "Bewusst leicht", tone: "good", summary: "Die Woche liegt klar unter deinem jüngsten Rahmen und eignet sich zur Erholung." };
+  }
+  if (value <= 1.15) {
+    return { key: "green", label: "Im grünen Bereich", tone: "good", summary: "Die geplante Belastung liegt in deinem aktuellen, gut bekannten Trainingskorridor." };
+  }
+  if (value <= 1.3) {
+    return { key: "upper-green", label: "Oberer Zielkorridor", tone: "watch", summary: "Die Woche ist fordernd, aber noch kontrolliert, sofern die Erholung stabil bleibt." };
+  }
+  if (value < 1.5) {
+    return { key: "high", label: "Erhöht", tone: "warn", summary: "Die projizierte Belastung liegt deutlich über deinem jüngsten Mittel und sollte aktiv gesteuert werden." };
+  }
+  return { key: "too-high", label: "Zu hoch", tone: "bad", summary: "Die Woche überschreitet deinen jüngsten Belastungsrahmen klar; eine Anpassung ist sinnvoll." };
+}
+
 function plannedSport(item = {}) {
   const value = `${item.title || ""} ${item.type || ""}`.toLowerCase();
   if (/track|intervall|schwelle|tempo|run|lauf|backyard|ultra/.test(value)) return "running";
@@ -113,9 +134,10 @@ export function coachAlternativeFor(item = {}, context = {}) {
   const sport = plannedSport(item);
   const hard = intensityFactor(`${item.title || ""} ${item.type || ""}`) >= 1.2;
   const primary = Number(context.index || 0) === 0;
+  const preferRest = Boolean(context.preferRest);
   const overload = context.level === "adjust" || numeric(context.ratio) >= 1.5 || numeric(context.lowReviews) >= 2;
 
-  if (primary && overload) {
+  if ((primary || preferRest) && overload) {
     let reason = alternativeDetails["preset:rest"].reason;
     if (numeric(context.ratio) >= 1.5) {
       reason = "Die projizierte Belastung liegt deutlich über deinem jüngsten Rahmen. Ein freier Tag senkt sie am zuverlässigsten.";
@@ -206,46 +228,122 @@ export function currentWeekAssessment(state, now = new Date()) {
   const end = new Date(start); end.setDate(end.getDate() + 7);
   const previousStart = new Date(start); previousStart.setDate(previousStart.getDate() - 42);
   const activities = preferredActivities(state.activities || []);
-  const recent = activities.filter((a) => activityTimestamp(a) >= previousStart && activityTimestamp(a) < start);
-  const recentLoads = Array.from({length:6}, (_,i) => {
-    const ws = new Date(previousStart); ws.setDate(ws.getDate()+i*7);
-    const we = new Date(ws); we.setDate(we.getDate()+7);
-    return recent.filter(a => activityTimestamp(a)>=ws && activityTimestamp(a)<we).reduce((sum,a)=>sum+activityLoad(a,reviewFor(state.reviews,a)),0);
+  const recent = activities.filter((activity) => activityTimestamp(activity) >= previousStart && activityTimestamp(activity) < start);
+  const recentLoads = Array.from({ length: 6 }, (_, index) => {
+    const weekStart = new Date(previousStart); weekStart.setDate(weekStart.getDate() + index * 7);
+    const weekEnd = new Date(weekStart); weekEnd.setDate(weekEnd.getDate() + 7);
+    return recent
+      .filter((activity) => activityTimestamp(activity) >= weekStart && activityTimestamp(activity) < weekEnd)
+      .reduce((sum, activity) => sum + activityLoad(activity, reviewFor(state.reviews, activity)), 0);
   });
-  const average = recentLoads.reduce((a,b)=>a+b,0) / Math.max(1,recentLoads.filter(Boolean).length);
-  const completed = activities.filter(a => activityTimestamp(a)>=start && activityTimestamp(a)<end).reduce((sum,a)=>sum+activityLoad(a,reviewFor(state.reviews,a)),0);
+  const nonEmptyLoads = recentLoads.filter((value) => value > 0);
+  const average = recentLoads.reduce((left, right) => left + right, 0) / Math.max(1, nonEmptyLoads.length);
+  const completed = activities
+    .filter((activity) => activityTimestamp(activity) >= start && activityTimestamp(activity) < end)
+    .reduce((sum, activity) => sum + activityLoad(activity, reviewFor(state.reviews, activity)), 0);
   const todayKey = `${reference.getFullYear()}-${String(reference.getMonth() + 1).padStart(2, "0")}-${String(reference.getDate()).padStart(2, "0")}`;
-  const open = (state.plan || []).filter(i => !i.archived && i.date>=todayKey && i.date<end.toISOString().slice(0,10) && !i.completed && !i.missedReason);
-  const remaining = open.reduce((sum,i)=>sum+plannedLoad(i),0);
+  const open = (state.plan || []).filter((item) => (
+    !item.archived
+    && item.date >= todayKey
+    && item.date < end.toISOString().slice(0, 10)
+    && !item.completed
+    && !item.missedReason
+    && item.type !== "Ruhetag"
+  ));
+  const remaining = open.reduce((sum, item) => sum + plannedLoad(item), 0);
   const projected = completed + remaining;
-  const ratio = average > 0 ? projected / average : 1;
-  const hard = open.filter(i => intensityFactor(`${i.title} ${i.type}`)>=1.2);
-  const lowReviews = Object.values(state.reviews || {}).filter(r => numeric(r.energy)>0 && numeric(r.energy)<=5 || numeric(r.legs)>0 && numeric(r.legs)<=5).slice(-4).length;
+  const hasBaseline = nonEmptyLoads.length >= 2 && average > 0;
+  const ratio = hasBaseline ? projected / average : 1;
+  const hard = open.filter((item) => intensityFactor(`${item.title} ${item.type}`) >= 1.2);
+  const reviewCutoff = new Date(reference.getTime() - 21 * DAY);
+  const recentReviewed = activities
+    .filter((activity) => activityTimestamp(activity) >= reviewCutoff && activityTimestamp(activity) < end && state.reviews?.[activity.id])
+    .sort((left, right) => activityTimestamp(right) - activityTimestamp(left))
+    .slice(0, 4);
+  const lowReviews = recentReviewed.filter((activity) => {
+    const review = reviewFor(state.reviews, activity);
+    return (numeric(review.energy) > 0 && numeric(review.energy) <= 5)
+      || (numeric(review.legs) > 0 && numeric(review.legs) <= 5);
+  }).length;
   const reasons = [];
-  if (ratio >= 1.3) reasons.push(`projizierte Wochenbelastung liegt etwa ${Math.round((ratio-1)*100)} % über deinem jüngsten Mittel`);
+  if (ratio >= 1.3) reasons.push(`projizierte Wochenbelastung liegt etwa ${Math.round((ratio - 1) * 100)} % über deinem jüngsten Mittel`);
   if (hard.length >= 3) reasons.push(`${hard.length} belastende Reize liegen in der verbleibenden Woche`);
   if (lowReviews >= 2) reasons.push("mehrere aktuelle Reviews melden müde Beine oder niedrige Energie");
   const level = reasons.length >= 2 || ratio >= 1.5 ? "adjust" : reasons.length ? "watch" : "ok";
   const availableKeys = availableAlternativeKeys(state);
-  const candidates = [...open].sort((a,b)=>plannedLoad(b)-plannedLoad(a)).slice(0,3).map(item => ({
-    id: item.id,
-    title: item.title,
-    date: item.date,
-    load: plannedLoad(item),
-    type: item.type,
-  })).map((item, index) => {
-    const coachAlternative = coachAlternativeFor(item, {
-      availableKeys,
-      index,
-      level,
-      ratio,
-      lowReviews,
+  const flexible = open.filter((item) => !item.fixed && !item.commitmentId && !item.keySession);
+  const flexibleKey = open.filter((item) => !item.fixed && !item.commitmentId && item.keySession);
+  const fixed = open.filter((item) => item.fixed || item.commitmentId);
+  const flexiblePool = [
+    ...flexible,
+    ...(level === "adjust" ? flexibleKey : []),
+  ];
+  // Fixtermine are an escalation path, never the first place to create recovery.
+  // As long as a flexible unit exists, coach suggestions stay on flexible days.
+  const candidatePool = flexiblePool.length > 0
+    ? flexiblePool
+    : level === "adjust" ? fixed : [];
+  const candidates = candidatePool
+    .sort((left, right) => {
+      const score = (item) => {
+        const text = `${item.title || ""} ${item.type || ""}`.toLowerCase();
+        const flexibleBonus = !item.fixed && !item.commitmentId ? 180 : -80;
+        const easyBonus = /easy|locker|recovery|stabi|mobility|rudern/.test(text) ? 45 : 0;
+        const optionalBonus = item.optional ? 30 : 0;
+        const keyPenalty = item.keySession ? 120 : 0;
+        return plannedLoad(item) + flexibleBonus + easyBonus + optionalBonus - keyPenalty;
+      };
+      return score(right) - score(left);
+    })
+    .slice(0, 5)
+    .map((item) => ({
+      id: item.id,
+      title: item.title,
+      date: item.date,
+      day: item.day || "",
+      load: plannedLoad(item),
+      type: item.type,
+      fixed: Boolean(item.fixed || item.commitmentId),
+      keySession: Boolean(item.keySession),
+      optional: Boolean(item.optional),
+    }))
+    .map((item, index) => {
+      const coachAlternative = coachAlternativeFor(item, {
+        availableKeys,
+        index,
+        level,
+        ratio,
+        lowReviews,
+        preferRest: level === "adjust" && !item.fixed && index <= 1,
+      });
+      const flexibilityReason = item.fixed
+        ? "Dieser Fixtermin wird nur vorgeschlagen, weil aktuell keine flexible Einheit als sinnvoller Belastungshebel verfügbar ist."
+        : "Flexible Einheiten werden vor Fixterminen angepasst, damit Vereins- und Gruppentermine möglichst erhalten bleiben.";
+      return {
+        ...item,
+        coachAlternative: {
+          ...coachAlternative,
+          reason: `${coachAlternative.reason} ${flexibilityReason}`,
+        },
+        suggestion: `${coachAlternative.label}. ${coachAlternative.reason}`,
+      };
     });
-    return {
-      ...item,
-      coachAlternative,
-      suggestion: `${coachAlternative.label}. ${coachAlternative.reason}`,
-    };
-  });
-  return { level, reasons, average: Math.round(average), projected: Math.round(projected), ratio, candidates };
+  const loadBand = loadBandForRatio(ratio, hasBaseline);
+  return {
+    level,
+    reasons,
+    average: Math.round(average),
+    completed: Math.round(completed),
+    remaining: Math.round(remaining),
+    projected: Math.round(projected),
+    ratio,
+    hasBaseline,
+    baselineWeeks: nonEmptyLoads.length,
+    loadBand,
+    hardCount: hard.length,
+    openCount: open.length,
+    lowReviews,
+    reviewedSignals: recentReviewed.length,
+    candidates,
+  };
 }
