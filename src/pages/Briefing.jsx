@@ -334,7 +334,6 @@ export default function Briefing() {
           </div>
           <div className="today-side-panel">
             <div className="today-card-actions">
-              <span className={`today-summary ${today.open ? "planned" : today.done ? "done" : "rest"}`}>{today.open ? `${today.open} offen` : today.done ? `${today.done} erledigt` : "Regeneration"}</span>
               <Link to="/planner">Wochenplan öffnen →</Link>
             </div>
             <div className="today-upcoming-preview">
