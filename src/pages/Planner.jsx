@@ -41,6 +41,12 @@ import {
   requiresWeeklyReview,
 } from "../services/reviewCoverage";
 import {
+  WEEK_APPROVAL_STATES,
+  acceptWeekPlan,
+  invalidateWeekPlanApproval,
+  weekPlanApprovalStatus,
+} from "../services/plannerApproval";
+import {
   buildTrackWorkoutTemplate,
   formatTrackPaceInput,
   isProvisionalTrackWorkout,
@@ -367,6 +373,7 @@ export default function Planner() {
   const [missedEditing, setMissedEditing] = useState(null);
   const [planningOpen, setPlanningOpen] = useState(false);
   const [planningDraft, setPlanningDraft] = useState(null);
+  const [planningMode, setPlanningMode] = useState("create");
   const [adjustmentOpen, setAdjustmentOpen] = useState(false);
   const [adjustmentDraft, setAdjustmentDraft] = useState(null);
   const [planningInfoOpen, setPlanningInfoOpen] = useState(false);
@@ -500,6 +507,14 @@ export default function Planner() {
     ? "aufgrund deiner aktuellen Reviews"
     : "aufgrund der aktuellen Wochenbelastung";
   const currentPlanFingerprint = useMemo(() => planFingerprint(publishablePlan), [publishablePlan]);
+  const approvalFingerprint = useMemo(() => planFingerprint(weekPlan), [weekPlan]);
+  const weekApprovals = config.weekApprovals || {};
+  const weekApproval = weekApprovals[weekKey] || null;
+  const weekApprovalState = weekPlanApprovalStatus(weekApprovals, weekKey, approvalFingerprint);
+  const weekAccepted = weekApprovalState === WEEK_APPROVAL_STATES.ACCEPTED;
+  const acceptedAtLabel = weekAccepted && weekApproval?.acceptedAt
+    ? new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(weekApproval.acceptedAt))
+    : "";
   const publishedWeek = config.intervalSync?.[weekKey] || null;
   const planChangedAfterPublish = Boolean(publishedWeek && publishedWeek.fingerprint !== currentPlanFingerprint);
   const adjustmentSelectedItems = adjustmentDraft?.selectedIds?.map((id) => weekPlan.find((item) => item.id === id)).filter(Boolean) || [];
@@ -584,7 +599,7 @@ export default function Planner() {
       setStatus(`${planningTargetLabel} wird freigeschaltet, sobald alle tatsächlich erforderlichen Reviews vorliegen und offene Einheiten der ${closurePeriodLabel} geklärt sind.`);
       return;
     }
-    openPlanning();
+    openPlanning("create");
   }
 
   function openAdjustment(preselectedId = "", preferredAction = "replace", preferredReplacementKey = "", coachAlternative = null) {
@@ -608,8 +623,9 @@ export default function Planner() {
     setAdjustmentOpen(true);
   }
 
-  function openPlanning() {
+  function openPlanning(mode = "create") {
     const lastCheckin = state.healthCheckins?.[0]?.checkin || config.checkin || {};
+    setPlanningMode(mode);
     setPlanningDraft({
       stabiCount: Number(config.stabiCount ?? 2),
       stabiDays: Array.isArray(config.stabiDays) ? config.stabiDays : [],
@@ -641,6 +657,29 @@ export default function Planner() {
       },
     });
     setPlanningOpen(true);
+  }
+
+  function acceptCurrentWeek() {
+    if (!weekPlan.length || !approvalFingerprint) return;
+    const acceptedAt = new Date().toISOString();
+    setState((current) => ({
+      ...current,
+      planner: {
+        ...current.planner,
+        weekApprovals: acceptWeekPlan(
+          current.planner?.weekApprovals,
+          weekKey,
+          approvalFingerprint,
+          acceptedAt,
+        ),
+      },
+    }));
+    setStatus("Wochenplan angenommen. Du kannst ihn jetzt an Garmin senden; spätere Änderungen müssen erneut bestätigt werden.");
+  }
+
+  function replanCurrentWeek() {
+    openPlanning("replan");
+    setStatus("Neuplanung geöffnet. Der bestehende Plan wird erst ersetzt, wenn du die Berechnung bestätigst.");
   }
 
   function toggleAdjustmentItem(id) {
@@ -1148,6 +1187,7 @@ export default function Planner() {
         lastRecoveryReason: generated.recoveryReason || "",
         lastReadiness: generated.readiness || null,
         lastEventWeek: generated.eventWeek || null,
+        weekApprovals: invalidateWeekPlanApproval(current.planner?.weekApprovals, weekKey),
       },
     }));
 
@@ -1162,8 +1202,9 @@ export default function Planner() {
       : "";
     const loopLabel = generated.loopStrategy ? ` · Loop-Block ${generated.loopStrategy.loops} × ${String(generated.loopStrategy.loopKm).replace(".", ",")} km` : "";
     const scopeLabel = requestedDates.length ? `Ausgewählte Tage (${requestedDates.length}) neu geplant. ` : "";
-    setStatus(`${scopeLabel}${generated.phase.label}${targetLabel} · ${loadLabel} · berechneter Laufrahmen ${generated.target} km${loopLabel}. Bereits gelaufen: ${actualRunningKm.toFixed(1)} km. ${generated.recoveryReason}${readinessNotes}`);
+    setStatus(`${scopeLabel}${generated.phase.label}${targetLabel} · ${loadLabel} · berechneter Laufrahmen ${generated.target} km${loopLabel}. Bereits gelaufen: ${actualRunningKm.toFixed(1)} km. ${generated.recoveryReason}${readinessNotes} Der neue Wochenplan ist noch nicht angenommen.`);
     setPlanningOpen(false);
+    setPlanningMode("create");
   }
 
   async function publishWeek() {
@@ -1211,6 +1252,10 @@ export default function Planner() {
   }
 
   function requestPublish() {
+    if (!weekAccepted) {
+      setStatus("Bitte den Wochenplan zuerst annehmen. So landet kein ungeprüfter Entwurf auf Garmin.");
+      return;
+    }
     if (!state.intervals?.connected) {
       setStatus("Intervals.icu ist noch nicht verbunden. Bitte zuerst unter Einstellungen die Verbindung prüfen.");
       return;
@@ -1675,8 +1720,8 @@ export default function Planner() {
           <button className="primary planner-generate" onClick={requestPlanning} disabled={isPastWeek || planningWeekLocked}>
             ✦ {isPastWeek ? "Woche abgeschlossen" : weekPlan.length ? "Woche anpassen" : planningWeekLocked ? "Noch nicht planbar" : offsetWeeks === 1 ? "Nächste Woche planen" : "Woche planen"}
           </button>
-          <button className={`planner-publish-button ${publishedWeek && !planChangedAfterPublish ? "intervals-published-button" : ""}`} onClick={requestPublish} disabled={publishBusy || (!publishedWeek && publishablePlan.length === 0)}>
-            {publishBusy ? "Senden …" : publishedWeek ? (planChangedAfterPublish ? "Garmin aktualisieren" : "✓ Garmin") : "An Garmin senden"}
+          <button className={`planner-publish-button ${publishedWeek && !planChangedAfterPublish ? "intervals-published-button" : ""}`} onClick={requestPublish} disabled={publishBusy || !weekAccepted || (!publishedWeek && publishablePlan.length === 0)}>
+            {publishBusy ? "Senden …" : !weekAccepted && weekPlan.length ? "Plan erst annehmen" : publishedWeek ? (planChangedAfterPublish ? "Garmin aktualisieren" : "✓ Garmin") : "An Garmin senden"}
           </button>
           <details className="action-menu planner-action-menu">
             <summary aria-label="Weitere Aktionen" title="Weitere Aktionen">•••</summary>
@@ -1685,7 +1730,7 @@ export default function Planner() {
               {publishedWeek && <span className="action-menu-status">{planChangedAfterPublish ? "! Garmin-Stand veraltet" : `✓ ${publishedWeek.guided || 0} Workouts und ${publishedWeek.notes || 0} Termine gesendet`}</span>}
               <button type="button" onClick={(event) => { setPlanningInfoOpen(true); event.currentTarget.closest("details")?.removeAttribute("open"); }}>Wie plant dein Coach?</button>
               <button type="button" onClick={(event) => { downloadCalendar(weekPlan); event.currentTarget.closest("details")?.removeAttribute("open"); }} disabled={!weekPlan.length}>ICS-Datei laden</button>
-              <button type="button" onClick={(event) => { requestPublish(); event.currentTarget.closest("details")?.removeAttribute("open"); }} disabled={publishBusy || (!publishedWeek && publishablePlan.length === 0)}>{publishedWeek ? "Garmin erneut senden" : "Plan an Garmin senden"}</button>
+              <button type="button" onClick={(event) => { requestPublish(); event.currentTarget.closest("details")?.removeAttribute("open"); }} disabled={publishBusy || !weekAccepted || (!publishedWeek && publishablePlan.length === 0)}>{!weekAccepted && weekPlan.length ? "Plan zuerst annehmen" : publishedWeek ? "Garmin erneut senden" : "Plan an Garmin senden"}</button>
             </div>
           </details>
         </div>
@@ -1705,6 +1750,24 @@ export default function Planner() {
           <span className="planner-goal-strip-status">{goalProfile.feasibility?.label || "Ziel wird geprüft"}</span>
           <b>Ziel öffnen →</b>
         </Link>
+      )}
+
+      {!isPastWeek && weekPlan.length > 0 && (
+        <section className={`planner-plan-approval ${weekApprovalState}`}>
+          <div className="planner-plan-approval-copy">
+            <span>Wochenplan</span>
+            <strong>{weekAccepted ? "Plan angenommen" : weekApprovalState === WEEK_APPROVAL_STATES.CHANGED ? "Plan wurde seit der Annahme geändert" : "Plan ist berechnet und wartet auf deine Freigabe"}</strong>
+            <small>{weekAccepted
+              ? `Angenommen am ${acceptedAtLabel}. Garmin erhält nur diesen bestätigten Stand.`
+              : weekApprovalState === WEEK_APPROVAL_STATES.CHANGED
+                ? "Prüfe die Änderungen kurz und bestätige den aktuellen Stand erneut."
+                : "Schau dir Einheiten, Belastung und Coach-Hinweise an. Danach kannst du den Plan annehmen oder komplett neu berechnen."}</small>
+          </div>
+          <div className="planner-plan-approval-actions">
+            {!weekAccepted && <button type="button" className="primary" onClick={acceptCurrentWeek}>{weekApprovalState === WEEK_APPROVAL_STATES.CHANGED ? "Erneut annehmen" : "Plan annehmen"}</button>}
+            <button type="button" onClick={replanCurrentWeek}>Neu planen</button>
+          </div>
+        </section>
       )}
 
       {offsetWeeks === 0 && ["adjust", "watch"].includes(unifiedCoach.level) && activeCoachSuggestions.length > 0 && (
@@ -1774,7 +1837,7 @@ export default function Planner() {
 
       <div className="planner-week-nav">
         <button disabled={offsetWeeks === 0 && !previousWeekHasPlan} title={offsetWeeks === 0 && !previousWeekHasPlan ? "Keine ältere geplante Woche vorhanden" : "Vorherige Woche"} onClick={() => { setOffsetWeeks((value) => value - 1); setForecast([]); setStatus(""); }}>←</button>
-        <div><strong>{dayFormatter.format(weekStart)} – {dayFormatter.format(weekEnd)}</strong><span>{offsetWeeks === 0 ? "Aktuelle Woche · Plan aktiv" : offsetWeeks === 1 ? "Nächste Woche" : "Abgeschlossene Trainingswoche"}</span></div>
+        <div><strong>{dayFormatter.format(weekStart)} – {dayFormatter.format(weekEnd)}</strong><span>{offsetWeeks === 0 ? `Aktuelle Woche · ${weekAccepted ? "angenommen" : weekApprovalState === WEEK_APPROVAL_STATES.CHANGED ? "geändert" : "Entwurf"}` : offsetWeeks === 1 ? `Nächste Woche · ${weekAccepted ? "angenommen" : weekApprovalState === WEEK_APPROVAL_STATES.CHANGED ? "geändert" : weekPlan.length ? "Entwurf" : "noch nicht geplant"}` : "Abgeschlossene Trainingswoche"}</span></div>
         <button disabled={offsetWeeks >= 1} title={offsetWeeks >= 1 ? "Es wird immer nur die nächste Woche vorbereitet" : "Nächste Woche"} onClick={() => { setOffsetWeeks((value) => value + 1); setForecast([]); setStatus(""); }}>→</button>
       </div>
 
@@ -1782,7 +1845,7 @@ export default function Planner() {
         <div><span>Noch geplant</span><strong>{plannedKm.toFixed(1).replace(".0", "")} km</strong></div>
         <div><span>Gelaufen</span><strong>{completedKm.toFixed(1)} km</strong></div>
         <div><span>Erledigt</span><strong>{weekActivities.length} Einheiten</strong></div>
-        <div className="planner-overview-state"><span>Status</span><strong>{isPastWeek ? "Abgeschlossen" : weekPlan.length ? "Plan aktiv · nur gezielte Änderungen" : planningWeekLocked ? "Wochenabschluss fehlt" : "Bereit zur Planung"}</strong></div>
+        <div className="planner-overview-state"><span>Status</span><strong>{isPastWeek ? "Abgeschlossen" : weekPlan.length ? (weekAccepted ? "Angenommen · Änderungen gezielt" : weekApprovalState === WEEK_APPROVAL_STATES.CHANGED ? "Geändert · erneut annehmen" : "Entwurf · noch annehmen") : planningWeekLocked ? "Wochenabschluss fehlt" : "Bereit zur Planung"}</strong></div>
         <button onClick={() => setEditing(createBlank(weekStart))} disabled={isPastWeek || planningWeekPending}>+ Einheit</button>
       </section>
 
@@ -2462,9 +2525,10 @@ export default function Planner() {
         <div className="modal-backdrop">
           <form className="modal planner-modal planner-setup" onSubmit={(event) => { event.preventDefault(); generate(planningDraft); }}>
             <button type="button" className="close" onClick={() => setPlanningOpen(false)}>×</button>
-            <p className="eyebrow">Intelligente Wochenplanung</p>
-            <h2>Wie geht es dir – und wann hast du Zeit?</h2>
+            <p className="eyebrow">{planningMode === "replan" ? "Wochenplan neu berechnen" : "Intelligente Wochenplanung"}</p>
+            <h2>{planningMode === "replan" ? "Woche wirklich neu planen?" : "Wie geht es dir – und wann hast du Zeit?"}</h2>
             <p className="muted">Dein Hauptziel legt Fähigkeiten, Phase und notwendige Schlüsseleinheiten fest. Die letzten Trainingswochen und dieser Check-in bestimmen, wie viel davon aktuell sicher umsetzbar ist. Erholungssignale können jederzeit eine frühere Entlastung auslösen.</p>
+            {planningMode === "replan" && <div className="planner-replan-notice"><strong>Der bestehende Entwurf bleibt bis zur Bestätigung erhalten.</strong><span>Erst mit „Woche neu planen“ werden zukünftige Coach-Einheiten dieser Woche neu berechnet. Bereits absolvierte Einheiten, dokumentierte Ausfälle und manuell angelegte Einträge bleiben geschützt.</span></div>}
 
             {(reasonCounts.fatigue > 0 || reasonCounts.pain > 0 || reasonCounts.illness > 0) && (
               <div className="planner-history-alert">
@@ -2539,7 +2603,7 @@ export default function Planner() {
             <div className="planner-day-picker"><strong>Rudern an welchen Tagen?</strong><div>{plannerDays.map((day) => <button type="button" className={planningDraft.rowingDays.includes(day) ? "selected" : ""} onClick={() => toggleDay("rowingDays", day)} key={`row-${day}`}>{day.slice(0, 2)}</button>)}</div></div>
             <div className="planner-day-picker"><strong>An welchen Tagen ist echtes Doppeltraining erlaubt?</strong><div>{plannerDays.map((day) => <button type="button" className={planningDraft.doubleTrainingDays.includes(day) ? "selected" : ""} onClick={() => toggleDay("doubleTrainingDays", day)} key={`double-${day}`}>{day.slice(0, 2)}</button>)}</div><small>Gemeint sind Fußball + Lauf, Rudern + Lauf oder zwei Ausdauereinheiten. Stabi/Mobility + Lauf ist nur ein Kombi-Tag und braucht keine Freigabe.</small></div>
             <label>Zusätzliche Notiz<textarea value={planningDraft.checkin.notes} onChange={(event) => updateCheckin("notes", event.target.value)} placeholder="Reise, wenig Zeit, besondere Termine …" /></label>
-            <button className="primary" type="submit">Plan berechnen</button>
+            <button className="primary" type="submit">{planningMode === "replan" ? "Woche neu planen" : "Plan berechnen"}</button>
           </form>
         </div>
       )}

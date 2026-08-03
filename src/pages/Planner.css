@@ -1154,3 +1154,36 @@
   .planner-week-logic-metrics>span{text-align:center;white-space:normal}
   .planner-week-logic-body{grid-template-columns:1fr;padding:10px 12px 12px}
 }
+
+/* v3.9.12 – explicit weekly plan approval and full replanning */
+.planner-plan-approval{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:center;
+  gap:14px;
+  margin:0 0 12px;
+  padding:11px 14px;
+  border:1px solid var(--accent-border-strong);
+  border-radius:13px;
+  background:linear-gradient(100deg,color-mix(in srgb,var(--accent-surface) 62%,var(--bg-card)),var(--bg-card));
+}
+.planner-plan-approval.accepted{border-color:color-mix(in srgb,var(--success,#5ee494) 58%,var(--border));background:linear-gradient(100deg,color-mix(in srgb,var(--success,#5ee494) 9%,var(--bg-card)),var(--bg-card))}
+.planner-plan-approval.changed{border-color:rgba(250,204,21,.55);background:linear-gradient(100deg,rgba(250,204,21,.07),var(--bg-card))}
+.planner-plan-approval-copy{display:grid;gap:2px;min-width:0}
+.planner-plan-approval-copy>span{color:var(--accent-bright);font-size:9px;font-weight:900;letter-spacing:.09em;text-transform:uppercase}
+.planner-plan-approval.accepted .planner-plan-approval-copy>span{color:var(--success,#5ee494)}
+.planner-plan-approval.changed .planner-plan-approval-copy>span{color:var(--warning,#facc15)}
+.planner-plan-approval-copy>strong{font-size:14px;line-height:1.35}
+.planner-plan-approval-copy>small{overflow:hidden;color:var(--muted);font-size:10px;line-height:1.4;text-overflow:ellipsis;white-space:nowrap}
+.planner-plan-approval-actions{display:flex;align-items:center;gap:7px;flex:none}
+.planner-plan-approval-actions button{padding:8px 11px;white-space:nowrap}
+.planner-replan-notice{display:grid;gap:4px;padding:12px 14px;border:1px solid rgba(250,204,21,.45);border-radius:12px;background:rgba(250,204,21,.07)}
+.planner-replan-notice strong{color:var(--warning,#facc15);font-size:12px}
+.planner-replan-notice span{color:var(--muted-bright);font-size:11px;line-height:1.45}
+@media(max-width:720px){
+  .planner-plan-approval{grid-template-columns:1fr;padding:10px 12px}
+  .planner-plan-approval-copy>small{white-space:normal}
+  .planner-plan-approval-actions{display:grid;grid-template-columns:1fr 1fr;width:100%}
+  .planner-plan-approval-actions button{width:100%}
+  .planner-plan-approval.accepted .planner-plan-approval-actions{grid-template-columns:1fr}
+}
