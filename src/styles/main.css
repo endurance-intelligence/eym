@@ -1475,3 +1475,40 @@ button:focus-visible,a:focus-visible,summary:focus-visible{
 .mobility-completion-feedback{display:grid;gap:13px;width:min(720px,100%);padding:15px;border:1px solid var(--border-strong);border-radius:14px;background:var(--bg-input);text-align:left}.mobility-completion-feedback>div{display:grid;gap:7px}.mobility-completion-feedback span{color:var(--text-soft);font-weight:750}.mobility-completion-feedback>small{color:var(--muted);text-align:center}.mobility-score-buttons,.mobility-response-buttons{display:flex;flex-wrap:wrap;gap:6px}.mobility-score-buttons button{width:38px;height:38px;padding:0}.mobility-response-buttons button{flex:1;min-width:120px}.mobility-score-buttons button.selected,.mobility-response-buttons button.selected{border-color:var(--accent);background:var(--accent-surface-strong);color:var(--accent-bright)}
 @media(max-width:800px){.mobility-adaptive-heading{grid-template-columns:1fr}.exercise-library-actions{grid-template-columns:1fr 1fr}.exercise-library-actions .exercise-guide-button{grid-column:1/-1}}
 @media(max-width:520px){.exercise-library-actions{grid-template-columns:1fr}.exercise-library-actions .exercise-guide-button{grid-column:auto}.mobility-score-buttons button{flex:1;min-width:34px}.mobility-response-buttons{display:grid;grid-template-columns:1fr}}
+
+/* v3.9.28 – reliable browser audio activation and visible diagnostics */
+.mobility-audio-actions{
+  flex-wrap:wrap;
+  padding:10px 12px;
+  border:1px solid var(--border);
+  border-radius:12px;
+  background:var(--bg-input);
+}
+.mobility-audio-actions button{flex:none}
+.mobility-audio-actions.good{border-color:color-mix(in srgb,var(--success,#5ee494) 55%,var(--border));background:color-mix(in srgb,var(--success,#5ee494) 7%,var(--bg-input))}
+.mobility-audio-actions.warn{border-color:rgba(250,204,21,.48);background:rgba(250,204,21,.06)}
+.mobility-audio-actions.bad{border-color:rgba(248,113,113,.55);background:rgba(248,113,113,.06)}
+.mobility-audio-actions.testing{border-color:var(--accent-border-strong);background:var(--accent-surface)}
+.mobility-audio-actions.good .mobility-audio-status{color:var(--success-bright,#7cf0a7)}
+.mobility-audio-actions.warn .mobility-audio-status{color:var(--warning,#facc15)}
+.mobility-audio-actions.bad .mobility-audio-status{color:var(--danger-bright,#ff9a90)}
+.mobility-audio-live{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  margin:8px 0 2px;
+  padding:9px 11px;
+  border:1px solid rgba(248,113,113,.55);
+  border-radius:11px;
+  background:rgba(248,113,113,.07);
+  color:var(--danger-bright,#ff9a90);
+  font-size:11px;
+  line-height:1.4;
+}
+.mobility-audio-live.warn{border-color:rgba(250,204,21,.48);background:rgba(250,204,21,.06);color:var(--warning,#facc15)}
+.mobility-audio-live button{flex:none;padding:7px 9px;font-size:10px}
+@media(max-width:620px){
+  .mobility-audio-actions,.mobility-audio-live{align-items:stretch;flex-direction:column}
+  .mobility-audio-actions button,.mobility-audio-live button{width:100%}
+}

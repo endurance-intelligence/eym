@@ -11,7 +11,7 @@ import ReviewModal from "../components/ReviewModal";
 import ExerciseGuide, { ExerciseGuideButton } from "../components/ExerciseGuide";
 import { activitiesWithGroups } from "../services/activityGroups";
 import { fmtDate } from "../utils/format";
-import { playWorkoutAudioDemo, playWorkoutCue, primeWorkoutAudio, speakWorkoutCue } from "../services/workoutAudio";
+import { playWorkoutAudioDemo, playWorkoutCue, primeWorkoutAudio, speakWorkoutCue, workoutAudioCapabilities } from "../services/workoutAudio";
 import { releaseScreenWakeLock, requestScreenWakeLock } from "../services/wakeLock";
 import {
   buildCoachState,
@@ -96,6 +96,7 @@ export default function Coach() {
   const [sessionCoachOverride, setSessionCoachOverride] = useState(null);
   const [dismissedCoachSuggestionId, setDismissedCoachSuggestionId] = useState("");
   const [wakeLockStatus, setWakeLockStatus] = useState("idle");
+  const [audioFeedback, setAudioFeedback] = useState({ tone: "idle", message: "Ton und Sprache vor dem Workout einmal testen." });
   const previousRunnerRef = useRef(null);
   const cueKeyRef = useRef("");
   const wakeLockRef = useRef(null);
@@ -328,13 +329,63 @@ export default function Coach() {
     setWorkoutShuffleOffset(nextRotationOffset - workoutHistory.length);
   }
 
+  async function activateWorkoutAudio({ demo = false, announce = "" } = {}) {
+    if (!audioEnabled) {
+      setAudioFeedback({ tone: "bad", message: "Signaltöne sind ausgeschaltet. Aktiviere sie unter Timer & Pausen." });
+      return false;
+    }
+
+    setAudioFeedback({ tone: "testing", message: demo ? "Ton und Sprache werden getestet …" : "Audio wird aktiviert …" });
+    const tonePromise = demo
+      ? playWorkoutAudioDemo()
+      : primeWorkoutAudio({ audible: true });
+    // Trigger speech before the first await so strict mobile browsers still
+    // treat it as part of the user's click/tap interaction.
+    const speechReady = voiceCues && announce ? speakWorkoutCue(announce) : !voiceCues;
+    const tonesReady = await tonePromise;
+    const capabilities = workoutAudioCapabilities();
+
+    if (!tonesReady) {
+      setAudioFeedback({
+        tone: "bad",
+        message: capabilities.tonesSupported
+          ? "Der Browser blockiert den Ton. Drücke erneut auf Ton aktivieren, prüfe die Medienlautstärke und verlasse den Lautlosmodus."
+          : "Dieser Browser unterstützt die benötigte Audio-Ausgabe nicht.",
+      });
+      return false;
+    }
+
+    if (voiceCues && !speechReady) {
+      setAudioFeedback({ tone: "warn", message: "Signaltöne sind aktiv, aber die Sprachausgabe wird vom Browser nicht unterstützt." });
+      return true;
+    }
+
+    setAudioFeedback({
+      tone: "good",
+      message: voiceCues ? "Ton und deutsche Sprachausgabe sind aktiv." : "Signaltöne sind aktiv. Sprachausgabe ist ausgeschaltet.",
+    });
+    return true;
+  }
+
+  async function testWorkoutAudio() {
+    const ready = await activateWorkoutAudio({ demo: true, announce: "Audio aktiviert. Du hörst jetzt die Signaltöne." });
+    if (!ready) return;
+    if (voiceCues) window.setTimeout(() => speakWorkoutCue("Drei, zwei, eins. Start. Seitenwechsel. Workout abgeschlossen."), 7600);
+  }
+
   async function startWorkout() {
     if (!workout.items.length) return;
-    if (audioEnabled) await primeWorkoutAudio();
-    previousRunnerRef.current = null;
-    cueKeyRef.current = "";
     const items = workout.items.map((item) => ({ ...item }));
     const firstPhase = items[0].preparationSeconds > 0 ? "prepare" : "work";
+    if (audioEnabled) {
+      await activateWorkoutAudio({
+        announce: voiceCues
+          ? `Workout startet. ${items[0].name}. ${firstPhase === "prepare" ? `Vorbereitung ${runnerPhaseSeconds(items, 0, firstPhase, 0)} Sekunden.` : "Start."}`
+          : "",
+      });
+    }
+    previousRunnerRef.current = null;
+    cueKeyRef.current = "";
     setRunner({
       sessionId: crypto.randomUUID(),
       planItemId: todayMobilityPlan?.id || null,
@@ -501,10 +552,13 @@ export default function Coach() {
         if (voiceCues) speakWorkoutCue(`${activeExercise?.switchCue || "Seite wechseln"}. ${nextRunnerSideLabel(weakSide)}. Start in ${runner.remaining} Sekunden`);
       } else {
         if (previous?.phase === "work") playWorkoutCue("end");
+        if (runner.phase === "transition" && voiceCues) {
+          speakWorkoutCue(`Übung beendet. Als Nächstes ${activeExercise?.name || "die nächste Übung"}. Wechselpause ${runner.remaining} Sekunden.`);
+        }
         if (runner.phase === "work") {
           playWorkoutCue("start");
           const sideLabel = activeRunnerSideLabel(activeExercise, runner.phase, runner.sideIndex, weakSide);
-          if (voiceCues && sideLabel) speakWorkoutCue(`Start ${sideLabel}`);
+          if (voiceCues) speakWorkoutCue(`Start ${activeExercise?.name || "Übung"}${sideLabel ? `. ${sideLabel}` : ""}`);
         }
       }
     }
@@ -787,8 +841,8 @@ export default function Coach() {
               </div>
               <label className="mobility-timer-toggle"><input type="checkbox" checked={longerPreparationForUnknown} onChange={(event) => { updateMobility({ longerPreparationForUnknown: event.target.checked }); setRunner(null); }} /><span><b>Unbekannte Übungen länger vorbereiten</b><small>Markierte Physio-Übungen gelten automatisch als bekannt. Weitere Übungen kannst du in der Anleitung als bekannt markieren.</small></span></label>
               <label className="mobility-timer-toggle"><input type="checkbox" checked={audioEnabled} onChange={(event) => updateMobility({ audioEnabled: event.target.checked })} /><span><b>Signaltöne im Workout</b><small>Deutlich hörbarer 3–2–1-Countdown vor Start und Ende sowie eigene Töne für Seitenwechsel und Workout-Abschluss.</small></span></label>
-              <label className="mobility-timer-toggle"><input type="checkbox" checked={voiceCues} disabled={!audioEnabled} onChange={(event) => updateMobility({ voiceCues: event.target.checked })} /><span><b>Seitenwechsel ansagen</b><small>Bei Seitstütz, Pallof Press, Sprunggelenkübungen und weiteren beidseitigen Übungen wird die nächste Seite angesagt.</small></span></label>
-              <div className="mobility-audio-actions"><button type="button" onClick={() => playWorkoutAudioDemo()}>Signale testen</button><span className="mobility-audio-status">Spielt 3–2–1, Start, Ende, Seitenwechsel und Workout-Abschluss einmal vor.</span></div>
+              <label className="mobility-timer-toggle"><input type="checkbox" checked={voiceCues} disabled={!audioEnabled} onChange={(event) => updateMobility({ voiceCues: event.target.checked })} /><span><b>Übungen und Seitenwechsel ansagen</b><small>Der Coach nennt Übungsstart, nächste Übung, Seitenwechsel und Workout-Abschluss auf Deutsch.</small></span></label>
+              <div className={`mobility-audio-actions ${audioFeedback.tone}`}><button type="button" onClick={testWorkoutAudio}>Ton & Sprache aktivieren</button><span className="mobility-audio-status" role="status">{audioFeedback.message}</span></div>
               <p>Die gewählte Zeit ist reine Bewegungszeit. Vorbereitung, Übungswechsel und automatisch hinterlegte Seitenwechsel kommen zusätzlich hinzu. Bei Seitstütz, Bandübungen und einbeinigen Übungen pausiert der Timer 3–5 Sekunden; alternierende Übungen und Fußkreisen laufen ohne künstliche Unterbrechung weiter.</p>
             </details>
             {workout.missingPhysio.length > 0 && <div className="mobility-warning"><strong>Physioübung aktuell nicht im Workout:</strong> {workout.missingPhysio.map((item) => `${item.name} (${(item.equipment || item.equipmentAny || []).map(equipmentLabel).join(" oder ")})`).join(", ")}</div>}
@@ -818,6 +872,7 @@ export default function Coach() {
                 </> : <>
                   <div className="mobility-runner-topline"><span>{runnerPhaseLabel} · Schritt {runner.index + 1} von {runner.items.length}</span><small>{isExerciseKnown(activeExercise.id) ? "Bekannte Übung" : "Neue Übung"}</small></div>
                   {runner.running && wakeLockStatus === "active" && <span className="mobility-wake-status">Bildschirm bleibt während des Workouts aktiv</span>}
+                  {audioEnabled && ["bad", "warn"].includes(audioFeedback.tone) && <div className={`mobility-audio-live ${audioFeedback.tone}`}><span>{audioFeedback.message}</span><button type="button" onClick={() => activateWorkoutAudio({ announce: voiceCues ? `Audio aktiv. ${activeExercise?.name || "Workout"}.` : "" })}>Ton aktivieren</button></div>}
                   <h2>{runnerPhase === "transition"
                     ? `Als Nächstes: ${activeExercise.name}`
                     : runnerPhase === "side-switch"
