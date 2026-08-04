@@ -1,5 +1,6 @@
 import { activitiesLikelySame } from "./activityUtils.js";
 import { readableErrorText } from "./errorText.js";
+import { rawIntervalsDistanceMeters } from "./rowingDistance.js";
 import { supabase, supabaseConfigured } from "./supabase.js";
 
 async function invokeIntervals(action, payload = {}) {
@@ -199,6 +200,7 @@ export function mapIntervalsActivity(activity) {
   const type = activity.type || "Workout";
   const coordinates = activityCoordinates(activity);
   const streamTypes = activityStreamTypes(activity);
+  const distanceMeters = rawIntervalsDistanceMeters(activity);
   return {
     id: `intervals-${activity.id}`,
     intervalsId: String(activity.id || ""),
@@ -210,7 +212,8 @@ export function mapIntervalsActivity(activity) {
     description: activity.description || "",
     date: activity.start_date_local?.slice(0, 10) || new Date().toISOString().slice(0, 10),
     startDateLocal: activity.start_date_local || null,
-    distance: Number((Number(activity.distance || 0) / 1000).toFixed(2)),
+    distance: Number((distanceMeters / 1000).toFixed(2)),
+    distanceMeters: Math.round(distanceMeters),
     duration: Math.round(durationSeconds / 60),
     durationSeconds,
     elapsedSeconds: Number(activity.elapsed_time || durationSeconds),

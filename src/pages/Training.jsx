@@ -3,7 +3,7 @@ import { useLocation } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { Card, PageTitle } from "../components/UI";
 import TrainingSectionNav from "../components/SectionNav";
-import { fmtDate, pace, hours } from "../utils/format";
+import { fmtDate, hours } from "../utils/format";
 import ReviewModal from "../components/ReviewModal";
 import ActivityNameModal from "../components/ActivityNameModal";
 import { intervalsOnlineReady } from "../services/intervals";
@@ -22,6 +22,7 @@ import {
   startOfIsoWeek,
 } from "../services/activityUtils";
 import { activitiesWithGroups, canGroupActivities, suggestedGroupName } from "../services/activityGroups";
+import { activityListMetrics } from "../services/activityDisplay";
 import {
   hasReviewCoverage,
   requiresWeeklyReview,
@@ -329,13 +330,14 @@ export default function Training() {
                               const kind = reviewKind(activity);
                               const covered = kind && hasReviewCoverage(activity, state.reviews, [...state.activities, ...activities, ...rawActivities]);
                               const tracked = activityDate(activity) >= reviewTrackingStart && requiresWeeklyReview(activity);
+                              const metrics = activityListMetrics(activity);
                               return (
                                 <article className={`activity-row ${kind ? "reviewable" : "no-review"} ${mergeSelection.includes(activity.id) ? "merge-selected" : ""} ${activity.isActivityGroup ? "activity-group-row" : ""} ${mergeMode && !activity.isActivityGroup && isRunningActivity(activity) ? "merge-candidate" : ""}`} key={activity.id}>
                                   {mergeMode && !activity.isActivityGroup && isRunningActivity(activity) && <button type="button" className="activity-merge-check" disabled={Boolean(state.reviews[activity.id])} onClick={() => toggleMergeActivity(activity)} aria-label={`${activity.name} auswählen`}>{mergeSelection.includes(activity.id) ? "✓" : "○"}</button>}
                                   <button className="activity activity-main" onClick={() => mergeMode && !activity.isActivityGroup ? toggleMergeActivity(activity) : kind && setSelected(activity)} disabled={!kind && !mergeMode} title={mergeMode ? "Zum Zusammenfassen auswählen" : kind ? `${reviewKindLabel(activity)} öffnen` : "Für diese Aktivität ist kein Review nötig"}>
                                     <div><b>{activity.name}</b><span>{fmtDate(activityDate(activity))} · {sourceLabel(activity)} · {sportGroup(activity).label}{activity.isActivityGroup ? ` · ${activity.memberCount} Teile` : ""}{activity.weather?.temperature != null || activity.temperature != null ? ` · ${Math.round(Number(activity.weather?.temperature ?? activity.temperature))} °C` : ""}</span></div>
-                                    <div className="activity-metrics"><strong>{Number(activity.distance || 0).toLocaleString("de-DE", { maximumFractionDigits: 2 })} km</strong><span>{hours(activity.duration)} · {Number(activity.distance || 0) > 0 ? pace(activity.distance, activity.duration) : "–"}</span></div>
-                                    <div className="activity-secondary"><strong>{activity.elevation || 0} hm</strong><span>{activity.avgHr ? `Ø ${activity.avgHr} bpm` : "Kein Puls"}</span></div>
+                                    <div className="activity-metrics"><strong>{metrics.primary}</strong>{metrics.detail && <span>{metrics.detail}</span>}</div>
+                                    <div className={`activity-secondary ${metrics.secondaryDetail ? "with-detail" : "single-metric"}`}><strong>{metrics.secondaryPrimary}</strong>{metrics.secondaryDetail && <span>{metrics.secondaryDetail}</span>}</div>
                                     <em>{kind ? (covered ? "✓ Review" : tracked ? "Review öffnen" : "Review optional") : "Kein Review nötig"}</em>
                                   </button>
                                   <div className="activity-row-actions">
