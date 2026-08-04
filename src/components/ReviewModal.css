@@ -316,3 +316,111 @@
     width: 100%;
   }
 }
+
+
+/* v3.9.30 – segmented review score controls */
+.review-score-segments {
+  --score-color: var(--accent);
+  display: grid;
+  grid-template-columns: repeat(var(--review-score-steps), minmax(0, 1fr));
+  gap: 5px;
+  width: 100%;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-sidebar) 72%, transparent);
+}
+
+.review-score-effort .review-score-segments {
+  --score-color: var(--warning, #ffcf68);
+}
+
+.review-score-soreness .review-score-segments {
+  --score-color: #ff9e78;
+}
+
+.review-score-segments button {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  min-height: 34px;
+  place-items: center;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 850;
+  line-height: 1;
+  transition: transform .14s ease, border-color .14s ease, background .14s ease, color .14s ease, box-shadow .14s ease;
+}
+
+.review-score-segments button::before {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--score-color) 20%, transparent);
+  content: "";
+  opacity: 0;
+  transition: opacity .14s ease;
+}
+
+.review-score-segments button.filled::before {
+  opacity: .58;
+}
+
+.review-score-segments button.selected {
+  border-color: color-mix(in srgb, var(--score-color) 88%, white 12%);
+  background: color-mix(in srgb, var(--score-color) 33%, var(--bg-input));
+  color: var(--text);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--score-color) 24%, transparent), 0 7px 16px rgba(0, 0, 0, .2);
+  transform: translateY(-1px);
+}
+
+.review-score-segments button.selected::before {
+  opacity: .88;
+}
+
+.review-score-segments button > span {
+  position: relative;
+  z-index: 1;
+}
+
+.review-score-segments button:hover {
+  border-color: color-mix(in srgb, var(--score-color) 55%, var(--border));
+  color: var(--text-soft);
+}
+
+.review-score-segments button:focus-visible {
+  outline: 2px solid var(--score-color);
+  outline-offset: 2px;
+}
+
+.review-score-segments button:active {
+  transform: translateY(0);
+}
+
+@media (max-width: 620px) {
+  .review-score-segments {
+    gap: 3px;
+    padding: 2px;
+  }
+
+  .review-score-segments button {
+    min-height: 38px;
+    border-radius: 7px;
+    font-size: 9px;
+  }
+}
+
+@media (max-width: 410px) {
+  .review-score-segments {
+    gap: 2px;
+  }
+
+  .review-score-segments button {
+    min-height: 36px;
+    font-size: 8px;
+  }
+}

@@ -82,13 +82,54 @@ function activitySummaryFacts(activity, weather) {
 }
 
 function ReviewScore({ label, value, onChange, low, high, description, variant = "positive", min = 1, wide = false }) {
+  const minimum = Number(min);
+  const selected = Math.min(10, Math.max(minimum, Number(value ?? minimum)));
+  const values = Array.from({ length: 11 - minimum }, (_, index) => minimum + index);
+
+  function moveSelection(event, current) {
+    const next = ["ArrowRight", "ArrowUp"].includes(event.key)
+      ? Math.min(10, current + 1)
+      : ["ArrowLeft", "ArrowDown"].includes(event.key)
+        ? Math.max(minimum, current - 1)
+        : event.key === "Home"
+          ? minimum
+          : event.key === "End"
+            ? 10
+            : null;
+    if (next == null) return;
+    event.preventDefault();
+    onChange(next);
+    event.currentTarget.parentElement?.querySelector(`[data-score-value="${next}"]`)?.focus();
+  }
+
   return (
-    <label className={`review-score review-score-${variant} ${wide ? "wide-score" : ""}`}>
-      <span className="review-score-heading"><b>{label}</b><strong>{value}/10 · {scoreMeaning(value, variant)}</strong></span>
-      <input type="range" min={min} max="10" value={value} onChange={(event) => onChange(Number(event.target.value))} />
+    <div className={`review-score review-score-${variant} ${wide ? "wide-score" : ""}`}>
+      <span className="review-score-heading"><b>{label}</b><strong>{selected}/10 · {scoreMeaning(selected, variant)}</strong></span>
+      <div
+        className="review-score-segments"
+        role="radiogroup"
+        aria-label={`${label}: ${selected} von 10`}
+        style={{ "--review-score-steps": values.length }}
+      >
+        {values.map((score) => (
+          <button
+            type="button"
+            role="radio"
+            aria-checked={score === selected}
+            aria-label={`${score} von 10${score === selected ? ", ausgewählt" : ""}`}
+            className={`${score < selected ? "filled" : ""} ${score === selected ? "selected" : ""}`.trim()}
+            data-score-value={score}
+            tabIndex={score === selected ? 0 : -1}
+            onClick={() => onChange(score)}
+            onKeyDown={(event) => moveSelection(event, score)}
+          >
+            <span aria-hidden="true">{score}</span>
+          </button>
+        ))}
+      </div>
       <span className="review-score-scale"><small>{low}</small><small>{high}</small></span>
       {description && <p>{description}</p>}
-    </label>
+    </div>
   );
 }
 
