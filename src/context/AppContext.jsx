@@ -129,6 +129,8 @@ function mergeState(localState = {}, cloudState = {}) {
       physioExerciseIds: asArray(cloud.mobilityCoach?.physioExerciseIds, asArray(local.mobilityCoach?.physioExerciseIds, defaultState.mobilityCoach.physioExerciseIds)),
       focusAreaIds: asArray(cloud.mobilityCoach?.focusAreaIds, asArray(local.mobilityCoach?.focusAreaIds, defaultState.mobilityCoach.focusAreaIds)),
       knownExerciseIds: asArray(cloud.mobilityCoach?.knownExerciseIds, asArray(local.mobilityCoach?.knownExerciseIds, defaultState.mobilityCoach.knownExerciseIds)),
+      preferredExerciseIds: asArray(cloud.mobilityCoach?.preferredExerciseIds, asArray(local.mobilityCoach?.preferredExerciseIds, defaultState.mobilityCoach.preferredExerciseIds)),
+      excludedExerciseIds: asArray(cloud.mobilityCoach?.excludedExerciseIds, asArray(local.mobilityCoach?.excludedExerciseIds, defaultState.mobilityCoach.excludedExerciseIds)),
       history: asArray(cloud.mobilityCoach?.history, asArray(local.mobilityCoach?.history)),
     },
     reviews: inventory.reviews,

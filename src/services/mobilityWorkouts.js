@@ -1,3 +1,5 @@
+import { adaptiveExerciseReason } from "./mobilityProgramming.js";
+
 export const MOBILITY_EQUIPMENT = [
   { id: "mat", label: "Matte" },
   { id: "band", label: "Gummiband / Miniband" },
@@ -773,6 +775,9 @@ export function buildMobilityWorkout({
   longerPreparationForUnknown = true,
   rotationOffset = 0,
   exerciseHistory = [],
+  adaptiveProfile = null,
+  preferredExerciseIds = [],
+  excludedExerciseIds = [],
 } = {}) {
   const targetActiveSeconds = Math.max(10, Number(durationMinutes || 25)) * 60;
   const selectedPhysio = (physioExerciseIds || []).map(exerciseById).filter(Boolean);
@@ -784,7 +789,10 @@ export function buildMobilityWorkout({
   const newExercisePreparation = Math.max(normalPreparation, Number(unknownPreparationSeconds || normalPreparation));
   const normalTransition = Math.max(0, Number(transitionSeconds || 0));
   const materialTransition = Math.max(normalTransition, Number(materialTransitionSeconds || normalTransition));
-  const available = MOBILITY_EXERCISES.filter((item) => hasEquipment(item, equipment));
+  const selectedPhysioIds = new Set(selectedPhysio.map((item) => item.id));
+  const preferredIds = new Set([...(preferredExerciseIds || []), ...(adaptiveProfile?.preferredExerciseIds || [])]);
+  const excludedIds = new Set([...(excludedExerciseIds || []), ...(adaptiveProfile?.excludedExerciseIds || [])]);
+  const available = MOBILITY_EXERCISES.filter((item) => hasEquipment(item, equipment) && (!excludedIds.has(item.id) || selectedPhysioIds.has(item.id)));
   const conditionAvailable = condition === "tired"
     ? available.filter((item) => item.intensity !== "high")
     : available;
@@ -817,6 +825,17 @@ export function buildMobilityWorkout({
       ? ["Rumpf", "Gesäß & Hüfte", "Kraft", "Rumpf & Haltung", "Beinachse", "Fuß & Sprunggelenk", "Mobilität"]
       : ["Rumpf", "Fuß & Sprunggelenk", "Gesäß & Hüfte", "Mobilität", "Balance", "Beinachse", "Kraft"];
   const standardSequence = interleaveExerciseGroups(pool, standardPriority, rotationOffset, exerciseUsage);
+  const adaptiveSlots = Number(durationMinutes || 25) >= 20 ? 3 : 2;
+  const adaptiveSequence = [...preferredIds]
+    .map(exerciseById)
+    .filter((item) => item && pool.some((candidate) => candidate.id === item.id))
+    .sort((a, b) => {
+      const preferredOrder = [...preferredIds];
+      const usageDelta = Number(exerciseUsage[a.id]?.recentCount || 0) - Number(exerciseUsage[b.id]?.recentCount || 0);
+      if (usageDelta) return usageDelta;
+      return preferredOrder.indexOf(a.id) - preferredOrder.indexOf(b.id);
+    })
+    .slice(0, adaptiveSlots);
 
   const items = [];
   let activeSeconds = 0;
@@ -848,6 +867,7 @@ export function buildMobilityWorkout({
       transitionBeforeSeconds,
       sideSwitchSeconds,
       materialChangeBefore: Boolean(previous && requiresMaterialChange(previous, item)),
+      coachReason: adaptiveExerciseReason(adaptiveProfile, item),
     });
     activeSeconds += seconds;
     totalSeconds += stepTotalSeconds;
@@ -855,6 +875,7 @@ export function buildMobilityWorkout({
   };
 
   rotate(availablePhysio, rotationOffset).forEach((item) => add(item, "Physio-Priorität", 1));
+  uniqueExercises(adaptiveSequence).forEach((item) => add(item, "Coach-Fokus heute", 1));
   uniqueExercises(focusSequence).forEach((item) => {
     const labels = selectedFocusIds.filter((id) => item.focusAreas.includes(id)).map(focusAreaLabel);
     add(item, labels.length ? `Schwerpunkt ${labels.join(" & ")}` : "Persönlicher Schwerpunkt", 1);
@@ -883,7 +904,7 @@ export function buildMobilityWorkout({
   const missingFocus = selectedFocusIds.filter((focusId) => !conditionAvailable.some((item) => item.focusAreas.includes(focusId)));
 
   return {
-    id: `mobility-${durationMinutes}-${condition}-${equipment.join("-")}-${physioExerciseIds.join("-")}-${selectedFocusIds.join("-")}-${preparationSeconds}-${transitionSeconds}-${rotationOffset}`,
+    id: `mobility-${durationMinutes}-${condition}-${equipment.join("-")}-${physioExerciseIds.join("-")}-${selectedFocusIds.join("-")}-${preparationSeconds}-${transitionSeconds}-${rotationOffset}-${adaptiveProfile?.id || "manual"}-${[...excludedIds].join("-")}`,
     title: focusLabels.length
       ? `${focusLabels.join(" & ")} im Fokus`
       : condition === "tired"
@@ -914,6 +935,9 @@ export function buildMobilityWorkout({
     missingPhysio,
     missingFocus,
     exerciseUsage,
+    adaptiveProfile,
+    preferredExerciseIds: [...preferredIds],
+    excludedExerciseIds: [...excludedIds],
   };
 }
 

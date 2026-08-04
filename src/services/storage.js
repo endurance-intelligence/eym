@@ -44,6 +44,8 @@ function sanitizeState(state, defaults) {
       physioExerciseIds: Array.isArray(state?.mobilityCoach?.physioExerciseIds) ? state.mobilityCoach.physioExerciseIds : defaults.mobilityCoach.physioExerciseIds,
       focusAreaIds: Array.isArray(state?.mobilityCoach?.focusAreaIds) ? state.mobilityCoach.focusAreaIds : defaults.mobilityCoach.focusAreaIds,
       knownExerciseIds: Array.isArray(state?.mobilityCoach?.knownExerciseIds) ? state.mobilityCoach.knownExerciseIds : defaults.mobilityCoach.knownExerciseIds,
+      preferredExerciseIds: Array.isArray(state?.mobilityCoach?.preferredExerciseIds) ? state.mobilityCoach.preferredExerciseIds : defaults.mobilityCoach.preferredExerciseIds,
+      excludedExerciseIds: Array.isArray(state?.mobilityCoach?.excludedExerciseIds) ? state.mobilityCoach.excludedExerciseIds : defaults.mobilityCoach.excludedExerciseIds,
       history: Array.isArray(state?.mobilityCoach?.history) ? state.mobilityCoach.history : defaults.mobilityCoach.history,
     },
     appearance: normalizeAppearance({ ...defaults.appearance, ...(state?.appearance || {}) }),

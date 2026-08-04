@@ -34,6 +34,10 @@ import {
   mobilityOverrideExpiry,
 } from "../services/mobilityCoach";
 import {
+  buildAdaptiveMobilityProfile,
+  mergeMobilityFocusAreas,
+} from "../services/mobilityProgramming";
+import {
   activeRunnerSideLabel,
   advanceMobilityRunner,
   nextRunnerSideLabel,
@@ -121,6 +125,9 @@ export default function Coach() {
   const physioExerciseIds = useMemo(() => Array.isArray(mobilitySettings.physioExerciseIds) ? mobilitySettings.physioExerciseIds : [], [mobilitySettings.physioExerciseIds]);
   const focusAreaIds = useMemo(() => Array.isArray(mobilitySettings.focusAreaIds) ? mobilitySettings.focusAreaIds : [], [mobilitySettings.focusAreaIds]);
   const knownExerciseIds = useMemo(() => Array.isArray(mobilitySettings.knownExerciseIds) ? mobilitySettings.knownExerciseIds : [], [mobilitySettings.knownExerciseIds]);
+  const preferredExerciseIds = useMemo(() => Array.isArray(mobilitySettings.preferredExerciseIds) ? mobilitySettings.preferredExerciseIds : [], [mobilitySettings.preferredExerciseIds]);
+  const excludedExerciseIds = useMemo(() => Array.isArray(mobilitySettings.excludedExerciseIds) ? mobilitySettings.excludedExerciseIds : [], [mobilitySettings.excludedExerciseIds]);
+  const adaptiveProgrammingEnabled = mobilitySettings.adaptiveProgrammingEnabled !== false;
   const preparationSeconds = Number(mobilitySettings.preparationSeconds ?? 10);
   const unknownPreparationSeconds = Number(mobilitySettings.unknownPreparationSeconds ?? 20);
   const transitionSeconds = Number(mobilitySettings.transitionSeconds ?? 10);
@@ -138,10 +145,19 @@ export default function Coach() {
     () => mobilityCoachSuggestion(reviewActivities, state.reviews, now),
     [reviewActivities, state.reviews, now],
   );
+  const adaptiveProfile = useMemo(() => buildAdaptiveMobilityProfile({
+    activities: reviewActivities,
+    reviews: state.reviews,
+    plan: state.plan,
+    history: workoutHistory,
+    now,
+  }), [reviewActivities, state.reviews, state.plan, workoutHistory, now]);
   const weeklyCoachOverride = activeMobilityOverride(mobilitySettings.coachFocusOverride, now);
   const coachOverride = sessionCoachOverride || weeklyCoachOverride;
-  const effectiveFocusAreaIds = coachOverride?.focusAreaIds || focusAreaIds;
-  const effectiveCondition = coachOverride?.condition || condition;
+  const effectiveFocusAreaIds = coachOverride?.focusAreaIds || (adaptiveProgrammingEnabled
+    ? mergeMobilityFocusAreas(adaptiveProfile.focusAreaIds, focusAreaIds)
+    : focusAreaIds);
+  const effectiveCondition = coachOverride?.condition || (adaptiveProgrammingEnabled ? adaptiveProfile.condition : condition);
   const focusPickerOpen = focusEditorOpen || focusAreaIds.length === 0;
   const knownExerciseCount = useMemo(() => new Set([...knownExerciseIds, ...physioExerciseIds]).size, [knownExerciseIds, physioExerciseIds]);
   const workoutOptions = useMemo(() => ({
@@ -157,7 +173,10 @@ export default function Coach() {
     materialTransitionSeconds,
     longerPreparationForUnknown,
     exerciseHistory: workoutHistory,
-  }), [durationMinutes, effectiveCondition, equipment, physioExerciseIds, effectiveFocusAreaIds, knownExerciseIds, preparationSeconds, unknownPreparationSeconds, transitionSeconds, materialTransitionSeconds, longerPreparationForUnknown, workoutHistory]);
+    adaptiveProfile: adaptiveProgrammingEnabled && !coachOverride ? adaptiveProfile : null,
+    preferredExerciseIds,
+    excludedExerciseIds,
+  }), [durationMinutes, effectiveCondition, equipment, physioExerciseIds, effectiveFocusAreaIds, knownExerciseIds, preparationSeconds, unknownPreparationSeconds, transitionSeconds, materialTransitionSeconds, longerPreparationForUnknown, workoutHistory, adaptiveProgrammingEnabled, adaptiveProfile, coachOverride, preferredExerciseIds, excludedExerciseIds]);
   const workoutRotationOffset = workoutHistory.length + workoutShuffleOffset;
   const workout = useMemo(() => buildMobilityWorkout({
     ...workoutOptions,
@@ -213,6 +232,40 @@ export default function Coach() {
       ? knownExerciseIds.filter((item) => item !== id)
       : [...knownExerciseIds, id];
     updateMobility({ knownExerciseIds: next });
+  }
+
+  function togglePreferredExercise(id) {
+    const preferred = preferredExerciseIds.includes(id);
+    updateMobility({
+      preferredExerciseIds: preferred ? preferredExerciseIds.filter((item) => item !== id) : [...preferredExerciseIds, id],
+      excludedExerciseIds: excludedExerciseIds.filter((item) => item !== id),
+    });
+    setRunner(null);
+  }
+
+  function toggleExcludedExercise(id) {
+    if (physioExerciseIds.includes(id)) return;
+    const excluded = excludedExerciseIds.includes(id);
+    updateMobility({
+      excludedExerciseIds: excluded ? excludedExerciseIds.filter((item) => item !== id) : [...excludedExerciseIds, id],
+      preferredExerciseIds: preferredExerciseIds.filter((item) => item !== id),
+    });
+    setRunner(null);
+  }
+
+  function saveMobilityFeedback(patch) {
+    const sessionId = runner?.sessionId;
+    if (!sessionId) return;
+    setRunner((current) => current ? { ...current, feedback: { ...(current.feedback || {}), ...patch } } : current);
+    setState((current) => ({
+      ...current,
+      mobilityCoach: {
+        ...current.mobilityCoach,
+        history: (current.mobilityCoach?.history || []).map((entry) => entry.sessionId === sessionId
+          ? { ...entry, ...patch }
+          : entry),
+      },
+    }));
   }
 
   function toggleEquipment(id) {
@@ -297,6 +350,7 @@ export default function Coach() {
       running: true,
       complete: false,
       saved: false,
+      feedback: { fitScore: 0, zoneResponse: "" },
     });
   }
 
@@ -392,6 +446,9 @@ export default function Coach() {
         exerciseIds: [...new Set(completedExerciseIds)],
         focusAreaIds: Array.isArray(completedRunner.focusAreaIds) ? completedRunner.focusAreaIds : [],
         planItemId: completedRunner.planItemId || null,
+        fitScore: Number(completedRunner.feedback?.fitScore || 0),
+        zoneResponse: completedRunner.feedback?.zoneResponse || "",
+        adaptiveProfileId: adaptiveProgrammingEnabled ? adaptiveProfile.id : "",
       };
 
       setState((current) => {
@@ -417,7 +474,7 @@ export default function Coach() {
       setRunner((current) => current?.sessionId === completedRunner.sessionId ? { ...current, saved: true, completedAt } : current);
     }, 0);
     return () => window.clearTimeout(saveTimer);
-  }, [runner, setState]);
+  }, [runner, setState, adaptiveProgrammingEnabled, adaptiveProfile.id]);
 
   useEffect(() => {
     const previous = previousRunnerRef.current;
@@ -582,6 +639,25 @@ export default function Coach() {
 
       {activeTab === "mobility" && (
         <div className="grid mobility-coach-grid">
+          <Card className={`wide mobility-adaptive-card ${adaptiveProfile.safetyMode ? "safety" : effectiveCondition}`}>
+            <div className="mobility-adaptive-heading">
+              <div>
+                <p className="eyebrow">Heutiger Coach-Fokus</p>
+                <h2>{adaptiveProgrammingEnabled ? adaptiveProfile.title : "Automatische Auswahl pausiert"}</h2>
+                <p>{adaptiveProgrammingEnabled ? adaptiveProfile.reason : "Deine persönlichen Schwerpunkte und die manuell gewählte Tagesform bestimmen das Workout."}</p>
+              </div>
+              <label className="mobility-adaptive-toggle">
+                <input type="checkbox" checked={adaptiveProgrammingEnabled} onChange={(event) => { updateMobility({ adaptiveProgrammingEnabled: event.target.checked }); setRunner(null); }} />
+                <span><b>Coach programmiert automatisch</b><small>Reviews, heutiges Training und die nächste Schlüsseleinheit steuern die Auswahl.</small></span>
+              </label>
+            </div>
+            {adaptiveProgrammingEnabled && <>
+              <div className="mobility-adaptive-focuses">{adaptiveProfile.focusAreaIds.map((id) => <span key={id}>{focusAreaLabel(id)}</span>)}</div>
+              {adaptiveProfile.factors.length > 0 && <div className="mobility-adaptive-factors">{adaptiveProfile.factors.map((factor) => <span key={factor}>{factor}</span>)}</div>}
+              {adaptiveProfile.safetyMode && <p className="mobility-adaptive-safety"><strong>Schmerzsignal erkannt:</strong> Nur beschwerdefrei und kontrolliert arbeiten. Bei anhaltenden oder zunehmenden Beschwerden Einheit abbrechen.</p>}
+            </>}
+          </Card>
+
           <Card className="wide mobility-focus-card">
             <div className="settings-section-heading">
               <div>
@@ -631,7 +707,7 @@ export default function Coach() {
               </div>
               <button type="button" onClick={clearCoachOverride}>Coach-Fokus zurücksetzen</button>
             </Card>
-          ) : coachSuggestion && dismissedCoachSuggestionId !== coachSuggestion.id ? (
+          ) : !adaptiveProgrammingEnabled && coachSuggestion && dismissedCoachSuggestionId !== coachSuggestion.id ? (
             <Card className="wide mobility-coach-suggestion">
               <div>
                 <p className="eyebrow">Vorschlag vom Coach</p>
@@ -669,7 +745,7 @@ export default function Coach() {
                 </select>
               </label>
               <label>Tagesform
-                <select value={effectiveCondition} onChange={(event) => { if (coachOverride) clearCoachOverride(); updateMobility({ condition: event.target.value }); setRunner(null); }}>
+                <select value={effectiveCondition} disabled={adaptiveProgrammingEnabled && !coachOverride} onChange={(event) => { if (coachOverride) clearCoachOverride(); updateMobility({ condition: event.target.value }); setRunner(null); }}>
                   <option value="fresh">Erholt</option><option value="normal">Normal</option><option value="tired">Müde / Regeneration</option>
                 </select>
               </label>
@@ -729,7 +805,17 @@ export default function Coach() {
             </div>
             {runner && (runner.complete || activeExercise) && (
               <div className={`mobility-runner phase-${runnerPhase} ${runner.complete ? "complete" : ""} ${switchMoment ? "switch-now" : ""}`}>
-                {runner.complete ? <><p className="eyebrow">Geschafft</p><h2>Workout abgeschlossen</h2><p className="mobility-completion-note">{runner.saved ? (runner.planItemId ? "Die heutige Stabi-/Mobility-Einheit wurde automatisch als erledigt markiert." : "Das Workout wurde automatisch in deinem Verlauf gespeichert.") : "Workout wird gespeichert …"}</p><button type="button" className="primary compact-primary" onClick={closeFinishedWorkout} disabled={!runner.saved}>Workout schließen</button></> : <>
+                {runner.complete ? <>
+                  <p className="eyebrow">Geschafft</p>
+                  <h2>Workout abgeschlossen</h2>
+                  <p className="mobility-completion-note">{runner.saved ? (runner.planItemId ? "Die heutige Stabi-/Mobility-Einheit wurde automatisch als erledigt markiert." : "Das Workout wurde automatisch in deinem Verlauf gespeichert.") : "Workout wird gespeichert …"}</p>
+                  <div className="mobility-completion-feedback">
+                    <div><span>Wie passend war die heutige Auswahl?</span><div className="mobility-score-buttons">{Array.from({ length: 10 }, (_, index) => index + 1).map((score) => <button type="button" className={Number(runner.feedback?.fitScore) === score ? "selected" : ""} onClick={() => saveMobilityFeedback({ fitScore: score })} key={score}>{score}</button>)}</div></div>
+                    <div><span>Wie fühlen sich die belasteten Bereiche jetzt an?</span><div className="mobility-response-buttons">{[["better", "Besser"], ["same", "Unverändert"], ["worse", "Schlechter"]].map(([value, label]) => <button type="button" className={runner.feedback?.zoneResponse === value ? "selected" : ""} onClick={() => saveMobilityFeedback({ zoneResponse: value })} key={value}>{label}</button>)}</div></div>
+                    <small>Dein Coach nutzt dieses Feedback bei der nächsten Übungsauswahl. Es ist optional.</small>
+                  </div>
+                  <button type="button" className="primary compact-primary" onClick={closeFinishedWorkout} disabled={!runner.saved}>Workout schließen</button>
+                </> : <>
                   <div className="mobility-runner-topline"><span>{runnerPhaseLabel} · Schritt {runner.index + 1} von {runner.items.length}</span><small>{isExerciseKnown(activeExercise.id) ? "Bekannte Übung" : "Neue Übung"}</small></div>
                   {runner.running && wakeLockStatus === "active" && <span className="mobility-wake-status">Bildschirm bleibt während des Workouts aktiv</span>}
                   <h2>{runnerPhase === "transition"
@@ -748,7 +834,7 @@ export default function Coach() {
                         ? `Wechsle kontrolliert auf ${nextRunnerSideLabel(weakSide).toLocaleLowerCase("de-DE")}. Die Belastungszeit ist pausiert und startet nach dem 3–2–1-Countdown neu.`
                         : activeExercise.instruction}</p>
                   {runnerPhase !== "work" && activeExercise.cues?.length > 0 && <div className="mobility-runner-cues">{activeExercise.cues.slice(0, 3).map((cue) => <span key={cue}>{cue}</span>)}</div>}
-                  <div className="mobility-runner-tags"><small className="mobility-selection-reason">{activeExercise.selectionReason}</small>{!isExerciseKnown(activeExercise.id) && <small className="mobility-new-exercise">Mehr Zeit, weil noch nicht als bekannt markiert</small>}</div>
+                  <div className="mobility-runner-tags"><small className="mobility-selection-reason">{activeExercise.selectionReason}</small>{activeExercise.coachReason && <small className="mobility-coach-reason">{activeExercise.coachReason}</small>}{!isExerciseKnown(activeExercise.id) && <small className="mobility-new-exercise">Mehr Zeit, weil noch nicht als bekannt markiert</small>}</div>
                   <div className="button-row">
                     <button type="button" onClick={() => setRunner({ ...runner, running: !runner.running })}>{runner.running ? "Pause" : "Weiter"}</button>
                     <button type="button" className="secondary" onClick={() => openExerciseGuide(activeExercise)}>Anleitung</button>
@@ -767,6 +853,7 @@ export default function Coach() {
                     <div className="mobility-exercise-heading"><div><strong>{exercise.name}</strong>{exercise.subtitle && <small className="mobility-exercise-subtitle">{exercise.subtitle}</small>}</div><ExerciseGuideButton exercise={exercise} onOpen={openExerciseGuide} compact /></div>
                     <small>{exercise.group} · {Math.round(exercise.seconds / 15) * 15} Sek. Übung · {exercise.preparationSeconds} Sek. Vorbereitung{exercise.transitionBeforeSeconds ? ` · ${exercise.transitionBeforeSeconds} Sek. Wechsel davor` : ""}{exercise.sideSwitch ? ` · ${exercise.sideSwitchSeconds} Sek. Seitenwechsel` : ""}</small>
                     <em>{exercise.selectionReason}</em>
+                    {exercise.coachReason && <small className="mobility-exercise-coach-reason">{exercise.coachReason}</small>}
                     <p>{exercise.quickStart || exercise.instruction}</p>
                   </div>
                 </article>
@@ -793,10 +880,14 @@ export default function Coach() {
             <div className="exercise-library-grid">
               {visibleLibraryExercises.map((exercise) => (
                 <article key={exercise.id}>
-                  <div className="exercise-library-card-heading"><div><span>{exercise.group}</span><h3>{exercise.name}</h3>{exercise.subtitle && <small className="mobility-exercise-subtitle">{exercise.subtitle}</small>}</div><div className="exercise-library-badges">{physioExerciseIds.includes(exercise.id) && <b>Physio</b>}{knownExerciseIds.includes(exercise.id) && !physioExerciseIds.includes(exercise.id) && <b className="known">Bekannt</b>}{exerciseUsage[exercise.id]?.count > 0 && <b className="usage">{exerciseUsage[exercise.id].count}×</b>}</div></div>
+                  <div className="exercise-library-card-heading"><div><span>{exercise.group}</span><h3>{exercise.name}</h3>{exercise.subtitle && <small className="mobility-exercise-subtitle">{exercise.subtitle}</small>}</div><div className="exercise-library-badges">{physioExerciseIds.includes(exercise.id) && <b>Physio</b>}{knownExerciseIds.includes(exercise.id) && !physioExerciseIds.includes(exercise.id) && <b className="known">Bekannt</b>}{exerciseUsage[exercise.id]?.count > 0 && <b className="usage">{exerciseUsage[exercise.id].count}×</b>}{preferredExerciseIds.includes(exercise.id) && <b className="preferred">Bevorzugt</b>}{excludedExerciseIds.includes(exercise.id) && <b className="excluded">Pausiert</b>}</div></div>
                   <p>{exercise.purpose}</p>
                   <small>{materialText(exercise)} · {exercise.focusAreas.map(focusAreaLabel).join(" · ") || "Allgemein"}{exerciseUsageLabel(exerciseUsage[exercise.id]) ? ` · ${exerciseUsageLabel(exerciseUsage[exercise.id])}` : ""}</small>
-                  <ExerciseGuideButton exercise={exercise} onOpen={openExerciseGuide} />
+                  <div className="exercise-library-actions">
+                    <ExerciseGuideButton exercise={exercise} onOpen={openExerciseGuide} />
+                    <button type="button" className={preferredExerciseIds.includes(exercise.id) ? "selected" : ""} onClick={() => togglePreferredExercise(exercise.id)}>{preferredExerciseIds.includes(exercise.id) ? "✓ Bevorzugt" : "Bevorzugen"}</button>
+                    <button type="button" className={excludedExerciseIds.includes(exercise.id) ? "selected danger" : "secondary"} disabled={physioExerciseIds.includes(exercise.id)} title={physioExerciseIds.includes(exercise.id) ? "Physio-Prioritäten können nicht pausiert werden" : "Übung vorübergehend aus automatisch erzeugten Workouts entfernen"} onClick={() => toggleExcludedExercise(exercise.id)}>{excludedExerciseIds.includes(exercise.id) ? "✓ Pausiert" : "Pausieren"}</button>
+                  </div>
                 </article>
               ))}
             </div>
