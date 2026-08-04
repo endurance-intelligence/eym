@@ -63,20 +63,29 @@ export const MOBILITY_FOCUS_AREAS = [
   },
 ];
 
-const exercise = (definition) => ({
-  seconds: 60,
-  equipment: [],
-  focusAreas: [],
-  intensity: "medium",
-  steps: [],
-  cues: [],
-  mistakes: [],
-  quickStart: "",
-  sideSwitch: false,
-  switchCue: "Seite wechseln",
-  asymmetryNote: "",
-  ...definition,
-});
+const exercise = (definition) => {
+  const normalized = {
+    seconds: 60,
+    equipment: [],
+    focusAreas: [],
+    intensity: "medium",
+    steps: [],
+    cues: [],
+    mistakes: [],
+    quickStart: "",
+    sideSwitch: false,
+    sideSwitchSeconds: null,
+    switchCue: "Seite wechseln",
+    asymmetryNote: "",
+    ...definition,
+  };
+  const sideSwitch = Boolean(normalized.sideSwitch);
+  return {
+    ...normalized,
+    sideSwitch,
+    sideSwitchSeconds: sideSwitch ? Math.max(0, Number(normalized.sideSwitchSeconds ?? 5)) : 0,
+  };
+};
 
 export const MOBILITY_EXERCISES = [
   exercise({
@@ -133,6 +142,7 @@ export const MOBILITY_EXERCISES = [
     name: "Adduktoren mit Gummiband",
     quickStart: "Stell dich seitlich zur Bandbefestigung. Das Band zieht das Arbeitsbein nach außen; führe das gestreckte Bein langsam zur Körpermitte.",
     sideSwitch: true,
+    sideSwitchSeconds: 5,
     group: "Physio",
     seconds: 120,
     equipment: ["band"],
@@ -153,6 +163,7 @@ export const MOBILITY_EXERCISES = [
     subtitle: "Innenschenkel im Vierfüßler mobilisieren",
     quickStart: "Vierfüßlerstand. Ein Bein gestreckt zur Seite, Fuß am Boden. Schiebe das Gesäß langsam Richtung Ferse und wieder nach vorn.",
     sideSwitch: true,
+    sideSwitchSeconds: 4,
     group: "Mobilität",
     seconds: 75,
     equipment: ["mat"],
@@ -208,6 +219,7 @@ export const MOBILITY_EXERCISES = [
     subtitle: "Band gegen Rotation nach vorn drücken",
     quickStart: "Befestige das Band auf Brusthöhe. Stell dich seitlich dazu, halte es vor der Brust und drücke beide Hände gerade nach vorn, ohne dich zum Band zu drehen.",
     sideSwitch: true,
+    sideSwitchSeconds: 5,
     group: "Rumpf",
     seconds: 60,
     equipment: ["band"],
@@ -245,6 +257,7 @@ export const MOBILITY_EXERCISES = [
     subtitle: "Seitliche Plank auf dem Unterarm",
     quickStart: "Lege dich seitlich ab, Ellenbogen direkt unter der Schulter. Hebe das Becken an und halte Schulter, Hüfte und Füße möglichst in einer Linie.",
     sideSwitch: true,
+    sideSwitchSeconds: 5,
     group: "Rumpf",
     seconds: 60,
     equipment: ["mat"],
@@ -299,6 +312,7 @@ export const MOBILITY_EXERCISES = [
     subtitle: "Muschelbewegung in Seitlage",
     quickStart: "Seitlage, Knie gebeugt und Füße zusammen. Lass die Füße aufeinander und öffne nur das obere Knie wie eine Muschel; das Becken bleibt übereinander.",
     sideSwitch: true,
+    sideSwitchSeconds: 5,
     group: "Gesäß & Hüfte",
     seconds: 75,
     equipment: ["mat"],
@@ -335,6 +349,7 @@ export const MOBILITY_EXERCISES = [
     subtitle: "Wadenkraft und Sprunggelenkstabilität pro Seite",
     quickStart: "Stell dich auf ein Bein und halte dich leicht an einer Wand fest. Hebe die Ferse langsam an, halte oben kurz und senke sie kontrolliert ab. Danach Seite wechseln.",
     sideSwitch: true,
+    sideSwitchSeconds: 3,
     group: "Fuß & Unterschenkel",
     seconds: 75,
     focusAreas: ["ankle", "balance", "knee-axis"],
@@ -354,6 +369,7 @@ export const MOBILITY_EXERCISES = [
     subtitle: "Sprunggelenk testen und mobilisieren",
     quickStart: "Stell einen Fuß flach etwa 3–8 cm vor eine Wand. Schiebe das Knie gerade zur Wand, ohne dass die Ferse abhebt. Danach Seite wechseln.",
     sideSwitch: true,
+    sideSwitchSeconds: 3,
     group: "Fuß & Sprunggelenk",
     seconds: 75,
     focusAreas: ["ankle", "mobility"],
@@ -390,6 +406,7 @@ export const MOBILITY_EXERCISES = [
     subtitle: "Short Foot · Fuß sanft verkürzen",
     quickStart: "Barfuß sitzen oder stehen. Zehen locker lassen. Ziehe den Großzehenballen ganz leicht Richtung Ferse, sodass sich das innere Fußgewölbe hebt.",
     sideSwitch: true,
+    sideSwitchSeconds: 3,
     group: "Fuß & Sprunggelenk",
     seconds: 60,
     focusAreas: ["ankle", "balance"],
@@ -407,6 +424,7 @@ export const MOBILITY_EXERCISES = [
     name: "Einbeinstand",
     quickStart: "Stell dich auf ein Bein, richte Knie und Fuß gerade aus und halte das Fußgewölbe aktiv. Bei Bedarf mit einem Finger sichern.",
     sideSwitch: true,
+    sideSwitchSeconds: 3,
     group: "Balance",
     seconds: 75,
     focusAreas: ["ankle", "balance", "knee-axis"],
@@ -425,6 +443,7 @@ export const MOBILITY_EXERCISES = [
     subtitle: "Freien Fuß nach vorn, seitlich und hinten tippen",
     quickStart: "Steh auf einem Bein. Tippe mit dem freien Fuß wie auf einem Zifferblatt kontrolliert nach vorn, schräg zur Seite und nach hinten, ohne das Standbein zu verlieren.",
     sideSwitch: true,
+    sideSwitchSeconds: 4,
     group: "Balance",
     seconds: 90,
     focusAreas: ["ankle", "balance", "knee-axis"],
@@ -443,6 +462,7 @@ export const MOBILITY_EXERCISES = [
     subtitle: "Eversion · nur den Fuß gegen den Bandzug drehen",
     quickStart: "Setz dich hin. Das Band zieht den Vorfuß nach innen. Halte Knie und Unterschenkel still und bewege nur den Fuß gegen den Zug nach außen.",
     sideSwitch: true,
+    sideSwitchSeconds: 5,
     group: "Fuß & Sprunggelenk",
     seconds: 75,
     equipment: ["band"],
@@ -462,6 +482,7 @@ export const MOBILITY_EXERCISES = [
     subtitle: "Inversion · Vorfuß kontrolliert zur Körpermitte",
     quickStart: "Setz dich hin. Das Band zieht den Vorfuß nach außen. Halte Knie und Unterschenkel still und bewege nur den Fuß kontrolliert nach innen.",
     sideSwitch: true,
+    sideSwitchSeconds: 5,
     group: "Fuß & Sprunggelenk",
     seconds: 75,
     equipment: ["band"],
@@ -481,6 +502,7 @@ export const MOBILITY_EXERCISES = [
     subtitle: "Fußspitze gegen Widerstand zum Schienbein ziehen",
     quickStart: "Setz dich mit gestrecktem Bein hin. Befestige das Band vor dir am Vorfuß. Ziehe die Fußspitze Richtung Schienbein und lass sie langsam wieder nach vorn.",
     sideSwitch: true,
+    sideSwitchSeconds: 5,
     group: "Fuß & Sprunggelenk",
     seconds: 75,
     equipment: ["band"],
@@ -498,6 +520,7 @@ export const MOBILITY_EXERCISES = [
     id: "step-up",
     name: "Kontrollierte Step-ups",
     sideSwitch: true,
+    sideSwitchSeconds: 3,
     group: "Beinachse",
     seconds: 75,
     equipment: ["step"],
@@ -515,6 +538,7 @@ export const MOBILITY_EXERCISES = [
     id: "hip-flexor-stretch",
     name: "Hüftbeuger-Stretch",
     sideSwitch: true,
+    sideSwitchSeconds: 5,
     group: "Mobilität",
     seconds: 90,
     equipment: ["mat"],
@@ -532,6 +556,7 @@ export const MOBILITY_EXERCISES = [
     id: "thoracic-rotation",
     name: "Brustwirbelsäulen-Rotation",
     sideSwitch: true,
+    sideSwitchSeconds: 4,
     group: "Mobilität",
     seconds: 75,
     equipment: ["mat"],
@@ -583,6 +608,7 @@ export const MOBILITY_EXERCISES = [
     id: "suitcase-carry",
     name: "Suitcase Carry",
     sideSwitch: true,
+    sideSwitchSeconds: 4,
     group: "Rumpf & Haltung",
     seconds: 75,
     equipmentAny: ["dumbbells", "kettlebell"],
@@ -799,14 +825,16 @@ export function buildMobilityWorkout({
     if (!item) return false;
     const seconds = Number(item.seconds || 60);
     const known = knownIds.has(item.id);
-    const stepPreparationSeconds = longerPreparationForUnknown && !known
+    const configuredPreparationSeconds = longerPreparationForUnknown && !known
       ? newExercisePreparation
       : normalPreparation;
+    const stepPreparationSeconds = Math.max(3, configuredPreparationSeconds);
     const previous = items.at(-1);
     const transitionBeforeSeconds = previous
       ? requiresMaterialChange(previous, item) ? materialTransition : normalTransition
       : 0;
-    const stepTotalSeconds = seconds + stepPreparationSeconds + transitionBeforeSeconds;
+    const sideSwitchSeconds = item.sideSwitch ? Math.max(0, Number(item.sideSwitchSeconds ?? 5)) : 0;
+    const stepTotalSeconds = seconds + stepPreparationSeconds + transitionBeforeSeconds + sideSwitchSeconds;
     if (activeSeconds + seconds > activeLimitSeconds + 30 && items.length >= 3) return false;
     const matchedFocus = selectedFocusIds.filter((focusId) => item.focusAreas.includes(focusId));
     items.push({
@@ -818,6 +846,7 @@ export function buildMobilityWorkout({
       known,
       preparationSeconds: stepPreparationSeconds,
       transitionBeforeSeconds,
+      sideSwitchSeconds,
       materialChangeBefore: Boolean(previous && requiresMaterialChange(previous, item)),
     });
     activeSeconds += seconds;

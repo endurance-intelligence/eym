@@ -111,3 +111,33 @@ test("frequently repeated focus exercise is deprioritized when an alternative ex
   assert.notEqual(focusExercise.id, "dead-bug");
   assert.equal(workout.exerciseUsage["dead-bug"].streak, 4);
 });
+
+
+test("side-change pauses are exercise-specific and included in total time", () => {
+  const workout = buildMobilityWorkout({
+    durationMinutes: 10,
+    condition: "normal",
+    equipment: ["mat", "band"],
+    physioExerciseIds: ["side-plank", "ankle-circles"],
+    preparationSeconds: 0,
+    unknownPreparationSeconds: 0,
+    transitionSeconds: 0,
+    materialTransitionSeconds: 0,
+    longerPreparationForUnknown: false,
+  });
+  const sidePlank = workout.items.find((item) => item.id === "side-plank");
+  const ankleCircles = workout.items.find((item) => item.id === "ankle-circles");
+  const expectedPauseSeconds = workout.items.reduce((sum, item) => (
+    sum + Number(item.preparationSeconds || 0)
+      + Number(item.transitionBeforeSeconds || 0)
+      + Number(item.sideSwitchSeconds || 0)
+  ), 0);
+
+  assert.equal(sidePlank.sideSwitch, true);
+  assert.equal(sidePlank.sideSwitchSeconds, 5);
+  assert.ok(workout.items.every((item) => item.preparationSeconds >= 3));
+  assert.equal(ankleCircles.sideSwitch, false);
+  assert.equal(ankleCircles.sideSwitchSeconds, 0);
+  assert.equal(workout.pauseSeconds, expectedPauseSeconds);
+  assert.equal(workout.totalSeconds, workout.activeSeconds + expectedPauseSeconds);
+});

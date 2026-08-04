@@ -76,6 +76,8 @@ export async function playWorkoutAudioDemo() {
   scheduleCue(context, "countdown1", start + 2);
   scheduleCue(context, "start", start + 3);
   scheduleCue(context, "end", start + 4.25);
+  scheduleCue(context, "switch", start + 5.1);
+  scheduleCue(context, "complete", start + 6.1);
   return true;
 }
 

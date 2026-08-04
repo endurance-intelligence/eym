@@ -1443,3 +1443,19 @@ button:focus-visible,a:focus-visible,summary:focus-visible{
     margin-top:6px;
   }
 }
+
+/* v3.9.26 – guided 3–2–1 audio and real side-change pauses */
+.mobility-runner.phase-side-switch{
+  border-color:#ffcf68;
+  background:radial-gradient(circle at 85% 0,#4a3817,var(--bg-card) 60%);
+  animation:mobilitySwitchPulse .65s ease-out;
+}
+.mobility-runner.phase-side-switch .mobility-runner-topline>span{color:#ffdc8b}
+.mobility-runner.phase-side-switch .mobility-side-status{
+  border-color:#ffcf68;
+  background:#2a210f;
+  color:#ffdc8b;
+}
+@media(max-width:700px){
+  .mobility-runner.phase-side-switch{background:radial-gradient(circle at 85% 0,#4a3817,var(--bg-body) 64%)}
+}

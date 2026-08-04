@@ -33,6 +33,13 @@ import {
   mobilityCoachSuggestion,
   mobilityOverrideExpiry,
 } from "../services/mobilityCoach";
+import {
+  activeRunnerSideLabel,
+  advanceMobilityRunner,
+  nextRunnerSideLabel,
+  runnerPhaseSeconds,
+  sideOrder,
+} from "../services/mobilityRunner";
 
 const monthFormatter = new Intl.DateTimeFormat("de-DE", { month: "long", year: "numeric" });
 const DEFAULT_MOBILITY_EQUIPMENT = ["mat", "band"];
@@ -68,80 +75,6 @@ function exerciseUsageLabel(stat) {
   if (!stat?.count) return "";
   const dateKey = String(stat.lastCompletedAt || "").slice(0, 10);
   return `${stat.count}× absolviert${dateKey ? ` · zuletzt ${fmtDate(dateKey)}` : ""}`;
-}
-
-function runnerPhaseSeconds(items, index, phase) {
-  const item = items[index];
-  if (!item) return 0;
-  if (phase === "transition") return Number(item.transitionBeforeSeconds || 0);
-  if (phase === "prepare") return Number(item.preparationSeconds || 0);
-  if (phase === "work") return Number(item.seconds || 0);
-  return 0;
-}
-
-function advanceRunner(current) {
-  if (!current || current.complete) return current;
-  const items = current.items || [];
-  let index = current.index;
-  let phase = current.phase;
-  let completedExerciseIds = Array.isArray(current.completedExerciseIds) ? current.completedExerciseIds : [];
-  for (let guard = 0; guard < 5; guard += 1) {
-    if (phase === "prepare") {
-      phase = "work";
-    } else if (phase === "work") {
-      const completedExerciseId = items[index]?.id;
-      if (completedExerciseId && !completedExerciseIds.includes(completedExerciseId)) {
-        completedExerciseIds = [...completedExerciseIds, completedExerciseId];
-      }
-      if (index >= items.length - 1) {
-        return {
-          ...current,
-          completedExerciseIds,
-          remaining: 0,
-          running: false,
-          complete: true,
-        };
-      }
-      index += 1;
-      phase = "transition";
-    } else {
-      phase = "prepare";
-    }
-    const remaining = runnerPhaseSeconds(items, index, phase);
-    if (remaining > 0) {
-      return {
-        ...current,
-        completedExerciseIds,
-        index,
-        phase,
-        remaining,
-        complete: false,
-      };
-    }
-  }
-  return {
-    ...current,
-    completedExerciseIds,
-    remaining: 0,
-    running: false,
-    complete: true,
-  };
-}
-
-function sideOrder(weakSide) {
-  if (weakSide === "right") return ["Rechte Seite", "Linke Seite"];
-  return ["Linke Seite", "Rechte Seite"];
-}
-
-function activeSideLabel(exercise, remaining, weakSide) {
-  if (!exercise?.sideSwitch) return "";
-  const [first, second] = sideOrder(weakSide);
-  const halfway = Math.floor(Number(exercise.seconds || 0) / 2);
-  return Number(remaining || 0) > halfway ? first : second;
-}
-
-function nextSideLabel(weakSide) {
-  return sideOrder(weakSide)[1];
 }
 
 export default function Coach() {
@@ -359,7 +292,8 @@ export default function Coach() {
       completedExerciseIds: [],
       index: 0,
       phase: firstPhase,
-      remaining: runnerPhaseSeconds(items, 0, firstPhase),
+      sideIndex: 0,
+      remaining: runnerPhaseSeconds(items, 0, firstPhase, 0),
       running: true,
       complete: false,
       saved: false,
@@ -384,7 +318,7 @@ export default function Coach() {
       setRunner((current) => {
         if (!current?.running) return current;
         if (current.remaining > 1) return { ...current, remaining: current.remaining - 1 };
-        return advanceRunner(current);
+        return advanceMobilityRunner(current);
       });
     }, 1000);
     return () => window.clearInterval(timer);
@@ -497,19 +431,29 @@ export default function Coach() {
       return;
     }
 
-    const phaseChanged = !previous || previous.phase !== runner.phase || previous.index !== runner.index;
+    const phaseChanged = !previous
+      || previous.phase !== runner.phase
+      || previous.index !== runner.index
+      || Number(previous.sideIndex || 0) !== Number(runner.sideIndex || 0);
     if (runner.complete && !previous?.complete) {
       playWorkoutCue("complete");
       if (voiceCues) speakWorkoutCue("Workout abgeschlossen");
     } else if (phaseChanged) {
-      if (previous?.phase === "work") playWorkoutCue("end");
-      if (runner.phase === "work") {
-        playWorkoutCue("start");
-        if (voiceCues && activeExercise?.sideSwitch) speakWorkoutCue(`Start ${sideOrder(weakSide)[0]}`);
+      if (runner.phase === "side-switch") {
+        playWorkoutCue("switch");
+        if (voiceCues) speakWorkoutCue(`${activeExercise?.switchCue || "Seite wechseln"}. ${nextRunnerSideLabel(weakSide)}. Start in ${runner.remaining} Sekunden`);
+      } else {
+        if (previous?.phase === "work") playWorkoutCue("end");
+        if (runner.phase === "work") {
+          playWorkoutCue("start");
+          const sideLabel = activeRunnerSideLabel(activeExercise, runner.phase, runner.sideIndex, weakSide);
+          if (voiceCues && sideLabel) speakWorkoutCue(`Start ${sideLabel}`);
+        }
       }
     }
 
     const countdownBeforeStart = runner.phase === "prepare"
+      || runner.phase === "side-switch"
       || (runner.phase === "transition" && Number(activeExercise?.preparationSeconds || 0) <= 0);
     const countdownBeforeEnd = runner.phase === "work";
     if (
@@ -526,23 +470,26 @@ export default function Coach() {
       }
     }
 
-    const halfway = Math.floor(Number(activeExercise?.seconds || 0) / 2);
-    if (runner.running && runner.phase === "work" && activeExercise?.sideSwitch && runner.remaining === halfway) {
-      const switchKey = `${runner.index}-switch`;
-      if (cueKeyRef.current !== switchKey) {
-        cueKeyRef.current = switchKey;
-        playWorkoutCue("switch");
-        if (voiceCues) speakWorkoutCue(`${activeExercise.switchCue || "Seite wechseln"}. ${nextSideLabel(weakSide)}`);
-      }
-    }
 
     previousRunnerRef.current = runner;
   }, [runner, activeExercise, audioEnabled, voiceCues, weakSide]);
   const runnerPhase = runner?.phase || "work";
-  const runnerPhaseLabel = runnerPhase === "prepare" ? "Vorbereitung" : runnerPhase === "transition" ? "Wechselpause" : "Übung";
-  const runnerPhaseAction = runnerPhase === "work" ? "Übung abschließen" : runnerPhase === "prepare" ? "Jetzt starten" : "Vorbereitung starten";
-  const runnerSideLabel = activeExercise && runnerPhase === "work" ? activeSideLabel(activeExercise, runner?.remaining, weakSide) : "";
-  const switchMoment = Boolean(activeExercise?.sideSwitch && runnerPhase === "work" && runner?.remaining === Math.floor(Number(activeExercise.seconds || 0) / 2));
+  const runnerPhaseLabel = runnerPhase === "prepare"
+    ? "Vorbereitung"
+    : runnerPhase === "transition"
+      ? "Wechselpause"
+      : runnerPhase === "side-switch"
+        ? "Seitenwechsel"
+        : "Übung";
+  const runnerPhaseAction = runnerPhase === "work"
+    ? "Übung abschließen"
+    : runnerPhase === "prepare"
+      ? "Jetzt starten"
+      : runnerPhase === "side-switch"
+        ? "Zweite Seite starten"
+        : "Vorbereitung starten";
+  const runnerSideLabel = activeRunnerSideLabel(activeExercise, runnerPhase, runner?.sideIndex, weakSide);
+  const switchMoment = runnerPhase === "side-switch";
 
   return (
     <>
@@ -732,11 +679,11 @@ export default function Coach() {
               <div>{MOBILITY_EQUIPMENT.map((item) => <button type="button" className={equipment.includes(item.id) ? "selected" : ""} onClick={() => toggleEquipment(item.id)} key={item.id}>{item.label}</button>)}</div>
             </div>
             <details className="mobility-timer-settings">
-              <summary><span><b>Timer & Pausen</b><small>{preparationSeconds}s Vorbereitung · {transitionSeconds}s Wechsel · neue Übungen {longerPreparationForUnknown ? `${unknownPreparationSeconds}s` : "wie bekannte"}</small></span><strong>{knownExerciseCount} bekannt</strong></summary>
+              <summary><span><b>Timer & Pausen</b><small>{preparationSeconds ? `${preparationSeconds}s Vorbereitung` : "3–2–1 Start-Countdown"} · {transitionSeconds}s Übungswechsel · Seitenwechsel automatisch 3–5s</small></span><strong>{knownExerciseCount} bekannt</strong></summary>
               <div className="mobility-timer-grid">
                 <label>Vorbereitung bekannte Übung
                   <select value={preparationSeconds} onChange={(event) => { updateMobility({ preparationSeconds: Number(event.target.value) }); setRunner(null); }}>
-                    {[0, 5, 10, 15, 20].map((value) => <option value={value} key={value}>{value} Sekunden</option>)}
+                    {[0, 5, 10, 15, 20].map((value) => <option value={value} key={value}>{value === 0 ? "Nur 3–2–1 Countdown" : `${value} Sekunden`}</option>)}
                   </select>
                 </label>
                 <label>Vorbereitung neue Übung
@@ -765,8 +712,8 @@ export default function Coach() {
               <label className="mobility-timer-toggle"><input type="checkbox" checked={longerPreparationForUnknown} onChange={(event) => { updateMobility({ longerPreparationForUnknown: event.target.checked }); setRunner(null); }} /><span><b>Unbekannte Übungen länger vorbereiten</b><small>Markierte Physio-Übungen gelten automatisch als bekannt. Weitere Übungen kannst du in der Anleitung als bekannt markieren.</small></span></label>
               <label className="mobility-timer-toggle"><input type="checkbox" checked={audioEnabled} onChange={(event) => updateMobility({ audioEnabled: event.target.checked })} /><span><b>Signaltöne im Workout</b><small>Deutlich hörbarer 3–2–1-Countdown vor Start und Ende sowie eigene Töne für Seitenwechsel und Workout-Abschluss.</small></span></label>
               <label className="mobility-timer-toggle"><input type="checkbox" checked={voiceCues} disabled={!audioEnabled} onChange={(event) => updateMobility({ voiceCues: event.target.checked })} /><span><b>Seitenwechsel ansagen</b><small>Bei Seitstütz, Pallof Press, Sprunggelenkübungen und weiteren beidseitigen Übungen wird die nächste Seite angesagt.</small></span></label>
-              <div className="mobility-audio-actions"><button type="button" onClick={() => playWorkoutAudioDemo()}>Countdown & Ende testen</button><span className="mobility-audio-status">Spielt 3–2–1, Start und Abschluss einmal vor. Die Seitenansage bleibt im Workout aktiv.</span></div>
-              <p>Die gewählte Zeit ist reine Bewegungszeit. Vorbereitung und Wechsel kommen zusätzlich hinzu; die voraussichtliche Gesamtdauer siehst du oben. Die zuerst gewählte schwächere Seite erhält nicht automatisch mehr Belastung, sondern wird nur zuerst ausgeführt.</p>
+              <div className="mobility-audio-actions"><button type="button" onClick={() => playWorkoutAudioDemo()}>Signale testen</button><span className="mobility-audio-status">Spielt 3–2–1, Start, Ende, Seitenwechsel und Workout-Abschluss einmal vor.</span></div>
+              <p>Die gewählte Zeit ist reine Bewegungszeit. Vorbereitung, Übungswechsel und automatisch hinterlegte Seitenwechsel kommen zusätzlich hinzu. Bei Seitstütz, Bandübungen und einbeinigen Übungen pausiert der Timer 3–5 Sekunden; alternierende Übungen und Fußkreisen laufen ohne künstliche Unterbrechung weiter.</p>
             </details>
             {workout.missingPhysio.length > 0 && <div className="mobility-warning"><strong>Physioübung aktuell nicht im Workout:</strong> {workout.missingPhysio.map((item) => `${item.name} (${(item.equipment || item.equipmentAny || []).map(equipmentLabel).join(" oder ")})`).join(", ")}</div>}
             {workout.missingFocus.length > 0 && <div className="mobility-warning"><strong>Schwerpunkt ohne passende Übung:</strong> {workout.missingFocus.map(focusAreaLabel).join(", ")}. Prüfe das ausgewählte Material.</div>}
@@ -785,18 +732,28 @@ export default function Coach() {
                 {runner.complete ? <><p className="eyebrow">Geschafft</p><h2>Workout abgeschlossen</h2><p className="mobility-completion-note">{runner.saved ? (runner.planItemId ? "Die heutige Stabi-/Mobility-Einheit wurde automatisch als erledigt markiert." : "Das Workout wurde automatisch in deinem Verlauf gespeichert.") : "Workout wird gespeichert …"}</p><button type="button" className="primary compact-primary" onClick={closeFinishedWorkout} disabled={!runner.saved}>Workout schließen</button></> : <>
                   <div className="mobility-runner-topline"><span>{runnerPhaseLabel} · Schritt {runner.index + 1} von {runner.items.length}</span><small>{isExerciseKnown(activeExercise.id) ? "Bekannte Übung" : "Neue Übung"}</small></div>
                   {runner.running && wakeLockStatus === "active" && <span className="mobility-wake-status">Bildschirm bleibt während des Workouts aktiv</span>}
-                  <h2>{runnerPhase === "transition" ? `Als Nächstes: ${activeExercise.name}` : activeExercise.name}</h2>
+                  <h2>{runnerPhase === "transition"
+                    ? `Als Nächstes: ${activeExercise.name}`
+                    : runnerPhase === "side-switch"
+                      ? `Seitenwechsel: ${activeExercise.name}`
+                      : activeExercise.name}</h2>
                   {activeExercise.subtitle && <small className="mobility-exercise-subtitle">{activeExercise.subtitle}</small>}
                   <strong>{secondsLabel(runner.remaining)}</strong>
                   {runnerSideLabel && <span className="mobility-side-status">{runnerSideLabel}{weakSide !== "none" && runnerSideLabel === sideOrder(weakSide)[0] ? " · zuerst trainiert" : ""}</span>}
-                  <p>{runnerPhase === "transition" ? `${activeExercise.materialChangeBefore ? "Material wechseln und " : "Position einnehmen und "}${materialText(activeExercise)} bereitlegen.` : runnerPhase === "prepare" ? activeExercise.quickStart || activeExercise.instruction : activeExercise.instruction}</p>
+                  <p>{runnerPhase === "transition"
+                    ? `${activeExercise.materialChangeBefore ? "Material wechseln und " : "Position einnehmen und "}${materialText(activeExercise)} bereitlegen.`
+                    : runnerPhase === "prepare"
+                      ? activeExercise.quickStart || activeExercise.instruction
+                      : runnerPhase === "side-switch"
+                        ? `Wechsle kontrolliert auf ${nextRunnerSideLabel(weakSide).toLocaleLowerCase("de-DE")}. Die Belastungszeit ist pausiert und startet nach dem 3–2–1-Countdown neu.`
+                        : activeExercise.instruction}</p>
                   {runnerPhase !== "work" && activeExercise.cues?.length > 0 && <div className="mobility-runner-cues">{activeExercise.cues.slice(0, 3).map((cue) => <span key={cue}>{cue}</span>)}</div>}
                   <div className="mobility-runner-tags"><small className="mobility-selection-reason">{activeExercise.selectionReason}</small>{!isExerciseKnown(activeExercise.id) && <small className="mobility-new-exercise">Mehr Zeit, weil noch nicht als bekannt markiert</small>}</div>
                   <div className="button-row">
                     <button type="button" onClick={() => setRunner({ ...runner, running: !runner.running })}>{runner.running ? "Pause" : "Weiter"}</button>
                     <button type="button" className="secondary" onClick={() => openExerciseGuide(activeExercise)}>Anleitung</button>
                     {!physioExerciseIds.includes(activeExercise.id) && <button type="button" className={`secondary ${isExerciseKnown(activeExercise.id) ? "selected" : ""}`} onClick={() => toggleKnownExercise(activeExercise.id)}>{isExerciseKnown(activeExercise.id) ? "✓ Kenne ich" : "Als bekannt markieren"}</button>}
-                    <button type="button" className="secondary" onClick={() => setRunner((current) => advanceRunner(current))}>{runnerPhaseAction}</button>
+                    <button type="button" className="secondary" onClick={() => setRunner((current) => advanceMobilityRunner(current))}>{runnerPhaseAction}</button>
                     <button type="button" className="secondary" onClick={() => setRunner(null)}>Beenden</button>
                   </div>
                 </>}
@@ -808,7 +765,7 @@ export default function Coach() {
                   <span>{index + 1}</span>
                   <div>
                     <div className="mobility-exercise-heading"><div><strong>{exercise.name}</strong>{exercise.subtitle && <small className="mobility-exercise-subtitle">{exercise.subtitle}</small>}</div><ExerciseGuideButton exercise={exercise} onOpen={openExerciseGuide} compact /></div>
-                    <small>{exercise.group} · {Math.round(exercise.seconds / 15) * 15} Sek. Übung · {exercise.preparationSeconds} Sek. Vorbereitung{exercise.transitionBeforeSeconds ? ` · ${exercise.transitionBeforeSeconds} Sek. Wechsel davor` : ""}{exercise.sideSwitch ? " · Signal zur Halbzeit" : ""}</small>
+                    <small>{exercise.group} · {Math.round(exercise.seconds / 15) * 15} Sek. Übung · {exercise.preparationSeconds} Sek. Vorbereitung{exercise.transitionBeforeSeconds ? ` · ${exercise.transitionBeforeSeconds} Sek. Wechsel davor` : ""}{exercise.sideSwitch ? ` · ${exercise.sideSwitchSeconds} Sek. Seitenwechsel` : ""}</small>
                     <em>{exercise.selectionReason}</em>
                     <p>{exercise.quickStart || exercise.instruction}</p>
                   </div>
