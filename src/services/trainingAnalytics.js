@@ -268,7 +268,13 @@ export function buildTrainingAnalytics(state = {}, now = new Date(), weekCount =
   const plannedRuns = weeks.reduce((sum, week) => sum + week.plannedRuns, 0);
   const completedPlan = weeks.reduce((sum, week) => sum + week.completedPlan, 0);
   const activeWeeks = weeks.filter((week) => week.runs > 0).length;
+  const completedWeeks = weeks.filter((week) => !week.current);
+  const activeCompletedWeeks = completedWeeks.filter((week) => week.runs > 0).length;
   const totalKm = runs.reduce((sum, activity) => sum + numeric(activity.distance), 0);
+  const timeOnFeetMinutes = Math.round(runs.reduce((sum, activity) => sum + durationMinutes(activity), 0));
+  const longRunMinutes = Math.round(runs
+    .filter((activity) => runningIntensity(activity) === "long")
+    .reduce((sum, activity) => sum + durationMinutes(activity), 0));
   const metrics = {
     weekCount: safeWeekCount,
     runs: runs.length,
@@ -276,6 +282,11 @@ export function buildTrainingAnalytics(state = {}, now = new Date(), weekCount =
     averageKm: round(totalKm / safeWeekCount),
     activeWeeks,
     consistency: activeWeeks / safeWeekCount,
+    completedWeekCount: completedWeeks.length,
+    activeCompletedWeeks,
+    completedConsistency: completedWeeks.length ? activeCompletedWeeks / completedWeeks.length : 0,
+    timeOnFeetMinutes,
+    longRunMinutes,
     longestRun: round(Math.max(0, ...runs.map((activity) => numeric(activity.distance)))),
     weeklyElevation: weeks.reduce((sum, week) => sum + week.elevation, 0) / safeWeekCount,
     qualityRuns: intensity.quality,
