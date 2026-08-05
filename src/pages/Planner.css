@@ -1565,3 +1565,57 @@
   .planner-missed-session-alert{grid-template-columns:1fr}
   .planner-missed-session-alert button{width:100%}
 }
+
+/* v3.9.34 – clearer weekly decisions and cross-training preview */
+.planner-week-dashboard>.planner-goal-strip.active{
+  border-color:var(--border-strong);
+  background:linear-gradient(145deg,var(--bg-card),var(--bg-card-alt));
+  box-shadow:none;
+}
+.planner-week-dashboard>.planner-goal-strip.active:hover,
+.planner-week-dashboard>.planner-goal-strip.active:focus-visible{
+  border-color:var(--accent-border-strong);
+  box-shadow:var(--ambient-glow-subtle);
+}
+.planner-missed-session-inline{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  gap:14px;
+  align-items:center;
+  margin-top:11px;
+  padding:12px 13px;
+  border:1px solid var(--border-strong);
+  border-radius:13px;
+  background:var(--bg-card-alt);
+}
+.planner-missed-session-inline>div{display:grid;gap:3px;min-width:0}
+.planner-missed-session-inline span{color:var(--accent);font-size:9px;font-weight:900;letter-spacing:.09em;text-transform:uppercase}
+.planner-missed-session-inline strong{font-size:13px;line-height:1.35}
+.planner-missed-session-inline p{margin:0;font-size:11px;line-height:1.45}
+.planner-missed-session-inline small{color:var(--muted);font-size:10px;line-height:1.4}
+.planner-missed-session-inline button{padding:8px 11px;white-space:nowrap}
+.planner-missed-session-inline.optional{border-color:var(--success-border)}
+.planner-missed-session-inline.optional span,
+.planner-missed-session-inline.optional strong{color:var(--success-bright)}
+.planner-missed-session-inline.applied{border-color:var(--accent-border);background:var(--accent-surface)}
+.planner-cross-training-preview{width:min(820px,100%)}
+.planner-cross-training-preview .modal-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:12px}
+.planner-cross-training-preview .modal-heading h2{margin:4px 0 0}
+.planner-cross-training-preview>p{color:var(--text-soft);line-height:1.55}
+.planner-cross-training-preview-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:18px 0}
+.planner-cross-training-preview-grid article{display:grid;align-content:start;gap:7px;padding:15px;border:1px solid var(--border);border-radius:15px;background:var(--bg-card-alt)}
+.planner-cross-training-preview-grid article.protected{border-color:color-mix(in srgb,var(--success-border) 65%,var(--border))}
+.planner-cross-training-preview-grid span{color:var(--accent);font-size:10px;font-weight:900;letter-spacing:.08em;text-transform:uppercase}
+.planner-cross-training-preview-grid strong{font-size:15px}
+.planner-cross-training-preview-grid ul{display:grid;gap:7px;margin:4px 0 0;padding-left:18px;color:var(--text-soft);font-size:12px;line-height:1.4}
+.planner-cross-training-preview-grid p{margin:4px 0 0;color:var(--muted);font-size:12px;line-height:1.5}
+.planner-cross-training-preview-note{margin:0 0 16px;padding:11px 13px;border-left:3px solid var(--accent);background:var(--accent-surface);font-size:12px}
+.planner-cross-training-preview .modal-actions{display:grid;grid-template-columns:auto 1fr;gap:10px}
+.planner-cross-training-preview .modal-actions .primary{width:100%}
+@media(max-width:760px){
+  .planner-missed-session-inline,.planner-cross-training-preview-grid{grid-template-columns:1fr}
+  .planner-missed-session-inline button{width:100%}
+  .planner-cross-training-preview .modal-heading{display:grid}
+  .planner-cross-training-preview .modal-heading button{width:100%}
+  .planner-cross-training-preview .modal-actions{grid-template-columns:1fr}
+}

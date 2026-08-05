@@ -154,23 +154,80 @@ export function buildMissionOutlook(activities = [], reviews = {}, mission = {},
   const recoveryWarnings = signals.filter((signal) => signal.warning).length;
   const expectedHard = signals.filter((signal) => signal.expectedHard).length;
 
-  let score = 15;
-  score += averageKm >= 50 ? 30 : averageKm >= 40 ? 24 : averageKm >= 30 ? 17 : averageKm >= 20 ? 10 : 4;
-  score += longestRun >= 34 ? 25 : longestRun >= 28 ? 21 : longestRun >= 22 ? 15 : longestRun >= 16 ? 9 : 3;
-  score += activeWeeks >= 7 ? 18 : activeWeeks >= 6 ? 14 : activeWeeks >= 4 ? 8 : 3;
-  score += keySessions >= 4 ? 12 : keySessions >= 2 ? 8 : keySessions ? 4 : 0;
-  score -= Math.min(20, recoveryWarnings * 5);
-  score = clamp(Math.round(score), 0, 100);
-
-  const readiness = score >= 78
-    ? { label: "Auf Kurs", tone: "good", text: "Umfang, Kontinuität und lange Schlüsselreize bilden aktuell eine belastbare Basis." }
-    : score >= 58
-      ? { label: "Solider Aufbau", tone: "neutral", text: "Die Basis ist vorhanden. Die nächsten Wochen müssen jetzt spezifischer und konstant werden." }
-      : { label: "Aufbau nötig", tone: "warn", text: "Das Ziel bleibt erreichbar, aber Umfang, lange Einheiten und Erholung müssen erst stabiler werden." };
-
   const nextDays = nextTarget ? daysUntil(nextTarget, now) : null;
   const mainDays = mainTarget ? daysUntil(mainTarget, now) : null;
   const strategicDays = strategicTarget ? daysUntil(strategicTarget, now) : null;
+
+  const phase = strategicDays == null
+    ? "base"
+    : strategicDays <= 21
+      ? "taper"
+      : strategicDays <= 56
+        ? "specific"
+        : "base";
+  const phaseLabel = phase === "taper" ? "Taper & Frische" : phase === "specific" ? "Spezifischer Aufbau" : "Grundlagenaufbau";
+  const phaseVolumeFloor = phase === "specific" ? 32 : phase === "base" ? 22 : 18;
+  const phaseLongRunFloor = phase === "specific" ? 20 : phase === "base" ? 14 : 16;
+
+  const factors = [
+    {
+      id: "continuity",
+      label: "Kontinuität",
+      state: activeWeeks >= 7 ? "strong" : activeWeeks >= 5 ? "building" : "watch",
+      value: activeWeeks >= 7 ? "Sehr stabil" : activeWeeks >= 5 ? "Im Aufbau" : "Beobachten",
+      text: `${activeWeeks} von 8 Wochen enthalten absolvierte Läufe.`,
+    },
+    {
+      id: "volume",
+      label: "Wochenumfang",
+      state: averageKm >= phaseVolumeFloor ? "appropriate" : averageKm >= phaseVolumeFloor * 0.75 ? "building" : "watch",
+      value: averageKm >= phaseVolumeFloor ? "Passend zur Phase" : averageKm >= phaseVolumeFloor * 0.75 ? "Planmäßig im Aufbau" : "Beobachten",
+      text: `${Math.round(averageKm * 10) / 10} km/Woche im 8-Wochen-Mittel. Kein starres 50-km-Soll.`,
+    },
+    {
+      id: "longrun",
+      label: "Longrun-Robustheit",
+      state: longestRun >= phaseLongRunFloor ? "appropriate" : longestRun >= phaseLongRunFloor * 0.75 ? "building" : "watch",
+      value: longestRun >= phaseLongRunFloor ? "Passend zur Phase" : longestRun >= phaseLongRunFloor * 0.75 ? "Im planmäßigen Aufbau" : "Beobachten",
+      text: `Längster absolvierter Lauf der letzten 8 Wochen: ${Math.round(longestRun * 10) / 10} km.`,
+    },
+    {
+      id: "specificity",
+      label: "Zielspezifische Reize",
+      state: keySessions >= 4 ? "strong" : keySessions >= 2 ? "appropriate" : keySessions ? "building" : "watch",
+      value: keySessions >= 4 ? "Stark" : keySessions >= 2 ? "Passend" : keySessions ? "Im Aufbau" : "Noch offen",
+      text: `${keySessions} absolvierte Schlüsselreize wurden erkannt.`,
+    },
+    {
+      id: "recovery",
+      label: "Erholung",
+      state: recoveryWarnings === 0 ? "strong" : recoveryWarnings <= 1 ? "watch" : "action",
+      value: recoveryWarnings === 0 ? "Unauffällig" : recoveryWarnings === 1 ? "1 Signal beobachten" : `${recoveryWarnings} Signale beachten`,
+      text: recoveryWarnings === 0
+        ? "In den vorhandenen Reviews liegt kein kritisches Erholungssignal vor."
+        : "Erholungssignale bremsen den Aufbau automatisch; sie sind kein Trainingsversagen.",
+    },
+  ];
+
+  const actionFactors = factors.filter((factor) => factor.state === "action").length;
+  const watchFactors = factors.filter((factor) => factor.state === "watch").length;
+  const readiness = actionFactors > 0
+    ? {
+      label: "Anpassen",
+      tone: "warn",
+      text: "Der Coach reduziert oder verschiebt den nächsten Belastungsschritt, bis die Erholung wieder stabil ist.",
+    }
+    : watchFactors >= 3
+      ? {
+        label: "Beobachten",
+        tone: "neutral",
+        text: "Die Vorbereitung bleibt steuerbar. Einzelne Bereiche brauchen Zeit und werden schrittweise weiterentwickelt.",
+      }
+      : {
+        label: "Auf Kurs",
+        tone: "good",
+        text: `Dein absolvierter Trainingsstand passt zum ${phaseLabel.toLowerCase()}. Es besteht kein Anlass, künstlich Kilometer nachzuholen.`,
+      };
   const range = targetRange(nextTarget);
   const strategicRange = targetRange(strategicTarget);
   const loop = nextLoopPrescription(strategicTarget, strategicDays, { averageKm, peakKm, activeWeeks, longestRun, keySessions });
@@ -218,7 +275,10 @@ export function buildMissionOutlook(activities = [], reviews = {}, mission = {},
     targetRange: range,
     strategicTargetRange: strategicRange,
     readiness,
-    score,
+    phase,
+    phaseLabel,
+    factors,
+    dataScope: "Nur absolvierte Einheiten und vorhandene Reviews; geplante Workouts verändern diesen Status nicht.",
     averageKm: Math.round(averageKm * 10) / 10,
     peakKm: Math.round(peakKm * 10) / 10,
     activeWeeks,

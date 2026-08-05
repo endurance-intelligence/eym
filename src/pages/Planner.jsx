@@ -421,6 +421,32 @@ function findMatches(plan, activities) {
   return matches;
 }
 
+
+function crossTrainingReplanPreview(plan = [], creditKm = 0, todayKey = "", includeCurrentWeek = true) {
+  const future = plan.filter((item) => !item.completed && !item.missedReason && !item.plannedCancellation)
+    .filter((item) => !todayKey || String(item.date || "") >= todayKey);
+  const eligible = future.filter((item) => {
+    const label = `${item.type || ""} ${item.title || ""}`.toLowerCase();
+    if (normalizedType(label) !== "running") return false;
+    if (item.fixed || item.commitmentId || item.keySession || item.raceEvent) return false;
+    if (/longrun|long run|backyard|loop|track|intervall|interval|schwelle|threshold|tempo|wettkampf|race/.test(label)) return false;
+    return item.optional || /easy|locker|recovery|regeneration|grundlage/.test(label);
+  });
+  const protectedEntries = future.filter((item) => {
+    const label = `${item.type || ""} ${item.title || ""}`.toLowerCase();
+    return normalizedType(label) === "running"
+      && (item.fixed || item.commitmentId || item.keySession || item.raceEvent
+        || /longrun|long run|backyard|loop|track|intervall|interval|schwelle|threshold|tempo|wettkampf|race/.test(label));
+  });
+  return {
+    creditKm: Math.max(0, Number(creditKm || 0)),
+    eligible,
+    protectedEntries,
+    hasEligible: eligible.length > 0,
+    includesCurrentWeek: includeCurrentWeek,
+  };
+}
+
 function recentReasonCounts(plan, weekStart) {
   const since = new Date(weekStart);
   since.setDate(since.getDate() - 21);
@@ -453,6 +479,7 @@ export default function Planner() {
   const [adjustmentOpen, setAdjustmentOpen] = useState(false);
   const [adjustmentDraft, setAdjustmentDraft] = useState(null);
   const [planningInfoOpen, setPlanningInfoOpen] = useState(false);
+  const [crossTrainingPreviewOpen, setCrossTrainingPreviewOpen] = useState(false);
   const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
   const [publishBusy, setPublishBusy] = useState(false);
   const [plannerNow, setPlannerNow] = useState(() => new Date());
@@ -541,6 +568,12 @@ export default function Planner() {
   const crossTrainingNeedsReplan = offsetWeeks === 0
     && weekPlan.length > 0
     && crossTrainingSummary.latestActivityAt > lastGeneratedTimestamp;
+  const crossTrainingPreview = useMemo(() => crossTrainingReplanPreview(
+    weekPlan,
+    crossTrainingSummary.creditedEquivalentKm,
+    todayKey,
+    offsetWeeks === 0,
+  ), [weekPlan, crossTrainingSummary.creditedEquivalentKm, todayKey, offsetWeeks]);
   const trackWorkoutTemplates = useMemo(
     () => normalizeTrackWorkoutTemplates(config.trackWorkoutTemplates),
     [config.trackWorkoutTemplates],
@@ -624,7 +657,7 @@ export default function Planner() {
   const planningTargetLabel = offsetWeeks === 1 ? "Nächste Woche" : "Aktuelle Woche";
   const closurePeriodLabel = offsetWeeks === 1 ? "aktuelle Woche" : "Vorwoche";
   const isPastWeek = offsetWeeks < 0;
-  const modalVisible = Boolean(editing || missedEditing || planningOpen || adjustmentOpen || planningInfoOpen || publishConfirmOpen);
+  const modalVisible = Boolean(editing || missedEditing || planningOpen || adjustmentOpen || planningInfoOpen || crossTrainingPreviewOpen || publishConfirmOpen);
   const editingTrackWorkout = editing && isTrackWorkout(editing)
     ? editing.structuredWorkout
     : null;
@@ -1901,12 +1934,12 @@ export default function Planner() {
       <section className="planner-week-dashboard">
         {goalProfile.target?.name && (
           <Link
-            className={`planner-goal-strip ${goalProfile.feasibility?.status || "open"}`}
+            className="planner-goal-strip active"
             to="/mission"
-            aria-label={`${goalProfile.target.name}: Ziel und Goal Engine öffnen`}
+            aria-label={`${goalProfile.target.name}: Hauptziel öffnen`}
           >
             <div className="planner-goal-strip-main">
-              <span>Engine Goal</span>
+              <span>Hauptziel</span>
               <strong>{goalProfile.target.name}</strong>
               <small>{goalProfile.disciplineLabel} · {goalProfile.phase?.label || "Phase wird berechnet"}</small>
             </div>
@@ -2011,25 +2044,10 @@ export default function Planner() {
             <strong>{crossTrainingLabel || "Fußball oder Rennrad"} fließt noch nicht in den bestehenden Wochenentwurf ein.</strong>
             <small>Bei der Neuplanung reduziert der Coach zuerst flexible Easy-Kilometer. Rennrad zählt über Dauer und Intensität; Track, Longrun, Loop und Wettkampf bleiben geschützt.</small>
           </div>
-          <button type="button" onClick={replanCurrentWeek}>Jetzt einrechnen</button>
+          <button type="button" onClick={() => setCrossTrainingPreviewOpen(true)}>Auswirkung prüfen</button>
         </section>
       )}
 
-      {missedSessionDecision && (
-        <section className={`planner-missed-session-alert ${missedSessionDecision.tone}`}>
-          <div>
-            <span>Ausfallentscheidung</span>
-            <strong>{missedSessionDecision.title}</strong>
-            <p>{missedSessionDecision.recommendation}</p>
-            <small>{missedSessionDecision.reason}</small>
-          </div>
-          {missedSessionDecision.canApply && (
-            <button type="button" onClick={applyMissedLongRunExtension}>
-              + {missedSessionDecision.extraMinutes} min optional
-            </button>
-          )}
-        </section>
-      )}
 
       <div className="planner-week-nav">
         <button disabled={offsetWeeks === 0 && !previousWeekHasPlan} title={offsetWeeks === 0 && !previousWeekHasPlan ? "Keine ältere geplante Woche vorhanden" : "Vorherige Woche"} onClick={() => { setOffsetWeeks((value) => value - 1); setForecast([]); setStatus(""); }}>←</button>
@@ -2297,6 +2315,21 @@ export default function Planner() {
                       {loopLabel && !matched && <small className="planner-loop-row-label">{loopLabel}</small>}
                       {matched && <small>{matched.name || item.actualTitle}</small>}
                       {item.missedReason && <small>Grund: {item.missedReason}{item.missedNote ? ` · ${item.missedNote}` : ""}</small>}
+                      {missedSessionDecision?.cancellationId === item.id && (
+                        <div className={`planner-missed-session-inline ${missedSessionDecision.tone}`}>
+                          <div>
+                            <span>Coach-Entscheidung zum Ausfall</span>
+                            <strong>{missedSessionDecision.title}</strong>
+                            <p>{missedSessionDecision.recommendation}</p>
+                            <small>{missedSessionDecision.reason}</small>
+                          </div>
+                          {missedSessionDecision.canApply && (
+                            <button type="button" onClick={(event) => { event.stopPropagation(); applyMissedLongRunExtension(); }}>
+                              + {missedSessionDecision.extraMinutes} min optional
+                            </button>
+                          )}
+                        </div>
+                      )}
                       {item.notes && !isCancelled && <small>{item.notes}</small>}
                       {trackSyncStatus && !matched && !completed && !isCancelled && !isMissed && (
                         <div className={`planner-track-sync-status ${trackSyncStatus.state}`}>
@@ -2775,6 +2808,36 @@ export default function Planner() {
             <label className="planner-optional"><input type="checkbox" checked={editing.optional} onChange={(event) => setEditing({ ...editing, optional: event.target.checked })} /> Einheit ist optional</label>
             <button className="primary" type="submit">{editingTrackWorkout ? (editingTrackWorkout.planningStatus === "final" ? "Final speichern" : "Vorläufig speichern") : "Speichern"}</button>
           </form>
+        </div>
+      )}
+
+
+      {crossTrainingPreviewOpen && (
+        <div className="modal-backdrop">
+          <section className="modal planner-cross-training-preview" role="dialog" aria-modal="true" aria-labelledby="cross-training-preview-title">
+            <div className="modal-heading">
+              <div><p className="eyebrow">Zusatzbelastung einrechnen</p><h2 id="cross-training-preview-title">Was der Coach verändern darf</h2></div>
+              <button type="button" onClick={() => setCrossTrainingPreviewOpen(false)}>Schließen</button>
+            </div>
+            <p>{crossTrainingLabel || "Die erkannte Zusatzbelastung"} kann bei der Neuplanung bis zu <strong>{crossTrainingPreview.creditKm.toFixed(1).replace(".0", "")} km</strong> flexiblen Laufumfang ersetzen. Noch wird nichts geändert.</p>
+            <div className="planner-cross-training-preview-grid">
+              <article>
+                <span>Kann angepasst werden</span>
+                <strong>{crossTrainingPreview.hasEligible ? `${crossTrainingPreview.eligible.length} flexible Einheit${crossTrainingPreview.eligible.length === 1 ? "" : "en"}` : "Keine passende flexible Einheit"}</strong>
+                {crossTrainingPreview.hasEligible ? <ul>{crossTrainingPreview.eligible.map((item) => <li key={item.id}>{item.date} · {item.title}{Number(item.distance || 0) ? ` · ${Number(item.distance).toFixed(1).replace(".0", "")} km` : ""}</li>)}</ul> : <p>Die Zusatzbelastung wird dokumentiert, aber nicht zwanghaft auf Track, Longrun oder Fixtermine verteilt.</p>}
+              </article>
+              <article className="protected">
+                <span>Bleibt geschützt</span>
+                <strong>Schlüsselreize und feste Termine</strong>
+                {crossTrainingPreview.protectedEntries.length ? <ul>{crossTrainingPreview.protectedEntries.map((item) => <li key={item.id}>{item.date} · {item.title}</li>)}</ul> : <p>Aktuell wurde keine geschützte Lauf-Schlüsseleinheit im Rest der Woche erkannt.</p>}
+              </article>
+            </div>
+            <p className="planner-cross-training-preview-note">Die endgültige Neuplanung berücksichtigt zusätzlich Reviews, Erholung, freie Tage und den aktuellen Zielblock. Deshalb ist dies eine Wirkungs-Vorschau und kein bereits festgeschriebener neuer Plan.</p>
+            <div className="modal-actions">
+              <button type="button" onClick={() => setCrossTrainingPreviewOpen(false)}>Abbrechen</button>
+              <button type="button" className="primary" onClick={() => { setCrossTrainingPreviewOpen(false); replanCurrentWeek(); }}>Neuplanung öffnen</button>
+            </div>
+          </section>
         </div>
       )}
 

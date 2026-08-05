@@ -1521,3 +1521,54 @@ button:focus-visible,a:focus-visible,summary:focus-visible{
   font-size:11px;
   line-height:1.35;
 }
+
+/* v3.9.34 – coach clarity, phase-aware mission status and compact goals */
+.coach-primary-action{display:inline-flex;width:max-content;margin-top:2px}
+.coach-today-data{padding:0;overflow:hidden}
+.coach-today-data>summary{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:18px 22px;cursor:pointer;list-style:none}
+.coach-today-data>summary::-webkit-details-marker{display:none}
+.coach-today-data>summary h2{margin:3px 0 0;font-size:18px}
+.coach-today-data>summary>span{padding:7px 10px;border:1px solid var(--border);border-radius:999px;color:var(--muted-bright);font-size:12px;font-weight:800}
+.coach-today-data-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 22px 22px}
+.coach-today-data-grid article{display:grid;gap:5px;padding:14px;border:1px solid var(--border);border-radius:14px;background:var(--bg-card-alt)}
+.coach-today-data-grid small{color:var(--muted);font-size:10px;font-weight:900;letter-spacing:.08em;text-transform:uppercase}
+.coach-today-data-grid p{margin:0;color:var(--text-soft);font-size:12px;line-height:1.5}
+.coach-readiness-badge.status-only{grid-template-columns:auto 1fr;grid-template-rows:auto auto;place-items:start;min-width:170px;padding:13px 15px;text-align:left}
+.coach-readiness-badge.status-only i{grid-row:1/-1;align-self:center;width:10px;height:10px;border-radius:999px;background:currentColor;box-shadow:0 0 18px currentColor}
+.coach-readiness-badge.status-only strong{font-size:19px;line-height:1.1}
+.coach-readiness-badge.status-only span{margin:3px 0 0;font-size:10px}
+.coach-readiness-lead{margin:0;padding:13px 15px;border-left:3px solid var(--accent);border-radius:0 13px 13px 0;background:var(--accent-surface)}
+.coach-readiness-factors{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px}
+.coach-readiness-factors article{display:grid;align-content:start;gap:5px;min-width:0;padding:13px;border:1px solid var(--border);border-radius:14px;background:var(--bg-sidebar)}
+.coach-readiness-factors article.strong,.coach-readiness-factors article.appropriate{border-color:color-mix(in srgb,var(--success-border) 72%,var(--border))}
+.coach-readiness-factors article.watch{border-color:rgba(250,204,21,.38)}
+.coach-readiness-factors article.action{border-color:rgba(248,113,113,.5)}
+.coach-readiness-factors span{color:var(--muted);font-size:9px;font-weight:900;letter-spacing:.08em;text-transform:uppercase}
+.coach-readiness-factors strong{font-size:14px;line-height:1.3}
+.coach-readiness-factors p{margin:0;color:var(--text-soft);font-size:11px;line-height:1.45}
+.coach-outlook-data{padding:11px 13px;border:1px solid var(--border);border-radius:14px;background:var(--bg-sidebar)}
+.coach-outlook-data>summary{cursor:pointer;color:var(--accent-bright);font-size:12px;font-weight:800}
+.coach-outlook-data[open]>summary{margin-bottom:11px}
+.coach-outlook-data>small{display:block;margin-top:9px;color:var(--muted);font-size:11px}
+.mission-goal-engine-compact{padding:0;overflow:hidden}
+.mission-goal-engine-compact>summary{padding:18px 22px;cursor:pointer;list-style:none}
+.mission-goal-engine-compact>summary::-webkit-details-marker{display:none}
+.mission-goal-engine-compact>summary h2{font-size:20px}
+.mission-goal-engine-compact>summary>span{align-self:center;color:var(--accent-bright);font-size:11px;font-weight:900}
+.mission-goal-engine-compact .mission-goal-engine-body{display:grid;gap:18px;padding:0 22px 22px;border-top:1px solid var(--border)}
+.mission-goal-engine-compact .mission-goal-engine-metrics{margin-top:18px}
+.mission-event-timeline{position:relative;grid-template-columns:1fr}
+.mission-event-timeline::before{content:"";position:absolute;left:17px;top:22px;bottom:22px;width:1px;background:var(--border-strong)}
+.mission-timeline-entry{position:relative;display:grid;grid-template-columns:36px minmax(0,1fr);gap:12px;align-items:start}
+.mission-timeline-marker{position:relative;z-index:1;display:grid;place-items:center;width:34px;height:34px;border:1px solid var(--accent-border-strong);border-radius:999px;background:var(--bg-card);color:var(--accent-bright);font-size:11px;font-weight:900}
+.mission-timeline-entry>.card{grid-column:2;width:100%;margin:0}
+.mission-achievement-toggle{display:block;width:max-content;margin:16px auto 0}
+@media(max-width:1050px){.coach-readiness-factors{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:700px){
+  .coach-today-data>summary,.mission-goal-engine-compact>summary{display:grid}
+  .coach-today-data-grid,.coach-readiness-factors{grid-template-columns:1fr}
+  .coach-readiness-badge.status-only{width:100%}
+  .mission-timeline-entry{grid-template-columns:30px minmax(0,1fr);gap:8px}
+  .mission-timeline-marker{width:30px;height:30px}
+  .mission-event-timeline::before{left:14px}
+}

@@ -63,6 +63,7 @@ export default function Mission() {
   const [showEditor, setShowEditor] = useState(false);
   const [forecasts, setForecasts] = useState({});
   const [showArchived, setShowArchived] = useState(false);
+  const [showAllAchievements, setShowAllAchievements] = useState(false);
   const [placeSuggestions, setPlaceSuggestions] = useState([]);
   const [placeStatus, setPlaceStatus] = useState("");
   const placeRequest = useRef(null);
@@ -444,53 +445,32 @@ export default function Mission() {
         )}
 
         {mainTarget && goalEngine.target && (
-          <Card className={`wide mission-goal-engine ${goalEngine.feasibility.status}`}>
-            <div className="mission-goal-engine-heading">
+          <details className={`card wide mission-goal-engine mission-goal-engine-compact ${goalEngine.feasibility.status}`}>
+            <summary className="mission-goal-engine-heading">
               <div>
-                <p className="eyebrow">Goal Engine · aktive Plansteuerung</p>
-                <h2>{goalEngine.disciplineLabel} · {goalEngine.phase.label}</h2>
+                <p className="eyebrow">Zielbewertung</p>
+                <h2>{goalEngine.feasibility.label} · {goalEngine.phase.label}</h2>
                 <p>{goalEngine.feasibility.summary}</p>
               </div>
-              <span>{goalEngine.feasibility.label}</span>
-            </div>
-            <div className="mission-goal-engine-metrics">
-              <div><small>Zielart</small><strong>{{ finish: "Finish", time: "Zielzeit", pb: "Bestzeit", distance: "Distanz / Runden", training: "Vorbereitung" }[goalEngine.goalType] || goalEngine.goalType}</strong></div>
-              <div><small>Zielpace</small><strong>{goalEngine.targetPaceLabel || "Nicht pacegesteuert"}</strong></div>
-              <div><small>Wochenrahmen</small><strong>mind. {goalEngine.requiredRuns} passende Läufe</strong></div>
-              <div><small>Noch verfügbar</small><strong>{goalEngine.preparation?.remainingWeeksLabel || `${Math.max(0, Math.ceil(goalEngine.weeksLeft))} Wochen`}</strong></div>
-            </div>
-            <div className="mission-goal-engine-evidence">
-              <div>
-                <small>Langzeiterfahrung</small>
-                <strong>{goalEngine.experience.label}</strong>
-                <p>{goalEngine.experience.summary}</p>
+              <span>Warum bewertet der Coach das so? →</span>
+            </summary>
+            <div className="mission-goal-engine-body">
+              <div className="mission-goal-engine-metrics">
+                <div><small>Zielart</small><strong>{{ finish: "Finish", time: "Zielzeit", pb: "Bestzeit", distance: "Distanz / Runden", training: "Vorbereitung" }[goalEngine.goalType] || goalEngine.goalType}</strong></div>
+                <div><small>Zielpace</small><strong>{goalEngine.targetPaceLabel || "Nicht pacegesteuert"}</strong></div>
+                <div><small>Wochenrahmen</small><strong>mind. {goalEngine.requiredRuns} passende Läufe</strong></div>
+                <div><small>Noch verfügbar</small><strong>{goalEngine.preparation?.remainingWeeksLabel || `${Math.max(0, Math.ceil(goalEngine.weeksLeft))} Wochen`}</strong></div>
               </div>
-              <div>
-                <small>Aktuelle Form</small>
-                <strong>{goalEngine.currentForm.label}</strong>
-                <p>{goalEngine.currentForm.summary}</p>
+              <div className="mission-goal-engine-evidence">
+                <div><small>Langzeiterfahrung</small><strong>{goalEngine.experience.label}</strong><p>{goalEngine.experience.summary}</p></div>
+                <div><small>Aktuelle Form</small><strong>{goalEngine.currentForm.label}</strong><p>{goalEngine.currentForm.summary}</p></div>
+                <div><small>Zielspezifischer Aufbau</small><strong>{goalEngine.targetGap.label}</strong><p>{goalEngine.targetGap.summary}</p></div>
               </div>
-              <div>
-                <small>Zielspezifische Lücke</small>
-                <strong>{goalEngine.targetGap.label}</strong>
-                <p>{goalEngine.targetGap.summary}</p>
-              </div>
+              {goalEngine.preparation?.summary && <p className="mission-goal-engine-preparation"><strong>Vorbereitungslogik:</strong> {goalEngine.preparation.summary}</p>}
+              <div className="mission-goal-engine-abilities"><strong>Dafür trainiert der Coach:</strong><div>{goalEngine.abilities.map((ability) => <span key={ability}>{ability}</span>)}</div></div>
+              {(goalEngine.feasibility.reasons.length > 0 || goalEngine.constraintWarnings.length > 0) && <div className="mission-goal-engine-warnings">{[...goalEngine.feasibility.reasons, ...goalEngine.constraintWarnings].map((reason) => <span key={reason}>! {reason}</span>)}</div>}
             </div>
-            {goalEngine.preparation?.summary && (
-              <p className="mission-goal-engine-preparation">
-                <strong>Vorbereitungslogik:</strong> {goalEngine.preparation.summary}
-              </p>
-            )}
-            <div className="mission-goal-engine-abilities">
-              <strong>Dafür trainiert der Coach:</strong>
-              <div>{goalEngine.abilities.map((ability) => <span key={ability}>{ability}</span>)}</div>
-            </div>
-            {(goalEngine.feasibility.reasons.length > 0 || goalEngine.constraintWarnings.length > 0) && (
-              <div className="mission-goal-engine-warnings">
-                {[...goalEngine.feasibility.reasons, ...goalEngine.constraintWarnings].map((reason) => <span key={reason}>! {reason}</span>)}
-              </div>
-            )}
-          </Card>
+          </details>
         )}
 
         {!mainTarget && !showEditor && (
@@ -546,23 +526,26 @@ export default function Mission() {
 
         {upcomingMilestones.length > 0 && <Card className="wide mission-upcoming-section">
           <div className="card-heading-row"><div><p className="eyebrow">Nächste Meilensteine</p><h2>Auf dem Weg zum Hauptziel</h2></div><span className="achievement-count">{upcomingMilestones.length}</span></div>
-          <div className="mission-event-grid">{upcomingMilestones.map((item) => eventCard(item))}</div>
+          <div className="mission-event-grid mission-event-timeline">{upcomingMilestones.map((item, index) => <div className="mission-timeline-entry" key={item.id}><span className="mission-timeline-marker">{index + 1}</span>{eventCard(item)}</div>)}</div>
         </Card>}
 
         <Card className="wide">
           <div className="card-heading-row"><div><p className="eyebrow">Achievements</p><h2>Absolvierte offizielle Läufe</h2></div><span className="achievement-count">{achievements.length}</span></div>
           {achievements.length === 0 ? <p className="muted">Offizielle Läufe werden aus Garmin-Daten oder einer als „Event“ markierten Review erkannt.</p> : (
-            <div className="achievement-grid">
-              {achievements.map((achievement) => (
-                <article className="achievement-card" key={achievement.id}>
-                  <span>{achievement.category}</span>
-                  <h3>{achievement.title}</h3>
-                  <p>{fmtDate(achievement.date)}{achievement.location ? ` · ${achievement.location}` : ""}</p>
-                  <strong>{achievement.distance.toFixed(1)} km · {achievement.duration}</strong>
-                  {achievement.spontaneous && <small>Spontan über Review als Event markiert</small>}
-                </article>
-              ))}
-            </div>
+            <>
+              <div className="achievement-grid">
+                {(showAllAchievements ? achievements : achievements.slice(0, 3)).map((achievement) => (
+                  <article className="achievement-card" key={achievement.id}>
+                    <span>{achievement.category}</span>
+                    <h3>{achievement.title}</h3>
+                    <p>{fmtDate(achievement.date)}{achievement.location ? ` · ${achievement.location}` : ""}</p>
+                    <strong>{achievement.distance.toFixed(1)} km · {achievement.duration}</strong>
+                    {achievement.spontaneous && <small>Spontan über Review als Event markiert</small>}
+                  </article>
+                ))}
+              </div>
+              {achievements.length > 3 && <button type="button" className="mission-achievement-toggle" onClick={() => setShowAllAchievements((value) => !value)}>{showAllAchievements ? "Meilensteine einklappen" : `Alle ${achievements.length} Erfolge anzeigen`}</button>}
+            </>
           )}
         </Card>
 

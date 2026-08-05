@@ -61,3 +61,23 @@ test("an explicitly configured loop goal works without a special event name", ()
   assert.equal(outlook.loop.title, "3 × 5 km · 15 km");
   assert.match(outlook.loop.text, /Abstände der festen Verpflegungspunkte/);
 });
+
+test("mission status is phase-aware and does not expose a completion percentage", () => {
+  const now = new Date("2026-08-05T12:00:00");
+  const activities = Array.from({ length: 8 }, (_, index) => ({
+    id: `run-${index}`,
+    type: "Run",
+    name: index === 0 ? "24 km Longrun" : "Easy Run",
+    date: new Date(now.getTime() - index * 7 * 86400000).toISOString(),
+    distance: index === 0 ? 24 : 42,
+    duration: index === 0 ? 160 : 260,
+  }));
+  const outlook = buildMissionOutlook(activities, {}, mission, now);
+
+  assert.equal(outlook.phase, "specific");
+  assert.equal(outlook.readiness.label, "Auf Kurs");
+  assert.equal(Object.hasOwn(outlook, "score"), false);
+  assert.match(outlook.dataScope, /Nur absolvierte Einheiten/);
+  assert.equal(outlook.factors.find((factor) => factor.id === "volume")?.value, "Passend zur Phase");
+  assert.equal(outlook.factors.find((factor) => factor.id === "longrun")?.value, "Passend zur Phase");
+});

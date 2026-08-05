@@ -614,19 +614,19 @@ export default function Coach() {
           <Card className={`wide insight coach-recommendation unified-${unifiedCoach.level}`}>
             <div className="coach-recommendation-heading">
               <div>
-                <p className="eyebrow">Gemeinsame Coach-Bewertung</p>
+                <p className="eyebrow">Coach-Entscheidung heute</p>
                 <h2>{unifiedCoach.recommendation.title}</h2>
               </div>
               <span className={unifiedCoach.tone}>{unifiedCoach.label}</span>
             </div>
             <p className="coach-recommendation-copy">{unifiedCoach.recommendation.text}</p>
-            <details className="coach-evidence">
-              <summary>Warum diese Einschätzung?</summary>
+            {unifiedCoach.level !== "ok" && <Link className="button-link coach-primary-action" to={unifiedCoach.recommendation.action.href}>{unifiedCoach.recommendation.action.label}</Link>}
+            <details className="coach-evidence coach-decision-evidence">
+              <summary>Warum entscheidet der Coach so?</summary>
               <ul>{unifiedCoach.recommendation.evidence.map((item) => <li key={item}>{item}.</li>)}</ul>
               <small>{unifiedCoach.protectionNote}</small>
             </details>
             <div className="coach-recommendation-actions">
-              {unifiedCoach.level !== "ok" && <Link className="button-link" to={unifiedCoach.recommendation.action.href}>{unifiedCoach.recommendation.action.label}</Link>}
               <div>
                 <span>{currentRecommendationFeedback ? "Dein Feedback ist gespeichert:" : "War diese Einordnung hilfreich?"}</span>
                 <button type="button" className={currentRecommendationFeedback?.status === "helpful" ? "selected" : ""} onClick={() => saveRecommendationFeedback("helpful")}>Hilfreich</button>
@@ -634,12 +634,16 @@ export default function Coach() {
               </div>
             </div>
           </Card>
-          <Card className="coach-review-summary">
-            <p className="eyebrow">Reviews im Monat</p>
-            <h2>{reviewed.length}/{monthReviewable.length} bewertet</h2>
-            <p className="muted">{openReviews.length ? `${openReviews.length} relevante ${openReviews.length === 1 ? "Einheit ist" : "Einheiten sind"} noch offen.` : `Alle relevanten Einheiten aus ${monthFormatter.format(now)} sind bewertet.`}</p>
-          </Card>
-          <SignalCard eyebrow="HF & Wetter" signal={analysis.hrWeather} />
+          <details className="card wide coach-today-data">
+            <summary>
+              <div><p className="eyebrow">Daten hinter der Entscheidung</p><h2>{openReviews.length ? `${openReviews.length} Review${openReviews.length === 1 ? "" : "s"} offen` : "Keine offene Pflicht-Rückmeldung"}</h2></div>
+              <span>{analysis.hrWeather.value}</span>
+            </summary>
+            <div className="coach-today-data-grid">
+              <article><small>Reviews im Monat</small><strong>{reviewed.length}/{monthReviewable.length} bewertet</strong><p>{openReviews.length ? `${openReviews.length} relevante ${openReviews.length === 1 ? "Einheit ist" : "Einheiten sind"} noch offen.` : `Alle relevanten Einheiten aus ${monthFormatter.format(now)} sind bewertet.`}</p></article>
+              <article><small>Herzfrequenz & Wetter</small><strong>{analysis.hrWeather.value}</strong><p>{analysis.hrWeather.text}</p></article>
+            </div>
+          </details>
           {openReviews.length > 0 && (
             <Card className="wide">
               <div className="card-heading-row"><div><p className="eyebrow">Review-Warteschlange</p><h2>{monthFormatter.format(now)}</h2></div><span>{openReviews.length}</span></div>
@@ -669,21 +673,29 @@ export default function Coach() {
                 <p className="eyebrow">Missionsausblick</p>
                 <h2>{outlook.nextTarget ? `${outlook.nextTarget.name} in ${outlook.nextDays} Tagen` : "Kein nächstes Ziel hinterlegt"}</h2>
                 <p className="muted">{outlook.nextTarget
-                  ? `${outlook.nextTarget.id !== outlook.strategicTarget?.id ? `Nächster Termin: ${outlook.targetRange.label}. Strategischer Trainingsfokus: ${outlook.strategicTarget?.name || "noch offen"} · Priorität ${outlook.strategicTarget?.priority || "B"} · ${outlook.strategicDays ?? "?"} Tage. ` : `Zielkorridor: ${outlook.targetRange.label}. `}Der Coach bewertet Kontinuität, Longrun, Schlüsselreize und Erholung.`
+                  ? `${outlook.nextTarget.id !== outlook.strategicTarget?.id ? `Nächster Termin: ${outlook.targetRange.label}. Strategischer Trainingsfokus: ${outlook.strategicTarget?.name || "noch offen"} · Priorität ${outlook.strategicTarget?.priority || "B"} · ${outlook.strategicDays ?? "?"} Tage. ` : `Zielkorridor: ${outlook.targetRange.label}. `}${outlook.phaseLabel}.`
                   : "Lege unter Training → Ziele einen Wettkampf oder Meilenstein an."}</p>
               </div>
-              <div className={`coach-readiness-badge ${outlook.readiness.tone}`}><strong>{outlook.score}%</strong><span>{outlook.readiness.label}</span></div>
+              <div className={`coach-readiness-badge status-only ${outlook.readiness.tone}`}><i aria-hidden="true" /><strong>{outlook.readiness.label}</strong><span>{outlook.phaseLabel}</span></div>
             </div>
-            <div className="coach-outlook-metrics">
-              <div><span>Ø 8 Wochen</span><strong>{outlook.averageKm} km/Woche</strong></div>
-              <div><span>Längster Lauf</span><strong>{outlook.longestRun} km</strong></div>
-              <div><span>Aktive Wochen</span><strong>{outlook.activeWeeks}/8</strong></div>
-              <div><span>Schlüsseleinheiten</span><strong>{outlook.keySessions}</strong></div>
+            <p className="coach-readiness-copy coach-readiness-lead">{outlook.readiness.text}</p>
+            <div className="coach-readiness-factors">
+              {outlook.factors.map((factor) => <article className={factor.state} key={factor.id}><span>{factor.label}</span><strong>{factor.value}</strong><p>{factor.text}</p></article>)}
             </div>
             <div className="coach-loop-preview">
-              <div><p className="eyebrow">Nächster spezifischer Block{outlook.loop.targetName ? ` · ${outlook.loop.targetName} (${outlook.loop.priority})` : ""}</p><h3>{outlook.loop.title}</h3><p>{outlook.loop.text}</p></div>
-              <p className="coach-readiness-copy">{outlook.readiness.text} {outlook.expectedHard ? `${outlook.expectedHard} harte Schlüsseleinheit${outlook.expectedHard === 1 ? " wurde" : "en wurden"} als erwarteter Trainingsreiz erkannt.` : ""}</p>
+              <div><p className="eyebrow">Nächster konkreter Schritt{outlook.loop.targetName ? ` · ${outlook.loop.targetName} (${outlook.loop.priority})` : ""}</p><h3>{outlook.loop.title}</h3><p>{outlook.loop.text}</p></div>
+              <p className="coach-readiness-copy"><strong>Wichtig:</strong> „Im Aufbau“ ist kein Defizit. Der Coach steigert nur, wenn Phase und Erholung es erlauben.</p>
             </div>
+            <details className="coach-outlook-data">
+              <summary>Datengrundlage anzeigen</summary>
+              <div className="coach-outlook-metrics">
+                <div><span>Ø 8 Wochen</span><strong>{outlook.averageKm} km/Woche</strong></div>
+                <div><span>Längster Lauf</span><strong>{outlook.longestRun} km</strong></div>
+                <div><span>Aktive Wochen</span><strong>{outlook.activeWeeks}/8</strong></div>
+                <div><span>Schlüsseleinheiten</span><strong>{outlook.keySessions}</strong></div>
+              </div>
+              <small>{outlook.dataScope}</small>
+            </details>
             {outlook.roadmap.length > 0 && <div className="coach-roadmap">{outlook.roadmap.map((step) => <article className={step.current ? "current" : ""} key={`${step.label}-${step.title}`}><span>{step.label}</span><h3>{step.title}</h3><p>{step.text}</p></article>)}</div>}
             {outlook.mainTarget && outlook.strategicTarget && outlook.mainTarget.id !== outlook.strategicTarget.id && <p className="coach-main-target-note"><strong>Nach {outlook.strategicTarget.name}:</strong> {outlook.mainTarget.name} in {outlook.mainDays} Tagen.</p>}
           </Card>
