@@ -1,5 +1,6 @@
 import { reviewKind } from "./activityUtils.js";
-import { MAX_CROSS_TRAINING_TARGET_SHARE } from "./crossTrainingLoad.js";
+import { crossTrainingTargetShare } from "./crossTrainingLoad.js";
+import { blockedTrainingDates } from "./missedSessionDecision.js";
 import {
   buildEventWeek,
   eventDurationMinutes,
@@ -149,7 +150,7 @@ export function applyCrossTrainingCreditToPlan(plan = [], requestedCreditKm = 0)
         ...entry,
         distance: adjustedDistance,
         title: String(entry.title || "").replace(/^\d+(?:[.,]\d+)?\s*km/, `${distanceLabel} km`),
-        notes: `${entry.notes || ""} Bereits absolvierte Fußball- oder Rennradbelastung wurde auf den flexiblen Easy-Umfang angerechnet. Schlüssel- und zielspezifische Einheiten bleiben unverändert.`.trim(),
+        notes: `${entry.notes || ""} Bereits absolvierte Fußballbelastung oder der zeit- und intensitätsbasierte Rennradersatz wurde auf den flexiblen Easy-Umfang angerechnet. Schlüssel- und zielspezifische Einheiten bleiben unverändert.`.trim(),
         crossTrainingAdjusted: true,
       };
     })
@@ -1172,6 +1173,8 @@ export function generateWeekPlan({
   today = new Date(),
 }) {
   const weekStart = startOfWeek(today, offsetWeeks);
+  const weekEndKey = isoDate(dateForDay(weekStart, 6));
+  const blockedDates = blockedTrainingDates(planHistory, isoDate(weekStart), weekEndKey);
   const nextWeekStart = startOfWeek(today, 1);
   const historyCutoff = weekStart > nextWeekStart ? nextWeekStart : weekStart;
   const history = runningWeeks(activities, historyCutoff, 8);
@@ -1239,7 +1242,12 @@ export function generateWeekPlan({
     ? Math.max(Math.round(eventWeek.totalDistanceKm), Math.round(target))
     : Math.max(minimumTarget, Math.round(target));
 
-  const crossTrainingCreditCapKm = Math.max(0, target * MAX_CROSS_TRAINING_TARGET_SHARE);
+  const crossTrainingMaxShare = crossTrainingTargetShare({
+    phaseKey: phase.key,
+    phaseLabel: phase.label,
+    recoveryWeek,
+  });
+  const crossTrainingCreditCapKm = Math.max(0, target * crossTrainingMaxShare);
   const recognizedCrossTrainingKm = Math.max(0, Number(completedCrossTrainingKm || 0));
   const cappedCrossTrainingKm = Math.min(recognizedCrossTrainingKm, crossTrainingCreditCapKm);
   let appliedCrossTrainingKm = 0;
@@ -1514,6 +1522,10 @@ export function generateWeekPlan({
     }));
   }
 
+  if (blockedDates.size) {
+    plan = plan.filter((entry) => entry.raceEvent || !blockedDates.has(entry.date));
+  }
+
   const todayKey = isoDate(today);
   if (offsetWeeks === 0) {
     plan = plan.filter((entry) => entry.date >= todayKey);
@@ -1591,16 +1603,39 @@ export function generateWeekPlan({
     if (plannedRunningKm > 0) target = Math.round(plannedRunningKm);
   }
 
+  const rawFootballCreditKm = crossTrainingDetails
+    .filter((detail) => detail.kind === "football")
+    .reduce((sum, detail) => sum + Number(detail.equivalentKm || 0), 0);
+  const rawRoadCyclingCreditKm = crossTrainingDetails
+    .filter((detail) => detail.kind === "roadCycling")
+    .reduce((sum, detail) => sum + Number(detail.equivalentKm || 0), 0);
+  const rawRoadCyclingAerobicMinutes = crossTrainingDetails
+    .filter((detail) => detail.kind === "roadCycling")
+    .reduce((sum, detail) => sum + Number(detail.aerobicMinutes || 0), 0);
+  const appliedFootballCreditKm = Math.min(rawFootballCreditKm, appliedCrossTrainingKm);
+  const appliedRoadCyclingCreditKm = Math.min(
+    rawRoadCyclingCreditKm,
+    Math.max(0, appliedCrossTrainingKm - appliedFootballCreditKm),
+  );
+  const appliedRoadCyclingAerobicMinutes = rawRoadCyclingCreditKm > 0
+    ? rawRoadCyclingAerobicMinutes * (appliedRoadCyclingCreditKm / rawRoadCyclingCreditKm)
+    : 0;
+
   return {
     plan,
     target,
     remainingTarget: Math.max(0, target - Number(completedRunningKm || 0) - appliedCrossTrainingKm),
+    blockedDates: [...blockedDates],
     crossTrainingCredit: {
       recognizedKm: recognizedCrossTrainingKm,
       cappedKm: cappedCrossTrainingKm,
       appliedKm: appliedCrossTrainingKm,
       unusedKm: unusedCrossTrainingKm,
       capKm: crossTrainingCreditCapKm,
+      maxShare: crossTrainingMaxShare,
+      appliedFootballKm: appliedFootballCreditKm,
+      appliedRoadCyclingKm: appliedRoadCyclingCreditKm,
+      appliedRoadCyclingAerobicMinutes,
       details: crossTrainingDetails,
     },
     recentAverage: Math.round(recentAverage),

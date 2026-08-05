@@ -645,3 +645,36 @@ test("planner stores a readable reason for the current loop-training decision", 
   assert.ok(result.loopDecision.reason.length > 20);
   assert.equal(typeof result.loopDecision.scheduled, "boolean");
 });
+
+test("a deliberately blocked family day stays free during replanning", () => {
+  const result = generateWeekPlan({
+    mission: { id: "goal", name: "50 km Lauf", date: "2026-11-21", targetKm: 50, milestones: [] },
+    profile: { selfReportedRunsPerWeek: 4, selfReportedWeeklyKm: 40, selfReportedLongestRunKm: 24 },
+    offsetWeeks: 0,
+    today: new Date("2026-08-05T12:00:00"),
+    planHistory: [{
+      id: "cancelled-saturday",
+      date: "2026-08-08",
+      title: "8 km locker",
+      type: "Easy Run",
+      plannedCancellation: true,
+      missedReason: "Keine Zeit",
+      missedNote: "Familienausflug",
+      missedMeta: { plannedCancellation: true, blockDay: true },
+    }],
+    config: {
+      recurringCommitments: [],
+      fixedAppointments: { football: false, orcRun: false, saturdayMode: "off" },
+      targetRunCount: 4,
+      stabiCount: 0,
+      rowingCount: 0,
+      runDays: ["Donnerstag", "Samstag", "Sonntag"],
+      maxLongRun: 30,
+      checkin: { energy: 7, fatigue: "none", illness: "healthy", pain: "none", painLevel: 0 },
+    },
+  });
+
+  assert.deepEqual(result.blockedDates, ["2026-08-08"]);
+  assert.equal(result.plan.some((item) => item.date === "2026-08-08"), false);
+  assert.ok(result.plan.some((item) => item.date === "2026-08-09"));
+});

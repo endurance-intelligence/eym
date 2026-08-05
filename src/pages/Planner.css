@@ -1512,3 +1512,56 @@
   .planner-cross-training-alert{grid-template-columns:1fr}
   .planner-cross-training-alert button{width:100%}
 }
+
+/* v3.9.33 – time/intensity cross-training and protected missed-session decisions */
+.planner-missed-session-alert{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:center;
+  gap:14px;
+  margin:0 0 14px;
+  padding:13px 14px;
+  border:1px solid var(--border-strong);
+  border-radius:13px;
+  background:linear-gradient(100deg,color-mix(in srgb,var(--accent) 6%,var(--bg-card)),var(--bg-card));
+}
+.planner-missed-session-alert>div{display:grid;gap:3px;min-width:0}
+.planner-missed-session-alert span{
+  color:var(--accent-bright);
+  font-size:9px;
+  font-weight:900;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+}
+.planner-missed-session-alert strong{font-size:13px;line-height:1.35}
+.planner-missed-session-alert p{margin:1px 0 0;font-size:11px;line-height:1.45}
+.planner-missed-session-alert small{color:var(--muted);font-size:10px;line-height:1.4}
+.planner-missed-session-alert button{padding:8px 11px;white-space:nowrap}
+.planner-missed-session-alert.optional{
+  border-color:color-mix(in srgb,var(--success,#5ee494) 55%,var(--border));
+  background:linear-gradient(100deg,color-mix(in srgb,var(--success,#5ee494) 8%,var(--bg-card)),var(--bg-card));
+}
+.planner-missed-session-alert.optional span,
+.planner-missed-session-alert.optional strong{color:var(--success-bright,#7cf0a7)}
+.planner-missed-session-alert.applied{
+  border-color:color-mix(in srgb,var(--accent) 45%,var(--border));
+  opacity:.9;
+}
+.planner-block-day-toggle{
+  display:flex!important;
+  align-items:flex-start;
+  gap:10px;
+  padding:10px 11px;
+  border:1px solid var(--border);
+  border-radius:11px;
+  background:var(--bg-input);
+  cursor:pointer;
+}
+.planner-block-day-toggle input{width:auto;margin-top:2px;flex:none}
+.planner-block-day-toggle span{display:grid;gap:2px}
+.planner-block-day-toggle b{font-size:11px}
+.planner-block-day-toggle small{color:var(--muted);font-size:9px;line-height:1.4}
+@media(max-width:720px){
+  .planner-missed-session-alert{grid-template-columns:1fr}
+  .planner-missed-session-alert button{width:100%}
+}

@@ -276,7 +276,13 @@ export default function Briefing() {
     .reduce((sum, activity) => sum + Number(activity.distance || 0), 0);
   const calculatedTarget = Number(state.planner?.lastTarget || 0);
   const weekActivities = activities.filter((activity) => activityTimestamp(activity) >= weekStart);
-  const crossTrainingSummary = summarizeCrossTrainingCredits(weekActivities, { targetKm: calculatedTarget });
+  const crossTrainingSummary = summarizeCrossTrainingCredits(weekActivities, {
+    targetKm: calculatedTarget,
+    allActivities: activities,
+    phaseLabel: state.planner?.lastPhase || "",
+    recoveryWeek: Boolean(state.planner?.lastRecoveryWeek),
+    reviews: state.reviews,
+  });
   const crossTrainingLabel = formatCrossTrainingCredit(crossTrainingSummary);
   const effectiveWeekDistance = weekDistance + crossTrainingSummary.creditedEquivalentKm;
   const rows = weekRows(state.plan, activities);
@@ -377,8 +383,8 @@ export default function Briefing() {
                 <span><b>{missionTarget?.date ? daysUntil(missionTarget.date) : "–"}</b> Tage</span>
                 <span><b>{weekDistance.toFixed(1)}</b> / {calculatedTarget || "–"} km Lauf</span>
               </div>
-              {crossTrainingSummary.creditedEquivalentKm > 0 && <p className="briefing-cross-training-credit">+ {crossTrainingSummary.creditedEquivalentKm.toFixed(1).replace(".0", "")} km angerechnet · {crossTrainingLabel}</p>}
-              {calculatedTarget > 0 && <div className="progress" title={`${effectiveWeekDistance.toFixed(1)} km inklusive angerechneter Zusatzbelastung`}><i style={{ width: `${Math.min(100, effectiveWeekDistance / calculatedTarget * 100)}%` }} /></div>}
+              {crossTrainingSummary.creditedEquivalentKm > 0 && <p className="briefing-cross-training-credit">+ {crossTrainingSummary.creditedEquivalentKm.toFixed(1).replace(".0", "")} km planerischer Ersatz · {crossTrainingLabel}</p>}
+              {calculatedTarget > 0 && <div className="progress" title={`${effectiveWeekDistance.toFixed(1)} km inklusive planerischem Cross-Training-Ersatz`}><i style={{ width: `${Math.min(100, effectiveWeekDistance / calculatedTarget * 100)}%` }} /></div>}
               {nextEvent && <p className="briefing-compact-footer"><span>Nächstes Event</span><b>{nextEvent.name}</b><strong>{daysUntil(nextEvent.date)} Tage{nextEvent.time ? ` · ${nextEvent.time} Uhr` : ""}</strong></p>}
             </Card>
           </Link>

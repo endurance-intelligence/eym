@@ -16,6 +16,10 @@ import {
 import { downloadCalendar } from "../services/calendar";
 import { preferredActivities, reviewKind } from "../services/activityUtils";
 import { formatCrossTrainingCredit, summarizeCrossTrainingCredits } from "../services/crossTrainingLoad";
+import {
+  applyOptionalLongRunExtension,
+  buildMissedSessionDecision,
+} from "../services/missedSessionDecision";
 import { activitiesWithGroups } from "../services/activityGroups";
 import { completedActivityDestination } from "../services/briefingNavigation";
 import { publishIntervalsWeek } from "../services/intervals";
@@ -108,6 +112,10 @@ const trackDistanceFormatter = new Intl.NumberFormat("de-DE", { maximumFractionD
 const reasonOptions = ["Termin fiel aus", "Keine Zeit", "Müde", "Schmerzen", "Krankheit", "Wetter", "Verschoben", "Bewusst ausgelassen", "Aktivität nicht erkannt", "Sonstiges"];
 const cancellationReasonOptions = ["Termin fiel aus", "Keine Zeit", "Müde", "Schmerzen", "Krankheit", "Wetter", "Bewusst ausgelassen", "Sonstiges"];
 const plannerDays = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"];
+
+function blocksTrainingDayByDefault(reason = "") {
+  return ["Keine Zeit", "Krankheit", "Schmerzen", "Müde", "Bewusst ausgelassen"].includes(reason);
+}
 
 function PlannerActionIcon({ name }) {
   const common = {
@@ -510,10 +518,25 @@ export default function Planner() {
   }, [state.plan, offsetWeeks]);
   const config = useMemo(() => state.planner || {}, [state.planner]);
   const crossTrainingSummary = useMemo(
-    () => summarizeCrossTrainingCredits(weekActivities, { targetKm: Number(config.lastTarget || 0) }),
-    [weekActivities, config.lastTarget],
+    () => summarizeCrossTrainingCredits(weekActivities, {
+      targetKm: Number(config.lastTarget || 0),
+      allActivities: canonicalActivities,
+      phaseLabel: config.lastPhase || "",
+      recoveryWeek: Boolean(config.lastRecoveryWeek),
+      reviews: state.reviews,
+    }),
+    [weekActivities, canonicalActivities, config.lastTarget, config.lastPhase, config.lastRecoveryWeek, state.reviews],
   );
   const crossTrainingLabel = formatCrossTrainingCredit(crossTrainingSummary);
+  const missedSessionDecision = useMemo(
+    () => buildMissedSessionDecision({
+      plan: weekPlan,
+      activities: canonicalActivities,
+      planner: config,
+      today: plannerNow,
+    }),
+    [weekPlan, canonicalActivities, config, plannerNow],
+  );
   const lastGeneratedTimestamp = Date.parse(config.lastGeneratedAt || "") || 0;
   const crossTrainingNeedsReplan = offsetWeeks === 0
     && weekPlan.length > 0
@@ -695,6 +718,8 @@ export default function Planner() {
       moveSpontaneous: initial ? isSpontaneousWorkout(initial) : true,
       cancelReason: initial?.missedReason || "Termin fiel aus",
       cancelNote: initial?.missedNote || "",
+      blockDay: initial?.missedMeta?.blockDay
+        ?? blocksTrainingDayByDefault(initial?.missedReason || "Termin fiel aus"),
       coachAlternative,
     });
     setAdjustmentOpen(true);
@@ -886,7 +911,11 @@ export default function Planner() {
             matchedActivityId: null,
             missedReason: adjustmentDraft.cancelReason || "Termin fiel aus",
             missedNote: adjustmentDraft.cancelNote || "",
-            missedMeta: { ...(item.missedMeta || {}), plannedCancellation: true },
+            missedMeta: {
+              ...(item.missedMeta || {}),
+              plannedCancellation: true,
+              blockDay: Boolean(adjustmentDraft.blockDay),
+            },
             plannedCancellation: true,
             cancelledAt,
             intervalsPublishedAt: null,
@@ -933,6 +962,15 @@ export default function Planner() {
       intervalsPublishedAt: null,
     });
     setStatus(`${item.title} ist wieder als offene Einheit eingeplant.`);
+  }
+
+  function applyMissedLongRunExtension() {
+    if (!missedSessionDecision?.canApply) return;
+    const longRun = weekPlan.find((item) => item.id === missedSessionDecision.longRunId);
+    if (!longRun) return;
+    const adjusted = applyOptionalLongRunExtension(longRun, missedSessionDecision);
+    updateWorkout(longRun.id, adjusted);
+    setStatus(`Longrun optional um ${missedSessionDecision.extraMinutes} ruhige Minuten ergänzt. Die ausgefallene Einheit wird nicht vollständig nachgeholt.`);
   }
 
   function toggleDay(field, day) {
@@ -1285,10 +1323,15 @@ export default function Planner() {
       : "";
     const loopLabel = generated.loopStrategy ? ` · Loop-Block ${generated.loopStrategy.loops} × ${String(generated.loopStrategy.loopKm).replace(".", ",")} km` : "";
     const scopeLabel = requestedDates.length ? `Ausgewählte Tage (${requestedDates.length}) neu geplant. ` : "";
+    const appliedFootballKm = Number(generated.crossTrainingCredit?.appliedFootballKm || 0);
+    const appliedCyclingMinutes = Math.round(Number(generated.crossTrainingCredit?.appliedRoadCyclingAerobicMinutes || 0));
+    const crossTrainingParts = [];
+    if (appliedFootballKm > 0) crossTrainingParts.push(`${appliedFootballKm.toFixed(1).replace(".0", "")} km Fußball`);
+    if (appliedCyclingMinutes > 0) crossTrainingParts.push(`${appliedCyclingMinutes} aerobe Laufminuten aus Rennrad`);
     const crossTrainingStatus = generated.crossTrainingCredit?.appliedKm > 0
-      ? ` Zusätzlich angerechnet: ${generated.crossTrainingCredit.appliedKm.toFixed(1).replace(".0", "")} km aus Fußball/Rennrad.`
+      ? ` Zusätzlich angerechnet: ${crossTrainingParts.join(" · ") || `${generated.crossTrainingCredit.appliedKm.toFixed(1).replace(".0", "")} km Cross-Training`}.`
       : generated.crossTrainingCredit?.recognizedKm > 0
-        ? " Fußball/Rennrad wurden als Belastung erkannt; Schlüsselreize bleiben geschützt, deshalb war kein zusätzlicher Easy-Umfang reduzierbar."
+        ? " Fußball oder Rennrad wurden als Belastung erkannt; Schlüsselreize bleiben geschützt, deshalb war kein zusätzlicher Easy-Umfang reduzierbar."
         : "";
     setStatus(`${scopeLabel}${generated.phase.label}${targetLabel} · ${loadLabel} · berechneter Laufrahmen ${generated.target} km${loopLabel}. Bereits gelaufen: ${actualRunningKm.toFixed(1)} km.${crossTrainingStatus} ${generated.recoveryReason}${readinessNotes} Der neue Wochenplan ist noch nicht angenommen.`);
     setPlanningOpen(false);
@@ -1938,8 +1981,8 @@ export default function Planner() {
               </article>
               <article>
                 <span>Sportübergreifende Belastung</span>
-                <strong>{crossTrainingSummary.creditedEquivalentKm > 0 ? `${crossTrainingSummary.creditedEquivalentKm.toFixed(1).replace(".0", "")} km für die Planung anrechenbar` : "Aktuell kein Fußball- oder Rennradäquivalent"}</strong>
-                <p>{crossTrainingLabel || "Fußballkilometer und echtes Rennradtraining werden zusätzlich zur internen Belastung ausgewertet."} Rennrad nutzt ein transparentes 3:1-Ausdaueräquivalent. Insgesamt werden höchstens 35 % des Laufrahmens angerechnet und ausschließlich flexible Easy-Kilometer reduziert; Track, Longrun, Loop und Wettkampf bleiben erhalten.</p>
+                <strong>{crossTrainingSummary.creditedEquivalentKm > 0 ? `${crossTrainingSummary.creditedEquivalentKm.toFixed(1).replace(".0", "")} km planerischer Ersatz` : "Aktuell kein anrechenbarer Fußball- oder Rennradreiz"}</strong>
+                <p>{crossTrainingLabel || "Fußballkilometer und echtes Rennradtraining werden zusätzlich zur internen Belastung ausgewertet."} Rennrad wird über Dauer und Intensität bewertet, nicht über eine feste Distanzformel. Der Coach rechnet höchstens {Math.round(crossTrainingSummary.maxShare * 100)} % des Laufrahmens an und reduziert ausschließlich flexible Easy-Kilometer; Track, Longrun, Loop und Wettkampf bleiben erhalten.</p>
               </article>
               <article>
                 <span>Fixtermine & Doppeltraining</span>
@@ -1966,9 +2009,25 @@ export default function Planner() {
           <div>
             <span>Neue Zusatzbelastung erkannt</span>
             <strong>{crossTrainingLabel || "Fußball oder Rennrad"} fließt noch nicht in den bestehenden Wochenentwurf ein.</strong>
-            <small>Bei der Neuplanung reduziert der Coach zuerst flexible Easy-Kilometer. Track, Longrun, Loop und Wettkampf bleiben geschützt.</small>
+            <small>Bei der Neuplanung reduziert der Coach zuerst flexible Easy-Kilometer. Rennrad zählt über Dauer und Intensität; Track, Longrun, Loop und Wettkampf bleiben geschützt.</small>
           </div>
           <button type="button" onClick={replanCurrentWeek}>Jetzt einrechnen</button>
+        </section>
+      )}
+
+      {missedSessionDecision && (
+        <section className={`planner-missed-session-alert ${missedSessionDecision.tone}`}>
+          <div>
+            <span>Ausfallentscheidung</span>
+            <strong>{missedSessionDecision.title}</strong>
+            <p>{missedSessionDecision.recommendation}</p>
+            <small>{missedSessionDecision.reason}</small>
+          </div>
+          {missedSessionDecision.canApply && (
+            <button type="button" onClick={applyMissedLongRunExtension}>
+              + {missedSessionDecision.extraMinutes} min optional
+            </button>
+          )}
         </section>
       )}
 
@@ -1981,7 +2040,7 @@ export default function Planner() {
       <section className="planner-overview-strip">
         <div><span>Noch geplant</span><strong>{plannedKm.toFixed(1).replace(".0", "")} km</strong></div>
         <div><span>Gelaufen</span><strong>{completedKm.toFixed(1)} km</strong></div>
-        <div title={crossTrainingLabel || "Keine zusätzliche Fußball- oder Rennradbelastung erkannt"}><span>Zusatzlast</span><strong>{crossTrainingSummary.creditedEquivalentKm.toFixed(1)} km</strong></div>
+        <div title={crossTrainingLabel || "Kein planerischer Cross-Training-Ersatz erkannt"}><span>Planersatz</span><strong>{crossTrainingSummary.creditedEquivalentKm.toFixed(1)} km</strong></div>
         <div><span>Erledigt</span><strong>{weekActivities.length} Einheiten</strong></div>
         <div className="planner-overview-state"><span>Status</span><strong>{isPastWeek ? "Abgeschlossen" : weekPlan.length ? (weekAccepted ? "Angenommen · Änderungen gezielt" : weekApprovalState === WEEK_APPROVAL_STATES.CHANGED ? "Geändert · erneut annehmen" : "Entwurf · noch annehmen") : planningWeekLocked ? "Wochenabschluss fehlt" : "Bereit zur Planung"}</strong></div>
         <button onClick={() => setEditing(createBlank(weekStart))} disabled={isPastWeek || planningWeekPending}>+ Einheit</button>
@@ -2450,14 +2509,14 @@ export default function Planner() {
                 </div>
                 {adjustmentDraft.action === "replace" && <label>Ersatz<select value={adjustmentDraft.replacementKey} onChange={(event) => setAdjustmentDraft({ ...adjustmentDraft, replacementKey: event.target.value })}>{replacementOptions.map((option) => <option value={option.key} key={option.key}>{option.label}</option>)}</select></label>}
                 {adjustmentDraft.action === "move" && <div className="form-grid planner-move-timing"><label>Neues Datum<input type="date" min={todayKey} value={adjustmentDraft.moveDate} onChange={(event) => setAdjustmentDraft({ ...adjustmentDraft, moveDate: event.target.value })} /></label><label className="planner-spontaneous-toggle"><input type="checkbox" checked={Boolean(adjustmentDraft.moveSpontaneous)} disabled={adjustmentSelectedItems.some((item) => item.fixed || item.commitmentId)} onChange={(event) => setAdjustmentDraft({ ...adjustmentDraft, moveSpontaneous: event.target.checked, moveTime: event.target.checked ? "" : adjustmentDraft.moveTime || "18:00" })} /><span><b>Spontan</b><small>Ohne feste Uhrzeit; der Wetter-Slot bleibt nur eine Empfehlung.</small></span></label>{!adjustmentDraft.moveSpontaneous && <label>Neue Uhrzeit<input type="time" value={adjustmentDraft.moveTime} onChange={(event) => setAdjustmentDraft({ ...adjustmentDraft, moveTime: event.target.value })} /></label>}</div>}
-                {adjustmentDraft.action === "cancel" && <div className="planner-cancel-fields"><label>Warum fällt die Einheit aus?<select value={adjustmentDraft.cancelReason} onChange={(event) => setAdjustmentDraft({ ...adjustmentDraft, cancelReason: event.target.value })}>{cancellationReasonOptions.map((reason) => <option key={reason}>{reason}</option>)}</select></label><label>Notiz (optional)<textarea value={adjustmentDraft.cancelNote} onChange={(event) => setAdjustmentDraft({ ...adjustmentDraft, cancelNote: event.target.value })} placeholder="z. B. Training vom Verein abgesagt" /></label><div className="setup-note"><strong>Die Einheit bleibt in der Historie.</strong> So erkennt der Coach, ob ein externer Termin ausfiel oder ob Belastung, Krankheit oder Beschwerden der Grund waren.</div></div>}
+                {adjustmentDraft.action === "cancel" && <div className="planner-cancel-fields"><label>Warum fällt die Einheit aus?<select value={adjustmentDraft.cancelReason} onChange={(event) => { const cancelReason = event.target.value; setAdjustmentDraft({ ...adjustmentDraft, cancelReason, blockDay: blocksTrainingDayByDefault(cancelReason) }); }}>{cancellationReasonOptions.map((reason) => <option key={reason}>{reason}</option>)}</select></label><label>Notiz (optional)<textarea value={adjustmentDraft.cancelNote} onChange={(event) => setAdjustmentDraft({ ...adjustmentDraft, cancelNote: event.target.value })} placeholder="z. B. Familienausflug – ganzer Tag verplant" /></label><label className="planner-block-day-toggle"><input type="checkbox" checked={Boolean(adjustmentDraft.blockDay)} onChange={(event) => setAdjustmentDraft({ ...adjustmentDraft, blockDay: event.target.checked })} /><span><b>Tag für Training blockieren</b><small>Bei der nächsten Neuplanung setzt der Coach keine Ersatz-Einheit auf diesen Tag.</small></span></label><div className="setup-note"><strong>Keine Kilometerschulden.</strong> Die Einheit bleibt mit Grund in der Historie. Der Coach prüft separat, ob der nächste Longrun unverändert bleibt oder höchstens eine kleine optionale Verlängerung verträgt.</div></div>}
                 <button className="primary" type="submit" disabled={!adjustmentDraft.selectedIds.length}>{adjustmentDraft.action === "replace" ? "Ausgewählte Einheit ersetzen" : adjustmentDraft.action === "move" ? "Ausgewählte Einheit verschieben" : "Als ausgefallen markieren"}</button>
               </section>
             </div>
 
             <section className="planner-adjustment-preview">
               <div><p className="eyebrow">3. Änderung prüfen</p><h3>Das wird geändert</h3></div>
-              {adjustmentSelectedItems.length ? <div className="planner-adjustment-preview-list">{adjustmentSelectedItems.map((item) => <article key={item.id}><div><strong>{item.day || new Intl.DateTimeFormat("de-DE", { weekday: "long" }).format(new Date(`${item.date}T12:00:00`))} · {workoutTimingLabel(item)}</strong><span>{item.title}</span></div><b>→</b><div><strong>{adjustmentDraft.action === "replace" ? adjustmentReplacementLabel || "Ersatz auswählen" : adjustmentDraft.action === "move" ? `${adjustmentDraft.moveDate || "Datum wählen"} · ${adjustmentMoveTimingLabel(item, adjustmentDraft)}` : "Wird als ausgefallen markiert"}</strong><span>{adjustmentDraft.action === "replace" ? "Andere Einheiten des Tages bleiben erhalten" : adjustmentDraft.action === "move" ? "Inhalt der Einheit bleibt gleich" : adjustmentDraft.cancelReason || "Grund auswählen"}</span></div></article>)}</div> : <p className="muted">Wähle links mindestens eine Einheit aus. Danach siehst du hier die konkrete Auswirkung.</p>}
+              {adjustmentSelectedItems.length ? <div className="planner-adjustment-preview-list">{adjustmentSelectedItems.map((item) => <article key={item.id}><div><strong>{item.day || new Intl.DateTimeFormat("de-DE", { weekday: "long" }).format(new Date(`${item.date}T12:00:00`))} · {workoutTimingLabel(item)}</strong><span>{item.title}</span></div><b>→</b><div><strong>{adjustmentDraft.action === "replace" ? adjustmentReplacementLabel || "Ersatz auswählen" : adjustmentDraft.action === "move" ? `${adjustmentDraft.moveDate || "Datum wählen"} · ${adjustmentMoveTimingLabel(item, adjustmentDraft)}` : "Wird als ausgefallen markiert"}</strong><span>{adjustmentDraft.action === "replace" ? "Andere Einheiten des Tages bleiben erhalten" : adjustmentDraft.action === "move" ? "Inhalt der Einheit bleibt gleich" : `${adjustmentDraft.cancelReason || "Grund auswählen"}${adjustmentDraft.blockDay ? " · Tag blockiert" : ""}`}</span></div></article>)}</div> : <p className="muted">Wähle links mindestens eine Einheit aus. Danach siehst du hier die konkrete Auswirkung.</p>}
               <div className="planner-adjustment-scope-note">Nicht ausgewählte Einheiten und Tage bleiben unverändert. Die Woche wird nicht neu berechnet.</div>
             </section>
           </form>
