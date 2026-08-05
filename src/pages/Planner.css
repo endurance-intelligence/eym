@@ -124,7 +124,7 @@
 /* v2.18 – stable active weeks, compact planner overview and review gate */
 .planner-overview-strip{
   display:grid;
-  grid-template-columns:repeat(3,minmax(110px,.7fr)) minmax(250px,1.4fr) auto;
+  grid-template-columns:repeat(4,minmax(100px,.65fr)) minmax(240px,1.4fr) auto;
   gap:0;
   margin:0 0 14px;
   overflow:hidden;
@@ -182,7 +182,7 @@
 @media(max-width:980px){
   .planner-overview-strip{grid-template-columns:repeat(3,1fr)}
   .planner-overview-strip>div,.planner-overview-strip>button{border-bottom:1px solid var(--border)}
-  .planner-overview-state{grid-column:1/3}
+  .planner-overview-state{grid-column:auto}
   .planner-overview-strip>button{grid-column:3;border-right:0}
   .planner-gate-checks{grid-template-columns:1fr}
 }
@@ -1489,4 +1489,26 @@
 @media(max-width:720px){
   .planner-track-sync-status{align-items:stretch;flex-direction:column}
   .planner-track-sync-status button{width:100%}
+}
+
+/* v3.9.32 – football and road-cycling load credit */
+.planner-cross-training-alert{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:center;
+  gap:14px;
+  margin:0 0 14px;
+  padding:12px 14px;
+  border:1px solid rgba(250,204,21,.48);
+  border-radius:13px;
+  background:linear-gradient(100deg,rgba(250,204,21,.08),var(--bg-card));
+}
+.planner-cross-training-alert>div{display:grid;gap:3px;min-width:0}
+.planner-cross-training-alert span{color:var(--warning,#facc15);font-size:9px;font-weight:900;letter-spacing:.08em;text-transform:uppercase}
+.planner-cross-training-alert strong{font-size:13px;line-height:1.35}
+.planner-cross-training-alert small{color:var(--muted);font-size:10px;line-height:1.4}
+.planner-cross-training-alert button{padding:8px 11px;white-space:nowrap}
+@media(max-width:720px){
+  .planner-cross-training-alert{grid-template-columns:1fr}
+  .planner-cross-training-alert button{width:100%}
 }

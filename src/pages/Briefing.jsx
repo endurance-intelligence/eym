@@ -12,6 +12,7 @@ import { workoutSortTime, workoutTimingLabel } from "../services/plannerTime";
 import { briefingWorkoutDestination } from "../services/briefingNavigation";
 import { workoutPaceLabel } from "../services/workoutPace";
 import { isLoopWorkout, loopWorkoutCompactLabel, loopWorkoutPaceLabel } from "../services/loopWorkout";
+import { formatCrossTrainingCredit, summarizeCrossTrainingCredits } from "../services/crossTrainingLoad";
 
 const dayLabel = new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" });
 const todayLabel = new Intl.DateTimeFormat("de-DE", { weekday: "long", day: "2-digit", month: "long" });
@@ -274,6 +275,10 @@ export default function Briefing() {
     .filter((activity) => activityTimestamp(activity) >= weekStart)
     .reduce((sum, activity) => sum + Number(activity.distance || 0), 0);
   const calculatedTarget = Number(state.planner?.lastTarget || 0);
+  const weekActivities = activities.filter((activity) => activityTimestamp(activity) >= weekStart);
+  const crossTrainingSummary = summarizeCrossTrainingCredits(weekActivities, { targetKm: calculatedTarget });
+  const crossTrainingLabel = formatCrossTrainingCredit(crossTrainingSummary);
+  const effectiveWeekDistance = weekDistance + crossTrainingSummary.creditedEquivalentKm;
   const rows = weekRows(state.plan, activities);
   const today = todayOverview(state.plan, activities);
   const upcoming = nextDayOverview(state.plan);
@@ -370,9 +375,10 @@ export default function Briefing() {
               <h2>{missionTarget?.name || "Hauptziel festlegen"}</h2>
               <div className="briefing-compact-metrics">
                 <span><b>{missionTarget?.date ? daysUntil(missionTarget.date) : "–"}</b> Tage</span>
-                <span><b>{weekDistance.toFixed(1)}</b> / {calculatedTarget || "–"} km</span>
+                <span><b>{weekDistance.toFixed(1)}</b> / {calculatedTarget || "–"} km Lauf</span>
               </div>
-              {calculatedTarget > 0 && <div className="progress"><i style={{ width: `${Math.min(100, weekDistance / calculatedTarget * 100)}%` }} /></div>}
+              {crossTrainingSummary.creditedEquivalentKm > 0 && <p className="briefing-cross-training-credit">+ {crossTrainingSummary.creditedEquivalentKm.toFixed(1).replace(".0", "")} km angerechnet · {crossTrainingLabel}</p>}
+              {calculatedTarget > 0 && <div className="progress" title={`${effectiveWeekDistance.toFixed(1)} km inklusive angerechneter Zusatzbelastung`}><i style={{ width: `${Math.min(100, effectiveWeekDistance / calculatedTarget * 100)}%` }} /></div>}
               {nextEvent && <p className="briefing-compact-footer"><span>Nächstes Event</span><b>{nextEvent.name}</b><strong>{daysUntil(nextEvent.date)} Tage{nextEvent.time ? ` · ${nextEvent.time} Uhr` : ""}</strong></p>}
             </Card>
           </Link>

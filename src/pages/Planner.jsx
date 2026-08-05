@@ -15,6 +15,7 @@ import {
 } from "../services/plannerEngine";
 import { downloadCalendar } from "../services/calendar";
 import { preferredActivities, reviewKind } from "../services/activityUtils";
+import { formatCrossTrainingCredit, summarizeCrossTrainingCredits } from "../services/crossTrainingLoad";
 import { activitiesWithGroups } from "../services/activityGroups";
 import { completedActivityDestination } from "../services/briefingNavigation";
 import { publishIntervalsWeek } from "../services/intervals";
@@ -508,6 +509,15 @@ export default function Planner() {
     return state.plan.some((item) => !item.archived && item.date >= isoDate(previousStart) && item.date <= isoDate(previousEnd));
   }, [state.plan, offsetWeeks]);
   const config = useMemo(() => state.planner || {}, [state.planner]);
+  const crossTrainingSummary = useMemo(
+    () => summarizeCrossTrainingCredits(weekActivities, { targetKm: Number(config.lastTarget || 0) }),
+    [weekActivities, config.lastTarget],
+  );
+  const crossTrainingLabel = formatCrossTrainingCredit(crossTrainingSummary);
+  const lastGeneratedTimestamp = Date.parse(config.lastGeneratedAt || "") || 0;
+  const crossTrainingNeedsReplan = offsetWeeks === 0
+    && weekPlan.length > 0
+    && crossTrainingSummary.latestActivityAt > lastGeneratedTimestamp;
   const trackWorkoutTemplates = useMemo(
     () => normalizeTrackWorkoutTemplates(config.trackWorkoutTemplates),
     [config.trackWorkoutTemplates],
@@ -1217,6 +1227,8 @@ export default function Planner() {
       forecast: weather,
       offsetWeeks,
       completedRunningKm: actualRunningKm,
+      completedCrossTrainingKm: crossTrainingSummary.rawEquivalentKm,
+      crossTrainingDetails: crossTrainingSummary.details,
     });
 
     const checkinRecord = {
@@ -1254,6 +1266,10 @@ export default function Planner() {
         lastRecoveryReason: generated.recoveryReason || "",
         lastReadiness: generated.readiness || null,
         lastEventWeek: generated.eventWeek || null,
+        crossTrainingCredits: {
+          ...(current.planner?.crossTrainingCredits || {}),
+          [generated.weekStart]: generated.crossTrainingCredit || null,
+        },
         weekApprovals: invalidateWeekPlanApproval(current.planner?.weekApprovals, weekKey),
       },
     }));
@@ -1269,7 +1285,12 @@ export default function Planner() {
       : "";
     const loopLabel = generated.loopStrategy ? ` · Loop-Block ${generated.loopStrategy.loops} × ${String(generated.loopStrategy.loopKm).replace(".", ",")} km` : "";
     const scopeLabel = requestedDates.length ? `Ausgewählte Tage (${requestedDates.length}) neu geplant. ` : "";
-    setStatus(`${scopeLabel}${generated.phase.label}${targetLabel} · ${loadLabel} · berechneter Laufrahmen ${generated.target} km${loopLabel}. Bereits gelaufen: ${actualRunningKm.toFixed(1)} km. ${generated.recoveryReason}${readinessNotes} Der neue Wochenplan ist noch nicht angenommen.`);
+    const crossTrainingStatus = generated.crossTrainingCredit?.appliedKm > 0
+      ? ` Zusätzlich angerechnet: ${generated.crossTrainingCredit.appliedKm.toFixed(1).replace(".0", "")} km aus Fußball/Rennrad.`
+      : generated.crossTrainingCredit?.recognizedKm > 0
+        ? " Fußball/Rennrad wurden als Belastung erkannt; Schlüsselreize bleiben geschützt, deshalb war kein zusätzlicher Easy-Umfang reduzierbar."
+        : "";
+    setStatus(`${scopeLabel}${generated.phase.label}${targetLabel} · ${loadLabel} · berechneter Laufrahmen ${generated.target} km${loopLabel}. Bereits gelaufen: ${actualRunningKm.toFixed(1)} km.${crossTrainingStatus} ${generated.recoveryReason}${readinessNotes} Der neue Wochenplan ist noch nicht angenommen.`);
     setPlanningOpen(false);
     setPlanningMode("create");
   }
@@ -1916,6 +1937,11 @@ export default function Planner() {
                 <p>{scienceAssessment.completed} Punkte sind bereits absolviert, {scienceAssessment.remaining} Punkte liegen noch vor dir. Der Coach-Load-Index verbindet Dauer, Sportart, Distanz, Höhenmeter und vorhandene Reviews; er ist ein transparenter Steuerungswert und kein medizinischer Messwert.</p>
               </article>
               <article>
+                <span>Sportübergreifende Belastung</span>
+                <strong>{crossTrainingSummary.creditedEquivalentKm > 0 ? `${crossTrainingSummary.creditedEquivalentKm.toFixed(1).replace(".0", "")} km für die Planung anrechenbar` : "Aktuell kein Fußball- oder Rennradäquivalent"}</strong>
+                <p>{crossTrainingLabel || "Fußballkilometer und echtes Rennradtraining werden zusätzlich zur internen Belastung ausgewertet."} Rennrad nutzt ein transparentes 3:1-Ausdaueräquivalent. Insgesamt werden höchstens 35 % des Laufrahmens angerechnet und ausschließlich flexible Easy-Kilometer reduziert; Track, Longrun, Loop und Wettkampf bleiben erhalten.</p>
+              </article>
+              <article>
                 <span>Fixtermine & Doppeltraining</span>
                 <strong>Freie Tage werden vor harten Fixterminen belegt</strong>
                 <p>Ein freigegebener Doppeltrainingstag ist nur eine Erlaubnis, kein Planungsauftrag. Auf einen harten ORC-Track- oder Fußballtag setzt der Coach keinen zusätzlichen generierten Lauf. Eine zweite Einheit wird zuerst auf einen freien Tag verschoben.</p>
@@ -1935,6 +1961,17 @@ export default function Planner() {
         )}
       </section>
 
+      {crossTrainingNeedsReplan && (
+        <section className="planner-cross-training-alert">
+          <div>
+            <span>Neue Zusatzbelastung erkannt</span>
+            <strong>{crossTrainingLabel || "Fußball oder Rennrad"} fließt noch nicht in den bestehenden Wochenentwurf ein.</strong>
+            <small>Bei der Neuplanung reduziert der Coach zuerst flexible Easy-Kilometer. Track, Longrun, Loop und Wettkampf bleiben geschützt.</small>
+          </div>
+          <button type="button" onClick={replanCurrentWeek}>Jetzt einrechnen</button>
+        </section>
+      )}
+
       <div className="planner-week-nav">
         <button disabled={offsetWeeks === 0 && !previousWeekHasPlan} title={offsetWeeks === 0 && !previousWeekHasPlan ? "Keine ältere geplante Woche vorhanden" : "Vorherige Woche"} onClick={() => { setOffsetWeeks((value) => value - 1); setForecast([]); setStatus(""); }}>←</button>
         <div><strong>{dayFormatter.format(weekStart)} – {dayFormatter.format(weekEnd)}</strong><span>{offsetWeeks === 0 ? `Aktuelle Woche · ${weekAccepted ? "angenommen" : weekApprovalState === WEEK_APPROVAL_STATES.CHANGED ? "geändert" : "Entwurf"}` : offsetWeeks === 1 ? `Nächste Woche · ${weekAccepted ? "angenommen" : weekApprovalState === WEEK_APPROVAL_STATES.CHANGED ? "geändert" : weekPlan.length ? "Entwurf" : "noch nicht geplant"}` : "Abgeschlossene Trainingswoche"}</span></div>
@@ -1944,6 +1981,7 @@ export default function Planner() {
       <section className="planner-overview-strip">
         <div><span>Noch geplant</span><strong>{plannedKm.toFixed(1).replace(".0", "")} km</strong></div>
         <div><span>Gelaufen</span><strong>{completedKm.toFixed(1)} km</strong></div>
+        <div title={crossTrainingLabel || "Keine zusätzliche Fußball- oder Rennradbelastung erkannt"}><span>Zusatzlast</span><strong>{crossTrainingSummary.creditedEquivalentKm.toFixed(1)} km</strong></div>
         <div><span>Erledigt</span><strong>{weekActivities.length} Einheiten</strong></div>
         <div className="planner-overview-state"><span>Status</span><strong>{isPastWeek ? "Abgeschlossen" : weekPlan.length ? (weekAccepted ? "Angenommen · Änderungen gezielt" : weekApprovalState === WEEK_APPROVAL_STATES.CHANGED ? "Geändert · erneut annehmen" : "Entwurf · noch annehmen") : planningWeekLocked ? "Wochenabschluss fehlt" : "Bereit zur Planung"}</strong></div>
         <button onClick={() => setEditing(createBlank(weekStart))} disabled={isPastWeek || planningWeekPending}>+ Einheit</button>

@@ -1,4 +1,5 @@
 import { reviewKind } from "./activityUtils.js";
+import { MAX_CROSS_TRAINING_TARGET_SHARE } from "./crossTrainingLoad.js";
 import {
   buildEventWeek,
   eventDurationMinutes,
@@ -105,6 +106,57 @@ function isRunningPlanEntry(entry) {
   const value = `${entry?.type || ""} ${entry?.title || ""}`.toLowerCase();
   if (/rudern|rowing|rad|ride|bike|cycling|schwimm|swim|fußball|football|soccer|stabi|mobility|mobilität/.test(value)) return false;
   return /run|lauf|orc|interval|schwelle|backyard|track|treadmill|wettkampf|race|marathon|ultra/.test(value);
+}
+
+
+export function applyCrossTrainingCreditToPlan(plan = [], requestedCreditKm = 0) {
+  let remainingCredit = Math.max(0, Number(requestedCreditKm || 0));
+  if (remainingCredit <= 0) return { plan, appliedCreditKm: 0, unusedCreditKm: 0 };
+
+  const adjustable = plan
+    .filter((entry) => {
+      if (!isRunningPlanEntry(entry) || entry.raceEvent || entry.fixed || entry.commitmentId || entry.keySession || isLoopWorkout(entry)) return false;
+      const text = `${entry.title || ""} ${entry.type || ""}`.toLowerCase();
+      if (/track|intervall|schwelle|tempo|long\s*run|longrun|wettkampf|race|marathon|ultra/.test(text)) return false;
+      return /easy|locker|recovery|regeneration|laufband/.test(text);
+    })
+    .sort((left, right) => {
+      const optionalDelta = Number(Boolean(right.optional)) - Number(Boolean(left.optional));
+      if (optionalDelta) return optionalDelta;
+      return Number(left.distance || 0) - Number(right.distance || 0);
+    });
+
+  const reductions = new Map();
+  adjustable.forEach((entry) => {
+    if (remainingCredit <= 0) return;
+    const distance = Math.max(0, Number(entry.distance || 0));
+    const minimum = entry.optional ? 0 : Math.min(3, distance);
+    const reducible = Math.max(0, distance - minimum);
+    const reduction = Math.min(reducible, remainingCredit);
+    if (reduction <= 0) return;
+    reductions.set(entry.id, reduction);
+    remainingCredit -= reduction;
+  });
+
+  const adjustedPlan = plan
+    .map((entry) => {
+      const reduction = reductions.get(entry.id) || 0;
+      if (!reduction) return entry;
+      const distance = Math.max(0, Number(entry.distance || 0));
+      const adjustedDistance = Math.max(0, Math.round((distance - reduction) * 10) / 10);
+      const distanceLabel = String(adjustedDistance).replace(".", ",");
+      return {
+        ...entry,
+        distance: adjustedDistance,
+        title: String(entry.title || "").replace(/^\d+(?:[.,]\d+)?\s*km/, `${distanceLabel} km`),
+        notes: `${entry.notes || ""} Bereits absolvierte Fußball- oder Rennradbelastung wurde auf den flexiblen Easy-Umfang angerechnet. Schlüssel- und zielspezifische Einheiten bleiben unverändert.`.trim(),
+        crossTrainingAdjusted: true,
+      };
+    })
+    .filter((entry) => Number(entry.distance || 0) > 0 || !isRunningPlanEntry(entry) || entry.fixed || entry.commitmentId || entry.keySession || entry.raceEvent);
+
+  const appliedCreditKm = Math.max(0, Number(requestedCreditKm || 0) - remainingCredit);
+  return { plan: adjustedPlan, appliedCreditKm, unusedCreditKm: remainingCredit };
 }
 
 function recentLongestRun(activities, weekStart) {
@@ -1114,6 +1166,8 @@ export function generateWeekPlan({
   forecast = [],
   offsetWeeks = 0,
   completedRunningKm = 0,
+  completedCrossTrainingKm = 0,
+  crossTrainingDetails = [],
   reviews = {},
   today = new Date(),
 }) {
@@ -1184,6 +1238,12 @@ export function generateWeekPlan({
   target = eventWeek
     ? Math.max(Math.round(eventWeek.totalDistanceKm), Math.round(target))
     : Math.max(minimumTarget, Math.round(target));
+
+  const crossTrainingCreditCapKm = Math.max(0, target * MAX_CROSS_TRAINING_TARGET_SHARE);
+  const recognizedCrossTrainingKm = Math.max(0, Number(completedCrossTrainingKm || 0));
+  const cappedCrossTrainingKm = Math.min(recognizedCrossTrainingKm, crossTrainingCreditCapKm);
+  let appliedCrossTrainingKm = 0;
+  let unusedCrossTrainingKm = cappedCrossTrainingKm;
 
   const allowedRuns = new Set(Array.isArray(config.runDays) ? config.runDays : []);
   (config.recurringCommitments || [])
@@ -1500,6 +1560,13 @@ export function generateWeekPlan({
     }
   }
 
+  if (offsetWeeks === 0 && cappedCrossTrainingKm > 0) {
+    const crossTrainingAdjustment = applyCrossTrainingCreditToPlan(plan, cappedCrossTrainingKm);
+    plan = crossTrainingAdjustment.plan;
+    appliedCrossTrainingKm = crossTrainingAdjustment.appliedCreditKm;
+    unusedCrossTrainingKm = crossTrainingAdjustment.unusedCreditKm;
+  }
+
   plan = plan.map((entry) => {
     const weatherForecast = forecast.find((day) => day.date === entry.date);
     return weatherForecast ? {
@@ -1527,7 +1594,15 @@ export function generateWeekPlan({
   return {
     plan,
     target,
-    remainingTarget: Math.max(0, target - Number(completedRunningKm || 0)),
+    remainingTarget: Math.max(0, target - Number(completedRunningKm || 0) - appliedCrossTrainingKm),
+    crossTrainingCredit: {
+      recognizedKm: recognizedCrossTrainingKm,
+      cappedKm: cappedCrossTrainingKm,
+      appliedKm: appliedCrossTrainingKm,
+      unusedKm: unusedCrossTrainingKm,
+      capKm: crossTrainingCreditCapKm,
+      details: crossTrainingDetails,
+    },
     recentAverage: Math.round(recentAverage),
     weekStart: isoDate(weekStart),
     phase,

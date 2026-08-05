@@ -1512,3 +1512,12 @@ button:focus-visible,a:focus-visible,summary:focus-visible{
   .mobility-audio-actions,.mobility-audio-live{align-items:stretch;flex-direction:column}
   .mobility-audio-actions button,.mobility-audio-live button{width:100%}
 }
+
+
+/* v3.9.32 – sportübergreifende Wochenbelastung */
+.briefing-cross-training-credit{
+  margin:8px 0 0;
+  color:var(--accent-bright);
+  font-size:11px;
+  line-height:1.35;
+}
