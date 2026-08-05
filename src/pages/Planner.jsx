@@ -71,6 +71,12 @@ import {
   workoutTimingLabel,
 } from "../services/plannerTime";
 import {
+  TRACK_PUBLICATION_STATES,
+  planPublicationFingerprint,
+  trackPublicationStatus,
+  workoutPublicationFingerprint,
+} from "../services/workoutPublication";
+import {
   fuelRecommendationFromState,
   isFuelRelevantWorkout,
 } from "../services/fuelPlanner";
@@ -229,24 +235,6 @@ function commitmentDate(weekStart, commitment) {
   return index >= 0 ? isoDate(dateForDay(weekStart, index)) : "";
 }
 
-function planFingerprint(plan) {
-  return JSON.stringify(plan.map((item) => ({
-    id: item.id,
-    date: item.date,
-    time: isSpontaneousWorkout(item) ? "" : item.time,
-    spontaneous: isSpontaneousWorkout(item),
-    title: item.title,
-    type: item.type,
-    distance: Number(item.distance || 0),
-    duration: Number(item.duration || 0),
-    optional: Boolean(item.optional),
-    notes: item.notes || "",
-    structuredWorkout: item.structuredWorkout || null,
-    goalWorkout: item.goalWorkout || null,
-    paceGuidance: item.paceGuidance || null,
-    loopTraining: item.loopTraining || null,
-  })).sort((a, b) => `${a.date}${a.time}${a.id}`.localeCompare(`${b.date}${b.time}${b.id}`)));
-}
 
 function createBlank(weekStart) {
   const date = dateForDay(weekStart, 1);
@@ -585,8 +573,8 @@ export default function Planner() {
   const coachAlertCause = scienceAssessment.reasons.some((reason) => /review|müde|energie/i.test(reason))
     ? "aufgrund deiner aktuellen Reviews"
     : "aufgrund der aktuellen Wochenbelastung";
-  const currentPlanFingerprint = useMemo(() => planFingerprint(publishablePlan), [publishablePlan]);
-  const approvalFingerprint = useMemo(() => planFingerprint(weekPlan), [weekPlan]);
+  const currentPlanFingerprint = useMemo(() => planPublicationFingerprint(publishablePlan), [publishablePlan]);
+  const approvalFingerprint = useMemo(() => planPublicationFingerprint(weekPlan), [weekPlan]);
   const weekApprovals = config.weekApprovals || {};
   const weekApproval = weekApprovals[weekKey] || null;
   const weekApprovalState = weekPlanApprovalStatus(weekApprovals, weekKey, approvalFingerprint);
@@ -1299,11 +1287,20 @@ export default function Planner() {
       setState((current) => ({
         ...current,
         plan: current.plan.map((item) => {
-          if (publishablePlan.some((entry) => entry.id === item.id)) {
-            return { ...item, intervalsPublishedAt: publishedAt };
+          const publishedItem = publishablePlan.find((entry) => entry.id === item.id);
+          if (publishedItem) {
+            return {
+              ...item,
+              intervalsPublishedAt: publishedAt,
+              intervalsPublishedFingerprint: workoutPublicationFingerprint(publishedItem),
+            };
           }
           if (item.date >= isoDate(weekStart) && item.date <= isoDate(weekEnd) && isProvisionalTrackWorkout(item)) {
-            return { ...item, intervalsPublishedAt: null };
+            return {
+              ...item,
+              intervalsPublishedAt: null,
+              intervalsPublishedFingerprint: null,
+            };
           }
           return item;
         }),
@@ -1364,6 +1361,9 @@ export default function Planner() {
     if (next.paceGuidance?.mode === "range") {
       next.duration = paceRangeDurationMinutes(next.distance, next.paceGuidance) || next.duration;
     }
+    const existingItem = weekPlan.find((item) => item.id === next.id) || null;
+    const publicationChanged = !existingItem
+      || workoutPublicationFingerprint(existingItem) !== workoutPublicationFingerprint(next);
     setState((current) => ({
       ...current,
       plan: current.plan.some((item) => item.id === next.id)
@@ -1371,9 +1371,21 @@ export default function Planner() {
         : [...current.plan, next],
     }));
     if (isProvisionalTrackWorkout(next)) {
-      setStatus("Track-Workout vorläufig gespeichert. Es bleibt im Wochenplan und wird erst nach „Final“ an Garmin gesendet.");
+      setStatus("Track-Workout vorläufig gespeichert. Es bleibt nur im Wochenplan und wird nicht an Intervals.icu oder Garmin gesendet.");
     } else if (isTrackWorkout(next)) {
-      setStatus("Track-Workout final gespeichert. Falls die Woche schon gesendet wurde, anschließend „Garmin aktualisieren“ drücken.");
+      if (!publicationChanged && existingItem) {
+        const existingStatus = trackPublicationStatus({
+          item: existingItem,
+          approvalState: weekApprovalState,
+          publishedWeekCurrent: Boolean(publishedWeek && !planChangedAfterPublish),
+          weekWasPublished: Boolean(publishedWeek),
+        });
+        setStatus(`Track-Workout unverändert gespeichert. Übertragungsstatus: ${existingStatus?.label || "wird geprüft"}.`);
+      } else {
+        const approvalAction = weekApproval ? "„Erneut annehmen“" : "„Plan annehmen“";
+        const publishAction = publishedWeek ? "„Garmin aktualisieren“" : "„An Garmin senden“";
+        setStatus(`Track-Workout final gespeichert – noch nicht übertragen. Bitte jetzt ${approvalAction} und danach ${publishAction} drücken.`);
+      }
     }
     setEditing(null);
   }
@@ -2110,6 +2122,12 @@ export default function Planner() {
                 const trackTemplateLabel = trackWorkoutTemplateLabel(item.structuredWorkout);
                 const paceLabel = loopWorkoutPaceLabel(item) || workoutPaceLabel(item, { includeSource: true });
                 const loopLabel = loopWorkoutCompactLabel(item);
+                const trackSyncStatus = trackPublicationStatus({
+                  item,
+                  approvalState: weekApprovalState,
+                  publishedWeekCurrent: Boolean(publishedWeek && !planChangedAfterPublish),
+                  weekWasPublished: Boolean(publishedWeek),
+                });
                 const coachCandidate = scienceAssessment.candidates.find((candidate) => candidate.id === item.id) || null;
                 const coachCandidateDecision = coachCandidate
                   ? coachSuggestionDecision(coachSuggestionDecisions, coachDecisionKey(coachCandidate))
@@ -2172,7 +2190,9 @@ export default function Planner() {
                         {item.raceEvent && <em>EVENT {item.goalPriority || "B"}</em>}
                         {item.comboSession && <em>KOMBI-TAG</em>}
                         {item.doubleSession && <em>DOPPELTRAINING</em>}
-                        {isProvisionalTrackWorkout(item) ? <em>VORLÄUFIG</em> : item.intervalsPublishedAt && <em>INTERVALS</em>}
+                        {trackSyncStatus
+                          ? <em>{trackSyncStatus.state === TRACK_PUBLICATION_STATES.DRAFT ? "VORLÄUFIG" : trackSyncStatus.state === TRACK_PUBLICATION_STATES.CURRENT ? "INTERVALS AKTUELL" : "FINAL"}</em>
+                          : item.intervalsPublishedAt && <em>INTERVALS</em>}
                         {matched && <em>{String(matched.source || item.actualSource || "Garmin").toUpperCase()}</em>}
                       </div>
                       <h3>{item.title}</h3>
@@ -2181,6 +2201,18 @@ export default function Planner() {
                       {matched && <small>{matched.name || item.actualTitle}</small>}
                       {item.missedReason && <small>Grund: {item.missedReason}{item.missedNote ? ` · ${item.missedNote}` : ""}</small>}
                       {item.notes && !isCancelled && <small>{item.notes}</small>}
+                      {trackSyncStatus && !matched && !completed && !isCancelled && !isMissed && (
+                        <div className={`planner-track-sync-status ${trackSyncStatus.state}`}>
+                          <div>
+                            <span>Garmin-Status</span>
+                            <strong>{trackSyncStatus.label}</strong>
+                            <small>{trackSyncStatus.detail}</small>
+                          </div>
+                          {trackSyncStatus.action === "edit" && <button type="button" onClick={() => openWorkoutEditor(item)}>Finalisieren</button>}
+                          {trackSyncStatus.action === "accept" && <button type="button" className="primary" onClick={acceptCurrentWeek}>{trackSyncStatus.actionLabel}</button>}
+                          {trackSyncStatus.action === "publish" && <button type="button" className="primary" onClick={requestPublish}>{trackSyncStatus.actionLabel}</button>}
+                        </div>
+                      )}
                       {coachCandidate && !matched && !completed && !isCancelled && !isMissed && !coachCandidateDecision && (
                         <div className="planner-coach-inline">
                           <div>
@@ -2330,6 +2362,7 @@ export default function Planner() {
               <span>✓ Fußball, Stabi, Mobility und Rudern bleiben reine Kalendereinträge</span>
               <span>✓ Erneutes Senden aktualisiert bestehende Einträge statt Duplikate anzulegen</span>
               <span>✓ Entfernte Einheiten werden auch aus dieser Intervals-Woche entfernt</span>
+              <span>✓ EYM bleibt die führende Fassung; direkte Änderungen in Intervals.icu können beim nächsten Update überschrieben werden</span>
             </div>
             <p className="muted">In Intervals.icu muss unter Garmin „Upload planned workouts“ aktiviert sein.</p>
             <div className="modal-actions">
@@ -2554,11 +2587,11 @@ export default function Planner() {
                     <strong>Planungsstand</strong>
                     <small>{editingTrackWorkout.planningStatus === "draft"
                       ? "Im Wochenplan speichern, aber noch nicht an Garmin senden. Ideal, wenn Runden oder Pausen erst am Trainingstag feststehen."
-                      : "Die Abfolge ist bestätigt und wird beim nächsten Senden bzw. Aktualisieren an Garmin übergeben."}</small>
+                      : "Die Abfolge ist lokal final, aber noch nicht automatisch übertragen. Nach dem Speichern musst du den Wochenplan annehmen und anschließend an Garmin senden bzw. aktualisieren."}</small>
                   </div>
                   <div role="group" aria-label="Planungsstand des Track-Workouts">
                     <button type="button" className={editingTrackWorkout.planningStatus === "draft" ? "selected" : ""} onClick={() => updateTrackWorkout("planningStatus", "draft")}>Vorläufig</button>
-                    <button type="button" className={editingTrackWorkout.planningStatus === "final" ? "selected" : ""} onClick={() => updateTrackWorkout("planningStatus", "final")}>Final</button>
+                    <button type="button" className={editingTrackWorkout.planningStatus === "final" ? "selected" : ""} onClick={() => updateTrackWorkout("planningStatus", "final")}>Final freigeben</button>
                   </div>
                 </div>
                 <section className="planner-track-archive">
@@ -2643,7 +2676,7 @@ export default function Planner() {
             )}
             <label>Notiz<textarea value={editing.notes} onChange={(event) => setEditing({ ...editing, notes: event.target.value })} /></label>
             <label className="planner-optional"><input type="checkbox" checked={editing.optional} onChange={(event) => setEditing({ ...editing, optional: event.target.checked })} /> Einheit ist optional</label>
-            <button className="primary" type="submit">Speichern</button>
+            <button className="primary" type="submit">{editingTrackWorkout ? (editingTrackWorkout.planningStatus === "final" ? "Final speichern" : "Vorläufig speichern") : "Speichern"}</button>
           </form>
         </div>
       )}
