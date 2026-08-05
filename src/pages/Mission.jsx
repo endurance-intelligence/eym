@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { Card, PageTitle, Metric } from "../components/UI";
+import EventAutocomplete from "../components/EventAutocomplete";
 import TrainingSectionNav from "../components/SectionNav";
 import { daysUntil, fmtDate } from "../utils/format";
 import { buildEventAdvice, fetchEventForecast } from "../services/eventWeather";
@@ -23,6 +24,10 @@ import {
   parseGoalDurationSeconds,
 } from "../services/goalEngine";
 import { LOOP_MODES, formatLoopDuration, loopMatchPlan } from "../services/loopWorkout";
+import {
+  eventSourceStatusLabel,
+  eventSuggestionMissionPatch,
+} from "../services/eventCatalog";
 
 const emptyEvent = {
   name: "",
@@ -48,6 +53,12 @@ const emptyEvent = {
   plannedStopMinutes: 3,
   aidStationMode: "unspecified",
   role: "",
+  eventCatalogId: "",
+  eventSourceName: "",
+  eventSourceUrl: "",
+  eventVerifiedAt: "",
+  eventDataStatus: "",
+  eventSourceDetails: "",
 };
 
 function nextDay(dateString) {
@@ -128,12 +139,24 @@ export default function Mission() {
       ...current,
       [name]: type === "checkbox" ? checked : value,
       ...(name === "location" ? { place: null } : {}),
+      ...(["name", "date", "time", "location", "targetKm", "surface", "courseType", "elevationGain", "elevationLoss"].includes(name) && current.eventCatalogId
+        ? { eventDataStatus: "adjusted" }
+        : {}),
     }));
+  }
+
+  function selectEventSuggestion(event) {
+    setDraft((current) => ({
+      ...current,
+      ...eventSuggestionMissionPatch(event),
+    }));
+    setPlaceSuggestions([]);
+    setPlaceStatus("");
   }
 
   useEffect(() => {
     const query = draft.location.trim();
-    if (draft.place || query.length < 3) {
+    if (draft.place || (draft.eventCatalogId && draft.eventDataStatus === "verified") || query.length < 3) {
       setPlaceSuggestions([]);
       setPlaceStatus("");
       return undefined;
@@ -154,7 +177,7 @@ export default function Mission() {
     }, 800);
 
     return () => window.clearTimeout(timer);
-  }, [draft.location, draft.place]);
+  }, [draft.eventCatalogId, draft.eventDataStatus, draft.location, draft.place]);
 
   function selectPlace(place) {
     setDraft((current) => ({ ...current, location: place.label, place }));
@@ -196,6 +219,12 @@ export default function Mission() {
         plannedStopMinutes: draft.courseType === "loop" && draft.loopMode === LOOP_MODES.TIME_LIMIT ? Number(draft.plannedStopMinutes || 0) : 0,
         aidStationMode: draft.aidStationMode || "unspecified",
         role: draft.role || "",
+        eventCatalogId: draft.eventCatalogId || "",
+        eventSourceName: draft.eventSourceName || "",
+        eventSourceUrl: draft.eventSourceUrl || "",
+        eventVerifiedAt: draft.eventVerifiedAt || "",
+        eventDataStatus: draft.eventDataStatus || "",
+        eventSourceDetails: draft.eventSourceDetails || "",
         archived: false,
       };
 
@@ -264,6 +293,12 @@ export default function Mission() {
       plannedStopMinutes: courseProfile.plannedStopMinutes ?? 3,
       aidStationMode: courseProfile.aidStationMode,
       role: item.role || "",
+      eventCatalogId: item.eventCatalogId || "",
+      eventSourceName: item.eventSourceName || "",
+      eventSourceUrl: item.eventSourceUrl || "",
+      eventVerifiedAt: item.eventVerifiedAt || "",
+      eventDataStatus: item.eventDataStatus || "",
+      eventSourceDetails: item.eventSourceDetails || "",
     });
     setShowEditor(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -488,7 +523,25 @@ export default function Mission() {
             <button type="button" onClick={() => { setShowEditor(false); setEditingId(null); setDraft(emptyEvent); }}>Schließen</button>
           </div>
           <form className="editor-form mission-editor" onSubmit={save}>
-            <label>Event<input name="name" value={draft.name} onChange={change} placeholder="z. B. erster Marathon" required /></label>
+            <label className="event-search-field">Event
+              <EventAutocomplete
+                value={draft.name}
+                onChange={(value) => change({ target: { name: "name", value, type: "text", checked: false } })}
+                onSelect={selectEventSuggestion}
+                placeholder="z. B. Hermannslauf"
+                inputProps={{ required: true, maxLength: 100 }}
+              />
+              <small>Tippe mindestens zwei Zeichen. Bestätigte Events füllen Datum, Startzeit, Ort, Distanz und Streckenprofil automatisch.</small>
+            </label>
+            {draft.eventCatalogId && <div className={`event-source-card ${draft.eventDataStatus || "verified"}`}>
+              <div>
+                <span>{eventSourceStatusLabel(draft.eventDataStatus)}</span>
+                <strong>{draft.eventSourceName}</strong>
+                {draft.eventSourceDetails && <small>{draft.eventSourceDetails}</small>}
+                {draft.eventVerifiedAt && <small>Zuletzt geprüft am {fmtDate(draft.eventVerifiedAt)}.</small>}
+              </div>
+              {draft.eventSourceUrl && <a href={draft.eventSourceUrl} target="_blank" rel="noreferrer">Quelle öffnen ↗</a>}
+            </div>}
             <label>Datum<input name="date" type="date" value={draft.date} onChange={change} required /></label>
             <label>Startzeit (optional)<input name="time" type="time" value={draft.time} onChange={change} /></label>
             <label className="place-field">Ort

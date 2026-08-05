@@ -4,6 +4,7 @@ import {
   exerciseVideoSearchUrl,
   focusAreaLabel,
 } from "../services/mobilityWorkouts";
+import { exerciseSourceLabel } from "../services/mobilityExerciseSources";
 
 const EXERCISE_SEARCH_TAB = "eym-exercise-search";
 const EXERCISE_SEARCH_WINDOW_KEY = "__eymExerciseSearchWindow";
@@ -339,6 +340,12 @@ export default function ExerciseGuide({ exercise, onClose, known = false, knownL
         <p className="exercise-guide-purpose">{exercise.purpose}</p>
         {exercise.quickStart && <div className="exercise-quick-start"><span>In 10 Sekunden verstanden</span><p>{exercise.quickStart}</p>{exercise.sideSwitch && <small>Nach der Hälfte ertönt ein Signal zum Seitenwechsel.</small>}</div>}
         {exercise.asymmetryNote && <div className="exercise-asymmetry-note"><span>Seitenvergleich</span><p>{exercise.asymmetryNote}</p></div>}
+
+        {exercise.source?.canonicalUrl && <a className="exercise-original-source" href={exercise.source.canonicalUrl} target="_blank" rel="noreferrer">
+          {exercise.source.thumbnailUrl ? <img src={exercise.source.thumbnailUrl} alt="Vorschaubild der Originalquelle" loading="lazy" referrerPolicy="no-referrer" /> : <span aria-hidden="true">▶</span>}
+          <div><small>Persönliche Inspirationsquelle</small><strong>{exerciseSourceLabel(exercise.source)}</strong><p>Öffne das Originalvideo für den dynamischen Ablauf. Die von dir hinterlegten Coach-Daten bleiben die Grundlage für Timer und Auswahl.</p></div>
+          <b aria-hidden="true">↗</b>
+        </a>}
 
         <div className="exercise-guide-visual"><ExerciseVisual visual={exercise.visual} /></div>
         <p className="exercise-visual-note">Die Grafik zeigt den Bewegungsablauf schematisch. Saubere, schmerzfreie Ausführung ist wichtiger als ein großer Bewegungsweg.</p>

@@ -23,6 +23,8 @@ import {
   syncIntervalsActivities,
 } from "../services/intervals";
 import { GOAL_DISCIPLINE_OPTIONS } from "../services/goalEngine";
+import EventAutocomplete from "../components/EventAutocomplete";
+import { eventSuggestionOnboardingPatch } from "../services/eventCatalog";
 import "./Onboarding.css";
 
 const WEEKDAYS = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"];
@@ -154,6 +156,14 @@ export default function Onboarding() {
 
   function selectMissionMode(mode) {
     update("missionMode", mode);
+  }
+
+  function selectMissionEvent(event) {
+    setDraft((current) => ({
+      ...current,
+      ...eventSuggestionOnboardingPatch(event),
+    }));
+    setMessage("");
   }
 
   function baselineRunsChanged(value) {
@@ -418,7 +428,14 @@ export default function Onboarding() {
                 {draft.missionMode === "event" ? (
                   <div className="onboarding-form-grid mission-fields">
                     <label className="wide-field">Name des Events
-                      <input value={draft.missionName} maxLength="80" placeholder="z. B. Berlin Marathon" onChange={(event) => update("missionName", event.target.value)} />
+                      <EventAutocomplete
+                        value={draft.missionName}
+                        onChange={(value) => update("missionName", value)}
+                        onSelect={selectMissionEvent}
+                        placeholder="z. B. Hermannslauf"
+                        inputProps={{ maxLength: 80 }}
+                      />
+                      <FieldNote>Bestätigte Events übernehmen Datum und Distanz. Weitere Streckendaten kannst du nach dem Onboarding prüfen.</FieldNote>
                     </label>
                     <label>Datum
                       <input type="date" min={todayKey} value={draft.missionDate} onChange={(event) => update("missionDate", event.target.value)} />

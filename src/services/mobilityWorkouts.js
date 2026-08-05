@@ -1,4 +1,5 @@
 import { adaptiveExerciseReason } from "./mobilityProgramming.js";
+import { customExerciseCoachMatch, mergeExerciseLibrary } from "./mobilityExerciseSources.js";
 
 export const MOBILITY_EQUIPMENT = [
   { id: "mat", label: "Matte" },
@@ -778,9 +779,12 @@ export function buildMobilityWorkout({
   adaptiveProfile = null,
   preferredExerciseIds = [],
   excludedExerciseIds = [],
+  customExercises = [],
 } = {}) {
+  const exerciseLibrary = mergeExerciseLibrary(MOBILITY_EXERCISES, customExercises);
+  const exerciseFromLibrary = (id) => exerciseLibrary.find((item) => item.id === id);
   const targetActiveSeconds = Math.max(10, Number(durationMinutes || 25)) * 60;
-  const selectedPhysio = (physioExerciseIds || []).map(exerciseById).filter(Boolean);
+  const selectedPhysio = (physioExerciseIds || []).map(exerciseFromLibrary).filter(Boolean);
   const availablePhysio = selectedPhysio.filter((item) => hasEquipment(item, equipment));
   const missingPhysio = selectedPhysio.filter((item) => !hasEquipment(item, equipment));
   const selectedFocusIds = (focusAreaIds || []).filter((id) => focusAreaById(id));
@@ -792,7 +796,11 @@ export function buildMobilityWorkout({
   const selectedPhysioIds = new Set(selectedPhysio.map((item) => item.id));
   const preferredIds = new Set([...(preferredExerciseIds || []), ...(adaptiveProfile?.preferredExerciseIds || [])]);
   const excludedIds = new Set([...(excludedExerciseIds || []), ...(adaptiveProfile?.excludedExerciseIds || [])]);
-  const available = MOBILITY_EXERCISES.filter((item) => hasEquipment(item, equipment) && (!excludedIds.has(item.id) || selectedPhysioIds.has(item.id)));
+  const available = exerciseLibrary.filter((item) => {
+    if (item.custom && !item.coachApproved) return false;
+    if (item.custom && adaptiveProfile && !customExerciseCoachMatch(item, adaptiveProfile)) return false;
+    return hasEquipment(item, equipment) && (!excludedIds.has(item.id) || selectedPhysioIds.has(item.id));
+  });
   const conditionAvailable = condition === "tired"
     ? available.filter((item) => item.intensity !== "high")
     : available;
@@ -826,8 +834,12 @@ export function buildMobilityWorkout({
       : ["Rumpf", "Fuß & Sprunggelenk", "Gesäß & Hüfte", "Mobilität", "Balance", "Beinachse", "Kraft"];
   const standardSequence = interleaveExerciseGroups(pool, standardPriority, rotationOffset, exerciseUsage);
   const adaptiveSlots = Number(durationMinutes || 25) >= 20 ? 3 : 2;
-  const adaptiveSequence = [...preferredIds]
-    .map(exerciseById)
+  const customCoachIds = exerciseLibrary
+    .filter((item) => customExerciseCoachMatch(item, adaptiveProfile))
+    .filter((item) => (item.focusAreas || []).some((focusId) => selectedFocusIds.includes(focusId) || adaptiveProfile?.focusAreaIds?.includes(focusId)))
+    .map((item) => item.id);
+  const adaptiveSequence = [...new Set([...preferredIds, ...customCoachIds])]
+    .map(exerciseFromLibrary)
     .filter((item) => item && pool.some((candidate) => candidate.id === item.id))
     .sort((a, b) => {
       const preferredOrder = [...preferredIds];
@@ -904,7 +916,7 @@ export function buildMobilityWorkout({
   const missingFocus = selectedFocusIds.filter((focusId) => !conditionAvailable.some((item) => item.focusAreas.includes(focusId)));
 
   return {
-    id: `mobility-${durationMinutes}-${condition}-${equipment.join("-")}-${physioExerciseIds.join("-")}-${selectedFocusIds.join("-")}-${preparationSeconds}-${transitionSeconds}-${rotationOffset}-${adaptiveProfile?.id || "manual"}-${[...excludedIds].join("-")}`,
+    id: `mobility-${durationMinutes}-${condition}-${equipment.join("-")}-${physioExerciseIds.join("-")}-${selectedFocusIds.join("-")}-${preparationSeconds}-${transitionSeconds}-${rotationOffset}-${adaptiveProfile?.id || "manual"}-${[...excludedIds].join("-")}-${customExercises.map((item) => `${item.id}:${item.updatedAt || ""}:${item.coachApproved ? 1 : 0}`).join("-")}`,
     title: focusLabels.length
       ? `${focusLabels.join(" & ")} im Fokus`
       : condition === "tired"
@@ -938,6 +950,7 @@ export function buildMobilityWorkout({
     adaptiveProfile,
     preferredExerciseIds: [...preferredIds],
     excludedExerciseIds: [...excludedIds],
+    customExerciseCount: customExercises.length,
   };
 }
 
@@ -955,7 +968,7 @@ export function nextMobilityWorkoutRotation(options = {}, currentOffset = 0, ran
   const variants = [];
   const variantsWithDifferentStart = [];
   const seenSignatures = new Set([currentSignature]);
-  const searchLimit = Math.max(12, MOBILITY_EXERCISES.length * 2);
+  const searchLimit = Math.max(12, (MOBILITY_EXERCISES.length + (options.customExercises?.length || 0)) * 2);
 
   for (let step = 1; step <= searchLimit; step += 1) {
     const rotationOffset = normalizedCurrentOffset + step;

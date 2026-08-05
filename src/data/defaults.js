@@ -58,6 +58,7 @@ export const defaultState = {
     knownExerciseIds: [],
     preferredExerciseIds: [],
     excludedExerciseIds: [],
+    customExercises: [],
     adaptiveProgrammingEnabled: true,
     preparationSeconds: 10,
     unknownPreparationSeconds: 20,
