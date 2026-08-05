@@ -1619,3 +1619,75 @@
   .planner-cross-training-preview .modal-heading button{width:100%}
   .planner-cross-training-preview .modal-actions{grid-template-columns:1fr}
 }
+
+/* v3.9.37 – sichere Planvorschau und Rückgängig */
+.planner-undo-banner{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:center;
+  gap:14px;
+  padding:11px 13px;
+  border:1px solid color-mix(in srgb,var(--accent) 48%,var(--border));
+  border-radius:14px;
+  background:linear-gradient(100deg,color-mix(in srgb,var(--accent) 8%,var(--bg-card)),var(--bg-card));
+}
+.planner-undo-banner>div{display:grid;gap:2px;min-width:0}
+.planner-undo-banner span{color:var(--accent-bright);font-size:9px;font-weight:900;letter-spacing:.09em;text-transform:uppercase}
+.planner-undo-banner strong{font-size:13px;line-height:1.35}
+.planner-undo-banner small{color:var(--muted);font-size:10px;line-height:1.45}
+.planner-undo-banner button{padding:8px 11px;white-space:nowrap}
+
+.planner-plan-change-preview{width:min(960px,100%);max-height:min(88vh,900px);overflow:auto}
+.planner-plan-change-preview .modal-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:14px}
+.planner-plan-change-preview .modal-heading h2{margin:4px 0 0}
+.planner-change-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:14px 0 18px}
+.planner-change-summary article{display:grid;gap:4px;padding:13px 14px;border:1px solid var(--border);border-radius:14px;background:var(--bg-card-alt)}
+.planner-change-summary span{color:var(--muted);font-size:9px;font-weight:900;letter-spacing:.08em;text-transform:uppercase}
+.planner-change-summary strong{font-size:18px;line-height:1.2}
+.planner-change-summary article.reduced{border-color:color-mix(in srgb,var(--success,#5ee494) 58%,var(--border));background:color-mix(in srgb,var(--success,#5ee494) 7%,var(--bg-card-alt))}
+.planner-change-summary article.reduced strong{color:var(--success,#5ee494)}
+.planner-change-summary article.increased{border-color:color-mix(in srgb,var(--warning,#facc15) 58%,var(--border));background:color-mix(in srgb,var(--warning,#facc15) 7%,var(--bg-card-alt))}
+.planner-change-summary article.increased strong{color:var(--warning,#facc15)}
+.planner-change-sections{display:grid;gap:16px}
+.planner-change-section-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px}
+.planner-change-section-heading span{color:var(--accent);font-size:10px;font-weight:900;letter-spacing:.08em;text-transform:uppercase}
+.planner-change-section-heading strong{display:grid;place-items:center;min-width:25px;height:25px;padding:0 7px;border-radius:999px;background:var(--accent-surface);color:var(--accent-bright);font-size:11px}
+.planner-change-list{display:grid;gap:8px}
+.planner-change-list article{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:12px;padding:13px;border:1px solid var(--border);border-radius:14px;background:var(--bg-card-alt)}
+.planner-change-list article>div{display:grid;gap:2px;min-width:0}
+.planner-change-list article small{color:var(--muted);font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.05em}
+.planner-change-list article strong{overflow:hidden;font-size:13px;line-height:1.35;text-overflow:ellipsis;white-space:nowrap}
+.planner-change-list article span{color:var(--text-soft);font-size:11px}
+.planner-change-list article>b{color:var(--accent);font-size:18px}
+.planner-change-list article>em{position:absolute;right:11px;top:9px;padding:3px 6px;border-radius:999px;background:var(--accent-surface);color:var(--accent-bright);font-size:8px;font-style:normal;font-weight:900;letter-spacing:.04em;text-transform:uppercase}
+.planner-change-secondary-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.planner-change-secondary-grid>section{padding:13px;border:1px solid var(--border);border-radius:14px;background:var(--bg-card-alt)}
+.planner-change-secondary-grid>section.added{border-color:color-mix(in srgb,var(--success,#5ee494) 45%,var(--border))}
+.planner-change-secondary-grid>section.removed{border-color:color-mix(in srgb,var(--warning,#facc15) 45%,var(--border))}
+.planner-change-secondary-grid ul{display:grid;gap:8px;margin:0;padding:0;list-style:none}
+.planner-change-secondary-grid li{display:grid;gap:2px;padding-top:8px;border-top:1px solid var(--border)}
+.planner-change-secondary-grid li:first-child{padding-top:0;border-top:0}
+.planner-change-secondary-grid li b{font-size:12px;line-height:1.35}
+.planner-change-secondary-grid li span{color:var(--muted);font-size:10px}
+.planner-change-empty{display:grid;gap:6px;padding:16px;border:1px solid color-mix(in srgb,var(--success,#5ee494) 50%,var(--border));border-radius:15px;background:color-mix(in srgb,var(--success,#5ee494) 6%,var(--bg-card-alt))}
+.planner-change-empty strong{font-size:15px}
+.planner-change-empty p{margin:0;color:var(--text-soft);font-size:12px;line-height:1.5}
+.planner-change-protection{display:grid;grid-template-columns:auto 1fr;gap:9px;margin:16px 0;padding:11px 13px;border-left:3px solid var(--success,#5ee494);background:color-mix(in srgb,var(--success,#5ee494) 5%,var(--bg-card-alt));font-size:11px;line-height:1.5}
+.planner-change-protection b{color:var(--success,#5ee494)}
+.planner-change-protection span{color:var(--text-soft)}
+.planner-change-actions{display:grid;grid-template-columns:auto auto 1fr;gap:9px}
+.planner-change-actions .primary{width:100%}
+
+@media (max-width:760px){
+  .planner-undo-banner{grid-template-columns:1fr}
+  .planner-undo-banner button{width:100%}
+  .planner-plan-change-preview .modal-heading{display:grid}
+  .planner-plan-change-preview .modal-heading button{width:100%}
+  .planner-change-summary{grid-template-columns:1fr}
+  .planner-change-list article{grid-template-columns:1fr;gap:8px}
+  .planner-change-list article>b{transform:rotate(90deg);justify-self:center}
+  .planner-change-list article>em{position:static;justify-self:start}
+  .planner-change-secondary-grid{grid-template-columns:1fr}
+  .planner-change-protection{grid-template-columns:1fr}
+  .planner-change-actions{grid-template-columns:1fr}
+}

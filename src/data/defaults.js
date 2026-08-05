@@ -97,6 +97,7 @@ export const defaultState = {
     orcTrackTime: "09:00",
     intervalSync: {},
     trackWorkoutTemplates: [],
+    lastPlanChange: null,
   },
   calendar: {
     id: crypto.randomUUID(),

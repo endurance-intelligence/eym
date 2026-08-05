@@ -105,6 +105,14 @@ import {
   loopWorkoutPaceLabel,
   normalizeLoopWorkoutItem,
 } from "../services/loopWorkout";
+import {
+  buildPlanChangePreview,
+  canUndoPlanChange,
+  mergeGeneratedWeekPlan,
+  planChangeFingerprint,
+  planEntriesForWeek,
+  restorePlanFromSnapshot,
+} from "../services/plannerChangePreview";
 import "./Planner.css";
 
 const dayFormatter = new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" });
@@ -112,6 +120,69 @@ const trackDistanceFormatter = new Intl.NumberFormat("de-DE", { maximumFractionD
 const reasonOptions = ["Termin fiel aus", "Keine Zeit", "Müde", "Schmerzen", "Krankheit", "Wetter", "Verschoben", "Bewusst ausgelassen", "Aktivität nicht erkannt", "Sonstiges"];
 const cancellationReasonOptions = ["Termin fiel aus", "Keine Zeit", "Müde", "Schmerzen", "Krankheit", "Wetter", "Bewusst ausgelassen", "Sonstiges"];
 const plannerDays = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"];
+const generatedPlannerKeys = [
+  "lastGeneratedAt",
+  "lastTarget",
+  "lastPhase",
+  "lastCycleWeek",
+  "lastRecoveryWeek",
+  "lastPlanningTarget",
+  "lastGoalProfile",
+  "lastLoopStrategy",
+  "lastLoopDecision",
+  "lastRecoveryReason",
+  "lastReadiness",
+  "lastEventWeek",
+  "crossTrainingCredits",
+  "weekApprovals",
+];
+
+function plannerValueSnapshot(planner = {}, keys = []) {
+  const values = {};
+  const missingKeys = [];
+  [...new Set(keys)].forEach((key) => {
+    if (Object.prototype.hasOwnProperty.call(planner, key)) values[key] = planner[key];
+    else missingKeys.push(key);
+  });
+  return { values, missingKeys };
+}
+
+function restorePlannerValues(planner = {}, snapshot = {}) {
+  const restored = { ...planner };
+  Object.entries(snapshot.values || {}).forEach(([key, value]) => { restored[key] = value; });
+  (snapshot.missingKeys || []).forEach((key) => { delete restored[key]; });
+  delete restored.lastPlanChange;
+  return restored;
+}
+
+function planChangeDateLabel(value) {
+  if (!value) return "Datum offen";
+  const date = new Date(`${value}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" }).format(date);
+}
+
+function planChangeMetricLabel(item = {}) {
+  const parts = [];
+  if (Number(item.distance || 0) > 0) parts.push(`${Number(item.distance).toFixed(1).replace(".0", "")} km`);
+  if (Number(item.duration || 0) > 0) parts.push(`${Math.round(Number(item.duration))} min`);
+  if (item.time) parts.push(`${item.time} Uhr`);
+  return parts.join(" · ") || "ohne Distanzvorgabe";
+}
+
+function planChangeFieldsLabel(fields = []) {
+  const labels = {
+    date: "Tag",
+    time: "Uhrzeit",
+    title: "Einheit",
+    type: "Sportart",
+    distance: "Distanz",
+    duration: "Dauer",
+    optional: "Priorität",
+    fixed: "Fixtermin",
+  };
+  return fields.map((field) => labels[field] || field).join(" · ");
+}
 
 function blocksTrainingDayByDefault(reason = "") {
   return ["Keine Zeit", "Krankheit", "Schmerzen", "Müde", "Bewusst ausgelassen"].includes(reason);
@@ -480,6 +551,7 @@ export default function Planner() {
   const [adjustmentDraft, setAdjustmentDraft] = useState(null);
   const [planningInfoOpen, setPlanningInfoOpen] = useState(false);
   const [crossTrainingPreviewOpen, setCrossTrainingPreviewOpen] = useState(false);
+  const [pendingPlanChange, setPendingPlanChange] = useState(null);
   const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
   const [publishBusy, setPublishBusy] = useState(false);
   const [plannerNow, setPlannerNow] = useState(() => new Date());
@@ -650,6 +722,9 @@ export default function Planner() {
     : "";
   const publishedWeek = config.intervalSync?.[weekKey] || null;
   const planChangedAfterPublish = Boolean(publishedWeek && publishedWeek.fingerprint !== currentPlanFingerprint);
+  const lastPlanChange = config.lastPlanChange || null;
+  const lastPlanChangeForWeek = lastPlanChange?.weekStart === weekKey ? lastPlanChange : null;
+  const lastPlanChangeUndoable = Boolean(lastPlanChangeForWeek && canUndoPlanChange(weekPlan, lastPlanChangeForWeek));
   const adjustmentSelectedItems = adjustmentDraft?.selectedIds?.map((id) => weekPlan.find((item) => item.id === id)).filter(Boolean) || [];
   const adjustmentReplacementLabel = replacementLabelForAdjustment(adjustmentDraft, replacementOptions);
   const planningWeekPending = offsetWeeks >= 0 && weekPlan.length === 0;
@@ -657,7 +732,7 @@ export default function Planner() {
   const planningTargetLabel = offsetWeeks === 1 ? "Nächste Woche" : "Aktuelle Woche";
   const closurePeriodLabel = offsetWeeks === 1 ? "aktuelle Woche" : "Vorwoche";
   const isPastWeek = offsetWeeks < 0;
-  const modalVisible = Boolean(editing || missedEditing || planningOpen || adjustmentOpen || planningInfoOpen || crossTrainingPreviewOpen || publishConfirmOpen);
+  const modalVisible = Boolean(editing || missedEditing || planningOpen || adjustmentOpen || planningInfoOpen || crossTrainingPreviewOpen || pendingPlanChange || publishConfirmOpen);
   const editingTrackWorkout = editing && isTrackWorkout(editing)
     ? editing.structuredWorkout
     : null;
@@ -807,6 +882,7 @@ export default function Planner() {
           approvalFingerprint,
           acceptedAt,
         ),
+        lastPlanChange: null,
       },
     }));
     setStatus("Wochenplan angenommen. Du kannst ihn jetzt an Garmin senden; spätere Änderungen müssen erneut bestätigt werden.");
@@ -1309,42 +1385,6 @@ export default function Planner() {
       checkin: effectiveConfig.checkin,
     };
 
-    setState((current) => ({
-      ...current,
-      plan: [
-        ...current.plan.filter((item) => {
-          const outsideWeek = item.date < isoDate(weekStart) || item.date > isoDate(weekEnd);
-          const protectedEntry = item.source !== "planner-engine" || item.completed || item.missedReason || (offsetWeeks === 0 && item.date < todayKey);
-          if (requestedDates.length) return outsideWeek || !requestedDates.includes(item.date) || protectedEntry;
-          return outsideWeek || protectedEntry;
-        }),
-        ...(requestedDates.length ? generated.plan.filter((item) => requestedDates.includes(item.date)) : generated.plan),
-      ],
-      healthCheckins: [checkinRecord, ...(current.healthCheckins || [])].slice(0, 20),
-      planner: {
-        ...current.planner,
-        ...effectiveConfig,
-        recurringCommitments: current.planner?.recurringCommitments || [],
-        lastGeneratedAt: new Date().toISOString(),
-        lastTarget: generated.target,
-        lastPhase: generated.phase.label,
-        lastCycleWeek: generated.cycleWeek,
-        lastRecoveryWeek: generated.recoveryWeek,
-        lastPlanningTarget: generated.planningTarget || null,
-        lastGoalProfile: generated.goalProfile || null,
-        lastLoopStrategy: generated.loopStrategy || null,
-        lastLoopDecision: generated.loopDecision || null,
-        lastRecoveryReason: generated.recoveryReason || "",
-        lastReadiness: generated.readiness || null,
-        lastEventWeek: generated.eventWeek || null,
-        crossTrainingCredits: {
-          ...(current.planner?.crossTrainingCredits || {}),
-          [generated.weekStart]: generated.crossTrainingCredit || null,
-        },
-        weekApprovals: invalidateWeekPlanApproval(current.planner?.weekApprovals, weekKey),
-      },
-    }));
-
     const loadLabel = generated.eventWeek
       ? `${generated.eventWeek.label} · ${generated.eventWeek.protectionText}`
       : generated.recoveryWeek
@@ -1366,9 +1406,134 @@ export default function Planner() {
       : generated.crossTrainingCredit?.recognizedKm > 0
         ? " Fußball oder Rennrad wurden als Belastung erkannt; Schlüsselreize bleiben geschützt, deshalb war kein zusätzlicher Easy-Umfang reduzierbar."
         : "";
-    setStatus(`${scopeLabel}${generated.phase.label}${targetLabel} · ${loadLabel} · berechneter Laufrahmen ${generated.target} km${loopLabel}. Bereits gelaufen: ${actualRunningKm.toFixed(1)} km.${crossTrainingStatus} ${generated.recoveryReason}${readinessNotes} Der neue Wochenplan ist noch nicht angenommen.`);
+    const statusText = `${scopeLabel}${generated.phase.label}${targetLabel} · ${loadLabel} · berechneter Laufrahmen ${generated.target} km${loopLabel}. Bereits gelaufen: ${actualRunningKm.toFixed(1)} km.${crossTrainingStatus} ${generated.recoveryReason}${readinessNotes} Der neue Wochenplan ist noch nicht angenommen.`;
+    const previewWeekStart = isoDate(weekStart);
+    const previewWeekEnd = isoDate(weekEnd);
+    const beforeEntries = planEntriesForWeek(state.plan, previewWeekStart, previewWeekEnd);
+    const nextPlan = mergeGeneratedWeekPlan(state.plan, generated.plan, {
+      weekStart: previewWeekStart,
+      weekEnd: previewWeekEnd,
+      requestedDates,
+      offsetWeeks,
+      todayKey,
+    });
+    const afterEntries = planEntriesForWeek(nextPlan, previewWeekStart, previewWeekEnd);
+
+    setPendingPlanChange({
+      mode: planningMode,
+      generated,
+      effectiveConfig,
+      requestedDates,
+      checkinRecord,
+      weekStart: previewWeekStart,
+      weekEnd: previewWeekEnd,
+      offsetWeeks,
+      todayKey,
+      beforeFingerprint: planChangeFingerprint(beforeEntries),
+      preview: buildPlanChangePreview(beforeEntries, afterEntries),
+      statusText,
+    });
+    setStatus("Planvorschau berechnet. Noch wurde keine Einheit verändert.");
     setPlanningOpen(false);
+  }
+
+  function applyPendingPlanChange() {
+    if (!pendingPlanChange) return;
+    const currentEntries = planEntriesForWeek(state.plan, pendingPlanChange.weekStart, pendingPlanChange.weekEnd);
+    if (planChangeFingerprint(currentEntries) !== pendingPlanChange.beforeFingerprint) {
+      setPendingPlanChange(null);
+      setStatus("Der Wochenplan wurde während der Vorschau verändert. Bitte die Neuplanung erneut berechnen.");
+      return;
+    }
+
+    const appliedAt = new Date().toISOString();
+    setState((current) => {
+      const beforeEntries = planEntriesForWeek(current.plan, pendingPlanChange.weekStart, pendingPlanChange.weekEnd);
+      if (planChangeFingerprint(beforeEntries) !== pendingPlanChange.beforeFingerprint) return current;
+
+      const nextPlan = mergeGeneratedWeekPlan(current.plan, pendingPlanChange.generated.plan, {
+        weekStart: pendingPlanChange.weekStart,
+        weekEnd: pendingPlanChange.weekEnd,
+        requestedDates: pendingPlanChange.requestedDates,
+        offsetWeeks: pendingPlanChange.offsetWeeks,
+        todayKey: pendingPlanChange.todayKey,
+      });
+      const afterEntries = planEntriesForWeek(nextPlan, pendingPlanChange.weekStart, pendingPlanChange.weekEnd);
+      const plannerKeys = [
+        ...Object.keys(pendingPlanChange.effectiveConfig || {}).filter((key) => !["recurringCommitments", "lastPlanChange"].includes(key)),
+        ...generatedPlannerKeys,
+      ];
+      const snapshot = {
+        id: crypto.randomUUID(),
+        createdAt: appliedAt,
+        weekStart: pendingPlanChange.weekStart,
+        weekEnd: pendingPlanChange.weekEnd,
+        reason: pendingPlanChange.mode === "replan" ? "Wochenplan neu berechnet" : "Wochenplan berechnet",
+        beforeEntries,
+        afterFingerprint: planChangeFingerprint(afterEntries),
+        plannerSnapshot: plannerValueSnapshot(current.planner || {}, plannerKeys),
+        checkinRecordId: pendingPlanChange.checkinRecord.id,
+      };
+      const generated = pendingPlanChange.generated;
+
+      return {
+        ...current,
+        plan: nextPlan,
+        healthCheckins: [pendingPlanChange.checkinRecord, ...(current.healthCheckins || [])].slice(0, 20),
+        planner: {
+          ...current.planner,
+          ...pendingPlanChange.effectiveConfig,
+          recurringCommitments: current.planner?.recurringCommitments || [],
+          lastGeneratedAt: appliedAt,
+          lastTarget: generated.target,
+          lastPhase: generated.phase.label,
+          lastCycleWeek: generated.cycleWeek,
+          lastRecoveryWeek: generated.recoveryWeek,
+          lastPlanningTarget: generated.planningTarget || null,
+          lastGoalProfile: generated.goalProfile || null,
+          lastLoopStrategy: generated.loopStrategy || null,
+          lastLoopDecision: generated.loopDecision || null,
+          lastRecoveryReason: generated.recoveryReason || "",
+          lastReadiness: generated.readiness || null,
+          lastEventWeek: generated.eventWeek || null,
+          crossTrainingCredits: {
+            ...(current.planner?.crossTrainingCredits || {}),
+            [generated.weekStart]: generated.crossTrainingCredit || null,
+          },
+          weekApprovals: pendingPlanChange.preview.hasChanges
+            ? invalidateWeekPlanApproval(current.planner?.weekApprovals, weekKey)
+            : current.planner?.weekApprovals,
+          lastPlanChange: pendingPlanChange.preview.hasChanges ? snapshot : null,
+        },
+      };
+    });
+
+    setStatus(pendingPlanChange.statusText);
+    setPendingPlanChange(null);
     setPlanningMode("create");
+  }
+
+  function undoLastPlanChange() {
+    const snapshot = state.planner?.lastPlanChange;
+    const currentEntries = snapshot
+      ? planEntriesForWeek(state.plan, snapshot.weekStart, snapshot.weekEnd)
+      : [];
+    if (!snapshot || !canUndoPlanChange(currentEntries, snapshot)) {
+      setStatus("Rückgängig ist nicht mehr möglich, weil der Wochenplan danach bereits weiter verändert wurde.");
+      return;
+    }
+
+    setState((current) => {
+      const liveEntries = planEntriesForWeek(current.plan, snapshot.weekStart, snapshot.weekEnd);
+      if (!canUndoPlanChange(liveEntries, snapshot)) return current;
+      return {
+        ...current,
+        plan: restorePlanFromSnapshot(current.plan, snapshot),
+        healthCheckins: (current.healthCheckins || []).filter((item) => item.id !== snapshot.checkinRecordId),
+        planner: restorePlannerValues(current.planner || {}, snapshot.plannerSnapshot),
+      };
+    });
+    setStatus("Die letzte Coach-Neuplanung wurde vollständig rückgängig gemacht.");
   }
 
   async function publishWeek() {
@@ -1962,6 +2127,17 @@ export default function Planner() {
               {!weekAccepted && <button type="button" className="primary" onClick={acceptCurrentWeek}>{weekApprovalState === WEEK_APPROVAL_STATES.CHANGED ? "Erneut annehmen" : "Plan annehmen"}</button>}
               <button type="button" onClick={replanCurrentWeek}>Neu planen</button>
             </div>
+          </section>
+        )}
+
+        {!isPastWeek && !weekAccepted && lastPlanChangeForWeek && lastPlanChangeUndoable && (
+          <section className="planner-undo-banner">
+            <div>
+              <span>Letzte Coach-Änderung</span>
+              <strong>{lastPlanChangeForWeek.reason || "Wochenplan angepasst"}</strong>
+              <small>Der vorherige Wochenstand ist noch verfügbar. Nach weiteren manuellen Änderungen wird Rückgängig aus Sicherheitsgründen deaktiviert.</small>
+            </div>
+            <button type="button" onClick={undoLastPlanChange}>Änderung rückgängig</button>
           </section>
         )}
 
@@ -2812,6 +2988,102 @@ export default function Planner() {
       )}
 
 
+      {pendingPlanChange && (
+        <div className="modal-backdrop">
+          <section className="modal planner-plan-change-preview" role="dialog" aria-modal="true" aria-labelledby="plan-change-preview-title">
+            <div className="modal-heading">
+              <div>
+                <p className="eyebrow">Sichere Planänderung</p>
+                <h2 id="plan-change-preview-title">Vorher sehen, dann entscheiden</h2>
+              </div>
+              <button type="button" onClick={() => { setPendingPlanChange(null); setStatus("Planvorschau geschlossen. Der bestehende Wochenplan blieb unverändert."); }}>Schließen</button>
+            </div>
+
+            <div className="planner-change-summary">
+              <article>
+                <span>Wochenumfang vorher</span>
+                <strong>{pendingPlanChange.preview.beforeRunningKm.toFixed(1).replace(".0", "")} km</strong>
+              </article>
+              <article>
+                <span>Wochenumfang nachher</span>
+                <strong>{pendingPlanChange.preview.afterRunningKm.toFixed(1).replace(".0", "")} km</strong>
+              </article>
+              <article className={pendingPlanChange.preview.deltaRunningKm < -0.01 ? "reduced" : pendingPlanChange.preview.deltaRunningKm > 0.01 ? "increased" : "neutral"}>
+                <span>Auswirkung</span>
+                <strong>{Math.abs(pendingPlanChange.preview.deltaRunningKm) < 0.01
+                  ? "Umfang unverändert"
+                  : `${pendingPlanChange.preview.deltaRunningKm > 0 ? "+" : "−"}${Math.abs(pendingPlanChange.preview.deltaRunningKm).toFixed(1).replace(".0", "")} km`}</strong>
+              </article>
+            </div>
+
+            {pendingPlanChange.preview.hasChanges ? (
+              <div className="planner-change-sections">
+                {pendingPlanChange.preview.changed.length > 0 && (
+                  <section>
+                    <div className="planner-change-section-heading"><span>Wird angepasst</span><strong>{pendingPlanChange.preview.changed.length}</strong></div>
+                    <div className="planner-change-list changed">
+                      {pendingPlanChange.preview.changed.map((change, index) => (
+                        <article key={`${change.before.id || index}-${change.after.id || index}`}>
+                          <div>
+                            <small>Bisher · {planChangeDateLabel(change.before.date)}</small>
+                            <strong>{change.before.title}</strong>
+                            <span>{planChangeMetricLabel(change.before)}</span>
+                          </div>
+                          <b aria-hidden="true">→</b>
+                          <div>
+                            <small>Neu · {planChangeDateLabel(change.after.date)}</small>
+                            <strong>{change.after.title}</strong>
+                            <span>{planChangeMetricLabel(change.after)}</span>
+                          </div>
+                          <em>{planChangeFieldsLabel(change.fields)}</em>
+                        </article>
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                <div className="planner-change-secondary-grid">
+                  {pendingPlanChange.preview.added.length > 0 && (
+                    <section className="added">
+                      <div className="planner-change-section-heading"><span>Kommt hinzu</span><strong>{pendingPlanChange.preview.added.length}</strong></div>
+                      <ul>{pendingPlanChange.preview.added.map((item, index) => <li key={item.id || `${item.date}-${index}`}><b>{planChangeDateLabel(item.date)} · {item.title}</b><span>{planChangeMetricLabel(item)}</span></li>)}</ul>
+                    </section>
+                  )}
+                  {pendingPlanChange.preview.removed.length > 0 && (
+                    <section className="removed">
+                      <div className="planner-change-section-heading"><span>Entfällt</span><strong>{pendingPlanChange.preview.removed.length}</strong></div>
+                      <ul>{pendingPlanChange.preview.removed.map((item, index) => <li key={item.id || `${item.date}-${index}`}><b>{planChangeDateLabel(item.date)} · {item.title}</b><span>{planChangeMetricLabel(item)}</span></li>)}</ul>
+                    </section>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="planner-change-empty">
+                <strong>Keine Einheit muss verändert werden.</strong>
+                <p>Der aktuelle Wochenplan passt bereits zu Check-in, Zielphase und erkannter Zusatzbelastung. Die neue Berechnung würde nur die Coach-Datengrundlage aktualisieren.</p>
+              </div>
+            )}
+
+            <div className="planner-change-protection">
+              <b>Geschützt</b>
+              <span>{pendingPlanChange.preview.unchangedCount} bestehende Einheit{pendingPlanChange.preview.unchangedCount === 1 ? " bleibt" : "en bleiben"} unverändert. Absolvierte Einheiten, dokumentierte Ausfälle, vergangene Tage und manuelle Einträge werden nicht überschrieben.</span>
+            </div>
+
+            <div className="modal-actions planner-change-actions">
+              <button type="button" onClick={() => {
+                const mode = pendingPlanChange.mode;
+                setPendingPlanChange(null);
+                setPlanningMode(mode);
+                setPlanningOpen(true);
+                setStatus("Check-in geöffnet. Der bestehende Plan ist weiterhin unverändert.");
+              }}>Check-in ändern</button>
+              <button type="button" onClick={() => { setPendingPlanChange(null); setStatus("Keine Änderung übernommen. Der bestehende Wochenplan bleibt bestehen."); }}>Abbrechen</button>
+              <button type="button" className="primary" onClick={applyPendingPlanChange}>{pendingPlanChange.preview.hasChanges ? "Änderungen übernehmen" : "Berechnung übernehmen"}</button>
+            </div>
+          </section>
+        </div>
+      )}
+
       {crossTrainingPreviewOpen && (
         <div className="modal-backdrop">
           <section className="modal planner-cross-training-preview" role="dialog" aria-modal="true" aria-labelledby="cross-training-preview-title">
@@ -2848,7 +3120,7 @@ export default function Planner() {
             <p className="eyebrow">{planningMode === "replan" ? "Wochenplan neu berechnen" : "Intelligente Wochenplanung"}</p>
             <h2>{planningMode === "replan" ? "Woche wirklich neu planen?" : "Wie geht es dir – und wann hast du Zeit?"}</h2>
             <p className="muted">Dein Hauptziel legt Fähigkeiten, Phase und notwendige Schlüsseleinheiten fest. Die letzten Trainingswochen und dieser Check-in bestimmen, wie viel davon aktuell sicher umsetzbar ist. Erholungssignale können jederzeit eine frühere Entlastung auslösen.</p>
-            {planningMode === "replan" && <div className="planner-replan-notice"><strong>Der bestehende Entwurf bleibt bis zur Bestätigung erhalten.</strong><span>Erst mit „Woche neu planen“ werden zukünftige Coach-Einheiten dieser Woche neu berechnet. Bereits absolvierte Einheiten, dokumentierte Ausfälle und manuell angelegte Einträge bleiben geschützt.</span></div>}
+            {planningMode === "replan" && <div className="planner-replan-notice"><strong>Der bestehende Entwurf bleibt vollständig erhalten.</strong><span>Zuerst berechnet der Coach eine exakte Vorher-/Nachher-Vorschau. Erst wenn du diese anschließend bestätigst, werden zukünftige Coach-Einheiten ersetzt. Bereits absolvierte Einheiten, dokumentierte Ausfälle und manuell angelegte Einträge bleiben geschützt.</span></div>}
 
             {(reasonCounts.fatigue > 0 || reasonCounts.pain > 0 || reasonCounts.illness > 0) && (
               <div className="planner-history-alert">
@@ -2923,7 +3195,7 @@ export default function Planner() {
             <div className="planner-day-picker"><strong>Rudern an welchen Tagen?</strong><div>{plannerDays.map((day) => <button type="button" className={planningDraft.rowingDays.includes(day) ? "selected" : ""} onClick={() => toggleDay("rowingDays", day)} key={`row-${day}`}>{day.slice(0, 2)}</button>)}</div></div>
             <div className="planner-day-picker"><strong>An welchen Tagen ist echtes Doppeltraining erlaubt?</strong><div>{plannerDays.map((day) => <button type="button" className={planningDraft.doubleTrainingDays.includes(day) ? "selected" : ""} onClick={() => toggleDay("doubleTrainingDays", day)} key={`double-${day}`}>{day.slice(0, 2)}</button>)}</div><small>Gemeint sind Fußball + Lauf, Rudern + Lauf oder zwei Ausdauereinheiten. Stabi/Mobility + Lauf ist nur ein Kombi-Tag und braucht keine Freigabe.</small></div>
             <label>Zusätzliche Notiz<textarea value={planningDraft.checkin.notes} onChange={(event) => updateCheckin("notes", event.target.value)} placeholder="Reise, wenig Zeit, besondere Termine …" /></label>
-            <button className="primary" type="submit">{planningMode === "replan" ? "Woche neu planen" : "Plan berechnen"}</button>
+            <button className="primary" type="submit">{planningMode === "replan" ? "Änderungsvorschau berechnen" : "Planvorschau berechnen"}</button>
           </form>
         </div>
       )}
