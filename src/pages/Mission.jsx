@@ -531,7 +531,7 @@ export default function Mission() {
                 placeholder="z. B. Hermannslauf"
                 inputProps={{ required: true, maxLength: 100 }}
               />
-              <small>Tippe mindestens zwei Zeichen. Bestätigte Events füllen Datum, Startzeit, Ort, Distanz und Streckenprofil automatisch.</small>
+              <small>Tippe mindestens drei Zeichen. Veröffentlichte Events füllen verfügbare Angaben wie Datum, Startzeit, Ort und Distanz; fehlende Werte bleiben offen.</small>
             </label>
             {draft.eventCatalogId && <div className={`event-source-card ${draft.eventDataStatus || "verified"}`}>
               <div>

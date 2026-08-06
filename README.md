@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **3.9.12**
+Current app version: **3.9.39**
 
 **Eat your miles.**
 
@@ -594,3 +594,20 @@ npm run build
 - Removing a block makes the date available again but still leaves the current plan untouched until the athlete explicitly replans.
 - No kilometer-debt logic is introduced: a blocked Saturday does not automatically extend Sunday's Longrun. The Coach redistributes only suitable flexible work or accepts a smaller week.
 - Existing saved plans remain compatible. No database migration or Supabase function deployment is required.
+
+## Live multi-source event discovery v3.9.39
+
+- Event autocomplete keeps the curated official Hermannslauf record as a verified fallback and now queries an authenticated Supabase Edge Function after at least three entered characters.
+- The Edge Function uses provider adapters for the public Race Result event calendar and published Davengo event pages. Both adapters are deliberately best-effort because neither provider exposes a documented global search API for this use case; provider layout changes may require maintenance.
+- Search results are normalized, ranked and deduplicated across official, Race Result and Davengo sources. Events with several published running disciplines remain separately selectable.
+- Only published fields are filled. Missing start times, distances, locations or elevation values stay open instead of being guessed. Manual event entry remains available at all times.
+- Provider requests run server-side with strict provider-domain validation, short timeouts and an 18-hour cache. Up to 30-day-old cache entries are used only as a fallback when providers are temporarily unavailable.
+- The cache is service-role-only; browser roles receive no table policy. Each live search still requires an authenticated Supabase user.
+- Apply `20260806090000_event_discovery_cache.sql` and deploy the `event-search` function:
+
+```bash
+supabase db push
+supabase functions deploy event-search
+```
+
+- No additional secret is required. Supabase supplies `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` to the Edge Function.

@@ -44,3 +44,52 @@ test("onboarding receives only the fields it can display safely", () => {
 test("past verified events are hidden from normal future search", () => {
   assert.deepEqual(searchRunningEvents("Hermann", { referenceDate: new Date("2028-01-01T12:00:00Z") }), []);
 });
+
+test("published provider events are ranked by name, discipline and location", async () => {
+  const { rankRunningEventSuggestions } = await import("../src/services/eventCatalog.js");
+  const events = rankRunningEventSuggestions([
+    {
+      id: "rr-kassel",
+      provider: "raceresult",
+      name: "Kassel Marathon 2026",
+      disciplineName: "Halbmarathon",
+      date: "2026-09-20",
+      location: "Kassel",
+      targetKm: 21.097,
+      status: "provider",
+    },
+    {
+      id: "davengo-kiel",
+      provider: "davengo",
+      name: "Kiel.Lauf 2026",
+      disciplineName: "Halbmarathon",
+      date: "2026-09-13",
+      location: "Kiel",
+      targetKm: 21.097,
+      status: "provider",
+    },
+  ], "Kassel", { referenceDate: new Date("2026-08-06T07:00:00Z") });
+
+  assert.equal(events.length, 1);
+  assert.equal(events[0].id, "rr-kassel");
+});
+
+test("an official event remains authoritative when a provider returns the same race", async () => {
+  const { mergeRunningEventSuggestions, searchRunningEvents } = await import("../src/services/eventCatalog.js");
+  const [official] = searchRunningEvents("Hermann", { referenceDate: new Date("2026-08-06T07:00:00Z") });
+  const [merged] = mergeRunningEventSuggestions(official, {
+    id: "davengo-hermann",
+    provider: "davengo",
+    name: "55. Hermannslauf 2027",
+    disciplineName: "31,1 km",
+    date: "2027-04-25",
+    location: "Detmold",
+    targetKm: 31.1,
+    sourceName: "Davengo",
+    status: "provider",
+  });
+
+  assert.equal(merged.provider, "official");
+  assert.equal(merged.status, "verified");
+  assert.deepEqual(merged.sourceAlternatives, ["Davengo"]);
+});

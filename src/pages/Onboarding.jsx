@@ -435,7 +435,7 @@ export default function Onboarding() {
                         placeholder="z. B. Hermannslauf"
                         inputProps={{ maxLength: 80 }}
                       />
-                      <FieldNote>Bestätigte Events übernehmen Datum und Distanz. Weitere Streckendaten kannst du nach dem Onboarding prüfen.</FieldNote>
+                      <FieldNote>Veröffentlichte Events übernehmen verfügbare Angaben zu Datum und Distanz. Fehlende Werte kannst du manuell ergänzen.</FieldNote>
                     </label>
                     <label>Datum
                       <input type="date" min={todayKey} value={draft.missionDate} onChange={(event) => update("missionDate", event.target.value)} />
