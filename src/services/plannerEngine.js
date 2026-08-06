@@ -19,6 +19,7 @@ import {
 } from "./goalEngine.js";
 import { applyPlanPaceGuidance } from "./workoutPace.js";
 import { LOOP_CONTROL_MODES, LOOP_PACE_MODES, isLoopWorkout, normalizeLoopWorkoutItem } from "./loopWorkout.js";
+import { buildWeekPrescription } from "./trainingPeriodization.js";
 
 const DAY_NAMES = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"];
 const DAY_INDEX = { Montag: 0, Dienstag: 1, Mittwoch: 2, Donnerstag: 3, Freitag: 4, Samstag: 5, Sonntag: 6 };
@@ -232,6 +233,50 @@ function cycleWeek(mission, weekStart) {
   const start = startOfWeek(new Date(`${raw}T12:00:00`));
   const diffWeeks = Math.max(0, Math.floor((weekStart - start) / (7 * DAY_MS)));
   return (diffWeeks % 4) + 1;
+}
+
+function loadWaveRecoveryDecision(history = [], cycle = 1, phaseKey = "base", eventWeek = null, previousPrescription = null) {
+  if (eventWeek || ["event", "taper"].includes(phaseKey)) {
+    return { scheduled: false, reason: "Event- oder Tapersteuerung ersetzt die normale Belastungswelle." };
+  }
+  if (["recovery", "taper"].includes(previousPrescription?.weekType?.key)) {
+    return {
+      scheduled: false,
+      reason: "Die vorherige Planwoche war bereits eine Entlastungs- oder Taperwoche. Der Coach erzwingt keine zweite starre Reduktionswoche.",
+    };
+  }
+  const values = history.map((week) => Number(week?.km || 0)).filter((km) => km > 0.5);
+  if (values.length < 3) {
+    return {
+      scheduled: cycle === 4,
+      reason: cycle === 4
+        ? "Noch fehlen mehrere abgeschlossene Wochen; der Coach setzt vorsichtshalber eine frühe Entlastung."
+        : "Noch fehlen mehrere abgeschlossene Wochen für eine belastbare Wellenanalyse.",
+    };
+  }
+  const ordered = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(ordered.length / 2);
+  const typical = ordered.length % 2
+    ? ordered[middle]
+    : (ordered[middle - 1] + ordered[middle]) / 2;
+  const lastWeekKm = values[0];
+  const recentThree = values.slice(0, 3);
+  const recentAverage = recentThree.reduce((sum, value) => sum + value, 0) / recentThree.length;
+  const alreadyReduced = lastWeekKm <= typical * 0.82;
+  const peakCompleted = lastWeekKm >= typical * 1.14;
+  const accumulatedLoad = recentAverage >= typical * 1.02
+    || Math.max(...recentThree) >= typical * 1.12;
+  const scheduled = !alreadyReduced && (peakCompleted || (cycle === 4 && accumulatedLoad));
+  return {
+    scheduled,
+    reason: scheduled
+      ? peakCompleted
+        ? `Die letzte abgeschlossene Woche lag mit ${Math.round(lastWeekKm)} km deutlich über der etablierten Normalbelastung. Der nächste Block verarbeitet diese Spitze.`
+        : "Mehrere belastende Wochen wurden stabil absolviert. Der nächste Block verarbeitet diese Belastungswelle, bevor wieder aufgebaut wird."
+      : alreadyReduced
+        ? "Die letzte abgeschlossene Woche war bereits deutlich reduziert und wird nicht durch eine zweite starre Entlastungswoche ergänzt."
+        : "Die abgeschlossenen Wochen zeigen noch keine Belastungsspitze, die eine automatische Entlastung erzwingt.",
+  };
 }
 
 function recentMissedSignals(planHistory, weekStart) {
@@ -1196,11 +1241,10 @@ export function generateWeekPlan({
   const missedBlockedDates = blockedTrainingDates(planHistory, isoDate(weekStart), weekEndKey);
   const configuredAvailabilityBlockedDates = blockedAvailabilityDates(config.availabilityExceptions, isoDate(weekStart), weekEndKey);
   const blockedDates = new Set([...missedBlockedDates, ...configuredAvailabilityBlockedDates]);
-  const nextWeekStart = startOfWeek(today, 1);
-  const historyCutoff = weekStart > nextWeekStart ? nextWeekStart : weekStart;
+  const currentWeekStart = startOfWeek(today, 0);
+  const historyCutoff = weekStart > currentWeekStart ? currentWeekStart : weekStart;
   const history = runningWeeks(activities, historyCutoff, 8);
   const recentAverage = weightedAverage(history.map((week) => week.km));
-  const recentPeak = Math.max(...history.slice(0, 4).map((week) => week.km), recentAverage, 0);
   const lastWeek = history[0]?.km || recentAverage;
   const reportedWeeklyKmAvailable = profile.selfReportedWeeklyKm !== "" && profile.selfReportedWeeklyKm !== null && profile.selfReportedWeeklyKm !== undefined;
   const reportedWeeklyKm = boundedNumber(profile.selfReportedWeeklyKm, 0, 300, 0);
@@ -1223,7 +1267,13 @@ export function generateWeekPlan({
     ? { key: "event", label: eventWeek.phaseLabel, factor: 1, longShare: 0 }
     : strategicPhase;
   const cycle = cycleWeek(mission, weekStart);
-  const scheduledRecoveryWeek = cycle === 4;
+  const previousPrescriptionKey = isoDate(dateForDay(weekStart, -7));
+  const previousPrescription = config.weekPrescriptions?.[previousPrescriptionKey]
+    || (offsetWeeks > 0 && config.lastRecoveryWeek
+      ? { weekType: { key: "recovery", label: "Entlastungswoche" } }
+      : null);
+  const loadWaveRecovery = loadWaveRecoveryDecision(history, cycle, phase.key, eventWeek, previousPrescription);
+  const scheduledRecoveryWeek = loadWaveRecovery.scheduled;
   const missedSignals = recentMissedSignals(planHistory, historyCutoff);
   const checkinReadiness = readinessDecision(config, missedSignals);
   const reviewReference = weekStart > today ? weekStart : new Date(today.getTime() + DAY_MS);
@@ -1234,7 +1284,7 @@ export function generateWeekPlan({
   const recoveryReason = eventWeek
     ? `${eventWeek.protectionText}. Das Event ersetzt Longrun und harte Qualität; danach ist Erholung eingeplant.`
     : scheduledRecoveryWeek
-      ? "Geplante Entlastung nach dem 3:1-Grundrhythmus."
+      ? loadWaveRecovery.reason
       : earlyRecoveryWeek
         ? "Entlastung wurde wegen Befinden, Reviews oder ausgefallener Einheiten vorgezogen."
         : "Belastungswoche innerhalb des adaptiven Aufbauzyklus.";
@@ -1249,19 +1299,29 @@ export function generateWeekPlan({
   const startingRunCount = Math.max(1, Math.min(7, Number(config.targetRunCount || profile.selfReportedRunsPerWeek || 2)));
   const starterFallback = Math.max(6, Math.min(28, startingRunCount * 4));
   const goalFallback = Math.max(25, Math.min(45, Number(goal?.targetKm || mission?.targetKm || 50) * 0.4));
-  const base = recentAverage || (reportedWeeklyKmAvailable ? (reportedWeeklyKm || starterFallback) : goalFallback);
-  const cycleFactor = recoveryWeek ? (scheduledRecoveryWeek ? 0.75 : 0.82) : [1, 1.04, 1.08][cycle - 1] || 1;
-  const protectedEventTarget = eventWeekTarget(base, readiness, eventWeek);
-  let target = protectedEventTarget ?? (base * cycleFactor * phase.factor * readiness.factor);
-
-  if (!eventWeek && !recoveryWeek && phase.key !== "taper" && lastWeek > 0) target = Math.min(target, lastWeek * 1.1);
-  if (!eventWeek && recentPeak > 0 && !recoveryWeek && phase.key !== "taper") target = Math.min(target, recentPeak * 1.1);
-  const minimumTarget = recentAverage || reportedWeeklyKmAvailable
-    ? Math.max(6, Math.min(22, Math.round(base * (readiness.longRunAllowed ? 0.8 : 0.65))))
-    : readiness.longRunAllowed ? 22 : 12;
+  const fallbackBase = recentAverage || (reportedWeeklyKmAvailable ? (reportedWeeklyKm || starterFallback) : goalFallback);
+  const protectedEventTarget = eventWeekTarget(fallbackBase, readiness, eventWeek);
+  const weekPrescription = buildWeekPrescription({
+    history,
+    fallbackWeeklyKm: fallbackBase,
+    goalEngine,
+    cycleWeek: cycle,
+    recoveryWeek,
+    scheduledRecoveryWeek,
+    earlyRecoveryWeek,
+    recoveryReason,
+    readiness,
+    eventWeek,
+    protectedEventTarget,
+    previousWeekKm: lastWeek,
+    maxWeeklyKm: config.maxWeeklyKm,
+    weekStart: isoDate(weekStart),
+  });
+  const base = weekPrescription.capacity.baseKm;
+  let target = protectedEventTarget ?? weekPrescription.targetKm;
   target = eventWeek
     ? Math.max(Math.round(eventWeek.totalDistanceKm), Math.round(target))
-    : Math.max(minimumTarget, Math.round(target));
+    : Math.max(4, Math.round(target));
 
   const crossTrainingMaxShare = crossTrainingTargetShare({
     phaseKey: phase.key,
@@ -1642,6 +1702,29 @@ export function generateWeekPlan({
   const appliedRoadCyclingAerobicMinutes = rawRoadCyclingCreditKm > 0
     ? rawRoadCyclingAerobicMinutes * (appliedRoadCyclingCreditKm / rawRoadCyclingCreditKm)
     : 0;
+  const plannedFutureRunningKm = plan
+    .filter((entry) => !entry.plannedCancellation && isRunningPlanEntry(entry))
+    .reduce((sum, entry) => sum + Number(entry.distance || 0), 0);
+  const projectedRunningKm = Number(completedRunningKm || 0) + plannedFutureRunningKm;
+  const projectedLoadEquivalentKm = projectedRunningKm + appliedCrossTrainingKm;
+  const corridorLowKm = Number(weekPrescription.corridor?.lowKm || target);
+  const corridorHighKm = Number(weekPrescription.corridor?.highKm || target);
+  const withinCorridor = projectedLoadEquivalentKm >= corridorLowKm - 1
+    && projectedLoadEquivalentKm <= corridorHighKm + 1;
+  const finalWeekPrescription = {
+    ...weekPrescription,
+    targetKm: target,
+    plannedFutureRunningKm: Math.round(plannedFutureRunningKm * 10) / 10,
+    completedRunningKm: Math.round(Number(completedRunningKm || 0) * 10) / 10,
+    projectedRunningKm: Math.round(projectedRunningKm * 10) / 10,
+    projectedLoadEquivalentKm: Math.round(projectedLoadEquivalentKm * 10) / 10,
+    withinCorridor,
+    deliveryNote: withinCorridor
+      ? "Der konkrete Plan liegt im automatisch berechneten Wochenkorridor."
+      : projectedLoadEquivalentKm < corridorLowKm
+        ? "Verfügbarkeit, absolvierte Einheiten oder geschützte Schlüsselreize begrenzen die Woche unterhalb des Korridors. Der Coach erzeugt daraus keine Kilometerschuld."
+        : "Fixtermine oder bereits absolvierte Belastung liegen über dem Korridor. Der Coach schützt deshalb zusätzliche flexible Einheiten und Intensität.",
+  };
 
   return {
     plan,
@@ -1697,6 +1780,7 @@ export function generateWeekPlan({
       feasibility: goalEngine.feasibility,
     } : null,
     goalProfile: publicGoalSummary(goalEngine),
+    weekPrescription: finalWeekPrescription,
     eventWeek: eventWeek ? {
       weekStart: eventWeek.weekStart,
       priority: eventWeek.priority,

@@ -141,6 +141,7 @@ const generatedPlannerKeys = [
   "lastRecoveryReason",
   "lastReadiness",
   "lastEventWeek",
+  "weekPrescriptions",
   "crossTrainingCredits",
   "weekApprovals",
 ];
@@ -707,6 +708,7 @@ export default function Planner() {
     [futurePlan],
   );
   const weekKey = isoDate(weekStart);
+  const weekPrescription = config.weekPrescriptions?.[weekKey] || null;
   const coachSuggestionDecisions = config.coachSuggestionDecisions || {};
   const coachSuggestionContext = {
     weekKey,
@@ -717,8 +719,14 @@ export default function Planner() {
     coachSuggestionDecisions,
     coachSuggestionContext,
   );
-  const loadPercent = Math.round(Number(scienceAssessment.ratio || 1) * 100);
-  const loadComparisonLabel = scienceAssessment.hasBaseline ? `${loadPercent} %` : "Vergleich noch offen";
+  const loadRatio = Number(scienceAssessment.ratio || 1);
+  const loadComparisonLabel = !scienceAssessment.hasBaseline
+    ? "Vergleich noch offen"
+    : loadRatio < 0.84
+      ? "Bewusst reduziert"
+      : loadRatio <= 1.12
+        ? "Im üblichen Bereich"
+        : "Erhöhte Belastung";
   const fixedSessionCount = weekPlan.filter((item) => !item.missedReason && (item.fixed || item.commitmentId)).length;
   const keySessionCount = weekPlan.filter((item) => !item.missedReason && (item.keySession || /orc\s*track|intervall|schwelle|longrun|loop-training|backyard/i.test(`${item.type || ""} ${item.title || ""}`))).length;
   const specificWeekEntry = weekPlan.find((item) => isLoopWorkout(item))
@@ -1406,11 +1414,12 @@ export default function Planner() {
       checkin: effectiveConfig.checkin,
     };
 
-    const loadLabel = generated.eventWeek
-      ? `${generated.eventWeek.label} · ${generated.eventWeek.protectionText}`
-      : generated.recoveryWeek
-        ? "Entlastungswoche"
-        : `Aufbauwoche ${generated.cycleWeek}/3`;
+    const loadLabel = generated.weekPrescription?.weekType?.label
+      || (generated.eventWeek
+        ? `${generated.eventWeek.label} · ${generated.eventWeek.protectionText}`
+        : generated.recoveryWeek
+          ? "Entlastungswoche"
+          : `Aufbauwoche ${generated.cycleWeek}/3`);
     const readinessNotes = generated.readiness.notes.length ? ` ${generated.readiness.notes.join(" ")}` : "";
     const targetLabel = generated.planningTarget?.name
       ? ` · Fokus ${generated.planningTarget.name}${generated.planningTarget.targetPaceLabel ? ` (${generated.planningTarget.targetPaceLabel})` : ""}`
@@ -1427,7 +1436,8 @@ export default function Planner() {
       : generated.crossTrainingCredit?.recognizedKm > 0
         ? " Fußball oder Rennrad wurden als Belastung erkannt; Schlüsselreize bleiben geschützt, deshalb war kein zusätzlicher Easy-Umfang reduzierbar."
         : "";
-    const statusText = `${scopeLabel}${generated.phase.label}${targetLabel} · ${loadLabel} · berechneter Laufrahmen ${generated.target} km${loopLabel}. Bereits gelaufen: ${actualRunningKm.toFixed(1)} km.${crossTrainingStatus} ${generated.recoveryReason}${readinessNotes} Der neue Wochenplan ist noch nicht angenommen.`;
+    const corridorLabel = generated.weekPrescription?.corridor?.label || `${generated.target} km`;
+    const statusText = `${scopeLabel}${loadLabel}${targetLabel} · automatisch berechneter Laufkorridor ${corridorLabel} · konkreter Planwert ${generated.target} km${loopLabel}. Bereits gelaufen: ${actualRunningKm.toFixed(1)} km.${crossTrainingStatus} ${generated.weekPrescription?.focus || generated.recoveryReason}${readinessNotes} Der neue Wochenplan ist noch nicht angenommen.`;
     const previewWeekStart = isoDate(weekStart);
     const previewWeekEnd = isoDate(weekEnd);
     const beforeEntries = planEntriesForWeek(state.plan, previewWeekStart, previewWeekEnd);
@@ -1517,6 +1527,10 @@ export default function Planner() {
           lastRecoveryReason: generated.recoveryReason || "",
           lastReadiness: generated.readiness || null,
           lastEventWeek: generated.eventWeek || null,
+          weekPrescriptions: {
+            ...(current.planner?.weekPrescriptions || {}),
+            [generated.weekStart]: generated.weekPrescription || null,
+          },
           crossTrainingCredits: {
             ...(current.planner?.crossTrainingCredits || {}),
             [generated.weekStart]: generated.crossTrainingCredit || null,
@@ -2203,6 +2217,39 @@ export default function Planner() {
           </section>
         )}
 
+        {weekPlan.length > 0 && weekPrescription && (
+          <section className={`planner-week-prescription ${weekPrescription.weekType?.tone || "neutral"}`}>
+            <div className="planner-week-prescription-head">
+              <div>
+                <span>Wochentyp</span>
+                <strong>{weekPrescription.weekType?.label || "Trainingswoche"}</strong>
+                <small>{weekPrescription.weekType?.summary}</small>
+              </div>
+              <div className="planner-week-prescription-range">
+                <b>{weekPrescription.corridor?.label || `${weekPrescription.targetKm || config.lastTarget || "–"} km`}</b>
+                <span>automatisch gesteuert</span>
+              </div>
+            </div>
+            <div className="planner-week-prescription-focus">
+              <span>Ziel dieser Woche</span>
+              <strong>{weekPrescription.focus}</strong>
+              <small>{weekPrescription.deliveryNote}</small>
+            </div>
+            <details>
+              <summary>Warum plant der Coach genau diese Woche? <b>Details →</b></summary>
+              <div className="planner-week-prescription-details">
+                <ul>{(weekPrescription.why || []).map((reason, index) => <li key={`${weekPrescription.weekStart || weekKey}-${index}`}>{reason}</li>)}</ul>
+                <div>
+                  <strong>Nächster Schritt</strong>
+                  <p>{weekPrescription.nextStep}</p>
+                  <small>{weekPrescription.confidenceText}</small>
+                  <small>{weekPrescription.noDebtText}</small>
+                </div>
+              </div>
+            </details>
+          </section>
+        )}
+
         {!isPastWeek && !weekAccepted && lastPlanChangeForWeek && lastPlanChangeUndoable && (
           <section className="planner-undo-banner">
             <div>
@@ -2260,7 +2307,7 @@ export default function Planner() {
                 <small>{scienceAssessment.loadBand?.summary || "Belastung und Erholung werden aus Plan, Aktivitäten und Reviews zusammengeführt."}</small>
               </div>
               <div className="planner-week-logic-metrics">
-                <span><b>{config.lastTarget || "–"}</b> km</span>
+                <span><b>{weekPrescription?.corridor?.label || (config.lastTarget ? `${config.lastTarget} km` : "–")}</b></span>
                 <span><b>{fixedSessionCount}</b> Termine</span>
                 <span><b>{scienceAssessment.hardCount ?? keySessionCount}</b> Reize</span>
               </div>
@@ -2836,13 +2883,14 @@ export default function Planner() {
             <button type="button" className="close" onClick={() => setPlanningInfoOpen(false)}>×</button>
             <p className="eyebrow">Planlogik</p>
             <h2>So plant dein Coach deine Woche</h2>
-            <div className="planner-logic-flow">Hauptziel <b>→</b> Fähigkeiten <b>→</b> aktuelle Lücke <b>→</b> Phase <b>→</b> Woche</div>
-            <p className="muted">Zuerst bestimmen Distanz, Zielart, Zielzeit und Streckenprofil, was trainiert werden muss. Danach begrenzen Historie, Fixtermine, Reviews, Check-in und Wetter die konkrete Woche. Sobald der Plan steht, wird er nicht automatisch geändert.</p>
+            <div className="planner-logic-flow">Zielanforderung <b>→</b> Athletenbasis <b>→</b> Trainingsphase <b>→</b> Reviews <b>→</b> Wochenkorridor</div>
+            <p className="muted">Der Coach hält intern den langfristigen Kurs bis zum Ziel, veröffentlicht aber immer nur die nächste Woche. Der Umfang entsteht aus abgeschlossenen Trainingswochen, Zielprofil, Belastungsphase, Verfügbarkeit und Erholung. Geplante Einheiten zählen nie als bereits erreichte Entwicklung.</p>
             <div className="form-grid">
               <label>Max. Außentemperatur<input type="number" value={config.maxOutdoorTemperature || 29} onChange={(event) => patchConfig({ maxOutdoorTemperature: Number(event.target.value) })} /></label>
               <label>Max. Böen in km/h<input type="number" value={config.maxWindGust || 55} onChange={(event) => patchConfig({ maxWindGust: Number(event.target.value) })} /></label>
               <label>Letzte Phase<input readOnly value={config.lastPhase || "Noch nicht berechnet"} /></label>
-              <label>Letzter Laufrahmen<input readOnly value={config.lastTarget ? `${config.lastTarget} km` : "Noch nicht berechnet"} /></label>
+              <label>Letzter Laufrahmen<input readOnly value={weekPrescription?.corridor?.label || (config.lastTarget ? `${config.lastTarget} km` : "Noch nicht berechnet")} /></label>
+              <label>Wochentyp<input readOnly value={weekPrescription?.weekType?.label || "Noch nicht berechnet"} /></label>
               <label>Zielprofil<input readOnly value={config.lastGoalProfile?.disciplineLabel || goalProfile.disciplineLabel || "Noch nicht berechnet"} /></label>
               <label>Machbarkeit<input readOnly value={config.lastGoalProfile?.feasibility?.label || goalProfile.feasibility?.label || "Noch nicht geprüft"} /></label>
             </div>
@@ -2850,6 +2898,7 @@ export default function Planner() {
               <span>✓ Aktive Wochen werden nur gezielt geändert</span>
               <span>✓ Ausfälle bleiben mit Grund in der Historie</span>
               <span>✓ Die nächste Woche wartet auf Reviews und geklärte Einheiten</span>
+              <span>✓ Entlastung ist geplant und wird nie als Kilometerdefizit behandelt</span>
             </div>
             <button type="button" className="primary" onClick={() => setPlanningInfoOpen(false)}>Verstanden</button>
           </div>
@@ -3096,6 +3145,20 @@ export default function Planner() {
               </div>
               <button type="button" onClick={() => { setPendingPlanChange(null); setStatus("Planvorschau geschlossen. Der bestehende Wochenplan blieb unverändert."); }}>Schließen</button>
             </div>
+
+            {pendingPlanChange.generated.weekPrescription && (
+              <section className={`planner-change-prescription ${pendingPlanChange.generated.weekPrescription.weekType?.tone || "neutral"}`}>
+                <div>
+                  <span>Geplanter Wochentyp</span>
+                  <strong>{pendingPlanChange.generated.weekPrescription.weekType?.label}</strong>
+                  <small>{pendingPlanChange.generated.weekPrescription.focus}</small>
+                </div>
+                <div>
+                  <b>{pendingPlanChange.generated.weekPrescription.corridor?.label}</b>
+                  <span>automatischer Korridor</span>
+                </div>
+              </section>
+            )}
 
             <div className="planner-change-summary">
               <article>
