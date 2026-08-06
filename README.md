@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **3.9.42**
+Current app version: **3.9.43**
 
 **Eat your miles.**
 
@@ -583,6 +583,18 @@ npm test
 npm run lint
 npm run build
 ```
+
+
+## Transparent workout roles and briefing-first startup v3.9.43
+
+- Planned and completed units now use one shared role model across the weekly planner, activity history and analytics. The visible roles are **Schlüsselreiz**, **Qualität**, **Lang / spezifisch**, **Locker**, **Ruhig**, **Ergänzung** and **Zusatzbelastung**.
+- A key session is goal- and phase-dependent. It is not synonymous with a hard session: a slow Backyard loop block or Longrun can be a key session, while football can be an intense additional load without being the central target stimulus.
+- Every workout shows no more than two compact role markers. Opening the markers explains why the Coach assigned that role and, when available, links the explanation to the current goal and weekly phase.
+- Completed activities inherit the role of their matched planned workout. Unmatched activities are classified conservatively from sport, name, distance and duration.
+- The analytics training mix is clickable and lists the actual units behind each category. It separately reports how many of those sessions were planned as key stimuli.
+- Duplicate Intervals badges are suppressed when a published Track status already communicates the same source state.
+- On a fresh app load or browser reload, authenticated users are returned to the Briefing hub. Normal navigation inside the running app remains unchanged.
+- No database migration or Supabase function deployment is required.
 
 ## Modal editors and exercise workspace v3.9.41
 

@@ -1797,3 +1797,14 @@
   .planner-week-prescription-range,.planner-change-prescription>div:last-child{justify-items:start}
   .planner-week-prescription-details{grid-template-columns:1fr}
 }
+
+/* v3.9.43 – workout roles use the previously empty unit-header space */
+.planner-workout{grid-template-columns:auto minmax(0,1fr) minmax(150px,auto) auto}
+.planner-workout.no-marker{grid-template-columns:minmax(0,1fr) minmax(150px,auto) auto}
+.planner-workout-roles{grid-column:3;grid-row:1;align-self:start;justify-self:end;padding-top:1px}
+.planner-workout.no-marker .planner-workout-roles{grid-column:2}
+.planner-actions{grid-column:4;grid-row:1}.planner-workout.no-marker .planner-actions{grid-column:3}
+.planner-review-cue{grid-column:4;grid-row:1}.planner-workout.no-marker .planner-review-cue{grid-column:3}
+.planner-day:has(.workout-role-badges[open]){overflow:visible;position:relative;z-index:5}
+@media(max-width:760px){.planner-workout{grid-template-columns:auto minmax(0,1fr) auto}.planner-workout.no-marker{grid-template-columns:minmax(0,1fr) auto}.planner-workout-roles{grid-column:2/-1;grid-row:2;justify-self:start;padding-top:5px}.planner-workout.no-marker .planner-workout-roles{grid-column:1/-1}.planner-actions{grid-column:3;grid-row:1}.planner-workout.no-marker .planner-actions{grid-column:2}.planner-review-cue{grid-column:3;grid-row:1}.planner-workout.no-marker .planner-review-cue{grid-column:2}}
+@media(max-width:620px){.planner-actions-menu{grid-column:3;grid-row:1}.planner-workout.no-marker .planner-actions-menu{grid-column:2}.planner-actions-menu[open]{grid-column:1/-1;grid-row:3}.planner-workout-roles .workout-role-popover{right:auto;left:0}}

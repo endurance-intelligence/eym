@@ -12,6 +12,7 @@ import {
   reviewCoverageSummary,
   reviewEntriesForActivity,
 } from "./reviewCoverage.js";
+import { workoutRoleAssessment } from "./workoutRoles.js";
 
 const DAY = 86400000;
 
@@ -38,18 +39,10 @@ function durationMinutes(activity) {
     : numeric(activity?.duration);
 }
 
-function activityText(activity) {
-  return `${activity?.name || ""} ${activity?.type || ""} ${activity?.sportType || ""}`.toLowerCase();
-}
+
 
 export function runningIntensity(activity) {
-  const text = activityText(activity);
-  const distance = numeric(activity?.distance);
-  const duration = durationMinutes(activity);
-  if (/intervall|interval|track|schwelle|threshold|tempo|sprint|race|wettkampf/.test(text)) return "quality";
-  if (distance >= 20 || duration >= 120 || /longrun|long run|backyard|ultra/.test(text)) return "long";
-  if (/easy|locker|recovery|regeneration|grundlage|ga1/.test(text)) return "easy";
-  return "steady";
+  return workoutRoleAssessment(activity).classificationKey;
 }
 
 function isPlannedRun(item) {
@@ -201,6 +194,7 @@ export function buildTrainingAnalytics(state = {}, now = new Date(), weekCount =
   const canonical = preferredActivities(state.activities || [], { hideStrava: Boolean(state.intervals?.connected) });
   const activities = activitiesWithGroups(canonical, state.activityGroups || []);
   const allActivities = [...(state.activities || []), ...activities];
+  const goal = goalRequirements(state);
   const currentWeek = startOfIsoWeek(now);
   const firstWeek = new Date(currentWeek);
   firstWeek.setDate(firstWeek.getDate() - (safeWeekCount - 1) * 7);
@@ -209,6 +203,12 @@ export function buildTrainingAnalytics(state = {}, now = new Date(), weekCount =
   const runs = activities
     .filter((activity) => isRunningActivity(activity) && activityTimestamp(activity) >= firstWeek && activityTimestamp(activity) < rangeEnd)
     .sort((left, right) => activityTimestamp(left) - activityTimestamp(right));
+  const assessedRuns = runs.map((activity) => ({
+    activity,
+    assessment: workoutRoleAssessment(activity, { plan: state.plan || [], goal }),
+  }));
+  const assessmentById = new Map(assessedRuns.map((entry) => [entry.activity.id, entry.assessment]));
+  const assessmentFor = (activity) => assessmentById.get(activity.id) || workoutRoleAssessment(activity, { plan: state.plan || [], goal });
 
   const weeks = Array.from({ length: safeWeekCount }, (_, index) => {
     const start = new Date(firstWeek);
@@ -229,8 +229,8 @@ export function buildTrainingAnalytics(state = {}, now = new Date(), weekCount =
       elevation: Math.round(entries.reduce((sum, activity) => sum + numeric(activity.elevation || activity.elevationGain), 0)),
       runs: entries.length,
       longest: round(Math.max(0, ...entries.map((activity) => numeric(activity.distance)))),
-      quality: entries.filter((activity) => runningIntensity(activity) === "quality").length,
-      long: entries.filter((activity) => runningIntensity(activity) === "long").length,
+      quality: entries.filter((activity) => assessmentFor(activity).classificationKey === "quality").length,
+      long: entries.filter((activity) => assessmentFor(activity).classificationKey === "long").length,
       backToBack: backToBackBlocks(entries),
       plannedKm: round(plan.reduce((sum, item) => sum + numeric(item.distance), 0)),
       plannedRuns: plan.length,
@@ -239,12 +239,31 @@ export function buildTrainingAnalytics(state = {}, now = new Date(), weekCount =
     };
   });
 
-  const intensity = {
-    easy: runs.filter((activity) => runningIntensity(activity) === "easy").length,
-    steady: runs.filter((activity) => runningIntensity(activity) === "steady").length,
-    quality: runs.filter((activity) => runningIntensity(activity) === "quality").length,
-    long: runs.filter((activity) => runningIntensity(activity) === "long").length,
+  const intensityDetails = {
+    easy: assessedRuns.filter((entry) => entry.assessment.classificationKey === "easy"),
+    steady: assessedRuns.filter((entry) => entry.assessment.classificationKey === "steady"),
+    quality: assessedRuns.filter((entry) => entry.assessment.classificationKey === "quality"),
+    long: assessedRuns.filter((entry) => entry.assessment.classificationKey === "long"),
   };
+  const intensity = Object.fromEntries(Object.entries(intensityDetails).map(([key, entries]) => [key, entries.length]));
+  const roleDetails = Object.fromEntries(Object.entries(intensityDetails).map(([key, entries]) => [key, entries.map(({ activity, assessment }) => ({
+    id: activity.id,
+    name: activity.name || activity.title || activity.type || "Training",
+    date: activityDate(activity),
+    explanation: assessment.explanation,
+    isKeySession: assessment.isKeySession,
+    markers: assessment.markers,
+  }))]));
+  roleDetails.key = assessedRuns
+    .filter((entry) => entry.assessment.isKeySession)
+    .map(({ activity, assessment }) => ({
+      id: activity.id,
+      name: activity.name || activity.title || activity.type || "Training",
+      date: activityDate(activity),
+      explanation: assessment.explanation,
+      isKeySession: true,
+      markers: assessment.markers,
+    }));
   const allReviewRuns = activities.filter(isRunningActivity);
   const reviewCoverage = reviewCoverageSummary(state, allReviewRuns, {
     allActivities,
@@ -273,7 +292,7 @@ export function buildTrainingAnalytics(state = {}, now = new Date(), weekCount =
   const totalKm = runs.reduce((sum, activity) => sum + numeric(activity.distance), 0);
   const timeOnFeetMinutes = Math.round(runs.reduce((sum, activity) => sum + durationMinutes(activity), 0));
   const longRunMinutes = Math.round(runs
-    .filter((activity) => runningIntensity(activity) === "long")
+    .filter((activity) => assessmentFor(activity).classificationKey === "long")
     .reduce((sum, activity) => sum + durationMinutes(activity), 0));
   const metrics = {
     weekCount: safeWeekCount,
@@ -291,6 +310,7 @@ export function buildTrainingAnalytics(state = {}, now = new Date(), weekCount =
     weeklyElevation: weeks.reduce((sum, week) => sum + week.elevation, 0) / safeWeekCount,
     qualityRuns: intensity.quality,
     longRuns: intensity.long,
+    keySessions: roleDetails.key.length,
     backToBackBlocks: backToBackBlocks(runs),
     planAdherence: plannedRuns ? completedPlan / plannedRuns : null,
     plannedRuns,
@@ -303,7 +323,6 @@ export function buildTrainingAnalytics(state = {}, now = new Date(), weekCount =
     fuelTracked: fuelTracked.length,
     fuelInRange: fuelInRange.length,
   };
-  const goal = goalRequirements(state);
   const trend = volumeTrend(weeks);
   const specificity = goalSpecificity(goal, metrics);
   const confidence = dataConfidence(runs, reviewCoverage);
@@ -314,6 +333,7 @@ export function buildTrainingAnalytics(state = {}, now = new Date(), weekCount =
     weeks,
     runs,
     intensity,
+    roleDetails,
     metrics,
     goal,
     trend,

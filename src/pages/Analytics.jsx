@@ -58,13 +58,13 @@ function SportBreakdown({ year, sports, selectedKey, onSelect }) {
   );
 }
 
-function IntensityRow({ label, value, total, tone }) {
+function IntensityRow({ label, value, total, tone, selected, onSelect }) {
   const width = total ? Math.max(4, value / total * 100) : 0;
   return (
-    <div className="analytics-distribution-row">
+    <button type="button" className={`analytics-distribution-row ${selected ? "selected" : ""}`} onClick={onSelect} aria-pressed={selected}>
       <div><span>{label}</span><strong>{value}</strong></div>
       <div className="analytics-distribution-track"><i className={tone} style={{ width: `${width}%` }} /></div>
-    </div>
+    </button>
   );
 }
 
@@ -101,6 +101,7 @@ export default function Analytics() {
   const { state } = useApp();
   const [weekCount, setWeekCount] = useState(8);
   const [selectedYearSports, setSelectedYearSports] = useState({});
+  const [selectedRole, setSelectedRole] = useState(null);
   const now = useMemo(() => new Date(), []);
   const activities = useMemo(() => preferredActivities(state.activities), [state.activities]);
   const analytics = useMemo(() => buildTrainingAnalytics(state, now, weekCount), [state, now, weekCount]);
@@ -115,6 +116,13 @@ export default function Analytics() {
   const maxCrossMinutes = Math.max(1, ...intelligence.crossTraining.rows.map((row) => row.minutes));
   const totalIntensity = Object.values(analytics.intensity).reduce((sum, value) => sum + value, 0);
   const reviewStartLabel = weekLabel.format(new Date(`${analytics.reviewCoverage.trackingStart}T12:00:00`));
+  const selectedRoleDetails = selectedRole ? analytics.roleDetails?.[selectedRole] || [] : [];
+  const roleLabels = {
+    easy: "Locker",
+    steady: "Ruhig / nicht eindeutig",
+    quality: "Qualität",
+    long: "Lang / spezifisch",
+  };
 
   if (activities.length === 0) {
     return (
@@ -280,12 +288,25 @@ export default function Analytics() {
           <p className="eyebrow">Trainingsmix</p>
           <h2>Reize im gewählten Zeitraum</h2>
           <div className="analytics-distribution">
-            <IntensityRow label="Locker erkannt" value={analytics.intensity.easy} total={totalIntensity} tone="easy" />
-            <IntensityRow label="Ruhig / nicht eindeutig" value={analytics.intensity.steady} total={totalIntensity} tone="steady" />
-            <IntensityRow label="Qualität" value={analytics.intensity.quality} total={totalIntensity} tone="quality" />
-            <IntensityRow label="Lang / spezifisch" value={analytics.intensity.long} total={totalIntensity} tone="long" />
+            <IntensityRow label="Locker erkannt" value={analytics.intensity.easy} total={totalIntensity} tone="easy" selected={selectedRole === "easy"} onSelect={() => setSelectedRole((current) => current === "easy" ? null : "easy")} />
+            <IntensityRow label="Ruhig / nicht eindeutig" value={analytics.intensity.steady} total={totalIntensity} tone="steady" selected={selectedRole === "steady"} onSelect={() => setSelectedRole((current) => current === "steady" ? null : "steady")} />
+            <IntensityRow label="Qualität" value={analytics.intensity.quality} total={totalIntensity} tone="quality" selected={selectedRole === "quality"} onSelect={() => setSelectedRole((current) => current === "quality" ? null : "quality")} />
+            <IntensityRow label="Lang / spezifisch" value={analytics.intensity.long} total={totalIntensity} tone="long" selected={selectedRole === "long"} onSelect={() => setSelectedRole((current) => current === "long" ? null : "long")} />
           </div>
-          <p className="muted analytics-classification-note">Die Einordnung nutzt Aktivitätsname, Typ, Distanz und Dauer. Sie ersetzt keine exakte physiologische Zonenanalyse.</p>
+          <div className="analytics-key-session-summary"><span>🔑 Als Schlüsselreiz geplant</span><strong>{analytics.roleDetails?.key?.length || 0}</strong></div>
+          {selectedRole && (
+            <div className="analytics-role-detail">
+              <div><strong>{roleLabels[selectedRole]}</strong><span>{selectedRoleDetails.length} {selectedRoleDetails.length === 1 ? "Einheit" : "Einheiten"}</span></div>
+              {selectedRoleDetails.length ? selectedRoleDetails.map((item) => (
+                <article key={item.id}>
+                  <div><b>{item.name}</b><small>{item.date ? dateLabel.format(new Date(`${item.date}T12:00:00`)) : "Datum offen"}</small></div>
+                  {item.isKeySession && <em>🔑 Schlüsselreiz</em>}
+                  <p>{item.explanation}</p>
+                </article>
+              )) : <p className="muted">Im gewählten Zeitraum wurde keine Einheit so eingeordnet.</p>}
+            </div>
+          )}
+          <p className="muted analytics-classification-note">Die Einordnung nutzt Planbezug, Aktivitätsname, Typ, Distanz und Dauer. Ein Schlüsselreiz ist ziel- und phasenabhängig; nicht jede harte Einheit ist automatisch einer.</p>
         </Card>
 
         <Card className="analytics-review-card">

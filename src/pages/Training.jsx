@@ -6,6 +6,7 @@ import TrainingSectionNav from "../components/SectionNav";
 import { fmtDate, hours } from "../utils/format";
 import ReviewModal from "../components/ReviewModal";
 import ActivityNameModal from "../components/ActivityNameModal";
+import WorkoutRoleBadges from "../components/WorkoutRoleBadges";
 import { intervalsOnlineReady } from "../services/intervals";
 import {
   activityDate,
@@ -28,6 +29,8 @@ import {
   requiresWeeklyReview,
   reviewTrackingStartDate,
 } from "../services/reviewCoverage";
+import { goalRequirements } from "../services/scienceCoach";
+import { workoutRoleAssessment } from "../services/workoutRoles";
 
 const monthFormatter = new Intl.DateTimeFormat("de-DE", { month: "long", year: "numeric" });
 const shortDateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit" });
@@ -84,6 +87,7 @@ export default function Training() {
   const [openMonths, setOpenMonths] = useState(() => new Set([currentMonth]));
   const currentMonthActivities = activities.filter((activity) => monthKey(activity) === currentMonth);
   const currentMonthSummary = useMemo(() => summaries(currentMonthActivities), [currentMonthActivities]);
+  const goalProfile = useMemo(() => goalRequirements(state), [state]);
 
   const grouped = useMemo(() => {
     const months = new Map();
@@ -331,6 +335,10 @@ export default function Training() {
                               const covered = kind && hasReviewCoverage(activity, state.reviews, [...state.activities, ...activities, ...rawActivities]);
                               const tracked = activityDate(activity) >= reviewTrackingStart && requiresWeeklyReview(activity);
                               const metrics = activityListMetrics(activity);
+                              const roleAssessment = workoutRoleAssessment(activity, {
+                                plan: state.plan,
+                                goal: goalProfile,
+                              });
                               return (
                                 <article className={`activity-row ${kind ? "reviewable" : "no-review"} ${mergeSelection.includes(activity.id) ? "merge-selected" : ""} ${activity.isActivityGroup ? "activity-group-row" : ""} ${mergeMode && !activity.isActivityGroup && isRunningActivity(activity) ? "merge-candidate" : ""}`} key={activity.id}>
                                   {mergeMode && !activity.isActivityGroup && isRunningActivity(activity) && <button type="button" className="activity-merge-check" disabled={Boolean(state.reviews[activity.id])} onClick={() => toggleMergeActivity(activity)} aria-label={`${activity.name} auswählen`}>{mergeSelection.includes(activity.id) ? "✓" : "○"}</button>}
@@ -340,6 +348,7 @@ export default function Training() {
                                     <div className={`activity-secondary ${metrics.secondaryDetail ? "with-detail" : "single-metric"}`}><strong>{metrics.secondaryPrimary}</strong>{metrics.secondaryDetail && <span>{metrics.secondaryDetail}</span>}</div>
                                     <em>{kind ? (covered ? "✓ Review" : tracked ? "Review öffnen" : "Review optional") : "Kein Review nötig"}</em>
                                   </button>
+                                  <WorkoutRoleBadges assessment={roleAssessment} className="activity-role-badges" />
                                   <div className="activity-row-actions">
                                     <button className="activity-edit-button" onClick={() => setEditingName(activity)} aria-label={`${activity.name} umbenennen`} title="Trainingsname ändern"><span aria-hidden="true">✎</span><b>Name ändern</b></button>
                                     {activity.isActivityGroup && !state.reviews[activity.id] && <button className="activity-edit-button activity-unmerge-button" onClick={() => dissolveGroup(activity)} aria-label="Zusammenfassung aufheben" title="Zusammenfassung aufheben"><span aria-hidden="true">↩</span><b>Aufheben</b></button>}

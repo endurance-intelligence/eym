@@ -1660,3 +1660,35 @@ button:focus-visible,a:focus-visible,summary:focus-visible{
   .exercise-page-stats{justify-content:flex-start}
   .exercise-page-section-heading{display:grid}
 }
+
+/* v3.9.43 – transparent workout roles shared across week, activities and analytics */
+.workout-role-badges{position:relative;align-self:center;justify-self:end;z-index:2}
+.workout-role-badges>summary{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:6px;list-style:none;cursor:pointer}
+.workout-role-badges>summary::-webkit-details-marker{display:none}
+.workout-role-badges>summary>span{display:inline-flex;align-items:center;gap:5px;min-height:27px;padding:5px 8px;border:1px solid var(--border);border-radius:999px;background:var(--bg-input);color:var(--muted-bright);font-size:9px;font-weight:900;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap}
+.workout-role-badges>summary>span i{font-style:normal;font-size:11px}
+.workout-role-badges>summary>span.key{border-color:color-mix(in srgb,var(--accent) 62%,var(--border));background:var(--accent-surface);color:var(--accent-bright)}
+.workout-role-badges>summary>span.quality{border-color:rgba(255,207,104,.48);background:rgba(255,207,104,.09);color:#ffdc8a}
+.workout-role-badges>summary>span.long{border-color:color-mix(in srgb,var(--accent-secondary) 68%,var(--border));background:color-mix(in srgb,var(--accent-secondary) 10%,var(--bg-input));color:var(--accent-secondary)}
+.workout-role-badges>summary>span.easy{border-color:color-mix(in srgb,var(--success) 50%,var(--border));background:color-mix(in srgb,var(--success) 8%,var(--bg-input));color:var(--success-bright)}
+.workout-role-badges>summary>span.steady,.workout-role-badges>summary>span.support{color:var(--muted-bright)}
+.workout-role-badges>summary>span.additional{border-color:color-mix(in srgb,var(--warning) 48%,var(--border));background:color-mix(in srgb,var(--warning) 8%,var(--bg-input));color:var(--warning)}
+.workout-role-popover{position:absolute;right:0;top:calc(100% + 8px);width:min(340px,calc(100vw - 48px));padding:14px;border:1px solid var(--border-strong);border-radius:13px;background:var(--bg-sidebar);box-shadow:0 18px 46px #000b;text-align:left}
+.workout-role-popover strong{display:block;color:var(--text);font-size:13px}
+.workout-role-popover p{margin:7px 0;color:var(--text-soft);font-size:11px;line-height:1.5}
+.workout-role-popover small{display:block;color:var(--muted);font-size:10px}
+.activity-row:has(.workout-role-badges[open]){overflow:visible;z-index:4}
+.activity-row{grid-template-columns:minmax(0,1fr) auto auto}
+.activity-row.merge-candidate{grid-template-columns:48px minmax(0,1fr) auto auto}
+.activity-role-badges{margin:0 8px}
+.analytics-distribution-row{width:100%;padding:0;border:0;border-radius:9px;background:transparent;text-align:left}
+.analytics-distribution-row:hover,.analytics-distribution-row.selected{padding:8px;background:var(--accent-surface)}
+.analytics-distribution-row.selected{box-shadow:inset 0 0 0 1px var(--accent-border-strong)}
+.analytics-key-session-summary{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:14px;padding:10px 11px;border:1px solid var(--accent-border);border-radius:11px;background:var(--accent-surface);font-size:11px}
+.analytics-key-session-summary span{color:var(--accent-bright);font-weight:800}.analytics-key-session-summary strong{font-size:15px}
+.analytics-role-detail{display:grid;gap:8px;margin-top:12px;padding:12px;border:1px solid var(--border);border-radius:12px;background:var(--bg-input)}
+.analytics-role-detail>div{display:flex;align-items:center;justify-content:space-between;gap:12px}.analytics-role-detail>div span{color:var(--muted);font-size:11px}
+.analytics-role-detail article{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px 10px;padding:10px;border:1px solid var(--border);border-radius:10px;background:var(--bg-card-alt)}
+.analytics-role-detail article>div{display:grid;gap:2px}.analytics-role-detail article small{color:var(--muted);font-size:10px}.analytics-role-detail article em{align-self:start;color:var(--accent-bright);font-size:9px;font-style:normal;font-weight:900;text-transform:uppercase}
+.analytics-role-detail article p{grid-column:1/-1;margin:2px 0 0;color:var(--muted);font-size:10px;line-height:1.45}
+@media(max-width:600px){.activity-row,.activity-row.merge-candidate{grid-template-columns:1fr}.activity-role-badges{grid-column:1;justify-self:start;margin:0 12px 10px}.workout-role-popover{right:auto;left:0}.analytics-role-detail article{grid-template-columns:1fr}.analytics-role-detail article p{grid-column:1}}

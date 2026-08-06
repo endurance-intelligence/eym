@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Card, PageTitle } from "../components/UI";
 import TrainingSectionNav from "../components/SectionNav";
+import WorkoutRoleBadges from "../components/WorkoutRoleBadges";
 import { useApp } from "../context/AppContext";
 import { getCurrentPosition } from "../services/weather";
 import {
@@ -121,6 +122,7 @@ import {
   removeAvailabilityException,
   upsertAvailabilityException,
 } from "../services/plannerAvailability";
+import { workoutRoleAssessment } from "../services/workoutRoles";
 import "./Planner.css";
 
 const dayFormatter = new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" });
@@ -2517,6 +2519,11 @@ export default function Planner() {
                 const reviewDestination = reviewKind(activity)
                   ? completedActivityDestination(activity.id)
                   : null;
+                const roleAssessment = workoutRoleAssessment(activity, {
+                  plan: state.plan,
+                  goal: goalProfile,
+                  weekPrescription,
+                });
                 return (
                   <div
                     className={`planner-workout planner-actual completed ${reviewDestination ? "planner-workout-review-open" : ""}`}
@@ -2534,6 +2541,7 @@ export default function Planner() {
                       <h3>{activity.name || activity.title || activity.type || "Training"}</h3>
                       <p>{activity.type || activity.sportType || "Einheit"}{Number(activity.distance || 0) ? ` · ${Number(activity.distance).toFixed(1)} km` : ""}{Number(activity.duration || 0) ? ` · ${Math.round(Number(activity.duration))} min` : ""}</p>
                     </div>
+                    <WorkoutRoleBadges assessment={roleAssessment} className="planner-workout-roles" />
                     {reviewDestination && <span className="planner-review-cue">Review →</span>}
                   </div>
                 );
@@ -2564,6 +2572,14 @@ export default function Planner() {
                   publishedWeekCurrent: Boolean(publishedWeek && !planChangedAfterPublish),
                   weekWasPublished: Boolean(publishedWeek),
                 });
+                const roleAssessment = workoutRoleAssessment(item, {
+                  plan: state.plan,
+                  goal: goalProfile,
+                  weekPrescription,
+                });
+                const matchedSourceLabel = matched ? String(matched.source || item.actualSource || "Garmin").toUpperCase() : "";
+                const showMatchedSource = Boolean(matchedSourceLabel)
+                  && !(matchedSourceLabel.includes("INTERVALS") && (trackSyncStatus || item.intervalsPublishedAt));
                 const coachCandidate = scienceAssessment.candidates.find((candidate) => candidate.id === item.id) || null;
                 const coachCandidateDecision = coachCandidate
                   ? coachSuggestionDecision(coachSuggestionDecisions, coachDecisionKey(coachCandidate))
@@ -2629,7 +2645,7 @@ export default function Planner() {
                         {trackSyncStatus
                           ? <em>{trackSyncStatus.state === TRACK_PUBLICATION_STATES.DRAFT ? "VORLÄUFIG" : trackSyncStatus.state === TRACK_PUBLICATION_STATES.CURRENT ? "INTERVALS AKTUELL" : "FINAL"}</em>
                           : item.intervalsPublishedAt && <em>INTERVALS</em>}
-                        {matched && <em>{String(matched.source || item.actualSource || "Garmin").toUpperCase()}</em>}
+                        {showMatchedSource && <em>{matchedSourceLabel}</em>}
                       </div>
                       <h3>{item.title}</h3>
                       <p>{item.type}{trackTemplateLabel ? ` · ${trackTemplateLabel}` : ""}{item.distance ? ` · ${item.distance} km geplant` : ""}{matched && Number(matched.distance || item.actualDistance || 0) ? ` · ${Number(matched.distance || item.actualDistance).toFixed(1)} km erledigt` : ""}{item.duration ? ` · ${item.duration} min` : ""}{paceLabel ? ` · ${paceLabel}` : ""}</p>
@@ -2723,6 +2739,7 @@ export default function Planner() {
                         </div>
                       )}
                     </div>
+                    <WorkoutRoleBadges assessment={roleAssessment} className="planner-workout-roles" />
                     {reviewDestination && <span className="planner-review-cue">Review →</span>}
                     {!completed && (
                       <>
