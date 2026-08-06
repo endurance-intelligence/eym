@@ -12,7 +12,6 @@ permissions:
   pages: write
   id-token: write
 
-# Pages-Deployments dürfen sich nicht gegenseitig abbrechen.
 concurrency:
   group: github-pages
   cancel-in-progress: false
@@ -56,12 +55,8 @@ jobs:
             exit 1
           fi
 
-          echo "Build-Verzeichnis wurde korrekt erstellt."
-          echo ""
-          echo "Größe des Builds:"
+          echo "Build-Verzeichnis ist vorhanden."
           du -sh ./dist
-          echo ""
-          echo "Dateien im Build:"
           find ./dist -maxdepth 3 -type f | sort | sed -n '1,200p'
 
       - name: GitHub Pages konfigurieren
@@ -82,6 +77,39 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
+      - name: Festhängendes Pages-Deployment abbrechen
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STALE_DEPLOYMENT_ID: cbb924cd1e6fc420fffebbbba7e789e93ed74331
+        run: |
+          echo "Prüfe das alte Pages-Deployment..."
+
+          STATUS="$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2026-03-10" \
+            "repos/${GITHUB_REPOSITORY}/pages/deployments/${STALE_DEPLOYMENT_ID}" \
+            --jq '.status' 2>/dev/null || true)"
+
+          echo "Status: ${STATUS:-nicht gefunden}"
+
+          if [ "$STATUS" = "deployment_in_progress" ] || \
+             [ "$STATUS" = "deployment_queued" ]; then
+
+            echo "Festhängendes Deployment wird abgebrochen..."
+
+            gh api \
+              --method POST \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2026-03-10" \
+              "repos/${GITHUB_REPOSITORY}/pages/deployments/${STALE_DEPLOYMENT_ID}/cancel"
+
+            echo "Altes Deployment wurde abgebrochen."
+            sleep 10
+          else
+            echo "Kein festhängendes Deployment mehr vorhanden."
+          fi
+
       - name: GitHub Pages veröffentlichen
         id: deployment
         uses: actions/deploy-pages@v4
