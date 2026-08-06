@@ -2,7 +2,6 @@ import { Link } from "react-router-dom";
 import { useMemo, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { Card, PageTitle } from "../components/UI";
-import { hydration } from "../services/insights";
 import { daysUntil, pace, hours } from "../utils/format";
 import WeatherCard from "../components/WeatherCard";
 import { activityTimestamp, isRunningActivity, preferredActivities, reviewKind } from "../services/activityUtils";
@@ -12,7 +11,8 @@ import { workoutSortTime, workoutTimingLabel } from "../services/plannerTime";
 import { briefingWorkoutDestination } from "../services/briefingNavigation";
 import { workoutPaceLabel } from "../services/workoutPace";
 import { isLoopWorkout, loopWorkoutCompactLabel, loopWorkoutPaceLabel } from "../services/loopWorkout";
-import { formatCrossTrainingCredit, summarizeCrossTrainingCredits } from "../services/crossTrainingLoad";
+import { summarizeCrossTrainingCredits } from "../services/crossTrainingLoad";
+import { currentWeekPrescription, keySessionDateLabel, missionFocusTarget, nextKeySession, weekHubSummary } from "../services/briefingHub";
 
 const dayLabel = new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" });
 const todayLabel = new Intl.DateTimeFormat("de-DE", { weekday: "long", day: "2-digit", month: "long" });
@@ -263,14 +263,9 @@ export default function Briefing() {
   )
     .sort((a, b) => activityTimestamp(b) - activityTimestamp(a));
   const runningActivities = activities.filter(isRunningActivity);
-  const latestActivity = runningActivities[0];
-  const latestReview = latestActivity && state.reviews[latestActivity.id];
   const coach = useMemo(() => buildCoachState(state), [state]);
-  const recoveryState = coach.recovery;
-  const missionTarget = (state.mission?.milestones || []).find((item) => item.isMainTarget && !item.archived)
-    || (state.mission?.name && state.mission?.date ? state.mission : null);
-  const hydrationState = latestActivity && hydration(latestActivity, latestReview);
   const weekStart = startOfCurrentWeek();
+  const now = new Date();
   const weekDistance = runningActivities
     .filter((activity) => activityTimestamp(activity) >= weekStart)
     .reduce((sum, activity) => sum + Number(activity.distance || 0), 0);
@@ -283,29 +278,42 @@ export default function Briefing() {
     recoveryWeek: Boolean(state.planner?.lastRecoveryWeek),
     reviews: state.reviews,
   });
-  const crossTrainingLabel = formatCrossTrainingCredit(crossTrainingSummary);
-  const effectiveWeekDistance = weekDistance + crossTrainingSummary.creditedEquivalentKm;
   const rows = weekRows(state.plan, activities);
   const today = todayOverview(state.plan, activities);
   const upcoming = nextDayOverview(state.plan);
-  const copy = briefingLanguage();
+  const copy = briefingLanguage(now);
   const name = displayName(state, session);
+  const weekPrescription = currentWeekPrescription(state.planner, now);
+  const { mainTarget: missionTarget, focusTarget } = missionFocusTarget(state.mission, weekPrescription);
 
   const nextEvent = (state.mission.milestones || [])
-    .filter((item) => !item.archived && !item.isMainTarget && new Date(`${item.date}T23:59:59`) >= new Date())
+    .filter((item) => !item.archived && !item.isMainTarget && new Date(`${item.date}T23:59:59`) >= now)
     .sort((a, b) => `${a.date}T${a.time || "23:59"}`.localeCompare(`${b.date}T${b.time || "23:59"}`))[0];
 
   const weekOpenItems = rows.reduce((sum, row) => sum + row.items.filter((item) => item.tone === "planned").length, 0);
-  const todayKey = isoDate(new Date());
-  const todayPlanEntries = useMemo(
-    () => state.plan.filter((item) => !item.archived && item.date === todayKey),
-    [state.plan, todayKey],
-  );
-  const hydrationSummary = hydrationState
-    ? hydrationState.reliable
-      ? `Getrunken ${latestReview.drinkMl} ml · geschätztes Defizit ${hydrationState.deficit} ml.`
-      : hydrationState.reason
-    : "Review offen – Körpergefühl und Trinkmenge ergänzen.";
+  const weekSummary = weekHubSummary({
+    planner: state.planner,
+    now,
+    openItems: weekOpenItems,
+    completedKm: weekDistance,
+  });
+  const upcomingKeySession = nextKeySession({
+    plan: state.plan,
+    now,
+    weekPrescription,
+  });
+  const focusName = focusTarget?.name || weekPrescription?.goal?.name || "";
+  const focusDate = focusTarget?.date || "";
+  const focusDays = focusDate ? daysUntil(focusDate) : Number.isFinite(Number(weekPrescription?.goal?.daysLeft)) ? Number(weekPrescription.goal.daysLeft) : null;
+  const crossTrainingTypes = [
+    Number(crossTrainingSummary.footballEquivalentKm || 0) > 0 ? "Fußball" : "",
+    Number(crossTrainingSummary.roadCyclingEquivalentKm || 0) > 0 ? "Rennrad" : "",
+  ].filter(Boolean);
+  const crossTrainingNote = crossTrainingTypes.length
+    ? `${crossTrainingTypes.join(" und ")} als Zusatzbelastung berücksichtigt`
+    : "";
+  const todayKey = isoDate(now);
+  const todayPlanEntries = state.plan.filter((item) => !item.archived && item.date === todayKey);
   const coachNeedsAction = ["adjust", "watch"].includes(coach.level);
   const coachStatusTitle = coach.level === "ok"
     ? "Alles im grünen Bereich"
@@ -373,47 +381,61 @@ export default function Briefing() {
           <Link className="button-link" to="/planner">{coachNeedsAction ? "Alternativen prüfen" : "Plan ansehen"}</Link>
         </Card>
 
-        <div className="wide briefing-summary-grid">
+        <div className="wide briefing-summary-grid briefing-hub-grid">
           <Link className="briefing-card-link" to="/mission" aria-label="Mission öffnen">
-            <Card className="briefing-compact-card briefing-mission-card">
+            <Card className="briefing-compact-card briefing-mission-card briefing-hub-card">
               <span className="briefing-card-arrow" aria-hidden="true">→</span>
-              <p className="eyebrow">Mission</p>
+              <p className="eyebrow">Hauptmission</p>
               <h2>{missionTarget?.name || "Hauptziel festlegen"}</h2>
-              <div className="briefing-compact-metrics">
-                <span><b>{missionTarget?.date ? daysUntil(missionTarget.date) : "–"}</b> Tage</span>
-                <span><b>{weekDistance.toFixed(1)}</b> / {calculatedTarget || "–"} km Lauf</span>
-              </div>
-              {crossTrainingSummary.creditedEquivalentKm > 0 && <p className="briefing-cross-training-credit">+ {crossTrainingSummary.creditedEquivalentKm.toFixed(1).replace(".0", "")} km planerischer Ersatz · {crossTrainingLabel}</p>}
-              {calculatedTarget > 0 && <div className="progress" title={`${effectiveWeekDistance.toFixed(1)} km inklusive planerischem Cross-Training-Ersatz`}><i style={{ width: `${Math.min(100, effectiveWeekDistance / calculatedTarget * 100)}%` }} /></div>}
+              <p className="briefing-mission-countdown"><b>{missionTarget?.date ? daysUntil(missionTarget.date) : "–"}</b> Tage bis zum Hauptziel</p>
+              {focusName && focusName !== missionTarget?.name && (
+                <div className="briefing-current-focus">
+                  <span>Aktueller Trainingsfokus</span>
+                  <strong>{focusName}{focusDays != null ? ` · ${focusDays} Tage` : ""}</strong>
+                  {weekPrescription?.focus && <small>{weekPrescription.focus}</small>}
+                </div>
+              )}
+              <p className="briefing-week-fact"><b>{weekDistance.toFixed(1)} km</b> diese Woche absolviert</p>
+              {crossTrainingNote && <p className="briefing-cross-training-credit">{crossTrainingNote}</p>}
               {nextEvent && <p className="briefing-compact-footer"><span>Nächstes Event</span><b>{nextEvent.name}</b><strong>{daysUntil(nextEvent.date)} Tage{nextEvent.time ? ` · ${nextEvent.time} Uhr` : ""}</strong></p>}
             </Card>
           </Link>
 
-          <Link className="briefing-card-link" to="/coach?tab=development" aria-label="Trainingsbereitschaft im Coach öffnen">
-            <Card className="briefing-compact-card readiness-card">
+          <Link className="briefing-card-link" to="/planner" aria-label="Wochentyp und Wochensteuerung öffnen">
+            <Card className={`briefing-compact-card briefing-week-type-card briefing-hub-card ${weekSummary.tone}`}>
               <span className="briefing-card-arrow" aria-hidden="true">→</span>
-              <p className="eyebrow">Trainingsbereitschaft</p>
-              <h2 className={coach.tone}>{coach.label}</h2>
-              {recoveryState.reviewed > 0 && <p className="briefing-compact-values">Beine {recoveryState.legs}/10 · Energie {recoveryState.energy}/10 · Belastung {recoveryState.rpe}/10</p>}
-              <p className="briefing-compact-text">{recoveryState.text}</p>
+              <p className="eyebrow">Diese Woche</p>
+              <h2>{weekSummary.typeLabel}</h2>
+              <p className="briefing-corridor"><b>{weekSummary.corridorLabel}</b><span>automatisch gesteuert</span></p>
+              <p className="briefing-compact-text">{weekSummary.focus}</p>
+              <p className="briefing-card-footnote">{weekSummary.meta}</p>
             </Card>
           </Link>
 
-          <Link className="briefing-card-link" to="/training" aria-label="Letzte Trainings öffnen">
-            <Card className="briefing-compact-card briefing-latest-card">
+          <Link className="briefing-card-link briefing-key-session-link" to="/planner" aria-label="Nächsten Schlüsselreiz im Wochenplan öffnen">
+            <Card className="briefing-compact-card briefing-key-session-card briefing-hub-card">
               <span className="briefing-card-arrow" aria-hidden="true">→</span>
-              <p className="eyebrow">Zuletzt</p>
-              {latestActivity ? <>
-                <h2>{latestActivity.name}</h2>
-                <p className="briefing-compact-values">{activityMetrics(latestActivity)}</p>
-                <p className="briefing-compact-text">{hydrationSummary}</p>
-              </> : <p className="briefing-compact-text">Importiere Aktivitäten, um deine echten Läufe zu sehen.</p>}
+              <p className="eyebrow">Nächster Schlüsselreiz</p>
+              {upcomingKeySession ? <>
+                <h2>{upcomingKeySession.item.title}</h2>
+                <p className="briefing-key-date">{keySessionDateLabel(upcomingKeySession.item.date, now)}{upcomingKeySession.item.time ? ` · ${upcomingKeySession.item.time} Uhr` : ""}</p>
+                <div className="briefing-role-markers" aria-label="Trainingsrollen">
+                  {upcomingKeySession.assessment.markers.map((marker) => <span className={marker.tone} key={marker.key}><i aria-hidden="true">{marker.icon}</i>{marker.label}</span>)}
+                </div>
+                <p className="briefing-compact-text">{upcomingKeySession.assessment.explanation}</p>
+              </> : <>
+                <h2>Nach dem Wochenreview festlegen</h2>
+                <p className="briefing-key-date">Aktuell kein weiterer Schlüsselreiz offen</p>
+                <p className="briefing-compact-text">{weekPrescription?.weekType?.key === "recovery"
+                  ? "Die Entlastung ist bewusst. Der nächste zielrelevante Reiz wird nach stabilen Reviews konkret eingeplant."
+                  : "Der Coach legt den nächsten zielrelevanten Reiz anhand der abgeschlossenen Woche und deiner Reviews fest."}</p>
+              </>}
             </Card>
           </Link>
         </div>
 
-        <details className="wide briefing-disclosure">
-          <summary><div><p className="eyebrow">Wochenplan</p><strong>Komplette Woche anzeigen</strong><span>{weekOpenItems} offene Einheit{weekOpenItems === 1 ? "" : "en"} · {calculatedTarget ? `${calculatedTarget} km Rahmen` : "Rahmen noch offen"}</span></div><b>⌄</b></summary>
+        <details className="wide briefing-disclosure briefing-week-disclosure">
+          <summary><div><p className="eyebrow">Wochenplan</p><strong>Komplette Woche anzeigen</strong><span>{weekSummary.meta} · {weekSummary.typeLabel} · {weekSummary.corridorLabel}</span></div><b>⌄</b></summary>
           <div className="briefing-week-list">
             {rows.map((row) => <div className={`briefing-week-row ${row.today ? "today" : ""}`} key={row.dateKey}><div className="briefing-week-day"><strong>{dayLabel.format(row.date)}</strong>{row.today && <span>Heute</span>}</div><div className="briefing-week-items">{row.items.map((item) => <div className={`briefing-week-item ${item.tone}`} key={item.id}><b>{item.title}</b>{item.detail && <span>{item.detail}</span>}</div>)}</div></div>)}
             <Link className="briefing-week-link" to="/planner">Wochenplan bearbeiten →</Link>

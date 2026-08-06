@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **3.9.43**
+Current app version: **3.9.44**
 
 **Eat your miles.**
 
@@ -641,3 +641,14 @@ supabase functions deploy event-search
 ```
 
 - No additional secret is required. Supabase supplies `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` to the Edge Function.
+
+
+## Opener hub clarity v3.9.44
+
+- Keeps the existing fixed-time weather forecast and flexible best-slot recommendation logic intact.
+- Replaces the fixed weekly kilometre chase on the briefing hub with the current periodization type and automatic running corridor.
+- Separates the long-term main mission from the current training focus.
+- Replaces the redundant readiness/latest cards with the current week type and the next planned key stimulus.
+- Shows completed running volume as context without treating it as a debt or progress score.
+- Uses the same key-session classification introduced in v3.9.43.
+- Makes the weekly disclosure repeat the coach-controlled week type and corridor instead of a static target.
