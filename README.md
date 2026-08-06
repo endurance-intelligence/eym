@@ -584,6 +584,16 @@ npm run lint
 npm run build
 ```
 
+## Modal editors and exercise workspace v3.9.41
+
+- Event, Fuel product and equipment editors now open as true modal dialogs instead of expanding below the current viewport and silently moving the relevant form out of sight.
+- The shared editor modal locks the background position, focuses the first meaningful field, keeps keyboard focus inside the dialog, closes with Escape or the backdrop and restores focus to the original trigger.
+- Long editor content scrolls inside the dialog. Important save actions remain reachable without moving the underlying page.
+- Stabi & Mobility is focused on the current Coach workout, timer, feedback and workout configuration instead of rendering the complete exercise administration underneath it.
+- A dedicated `/coach/exercises` workspace now contains Physio priorities, personal Reel/YouTube exercises, Coach approvals, usage information, search, filters and the complete exercise library.
+- New personal exercises are also entered in a modal, so external-source classification no longer lengthens the exercise page while editing.
+- No database migration or Supabase function deployment is required.
+
 ## Availability-aware weekly planning v3.9.38
 
 - Every future day in the weekly planner can be marked unavailable for one specific date, for example because of family plans, travel, work or another appointment.

@@ -23,9 +23,7 @@ import {
   equipmentLabel,
   focusAreaLabel,
   MOBILITY_EQUIPMENT,
-  MOBILITY_EXERCISES,
   MOBILITY_FOCUS_AREAS,
-  mobilityExerciseUsage,
   nextMobilityWorkoutRotation,
 } from "../services/mobilityWorkouts";
 import {
@@ -44,15 +42,6 @@ import {
   runnerPhaseSeconds,
   sideOrder,
 } from "../services/mobilityRunner";
-import {
-  emptyCustomExerciseDraft,
-  exerciseSourceLabel,
-  fetchExerciseSourceMetadata,
-  mergeExerciseLibrary,
-  normalizeCustomExercise,
-  parseExerciseSourceUrl,
-  validateCustomExerciseDraft,
-} from "../services/mobilityExerciseSources";
 
 const monthFormatter = new Intl.DateTimeFormat("de-DE", { month: "long", year: "numeric" });
 const DEFAULT_MOBILITY_EQUIPMENT = ["mat", "band"];
@@ -84,12 +73,6 @@ function materialText(exercise) {
   return ids.length ? ids.map(equipmentLabel).join(" / ") : "Ohne Material";
 }
 
-function exerciseUsageLabel(stat) {
-  if (!stat?.count) return "";
-  const dateKey = String(stat.lastCompletedAt || "").slice(0, 10);
-  return `${stat.count}× absolviert${dateKey ? ` · zuletzt ${fmtDate(dateKey)}` : ""}`;
-}
-
 export default function Coach() {
   const { state, setState } = useApp();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -99,17 +82,11 @@ export default function Coach() {
   const [selectedGuide, setSelectedGuide] = useState(null);
   const [runner, setRunner] = useState(null);
   const [workoutShuffleOffset, setWorkoutShuffleOffset] = useState(0);
-  const [libraryFocus, setLibraryFocus] = useState("all");
-  const [librarySearch, setLibrarySearch] = useState("");
   const [focusEditorOpen, setFocusEditorOpen] = useState(false);
   const [sessionCoachOverride, setSessionCoachOverride] = useState(null);
   const [dismissedCoachSuggestionId, setDismissedCoachSuggestionId] = useState("");
   const [wakeLockStatus, setWakeLockStatus] = useState("idle");
   const [audioFeedback, setAudioFeedback] = useState({ tone: "idle", message: "Ton und Sprache vor dem Workout einmal testen." });
-  const [exerciseSourceUrl, setExerciseSourceUrl] = useState("");
-  const [exerciseSourceStatus, setExerciseSourceStatus] = useState({ tone: "idle", message: "" });
-  const [customExerciseDraft, setCustomExerciseDraft] = useState(null);
-  const [customExerciseMessage, setCustomExerciseMessage] = useState("");
   const previousRunnerRef = useRef(null);
   const cueKeyRef = useRef("");
   const wakeLockRef = useRef(null);
@@ -142,7 +119,6 @@ export default function Coach() {
   const preferredExerciseIds = useMemo(() => Array.isArray(mobilitySettings.preferredExerciseIds) ? mobilitySettings.preferredExerciseIds : [], [mobilitySettings.preferredExerciseIds]);
   const excludedExerciseIds = useMemo(() => Array.isArray(mobilitySettings.excludedExerciseIds) ? mobilitySettings.excludedExerciseIds : [], [mobilitySettings.excludedExerciseIds]);
   const customExercises = useMemo(() => Array.isArray(mobilitySettings.customExercises) ? mobilitySettings.customExercises : [], [mobilitySettings.customExercises]);
-  const exerciseLibrary = useMemo(() => mergeExerciseLibrary(MOBILITY_EXERCISES, customExercises), [customExercises]);
   const adaptiveProgrammingEnabled = mobilitySettings.adaptiveProgrammingEnabled !== false;
   const preparationSeconds = Number(mobilitySettings.preparationSeconds ?? 10);
   const unknownPreparationSeconds = Number(mobilitySettings.unknownPreparationSeconds ?? 20);
@@ -156,7 +132,6 @@ export default function Coach() {
     () => Array.isArray(mobilitySettings.history) ? mobilitySettings.history : [],
     [mobilitySettings.history],
   );
-  const exerciseUsage = useMemo(() => mobilityExerciseUsage(workoutHistory), [workoutHistory]);
   const coachSuggestion = useMemo(
     () => mobilityCoachSuggestion(reviewActivities, state.reviews, now),
     [reviewActivities, state.reviews, now],
@@ -202,17 +177,6 @@ export default function Coach() {
   const localToday = new Date();
   const todayKey = `${localToday.getFullYear()}-${String(localToday.getMonth() + 1).padStart(2, "0")}-${String(localToday.getDate()).padStart(2, "0")}`;
   const todayMobilityPlan = state.plan.find((item) => !item.archived && !item.completed && !item.missedReason && item.date === todayKey && /stabi|mobility|kraft/i.test(`${item.title || ""} ${item.type || ""}`));
-  const physioCandidates = MOBILITY_EXERCISES.filter((exercise) => exercise.physioDefault || ["adductor-rockback", "hip-flexor-stretch", "thoracic-rotation", "knee-to-wall", "pallof-press"].includes(exercise.id));
-  const visibleLibraryExercises = useMemo(() => {
-    const query = librarySearch.trim().toLocaleLowerCase("de-DE");
-    return exerciseLibrary.filter((exercise) => {
-      if (libraryFocus !== "all" && !exercise.focusAreas.includes(libraryFocus)) return false;
-      if (!query) return true;
-      const haystack = `${exercise.name} ${exercise.group} ${exercise.purpose} ${exercise.focusAreas.map(focusAreaLabel).join(" ")}`.toLocaleLowerCase("de-DE");
-      return haystack.includes(query);
-    });
-  }, [exerciseLibrary, libraryFocus, librarySearch]);
-
   function selectCoachTab(key) {
     setSearchParams(key === "today" ? {} : { tab: key }, { replace: true });
   }
@@ -222,111 +186,6 @@ export default function Coach() {
       ...current,
       mobilityCoach: { ...current.mobilityCoach, ...patch },
     }));
-  }
-
-  function patchCustomExerciseDraft(patch) {
-    setCustomExerciseDraft((current) => current ? { ...current, ...patch } : current);
-    setCustomExerciseMessage("");
-  }
-
-  function toggleCustomDraftList(field, id) {
-    setCustomExerciseDraft((current) => {
-      if (!current) return current;
-      const values = Array.isArray(current[field]) ? current[field] : [];
-      return {
-        ...current,
-        [field]: values.includes(id) ? values.filter((item) => item !== id) : [...values, id],
-      };
-    });
-    setCustomExerciseMessage("");
-  }
-
-  async function inspectExerciseSource() {
-    const parsed = parseExerciseSourceUrl(exerciseSourceUrl);
-    if (!parsed.valid) {
-      setExerciseSourceStatus({ tone: "bad", message: parsed.reason });
-      return;
-    }
-
-    setExerciseSourceStatus({ tone: "testing", message: "Quelle und Metadaten werden geprüft …" });
-    let source;
-    let metadataLoaded = false;
-    try {
-      source = await fetchExerciseSourceMetadata(exerciseSourceUrl);
-      metadataLoaded = true;
-    } catch (error) {
-      source = parsed;
-      setExerciseSourceStatus({
-        tone: "warn",
-        message: `${error.message} Der Link ist gültig; Name und Übungsdaten kannst du trotzdem selbst ergänzen.`,
-      });
-    }
-
-    const base = emptyCustomExerciseDraft();
-    setCustomExerciseDraft({
-      ...base,
-      sourceUrl: source.canonicalUrl,
-      source,
-      subtitle: source.authorName ? `Inspiration von ${source.authorName}` : "Persönliche Übung aus externer Quelle",
-    });
-    setCustomExerciseMessage("");
-    if (metadataLoaded) {
-      setExerciseSourceStatus({
-        tone: "good",
-        message: `${source.providerLabel || source.providerName || "Quelle"}${source.authorName ? ` von ${source.authorName}` : ""} erkannt. Beschreibe jetzt die Übung fachlich für den Coach.`,
-      });
-    }
-  }
-
-  function saveCustomExercise() {
-    const error = validateCustomExerciseDraft(customExerciseDraft);
-    if (error) {
-      setCustomExerciseMessage(error);
-      return;
-    }
-    const normalized = normalizeCustomExercise(customExerciseDraft, customExerciseDraft.id || "");
-    const next = customExercises.some((item) => item.id === normalized.id)
-      ? customExercises.map((item) => item.id === normalized.id ? normalized : item)
-      : [...customExercises, normalized];
-    updateMobility({ customExercises: next });
-    setCustomExerciseDraft(null);
-    setExerciseSourceUrl("");
-    setCustomExerciseMessage("");
-    setExerciseSourceStatus({ tone: "good", message: `${normalized.name} wurde in deiner persönlichen Bibliothek gespeichert.` });
-    setRunner(null);
-  }
-
-  function editCustomExercise(exercise) {
-    setCustomExerciseDraft({
-      ...emptyCustomExerciseDraft(),
-      ...exercise,
-      sourceUrl: exercise.source?.canonicalUrl || "",
-    });
-    setExerciseSourceUrl(exercise.source?.canonicalUrl || "");
-    setCustomExerciseMessage("");
-    setExerciseSourceStatus({ tone: "idle", message: "Persönliche Übung wird bearbeitet." });
-  }
-
-  function toggleCustomExerciseApproval(id) {
-    updateMobility({
-      customExercises: customExercises.map((item) => item.id === id
-        ? { ...item, coachApproved: !item.coachApproved, updatedAt: new Date().toISOString() }
-        : item),
-    });
-    setRunner(null);
-  }
-
-  function removeCustomExercise(id) {
-    const exercise = customExercises.find((item) => item.id === id);
-    if (!exercise || !window.confirm(`„${exercise.name}“ aus deiner persönlichen Bibliothek löschen?`)) return;
-    updateMobility({
-      customExercises: customExercises.filter((item) => item.id !== id),
-      preferredExerciseIds: preferredExerciseIds.filter((item) => item !== id),
-      excludedExerciseIds: excludedExerciseIds.filter((item) => item !== id),
-      knownExerciseIds: knownExerciseIds.filter((item) => item !== id),
-    });
-    if (customExerciseDraft?.id === id) setCustomExerciseDraft(null);
-    setRunner(null);
   }
 
   function saveRecommendationFeedback(status) {
@@ -356,25 +215,6 @@ export default function Coach() {
     updateMobility({ knownExerciseIds: next });
   }
 
-  function togglePreferredExercise(id) {
-    const preferred = preferredExerciseIds.includes(id);
-    updateMobility({
-      preferredExerciseIds: preferred ? preferredExerciseIds.filter((item) => item !== id) : [...preferredExerciseIds, id],
-      excludedExerciseIds: excludedExerciseIds.filter((item) => item !== id),
-    });
-    setRunner(null);
-  }
-
-  function toggleExcludedExercise(id) {
-    if (physioExerciseIds.includes(id)) return;
-    const excluded = excludedExerciseIds.includes(id);
-    updateMobility({
-      excludedExerciseIds: excluded ? excludedExerciseIds.filter((item) => item !== id) : [...excludedExerciseIds, id],
-      preferredExerciseIds: preferredExerciseIds.filter((item) => item !== id),
-    });
-    setRunner(null);
-  }
-
   function saveMobilityFeedback(patch) {
     const sessionId = runner?.sessionId;
     if (!sessionId) return;
@@ -393,12 +233,6 @@ export default function Coach() {
   function toggleEquipment(id) {
     const next = equipment.includes(id) ? equipment.filter((item) => item !== id) : [...equipment, id];
     updateMobility({ equipment: next });
-    setRunner(null);
-  }
-
-  function togglePhysio(id) {
-    const next = physioExerciseIds.includes(id) ? physioExerciseIds.filter((item) => item !== id) : [...physioExerciseIds, id];
-    updateMobility({ physioExerciseIds: next });
     setRunner(null);
   }
 
@@ -725,7 +559,7 @@ export default function Coach() {
 
   return (
     <>
-      <PageTitle eyebrow="Coach Engine" title="Dein Coach" />
+      <PageTitle eyebrow="Coach Engine" title="Dein Coach">{activeTab === "mobility" && <Link className="button-link" to="/coach/exercises">Übungen verwalten</Link>}</PageTitle>
       <div className="section-tabs coach-tabs" role="tablist" aria-label="Coach-Bereiche">
         {coachTabs.map(([key, label]) => <button type="button" className={activeTab === key ? "selected" : ""} onClick={() => selectCoachTab(key)} key={key}>{label}</button>)}
       </div>
@@ -1049,123 +883,19 @@ export default function Coach() {
             </div>
           </Card>
 
-          <Card className="wide physio-library-card">
-            <p className="eyebrow">Meine Physio-Übungen</p>
-            <h2>Nur persönliche Vorgaben fest anheften</h2>
-            <p className="muted">Dieser Bereich ist bewusst individuell. Neue Nutzer starten ohne Physio-Pflichtübungen. Aktiviere nur Übungen, die du kennst oder die dir gezeigt wurden; sie werden vor allgemeinen Vorschlägen eingeplant.</p>
-            <div className="physio-picker">{physioCandidates.map((exercise) => <button type="button" className={physioExerciseIds.includes(exercise.id) ? "selected" : ""} onClick={() => togglePhysio(exercise.id)} key={exercise.id}><strong>{exercise.name}</strong><span>{materialText(exercise)}</span></button>)}</div>
-          </Card>
-
-          <Card className="wide exercise-inspiration-card">
-            <div className="settings-section-heading">
-              <div>
-                <p className="eyebrow">Inspirationen</p>
-                <h2>Übung aus Reel oder Video hinzufügen</h2>
-                <p className="muted">Speichere die Originalquelle und beschreibe die Übung einmal sauber. Erst nach deiner Freigabe darf der Coach sie automatisch in ein Workout einbauen.</p>
+          <Card className="wide mobility-library-summary">
+            <div>
+              <p className="eyebrow">Übungszentrale</p>
+              <h2>Physio, Favoriten und Reel-Übungen separat verwalten</h2>
+              <p>Der Workout-Bereich bleibt auf die heutige Einheit fokussiert. Die vollständige Bibliothek, persönliche Quellen und Coach-Freigaben findest du jetzt auf einer eigenen Seite.</p>
+              <div className="mobility-library-summary-metrics">
+                <span>{physioExerciseIds.length} Physio-Prioritäten</span>
+                <span>{knownExerciseCount} bekannte Übungen</span>
+                <span>{customExercises.length} persönliche Übungen</span>
+                <span>{preferredExerciseIds.length} bevorzugt</span>
               </div>
-              <span>{customExercises.length} persönlich</span>
             </div>
-
-            <div className="exercise-source-input-row">
-              <label>Öffentlicher Instagram- oder YouTube-Link
-                <input type="url" value={exerciseSourceUrl} onChange={(event) => setExerciseSourceUrl(event.target.value)} placeholder="https://www.instagram.com/reel/…" />
-              </label>
-              <button type="button" className="primary compact-primary" onClick={inspectExerciseSource}>Quelle prüfen</button>
-            </div>
-            {exerciseSourceStatus.message && <p className={`exercise-source-status ${exerciseSourceStatus.tone}`}>{exerciseSourceStatus.message}</p>}
-
-            {customExerciseDraft && <div className="custom-exercise-editor">
-              <div className="custom-exercise-source-preview">
-                {customExerciseDraft.source?.thumbnailUrl
-                  ? <img src={customExerciseDraft.source.thumbnailUrl} alt="Vorschaubild der Inspirationsquelle" loading="lazy" referrerPolicy="no-referrer" />
-                  : <span aria-hidden="true">▶</span>}
-                <div>
-                  <small>Originalquelle</small>
-                  <strong>{exerciseSourceLabel(customExerciseDraft.source)}</strong>
-                  {customExerciseDraft.source?.title && <p>{customExerciseDraft.source.title}</p>}
-                  <a href={customExerciseDraft.source?.canonicalUrl} target="_blank" rel="noreferrer">Original ansehen ↗</a>
-                </div>
-              </div>
-
-              <div className="custom-exercise-form-grid">
-                <label>Name der Übung<input value={customExerciseDraft.name} onChange={(event) => patchCustomExerciseDraft({ name: event.target.value })} placeholder="z. B. Dynamischer Lunge-to-Knee-Drive" /></label>
-                <label>Bereich<select value={customExerciseDraft.group} onChange={(event) => patchCustomExerciseDraft({ group: event.target.value })}><option value="Dynamisch">Dynamisch</option><option value="Mobilität">Mobilität</option><option value="Rumpf">Rumpf</option><option value="Gesäß & Hüfte">Gesäß & Hüfte</option><option value="Beinachse">Beinachse</option><option value="Kraft">Kraft</option></select></label>
-                <label>Belastungszeit<input type="number" min="15" max="600" step="15" value={customExerciseDraft.seconds} onChange={(event) => patchCustomExerciseDraft({ seconds: Number(event.target.value) })} /></label>
-                <label>Intensität<select value={customExerciseDraft.intensity} onChange={(event) => patchCustomExerciseDraft({ intensity: event.target.value })}><option value="low">Niedrig</option><option value="medium">Mittel</option><option value="high">Hoch</option></select></label>
-                <label>Coach-Einsatz<select value={customExerciseDraft.coachUse} onChange={(event) => patchCustomExerciseDraft({ coachUse: event.target.value })}><option value="general">Allgemeine Stabi</option><option value="activation">Aktivierung vor Belastung</option><option value="recovery">Regeneration nach Belastung</option><option value="strength">Kraft an freien Tagen</option></select></label>
-                <label className="wide-field">Wofür ist die Übung gut?<textarea rows="2" value={customExerciseDraft.purpose} onChange={(event) => patchCustomExerciseDraft({ purpose: event.target.value })} placeholder="Trainiert Hüftstabilität, Balance und kontrollierte Kraftübertragung." /></label>
-                <label className="wide-field">Kurz erklärt<textarea rows="3" value={customExerciseDraft.quickStart} onChange={(event) => patchCustomExerciseDraft({ quickStart: event.target.value, instruction: event.target.value })} placeholder="Ausgangsposition, Bewegungsweg und wichtigster Technikhinweis in zwei bis drei Sätzen." /></label>
-              </div>
-
-              <div className="custom-exercise-picker">
-                <b>Trainingsschwerpunkte</b>
-                <div>{MOBILITY_FOCUS_AREAS.map((focus) => <button type="button" className={customExerciseDraft.focusAreas.includes(focus.id) ? "selected" : ""} onClick={() => toggleCustomDraftList("focusAreas", focus.id)} key={focus.id}>{focus.shortLabel}</button>)}</div>
-              </div>
-              <div className="custom-exercise-picker">
-                <b>Benötigtes Material</b>
-                <div><button type="button" className={!customExerciseDraft.equipment.length ? "selected" : ""} onClick={() => patchCustomExerciseDraft({ equipment: [] })}>Ohne Material</button>{MOBILITY_EQUIPMENT.map((item) => <button type="button" className={customExerciseDraft.equipment.includes(item.id) ? "selected" : ""} onClick={() => toggleCustomDraftList("equipment", item.id)} key={item.id}>{item.label}</button>)}</div>
-              </div>
-
-              <div className="custom-exercise-toggles">
-                <label><input type="checkbox" checked={customExerciseDraft.sideSwitch} onChange={(event) => patchCustomExerciseDraft({ sideSwitch: event.target.checked })} /><span><b>Seitenwechsel nötig</b><small>Der Timer teilt die Belastungszeit auf beide Seiten auf.</small></span></label>
-                <label><input type="checkbox" checked={customExerciseDraft.avoidBeforeQuality} onChange={(event) => patchCustomExerciseDraft({ avoidBeforeQuality: event.target.checked })} /><span><b>Nicht vor Track, Fußball oder Longrun</b><small>Für dynamische oder ermüdende Übungen mit Bedacht setzen.</small></span></label>
-                <label><input type="checkbox" checked={customExerciseDraft.coachApproved} onChange={(event) => patchCustomExerciseDraft({ coachApproved: event.target.checked })} /><span><b>Für Coach-Auswahl freigeben</b><small>Ohne Freigabe bleibt die Übung nur in deiner persönlichen Bibliothek.</small></span></label>
-              </div>
-              {customExerciseDraft.sideSwitch && <label className="custom-side-switch-seconds">Pause für Seitenwechsel<input type="number" min="3" max="10" step="1" value={customExerciseDraft.sideSwitchSeconds} onChange={(event) => patchCustomExerciseDraft({ sideSwitchSeconds: Number(event.target.value) })} /> Sekunden</label>}
-
-              {customExerciseMessage && <p className="form-error">{customExerciseMessage}</p>}
-              <div className="button-row">
-                <button type="button" className="primary" onClick={saveCustomExercise}>{customExerciseDraft.id ? "Änderung speichern" : "Übung speichern"}</button>
-                <button type="button" className="secondary" onClick={() => { setCustomExerciseDraft(null); setCustomExerciseMessage(""); }}>Abbrechen</button>
-              </div>
-            </div>}
-
-            {customExercises.length > 0 && <div className="custom-exercise-source-list">
-              {customExercises.map((exercise) => <article key={exercise.id}>
-                {exercise.source?.thumbnailUrl ? <img src={exercise.source.thumbnailUrl} alt="" loading="lazy" referrerPolicy="no-referrer" /> : <span className="custom-source-placeholder" aria-hidden="true">▶</span>}
-                <div>
-                  <small>{exerciseSourceLabel(exercise.source)}</small>
-                  <strong>{exercise.name}</strong>
-                  <p>{exercise.purpose}</p>
-                  <div><b className={exercise.coachApproved ? "approved" : "library-only"}>{exercise.coachApproved ? "Coach freigegeben" : "Nur Bibliothek"}</b><span>{exercise.coachUse === "activation" ? "Aktivierung" : exercise.coachUse === "recovery" ? "Regeneration" : exercise.coachUse === "strength" ? "Kraft" : "Allgemein"}</span></div>
-                </div>
-                <div className="custom-exercise-source-actions">
-                  <a href={exercise.source?.canonicalUrl} target="_blank" rel="noreferrer">Quelle ↗</a>
-                  <button type="button" onClick={() => editCustomExercise(exercise)}>Bearbeiten</button>
-                  <button type="button" onClick={() => toggleCustomExerciseApproval(exercise.id)}>{exercise.coachApproved ? "Coach pausieren" : "Coach freigeben"}</button>
-                  <button type="button" className="danger" onClick={() => removeCustomExercise(exercise.id)}>Löschen</button>
-                </div>
-              </article>)}
-            </div>}
-          </Card>
-
-          <Card className="wide exercise-library-card">
-            <div className="settings-section-heading">
-              <div><p className="eyebrow">Übungsbibliothek</p><h2>Bewegung ansehen, dann sauber ausführen</h2><p className="muted">Jede Übung enthält eine schematische Bewegungsfolge, Schritt-für-Schritt-Erklärung, Technikhinweise, typische Fehler sowie eine leichtere und schwierigere Variante.</p></div>
-              <span>{visibleLibraryExercises.length} Übungen</span>
-            </div>
-            <div className="exercise-library-toolbar">
-              <label>Übung suchen<input type="search" value={librarySearch} onChange={(event) => setLibrarySearch(event.target.value)} placeholder="z. B. Dead Bug oder Sprunggelenk" /></label>
-              <label>Schwerpunkt<select value={libraryFocus} onChange={(event) => setLibraryFocus(event.target.value)}><option value="all">Alle Bereiche</option>{MOBILITY_FOCUS_AREAS.map((focus) => <option value={focus.id} key={focus.id}>{focus.label}</option>)}</select></label>
-            </div>
-            <div className="exercise-library-grid">
-              {visibleLibraryExercises.map((exercise) => (
-                <article key={exercise.id}>
-                  <div className="exercise-library-card-heading"><div><span>{exercise.group}</span><h3>{exercise.name}</h3>{exercise.subtitle && <small className="mobility-exercise-subtitle">{exercise.subtitle}</small>}</div><div className="exercise-library-badges">{exercise.custom && <b className="custom">Eigene Quelle</b>}{exercise.custom && <b className={exercise.coachApproved ? "coach-approved" : "coach-locked"}>{exercise.coachApproved ? "Coach aktiv" : "Nur Bibliothek"}</b>}{physioExerciseIds.includes(exercise.id) && <b>Physio</b>}{knownExerciseIds.includes(exercise.id) && !physioExerciseIds.includes(exercise.id) && <b className="known">Bekannt</b>}{exerciseUsage[exercise.id]?.count > 0 && <b className="usage">{exerciseUsage[exercise.id].count}×</b>}{preferredExerciseIds.includes(exercise.id) && <b className="preferred">Bevorzugt</b>}{excludedExerciseIds.includes(exercise.id) && <b className="excluded">Pausiert</b>}</div></div>
-                  <p>{exercise.purpose}</p>
-                  <small>{materialText(exercise)} · {exercise.focusAreas.map(focusAreaLabel).join(" · ") || "Allgemein"}{exerciseUsageLabel(exerciseUsage[exercise.id]) ? ` · ${exerciseUsageLabel(exerciseUsage[exercise.id])}` : ""}</small>
-                  {exercise.custom && <small className="custom-exercise-library-source">{exerciseSourceLabel(exercise.source)}</small>}
-                  <div className="exercise-library-actions">
-                    <ExerciseGuideButton exercise={exercise} onOpen={openExerciseGuide} />
-                    {exercise.custom && <button type="button" className={exercise.coachApproved ? "selected" : "secondary"} onClick={() => toggleCustomExerciseApproval(exercise.id)}>{exercise.coachApproved ? "✓ Coach aktiv" : "Coach freigeben"}</button>}
-                    <button type="button" className={preferredExerciseIds.includes(exercise.id) ? "selected" : ""} onClick={() => togglePreferredExercise(exercise.id)}>{preferredExerciseIds.includes(exercise.id) ? "✓ Bevorzugt" : "Bevorzugen"}</button>
-                    <button type="button" className={excludedExerciseIds.includes(exercise.id) ? "selected danger" : "secondary"} disabled={physioExerciseIds.includes(exercise.id)} title={physioExerciseIds.includes(exercise.id) ? "Physio-Prioritäten können nicht pausiert werden" : "Übung vorübergehend aus automatisch erzeugten Workouts entfernen"} onClick={() => toggleExcludedExercise(exercise.id)}>{excludedExerciseIds.includes(exercise.id) ? "✓ Pausiert" : "Pausieren"}</button>
-                  </div>
-                </article>
-              ))}
-            </div>
-            {!visibleLibraryExercises.length && <p className="empty-library-result">Keine passende Übung gefunden. Suche oder Schwerpunkt anpassen.</p>}
-            <p className="mobility-safety-note">Schmerz ist kein Trainingsziel. Übungen abbrechen oder vereinfachen, wenn die Bewegung Beschwerden auslöst; bei Physio-Vorgaben gilt die persönlich gezeigte Ausführung.</p>
+            <Link className="button-link" to="/coach/exercises">Übungen verwalten →</Link>
           </Card>
         </div>
       )}

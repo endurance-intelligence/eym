@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { Card, PageTitle } from "../components/UI";
 import StoredImage from "../components/StoredImage";
+import EditorModal from "../components/EditorModal";
 import {
   lookupOpenFoodFactsProduct,
   lookupOpenFoodFactsProductByText,
@@ -352,7 +353,6 @@ export default function Fuel() {
     setNutritionScanMessage("");
     setNutritionScanResult(null);
     setShowForm(true);
-    window.setTimeout(() => document.querySelector(".fuel-product-editor")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
   }
 
   async function refreshProduct(item) {
@@ -616,7 +616,7 @@ export default function Fuel() {
 
   return <>
     <PageTitle eyebrow="Fuel Intelligence" title="Fuel Lab">
-      {activeTab === "products" && <button onClick={() => showForm ? resetEditor() : openNewProduct()}>{showForm ? "Schließen" : "+ Produkt"}</button>}
+      {activeTab === "products" && <button onClick={openNewProduct}>+ Produkt</button>}
     </PageTitle>
 
     <div className="section-tabs fuel-tabs" role="tablist" aria-label="Fuel-Lab-Bereiche">
@@ -639,13 +639,16 @@ export default function Fuel() {
     {activeTab === "products" && <div className="fuel-tab-panel" id="fuel-panel-products" role="tabpanel" aria-labelledby="fuel-tab-products">
     {notice && <div className={`fuel-toast ${notice.tone}`} role="status"><b>{notice.message}</b><button type="button" aria-label="Hinweis schließen" onClick={() => setNotice(null)}>×</button></div>}
 
-    {showForm && <Card className="wide fuel-product-editor">
-      <div className="fuel-photo-import">
-        <div>
-          <p className="eyebrow">Produktdaten</p>
-          <h2>{editingId ? "Produkt ergänzen oder bearbeiten" : "Produkt aufnehmen"}</h2>
-          <p className="muted">Lokale Angaben stehen sofort im Fuel Lab zur Verfügung. Mit Barcode und eigenen Verpackungsfotos kannst du fehlende Daten optional zu Open Food Facts beitragen.</p>
-        </div>
+    {showForm && <EditorModal
+      eyebrow="Produktdaten"
+      title={editingId ? "Produkt ergänzen oder bearbeiten" : "Produkt aufnehmen"}
+      description="Lokale Angaben stehen sofort im Fuel Lab zur Verfügung. Mit Barcode und eigenen Verpackungsfotos kannst du fehlende Daten optional zu Open Food Facts beitragen."
+      width="xl"
+      className="fuel-product-editor-modal"
+      onClose={resetEditor}
+    >
+      <div className="fuel-product-editor">
+      <div className="fuel-photo-import fuel-photo-import-modal">
         <div className="fuel-photo-actions">
           <input ref={photoInput} className="visually-hidden" type="file" accept="image/*" capture="environment" onChange={scanPhoto} />
           <button type="button" className="secondary" onClick={() => photoInput.current?.click()}>Vorderseite / Barcode</button>
@@ -751,7 +754,8 @@ export default function Fuel() {
           <button className="primary fuel-contribute-button" type="button" disabled={!openFoodFactsContributionReady() || !product.barcode || contributionStatus === "loading"} onClick={(event) => save(event, true)}>{contributionStatus === "loading" ? "Wird gesendet …" : "Speichern + übertragen"}</button>
         </div>
       </form>
-    </Card>}
+      </div>
+    </EditorModal>}
 
     <div className="fuel-grid">
       {active.length === 0 && <Card className="wide empty-state"><h2>Noch keine Produkte</h2><p>Lege Gel, Drink Mix, Elektrolyte, Riegel oder andere Produkte manuell oder per Barcode-Foto an.</p></Card>}

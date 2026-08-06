@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { Card, PageTitle } from "../components/UI";
 import StoredImage from "../components/StoredImage";
+import EditorModal from "../components/EditorModal";
 import { fetchIntervalsGear, mapIntervalsGear, mergeIntervalsGear } from "../services/intervals";
 import { compressImageFile } from "../services/imageTools";
 import { queueEntityImageDeletion, uploadEntityImages } from "../services/imageStorage";
@@ -157,7 +158,7 @@ export default function Equipment({ embedded = false }) {
   const pageActions = (
     <div className="page-actions">
       {state.intervals?.connected && <button onClick={importIntervalsEquipment} disabled={syncing}>{syncing ? "Wird geladen …" : "Aus Intervals übernehmen"}</button>}
-      <button onClick={() => setShowForm((value) => !value)}>+ Ausrüstung</button>
+      <button onClick={() => { setItem(emptyItem); setShowForm(true); }}>+ Ausrüstung</button>
     </div>
   );
 
@@ -178,7 +179,14 @@ export default function Equipment({ embedded = false }) {
     <input ref={replacementInput} className="visually-hidden" type="file" accept="image/*" capture="environment" onChange={replacePhoto} />
     {status && <p className="connection-message">{status}</p>}
 
-    {showForm && <Card className="wide">
+    {showForm && <EditorModal
+      eyebrow="Ausrüstung"
+      title="Ausrüstung hinzufügen"
+      description="Schuhe, Geräte oder Fahrrad direkt anlegen. Der Hintergrund bleibt an seiner Position und wird nicht nach unten verschoben."
+      width="wide"
+      className="equipment-editor-modal"
+      onClose={() => { setShowForm(false); setItem(emptyItem); }}
+    >
       <form className="editor-form equipment-editor" onSubmit={add}>
         <label>Typ<select name="category" value={item.category} onChange={change}>{categories.map((category) => <option key={category}>{category}</option>)}</select></label>
         <label>Name<input name="name" value={item.name} onChange={change} placeholder={item.category === "Schuhe" ? "Brooks Adrenaline GTS 25" : item.category} required /></label>
@@ -187,10 +195,10 @@ export default function Equipment({ embedded = false }) {
         <label className="equipment-photo-field">Foto<input type="file" accept="image/*" capture="environment" onChange={(event) => readPhoto(event.target.files?.[0], (photo) => setItem((current) => ({ ...current, photo })))} /></label>
         {item.photo && <div className="equipment-photo-preview"><StoredImage value={item.photo} alt="Vorschau" /><button type="button" onClick={() => setItem((current) => ({ ...current, photo: "" }))}>Entfernen</button></div>}
         <button className="primary" type="submit">Speichern</button>
-        <button type="button" onClick={() => setShowForm(false)}>Abbrechen</button>
+        <button type="button" onClick={() => { setShowForm(false); setItem(emptyItem); }}>Abbrechen</button>
       </form>
       <p className="muted equipment-scan-note">Ein Foto wird komprimiert und getrennt vom Cloud-Datensatz im privaten Bildspeicher abgelegt. Beim Ersetzen wird dieselbe Datei überschrieben.</p>
-    </Card>}
+    </EditorModal>}
 
     <div className="grid">
       {activeEquipment.length === 0 && <Card className="wide empty-state"><h2>Noch keine Ausrüstung</h2><p>Übernimm vorhandene Ausrüstung aus Intervals.icu oder lege Schuhe, Laufband, Rudergerät und weiteres Equipment an.</p></Card>}

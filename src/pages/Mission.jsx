@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useApp } from "../context/AppContext";
 import { Card, PageTitle, Metric } from "../components/UI";
 import EventAutocomplete from "../components/EventAutocomplete";
+import EditorModal from "../components/EditorModal";
 import TrainingSectionNav from "../components/SectionNav";
 import { daysUntil, fmtDate } from "../utils/format";
 import { buildEventAdvice, fetchEventForecast } from "../services/eventWeather";
@@ -301,7 +302,6 @@ export default function Mission() {
       eventSourceDetails: item.eventSourceDetails || "",
     });
     setShowEditor(true);
-    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function archive(id) {
@@ -445,7 +445,7 @@ export default function Mission() {
         <button className="mission-add-button" onClick={() => {
           setEditingId(null);
           setDraft(emptyEvent);
-          setShowEditor((value) => !value);
+          setShowEditor(true);
         }}>+ Meilenstein / Event</button>
       </PageTitle>
       <TrainingSectionNav />
@@ -517,11 +517,14 @@ export default function Mission() {
           </Card>
         )}
 
-        {showEditor && <Card className="wide mission-editor-card">
-          <div className="card-heading-row">
-            <div><p className="eyebrow">Meilenstein & Event</p><h2>{editingId ? "Eintrag bearbeiten" : "Neuen Eintrag hinzufügen"}</h2></div>
-            <button type="button" onClick={() => { setShowEditor(false); setEditingId(null); setDraft(emptyEvent); }}>Schließen</button>
-          </div>
+        {showEditor && <EditorModal
+          eyebrow="Meilenstein & Event"
+          title={editingId ? "Eintrag bearbeiten" : "Neuen Eintrag hinzufügen"}
+          description="Event suchen oder manuell anlegen. Änderungen werden erst mit dem Speichern übernommen."
+          width="xl"
+          className="mission-editor-modal"
+          onClose={() => { setShowEditor(false); setEditingId(null); setDraft(emptyEvent); }}
+        >
           <form className="editor-form mission-editor" onSubmit={save}>
             <label className="event-search-field">Event
               <EventAutocomplete
@@ -575,7 +578,7 @@ export default function Mission() {
             <button className="primary" type="submit">{editingId ? "Änderung speichern" : "Event hinzufügen"}</button>
             {editingId && <button type="button" onClick={() => { setEditingId(null); setDraft(emptyEvent); setShowEditor(false); }}>Abbrechen</button>}
           </form>
-        </Card>}
+        </EditorModal>}
 
         {upcomingMilestones.length > 0 && <Card className="wide mission-upcoming-section">
           <div className="card-heading-row"><div><p className="eyebrow">Nächste Meilensteine</p><h2>Auf dem Weg zum Hauptziel</h2></div><span className="achievement-count">{upcomingMilestones.length}</span></div>
