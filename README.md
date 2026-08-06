@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **3.9.39**
+Current app version: **3.9.40**
 
 **Eat your miles.**
 
@@ -594,6 +594,14 @@ npm run build
 - Removing a block makes the date available again but still leaves the current plan untouched until the athlete explicitly replans.
 - No kilometer-debt logic is introduced: a blocked Saturday does not automatically extend Sunday's Longrun. The Coach redistributes only suitable flexible work or accepts a smaller week.
 - Existing saved plans remain compatible. No database migration or Supabase function deployment is required.
+
+
+## Event search relevance fix v3.9.40
+
+- Event suggestions now require a genuine text match in name, discipline, alias or location.
+- Verified/provider source bonuses only rank matching events; they can no longer make unrelated events appear.
+- The local Hermannslauf fallback therefore appears only for a matching Hermannslauf query.
+- Event inputs use the neutral placeholder “Eventname oder Ort”.
 
 ## Live multi-source event discovery v3.9.39
 

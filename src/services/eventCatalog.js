@@ -45,25 +45,29 @@ export function eventSearchScore(event, query) {
   const location = normalizeEventSearchText(event.location);
   const aliases = (event.aliases || []).map(normalizeEventSearchText);
   const haystacks = [name, edition, disciplineName, location, ...aliases].filter(Boolean);
-  let score = 0;
+  let matchScore = 0;
 
-  if (name === normalizedQuery || edition === normalizedQuery || disciplineName === normalizedQuery) score += 120;
-  if (name.startsWith(normalizedQuery) || edition.startsWith(normalizedQuery) || disciplineName.startsWith(normalizedQuery)) score += 80;
-  if (haystacks.some((value) => value.includes(normalizedQuery))) score += 55;
+  if (name === normalizedQuery || edition === normalizedQuery || disciplineName === normalizedQuery) matchScore += 120;
+  if (name.startsWith(normalizedQuery) || edition.startsWith(normalizedQuery) || disciplineName.startsWith(normalizedQuery)) matchScore += 80;
+  if (haystacks.some((value) => value.includes(normalizedQuery))) matchScore += 55;
 
   queryTokens.forEach((token) => {
-    if (name.startsWith(token)) score += 24;
-    else if (name.includes(token)) score += 14;
-    if (disciplineName.startsWith(token)) score += 18;
-    else if (disciplineName.includes(token)) score += 10;
-    if (aliases.some((value) => value.startsWith(token))) score += 16;
-    else if (aliases.some((value) => value.includes(token))) score += 8;
-    if (location.includes(token)) score += 5;
+    if (name.startsWith(token)) matchScore += 24;
+    else if (name.includes(token)) matchScore += 14;
+    if (disciplineName.startsWith(token)) matchScore += 18;
+    else if (disciplineName.includes(token)) matchScore += 10;
+    if (aliases.some((value) => value.startsWith(token))) matchScore += 16;
+    else if (aliases.some((value) => value.includes(token))) matchScore += 8;
+    if (location.includes(token)) matchScore += 5;
   });
 
-  if (event.status === "verified") score += 8;
-  if (event.provider === "raceresult") score += 3;
-  return score;
+  // Source quality may only break ties between genuine textual matches.
+  // It must never turn an unrelated event into a search result.
+  if (matchScore <= 0) return 0;
+  let qualityBonus = 0;
+  if (event.status === "verified") qualityBonus += 8;
+  if (event.provider === "raceresult") qualityBonus += 3;
+  return matchScore + qualityBonus;
 }
 
 function eventSourcePriority(event = {}) {

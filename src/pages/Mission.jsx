@@ -528,7 +528,7 @@ export default function Mission() {
                 value={draft.name}
                 onChange={(value) => change({ target: { name: "name", value, type: "text", checked: false } })}
                 onSelect={selectEventSuggestion}
-                placeholder="z. B. Hermannslauf"
+                placeholder="Eventname oder Ort"
                 inputProps={{ required: true, maxLength: 100 }}
               />
               <small>Tippe mindestens drei Zeichen. Veröffentlichte Events füllen verfügbare Angaben wie Datum, Startzeit, Ort und Distanz; fehlende Werte bleiben offen.</small>

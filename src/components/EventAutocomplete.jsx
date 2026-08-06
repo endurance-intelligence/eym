@@ -34,7 +34,7 @@ export default function EventAutocomplete({
   value,
   onChange,
   onSelect,
-  placeholder = "z. B. Hermannslauf",
+  placeholder = "Eventname oder Ort",
   inputProps = {},
   className = "",
 }) {

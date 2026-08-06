@@ -45,6 +45,30 @@ test("past verified events are hidden from normal future search", () => {
   assert.deepEqual(searchRunningEvents("Hermann", { referenceDate: new Date("2028-01-01T12:00:00Z") }), []);
 });
 
+
+test("verified fallback events are hidden for unrelated searches", () => {
+  assert.deepEqual(
+    searchRunningEvents("Oerlinghausen", { referenceDate: new Date("2026-08-06T07:00:00Z") }),
+    [],
+  );
+});
+
+test("provider priority never creates a result without a textual match", async () => {
+  const { rankRunningEventSuggestions } = await import("../src/services/eventCatalog.js");
+  const results = rankRunningEventSuggestions([{
+    id: "rr-kassel",
+    provider: "raceresult",
+    name: "Kassel Marathon 2026",
+    disciplineName: "Halbmarathon",
+    date: "2026-09-20",
+    location: "Kassel",
+    targetKm: 21.097,
+    status: "provider",
+  }], "Oerlinghausen", { referenceDate: new Date("2026-08-06T07:00:00Z") });
+
+  assert.deepEqual(results, []);
+});
+
 test("published provider events are ranked by name, discipline and location", async () => {
   const { rankRunningEventSuggestions } = await import("../src/services/eventCatalog.js");
   const events = rankRunningEventSuggestions([

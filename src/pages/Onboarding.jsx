@@ -432,7 +432,7 @@ export default function Onboarding() {
                         value={draft.missionName}
                         onChange={(value) => update("missionName", value)}
                         onSelect={selectMissionEvent}
-                        placeholder="z. B. Hermannslauf"
+                        placeholder="Eventname oder Ort"
                         inputProps={{ maxLength: 80 }}
                       />
                       <FieldNote>Veröffentlichte Events übernehmen verfügbare Angaben zu Datum und Distanz. Fehlende Werte kannst du manuell ergänzen.</FieldNote>
