@@ -1,7 +1,8 @@
 import { normalizeTrackWorkoutTemplates } from "./trackWorkout.js";
 import { normalizeOnboarding } from "./onboarding.js";
+import { normalizeAvailabilityExceptions } from "./plannerAvailability.js";
 
-export const CONFIGURATION_VERSION = 6;
+export const CONFIGURATION_VERSION = 7;
 
 export const WEEKDAYS = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"];
 
@@ -189,6 +190,7 @@ export function migrateConfiguration(inputState = {}) {
       configurationVersion: CONFIGURATION_VERSION,
       legacyMigrationComplete: true,
       recurringCommitments: existingCommitments.map(normalizeCommitment),
+      availabilityExceptions: normalizeAvailabilityExceptions(planner.availabilityExceptions),
       replacementSports: [...new Set(replacementSports)],
       trackWorkoutTemplates: normalizeTrackWorkoutTemplates(planner.trackWorkoutTemplates),
     },

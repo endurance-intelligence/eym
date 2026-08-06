@@ -86,6 +86,7 @@ export const defaultState = {
     doubleTrainingDays: [],
     fixedAppointments: { football: false, orcRun: false, saturdayMode: "off", extraOrcTrackDay: "" },
     recurringCommitments: [],
+    availabilityExceptions: [],
     replacementSports: ["running", "cycling", "rowing", "mobility", "swimming", "football"],
     configurationVersion: 6,
     legacyMigrationComplete: false,

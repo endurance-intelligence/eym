@@ -583,3 +583,14 @@ npm test
 npm run lint
 npm run build
 ```
+
+## Availability-aware weekly planning v3.9.38
+
+- Every future day in the weekly planner can be marked unavailable for one specific date, for example because of family plans, travel, work or another appointment.
+- The Coach treats these exceptions as hard planning constraints for automatic workouts, recurring appointments, Track, rowing, Stabi and Longrun placement. Race events remain visible and are never silently removed.
+- Blocking a day never moves an existing workout automatically. A clear conflict banner opens the same safe before/after preview introduced in v3.9.37.
+- An accepted week loses its approval after availability changes so an outdated Garmin plan cannot be sent as if it were current.
+- Blocked days remain visible inside the week with their reason and optional note. Empty blocked days show that training was deliberately kept free instead of offering a misleading add-workout action.
+- Removing a block makes the date available again but still leaves the current plan untouched until the athlete explicitly replans.
+- No kilometer-debt logic is introduced: a blocked Saturday does not automatically extend Sunday's Longrun. The Coach redistributes only suitable flexible work or accepts a smaller week.
+- Existing saved plans remain compatible. No database migration or Supabase function deployment is required.

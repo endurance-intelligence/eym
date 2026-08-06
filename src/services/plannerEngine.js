@@ -1,6 +1,7 @@
 import { reviewKind } from "./activityUtils.js";
 import { crossTrainingTargetShare } from "./crossTrainingLoad.js";
 import { blockedTrainingDates } from "./missedSessionDecision.js";
+import { blockedAvailabilityDates } from "./plannerAvailability.js";
 import {
   buildEventWeek,
   eventDurationMinutes,
@@ -769,7 +770,7 @@ function applyEventWeekProtection(plan, weekStart, eventWeek) {
   return protectedPlan;
 }
 
-function addStrengthSessions(plan, weekStart, config, readiness) {
+function addStrengthSessions(plan, weekStart, config, readiness, blockedDates = new Set()) {
   const trueDoubleDays = new Set(config.doubleTrainingDays || []);
   const strengthFactor = Number(readiness.strengthFactor || 1);
   const stabiDays = (Array.isArray(config.stabiDays) ? config.stabiDays : []).slice(0, Number(config.stabiCount ?? 0));
@@ -790,6 +791,8 @@ function addStrengthSessions(plan, weekStart, config, readiness) {
 
   stabiDays.forEach((day, index) => {
     if (DAY_INDEX[day] === undefined) return;
+    const date = isoDate(dateForDay(weekStart, DAY_INDEX[day]));
+    if (blockedDates.has(date)) return;
     const paired = sessionsOnDay(day).length > 0;
     plan.push(item(weekStart, DAY_INDEX[day], {
       time: paired ? "07:00" : "18:30",
@@ -807,11 +810,17 @@ function addStrengthSessions(plan, weekStart, config, readiness) {
 
   rowingDays.forEach((day, index) => {
     if (DAY_INDEX[day] === undefined) return;
+    const originalDate = isoDate(dateForDay(weekStart, DAY_INDEX[day]));
+    if (blockedDates.has(originalDate)) return;
     const paired = sessionsOnDay(day).length > 0;
     const trueDouble = paired && trueDoubleDays.has(day) && !readiness.avoidDoubleStrength;
     if (paired && !trueDouble) {
       const fallback = ["Donnerstag", "Freitag", "Dienstag", "Sonntag", "Samstag"]
-        .find((candidate) => DAY_INDEX[candidate] !== undefined && sessionsOnDay(candidate).length === 0);
+        .find((candidate) => {
+          if (DAY_INDEX[candidate] === undefined) return false;
+          const candidateDate = isoDate(dateForDay(weekStart, DAY_INDEX[candidate]));
+          return !blockedDates.has(candidateDate) && sessionsOnDay(candidate).length === 0;
+        });
       if (fallback) day = fallback;
     }
     const finalPaired = sessionsOnDay(day).length > 0;
@@ -843,10 +852,11 @@ function addStrengthSessions(plan, weekStart, config, readiness) {
   });
 }
 
-function applyExtraOrcTrack(plan, weekStart, dayName, config) {
+function applyExtraOrcTrack(plan, weekStart, dayName, config, blockedDates = new Set()) {
   const dayIndex = DAY_INDEX[dayName];
   if (dayIndex === undefined) return;
   const date = isoDate(dateForDay(weekStart, dayIndex));
+  if (blockedDates.has(date)) return;
   const replaceableTypes = new Set(["Easy Run", "Schwellenlauf", "Intervalle", "Laufband", "Backyard Training", "Loop-Training", "Long Run"]);
   const candidates = plan
     .map((entry, index) => ({ entry, index }))
@@ -897,7 +907,7 @@ function isReplaceablePlanEntry(entry) {
     && !["Stabi", "Mobility", "Ruhetag"].includes(entry.type);
 }
 
-function applyRecurringCommitments(plan, weekStart, config, mode = "all") {
+function applyRecurringCommitments(plan, weekStart, config, mode = "all", blockedDates = new Set()) {
   const commitments = Array.isArray(config.recurringCommitments)
     ? config.recurringCommitments.filter((entry) => entry && entry.enabled !== false)
     : [];
@@ -908,6 +918,7 @@ function applyRecurringCommitments(plan, weekStart, config, mode = "all") {
     const dayIndex = DAY_INDEX[commitment.weekday];
     if (dayIndex === undefined) return;
     const date = isoDate(dateForDay(weekStart, dayIndex));
+    if (blockedDates.has(date)) return;
     const type = commitmentWorkoutType(commitment);
     const sameDay = plan.map((entry, index) => ({ entry, index })).filter(({ entry }) => entry.date === date);
     const conflictMode = commitment.conflictMode
@@ -950,7 +961,7 @@ function applyRecurringCommitments(plan, weekStart, config, mode = "all") {
   });
 }
 
-function addGoalSpecificWorkout(plan, weekStart, prescription, config, engine, longRunDay) {
+function addGoalSpecificWorkout(plan, weekStart, prescription, config, engine, longRunDay, blockedDates = new Set()) {
   if (!prescription) return;
   const runningQuality = plan.filter((entry) => (
     /orc\s*track|intervall|schwelle|threshold|tempo/i.test(`${entry.type || ""} ${entry.title || ""}`)
@@ -986,7 +997,11 @@ function addGoalSpecificWorkout(plan, weekStart, prescription, config, engine, l
   const preferred = ["Dienstag", "Donnerstag", "Freitag", "Mittwoch", "Samstag", "Montag", "Sonntag"];
   const longIndex = DAY_INDEX[longRunDay];
   const candidates = preferred
-    .filter((day) => allowed.has(day) && DAY_INDEX[day] !== longIndex)
+    .filter((day) => {
+      if (!allowed.has(day) || DAY_INDEX[day] === longIndex) return false;
+      const date = isoDate(dateForDay(weekStart, DAY_INDEX[day]));
+      return !blockedDates.has(date);
+    })
     .map((day) => {
       const date = isoDate(dateForDay(weekStart, DAY_INDEX[day]));
       const entries = plan.filter((entry) => entry.date === date && !["Stabi", "Mobility", "Ruhetag"].includes(entry.type));
@@ -1053,7 +1068,7 @@ function applyBeginnerFiveKRunWalk(plan, engine) {
   });
 }
 
-function distributeEasyKilometers(plan, weekStart, target, fixedKm, config, phase, readiness, cycle, eventWeek = null) {
+function distributeEasyKilometers(plan, weekStart, target, fixedKm, config, phase, readiness, cycle, eventWeek = null, blockedDates = new Set()) {
   const allowed = new Set(Array.isArray(config.runDays) ? config.runDays : []);
   const trueDoubleDays = new Set(config.doubleTrainingDays || []);
   const existingQuality = plan.some((entry) => /orc\s*track|intervall|schwelle|threshold|tempo/i.test(`${entry.type || ""} ${entry.title || ""}`));
@@ -1075,7 +1090,11 @@ function distributeEasyKilometers(plan, weekStart, target, fixedKm, config, phas
     .filter((value) => value !== undefined));
 
   const candidates = preference
-    .filter((day) => allowed.has(day))
+    .filter((day) => {
+      if (!allowed.has(day)) return false;
+      const date = isoDate(dateForDay(weekStart, DAY_INDEX[day]));
+      return !blockedDates.has(date);
+    })
     .map((day) => {
       const entries = dayEntries(day);
       const occupied = entries.length > 0;
@@ -1174,7 +1193,9 @@ export function generateWeekPlan({
 }) {
   const weekStart = startOfWeek(today, offsetWeeks);
   const weekEndKey = isoDate(dateForDay(weekStart, 6));
-  const blockedDates = blockedTrainingDates(planHistory, isoDate(weekStart), weekEndKey);
+  const missedBlockedDates = blockedTrainingDates(planHistory, isoDate(weekStart), weekEndKey);
+  const configuredAvailabilityBlockedDates = blockedAvailabilityDates(config.availabilityExceptions, isoDate(weekStart), weekEndKey);
+  const blockedDates = new Set([...missedBlockedDates, ...configuredAvailabilityBlockedDates]);
   const nextWeekStart = startOfWeek(today, 1);
   const historyCutoff = weekStart > nextWeekStart ? nextWeekStart : weekStart;
   const history = runningWeeks(activities, historyCutoff, 8);
@@ -1285,7 +1306,7 @@ export function generateWeekPlan({
   const fridayWeather = weatherDecision(weatherForDate(forecast, dateForDay(weekStart, 4)), config);
   let plan = [];
 
-  if (fixedAppointments.football) {
+  if (fixedAppointments.football && !blockedDates.has(isoDate(dateForDay(weekStart, 0)))) {
     plan.push(item(weekStart, 0, {
       time: config.footballTime || "19:00",
       title: "Fußball",
@@ -1299,7 +1320,7 @@ export function generateWeekPlan({
     }));
   }
 
-  if (wednesdayKm > 0) {
+  if (wednesdayKm > 0 && !blockedDates.has(isoDate(dateForDay(weekStart, 2)))) {
     plan.push(item(weekStart, 2, {
       time: config.orcTime || "19:00",
       title: "ORC Run",
@@ -1313,7 +1334,7 @@ export function generateWeekPlan({
     }));
   }
 
-  if (saturdayKm > 0) {
+  if (saturdayKm > 0 && !blockedDates.has(isoDate(dateForDay(weekStart, 5)))) {
     if (fixedAppointments.saturdayMode === "orc") {
       plan.push(item(weekStart, 5, {
         time: config.orcTrackTime || "09:00",
@@ -1362,7 +1383,7 @@ export function generateWeekPlan({
     }
   }
 
-  applyRecurringCommitments(plan, weekStart, config, "running");
+  applyRecurringCommitments(plan, weekStart, config, "running", blockedDates);
   addMissionEvents(plan, weekStart, eventWeek);
 
   const trueDoubleDays = new Set(config.doubleTrainingDays || []);
@@ -1370,6 +1391,7 @@ export function generateWeekPlan({
     .find((day) => {
       if (!allowedRuns.has(day)) return false;
       const date = isoDate(dateForDay(weekStart, DAY_INDEX[day]));
+      if (blockedDates.has(date)) return false;
       const occupied = plan.some((entry) => entry.date === date && !["Stabi", "Mobility", "Ruhetag"].includes(entry.type));
       return !occupied || trueDoubleDays.has(day);
     });
@@ -1382,7 +1404,7 @@ export function generateWeekPlan({
     weeklyTarget: target,
     targetRunCount: startingRunCount,
   });
-  addGoalSpecificWorkout(plan, weekStart, goalWorkout, config, goalEngine, longRunDay);
+  addGoalSpecificWorkout(plan, weekStart, goalWorkout, config, goalEngine, longRunDay, blockedDates);
 
   if (longRun > 0 && longRunDay) {
     const longRunDayIndex = DAY_INDEX[longRunDay];
@@ -1422,12 +1444,12 @@ export function generateWeekPlan({
   }
 
   const fixedKm = plan.reduce((sum, entry) => sum + Number(entry.distance || 0), 0);
-  distributeEasyKilometers(plan, weekStart, target, fixedKm, config, phase, readiness, cycle, eventWeek);
+  distributeEasyKilometers(plan, weekStart, target, fixedKm, config, phase, readiness, cycle, eventWeek, blockedDates);
   plan = applyGoalWeekendSpecificity(plan, goalEngine, { cycle, recoveryWeek });
   plan = applyBeginnerFiveKRunWalk(plan, goalEngine);
-  applyExtraOrcTrack(plan, weekStart, fixedAppointments.extraOrcTrackDay, config);
-  applyRecurringCommitments(plan, weekStart, config, "non-running");
-  addStrengthSessions(plan, weekStart, config, readiness);
+  applyExtraOrcTrack(plan, weekStart, fixedAppointments.extraOrcTrackDay, config, blockedDates);
+  applyRecurringCommitments(plan, weekStart, config, "non-running", blockedDates);
+  addStrengthSessions(plan, weekStart, config, readiness, blockedDates);
   plan = applyEventWeekProtection(plan, weekStart, eventWeek);
 
   if (!readiness.hardAllowed) {
@@ -1626,6 +1648,7 @@ export function generateWeekPlan({
     target,
     remainingTarget: Math.max(0, target - Number(completedRunningKm || 0) - appliedCrossTrainingKm),
     blockedDates: [...blockedDates],
+    availabilityBlockedDates: [...configuredAvailabilityBlockedDates],
     crossTrainingCredit: {
       recognizedKm: recognizedCrossTrainingKm,
       cappedKm: cappedCrossTrainingKm,

@@ -678,3 +678,44 @@ test("a deliberately blocked family day stays free during replanning", () => {
   assert.equal(result.plan.some((item) => item.date === "2026-08-08"), false);
   assert.ok(result.plan.some((item) => item.date === "2026-08-09"));
 });
+
+test("planner keeps one-time unavailable dates free without creating kilometer debt", () => {
+  const result = generateWeekPlan({
+    mission: { id: "goal", name: "50 km Lauf", date: "2026-11-21", targetKm: 50, milestones: [] },
+    offsetWeeks: 1,
+    today: new Date("2026-07-24T12:00:00"),
+    config: {
+      recurringCommitments: [{
+        id: "orc-track",
+        name: "ORC Track",
+        sport: "running",
+        workoutType: "ORC Track",
+        weekday: "Samstag",
+        time: "09:00",
+        durationMinutes: 60,
+        load: "high",
+        conflictMode: "replace",
+        enabled: true,
+      }],
+      availabilityExceptions: [{
+        id: "family-day",
+        date: "2026-08-01",
+        status: "blocked",
+        reason: "Familie",
+      }],
+      fixedAppointments: { football: false, orcRun: false, saturdayMode: "off" },
+      targetRunCount: 3,
+      stabiCount: 1,
+      stabiDays: ["Samstag"],
+      rowingCount: 1,
+      rowingDays: ["Samstag"],
+      runDays: ["Dienstag", "Donnerstag", "Samstag", "Sonntag"],
+      maxLongRun: 30,
+    },
+  });
+
+  assert.equal(result.plan.some((item) => item.date === "2026-08-01"), false);
+  assert.deepEqual(result.availabilityBlockedDates, ["2026-08-01"]);
+  assert.equal(result.blockedDates.includes("2026-08-01"), true);
+  assert.equal(result.plan.some((item) => item.type === "Long Run" && item.day === "Sonntag"), true);
+});

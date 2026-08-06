@@ -113,6 +113,14 @@ import {
   planEntriesForWeek,
   restorePlanFromSnapshot,
 } from "../services/plannerChangePreview";
+import {
+  AVAILABILITY_REASONS,
+  availabilityForDate,
+  availabilityLabel,
+  normalizeAvailabilityExceptions,
+  removeAvailabilityException,
+  upsertAvailabilityException,
+} from "../services/plannerAvailability";
 import "./Planner.css";
 
 const dayFormatter = new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" });
@@ -555,6 +563,7 @@ export default function Planner() {
   const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
   const [publishBusy, setPublishBusy] = useState(false);
   const [plannerNow, setPlannerNow] = useState(() => new Date());
+  const [availabilityEditing, setAvailabilityEditing] = useState(null);
 
   const weekStart = useMemo(() => startOfWeek(new Date(), offsetWeeks), [offsetWeeks]);
   const weekEnd = dateForDay(weekStart, 6);
@@ -616,6 +625,15 @@ export default function Planner() {
     return state.plan.some((item) => !item.archived && item.date >= isoDate(previousStart) && item.date <= isoDate(previousEnd));
   }, [state.plan, offsetWeeks]);
   const config = useMemo(() => state.planner || {}, [state.planner]);
+  const availabilityExceptions = useMemo(
+    () => normalizeAvailabilityExceptions(config.availabilityExceptions),
+    [config.availabilityExceptions],
+  );
+  const weekAvailability = useMemo(() => new Map(
+    availabilityExceptions
+      .filter((entry) => entry.date >= isoDate(weekStart) && entry.date <= isoDate(weekEnd))
+      .map((entry) => [entry.date, entry]),
+  ), [availabilityExceptions, weekStart, weekEnd]);
   const crossTrainingSummary = useMemo(
     () => summarizeCrossTrainingCredits(weekActivities, {
       targetKm: Number(config.lastTarget || 0),
@@ -677,6 +695,9 @@ export default function Planner() {
     () => weekPlan.filter((item) => !item.completed && !item.missedReason && (offsetWeeks > 0 || item.date >= todayKey)),
     [weekPlan, offsetWeeks, todayKey],
   );
+  const availabilityConflicts = useMemo(() => futurePlan.filter((item) => (
+    !item.raceEvent && weekAvailability.has(item.date)
+  )), [futurePlan, weekAvailability]);
   const provisionalTrackPlan = useMemo(
     () => futurePlan.filter(isProvisionalTrackWorkout),
     [futurePlan],
@@ -732,7 +753,7 @@ export default function Planner() {
   const planningTargetLabel = offsetWeeks === 1 ? "Nächste Woche" : "Aktuelle Woche";
   const closurePeriodLabel = offsetWeeks === 1 ? "aktuelle Woche" : "Vorwoche";
   const isPastWeek = offsetWeeks < 0;
-  const modalVisible = Boolean(editing || missedEditing || planningOpen || adjustmentOpen || planningInfoOpen || crossTrainingPreviewOpen || pendingPlanChange || publishConfirmOpen);
+  const modalVisible = Boolean(editing || missedEditing || availabilityEditing || planningOpen || adjustmentOpen || planningInfoOpen || crossTrainingPreviewOpen || pendingPlanChange || publishConfirmOpen);
   const editingTrackWorkout = editing && isTrackWorkout(editing)
     ? editing.structuredWorkout
     : null;
@@ -2073,6 +2094,58 @@ export default function Planner() {
     });
   }
 
+  function openAvailability(date) {
+    const existing = availabilityForDate(availabilityExceptions, date);
+    setAvailabilityEditing({
+      date,
+      reason: existing?.reason || "Familie",
+      note: existing?.note || "",
+      exists: Boolean(existing),
+    });
+  }
+
+  function saveAvailability(event) {
+    event.preventDefault();
+    if (!availabilityEditing?.date) return;
+    const blockedDate = availabilityEditing.date;
+    const hasPlanConflict = weekPlan.some((item) => item.date === blockedDate && !item.completed && !item.missedReason && !item.raceEvent);
+    setState((current) => ({
+      ...current,
+      planner: {
+        ...current.planner,
+        availabilityExceptions: upsertAvailabilityException(current.planner?.availabilityExceptions, {
+          date: blockedDate,
+          status: "blocked",
+          reason: availabilityEditing.reason,
+          note: availabilityEditing.note,
+          updatedAt: new Date().toISOString(),
+        }),
+        weekApprovals: invalidateWeekPlanApproval(current.planner?.weekApprovals, weekKey),
+        lastPlanChange: null,
+      },
+    }));
+    setAvailabilityEditing(null);
+    setStatus(hasPlanConflict
+      ? `${planChangeDateLabel(blockedDate)} ist jetzt für Training blockiert. Öffne „Auswirkung prüfen“, damit der Coach die bestehenden Einheiten sicher neu verteilt.`
+      : `${planChangeDateLabel(blockedDate)} ist für Training blockiert. Der Coach hält den Tag bei der nächsten Planung frei.`);
+  }
+
+  function clearAvailability() {
+    if (!availabilityEditing?.date) return;
+    const date = availabilityEditing.date;
+    setState((current) => ({
+      ...current,
+      planner: {
+        ...current.planner,
+        availabilityExceptions: removeAvailabilityException(current.planner?.availabilityExceptions, date),
+        weekApprovals: invalidateWeekPlanApproval(current.planner?.weekApprovals, weekKey),
+        lastPlanChange: null,
+      },
+    }));
+    setAvailabilityEditing(null);
+    setStatus(`${planChangeDateLabel(date)} ist wieder für Training verfügbar. Bestehende Einheiten bleiben unverändert, bis du die Woche neu planst.`);
+  }
+
   return (
     <>
       <PageTitle eyebrow="Training" title="Deine Woche">
@@ -2138,6 +2211,17 @@ export default function Planner() {
               <small>Der vorherige Wochenstand ist noch verfügbar. Nach weiteren manuellen Änderungen wird Rückgängig aus Sicherheitsgründen deaktiviert.</small>
             </div>
             <button type="button" onClick={undoLastPlanChange}>Änderung rückgängig</button>
+          </section>
+        )}
+
+        {!isPastWeek && availabilityConflicts.length > 0 && (
+          <section className="planner-availability-conflict">
+            <div>
+              <span>Verfügbarkeit geändert</span>
+              <strong>{availabilityConflicts.length} Einheit{availabilityConflicts.length === 1 ? " liegt" : "en liegen"} noch auf einem blockierten Tag</strong>
+              <small>Der Coach verschiebt nichts heimlich. Prüfe zuerst die konkrete Vorher-/Nachher-Vorschau.</small>
+            </div>
+            <button type="button" className="primary" onClick={replanCurrentWeek}>Auswirkung prüfen</button>
           </section>
         )}
 
@@ -2363,12 +2447,24 @@ export default function Planner() {
           const entries = weekPlan.filter((item) => item.date === dateKey);
           const actuals = weekActivities.filter((activity) => activityDate(activity) === dateKey && !matchedActivityIds.has(activity.id));
           const dayWeather = forecast.find((item) => item.date === dateKey);
+          const availability = weekAvailability.get(dateKey) || null;
+          const availabilityEditable = !isPastWeek && dateKey >= todayKey;
           return (
-            <article className="planner-day" key={dateKey}>
+            <article className={`planner-day ${availability ? "availability-blocked" : ""}`.trim()} key={dateKey}>
               <header>
                 <div><span>{dayFormatter.format(date)}</span><strong>{new Intl.DateTimeFormat("de-DE", { weekday: "long" }).format(date)}</strong></div>
-                {dayWeather && <small>{dayWeather.maxTemp}° · Böen {dayWeather.maxGust} · Regen {dayWeather.rainChance}%</small>}
+                <div className="planner-day-header-actions">
+                  {dayWeather && <small>{dayWeather.maxTemp}° · Böen {dayWeather.maxGust} · Regen {dayWeather.rainChance}%</small>}
+                  {availabilityEditable && <button type="button" className={availability ? "blocked" : ""} onClick={() => openAvailability(dateKey)}>{availability ? "Nicht verfügbar" : "Verfügbarkeit"}</button>}
+                </div>
               </header>
+
+              {availability && (
+                <div className="planner-availability-note">
+                  <div><span>Tag blockiert</span><strong>{availabilityLabel(availability)}</strong>{availability.note && <small>{availability.note}</small>}</div>
+                  {availabilityEditable && <button type="button" onClick={() => openAvailability(dateKey)}>Ändern</button>}
+                </div>
+              )}
 
               {actuals.map((activity) => {
                 const reviewDestination = reviewKind(activity)
@@ -2397,7 +2493,9 @@ export default function Planner() {
               })}
 
               {entries.length === 0 && actuals.length === 0 ? (
-                <button className="planner-empty" onClick={() => setEditing({ ...createBlank(weekStart), date: dateKey })}>+ frei</button>
+                availability
+                  ? <div className="planner-empty planner-empty-blocked"><strong>Training frei gehalten</strong><span>Der Coach plant an diesem Tag keine Einheit.</span></div>
+                  : <button className="planner-empty" onClick={() => setEditing({ ...createBlank(weekStart), date: dateKey })}>+ frei</button>
               ) : entries.map((item) => {
                 const matched = matches.get(item.id) || (item.matchedActivityId ? activityById.get(item.matchedActivityId) : null);
                 const isCancelled = Boolean(item.plannedCancellation);
@@ -3196,6 +3294,27 @@ export default function Planner() {
             <div className="planner-day-picker"><strong>An welchen Tagen ist echtes Doppeltraining erlaubt?</strong><div>{plannerDays.map((day) => <button type="button" className={planningDraft.doubleTrainingDays.includes(day) ? "selected" : ""} onClick={() => toggleDay("doubleTrainingDays", day)} key={`double-${day}`}>{day.slice(0, 2)}</button>)}</div><small>Gemeint sind Fußball + Lauf, Rudern + Lauf oder zwei Ausdauereinheiten. Stabi/Mobility + Lauf ist nur ein Kombi-Tag und braucht keine Freigabe.</small></div>
             <label>Zusätzliche Notiz<textarea value={planningDraft.checkin.notes} onChange={(event) => updateCheckin("notes", event.target.value)} placeholder="Reise, wenig Zeit, besondere Termine …" /></label>
             <button className="primary" type="submit">{planningMode === "replan" ? "Änderungsvorschau berechnen" : "Planvorschau berechnen"}</button>
+          </form>
+        </div>
+      )}
+
+      {availabilityEditing && (
+        <div className="modal-backdrop">
+          <form className="modal planner-modal planner-availability-modal" onSubmit={saveAvailability}>
+            <button type="button" className="close" onClick={() => setAvailabilityEditing(null)}>×</button>
+            <p className="eyebrow">Verfügbarkeit</p>
+            <h2>{planChangeDateLabel(availabilityEditing.date)} für Training freihalten</h2>
+            <p className="muted">Der Coach plant an diesem Datum keine neue Einheit. Bestehende Einheiten werden nicht automatisch verschoben, sondern erst nach deiner Vorher-/Nachher-Prüfung angepasst.</p>
+            <div className="planner-availability-reasons" role="group" aria-label="Grund für den freien Tag">
+              {AVAILABILITY_REASONS.map((reason) => <button type="button" className={availabilityEditing.reason === reason ? "selected" : ""} onClick={() => setAvailabilityEditing({ ...availabilityEditing, reason })} key={reason}>{reason}</button>)}
+            </div>
+            <label>Notiz (optional)<textarea value={availabilityEditing.note} maxLength="240" onChange={(event) => setAvailabilityEditing({ ...availabilityEditing, note: event.target.value })} placeholder="z. B. Familienausflug – ganzer Tag verplant" /></label>
+            <div className="setup-note"><strong>Keine Kilometerschulden.</strong> Ein blockierter Tag führt nicht dazu, dass der Coach den nächsten Longrun stumpf verlängert. Er verteilt nur geeignete flexible Einheiten neu oder akzeptiert eine kleinere Woche.</div>
+            <div className="modal-actions">
+              {availabilityEditing.exists && <button type="button" onClick={clearAvailability}>Blockierung entfernen</button>}
+              <button type="button" onClick={() => setAvailabilityEditing(null)}>Abbrechen</button>
+              <button className="primary" type="submit">Tag blockieren</button>
+            </div>
           </form>
         </div>
       )}

@@ -1691,3 +1691,72 @@
   .planner-change-protection{grid-template-columns:1fr}
   .planner-change-actions{grid-template-columns:1fr}
 }
+
+/* v3.9.38 – einmalige Verfügbarkeit und abwesenheitsbewusste Planung */
+.planner-availability-conflict{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:center;
+  gap:14px;
+  padding:12px 14px;
+  border:1px solid color-mix(in srgb,var(--accent) 52%,var(--border));
+  border-radius:14px;
+  background:linear-gradient(100deg,color-mix(in srgb,var(--accent) 9%,var(--bg-card)),var(--bg-card));
+}
+.planner-availability-conflict>div{display:grid;gap:2px;min-width:0}
+.planner-availability-conflict span{color:var(--accent-bright);font-size:9px;font-weight:900;letter-spacing:.09em;text-transform:uppercase}
+.planner-availability-conflict strong{font-size:13px;line-height:1.35}
+.planner-availability-conflict small{color:var(--muted);font-size:10px;line-height:1.45}
+.planner-availability-conflict button{padding:8px 12px;white-space:nowrap}
+
+.planner-day-header-actions{display:flex;align-items:center;gap:10px}
+.planner-day-header-actions button{
+  padding:6px 9px;
+  border-color:var(--border);
+  background:transparent;
+  color:var(--muted-bright);
+  font-size:9px;
+}
+.planner-day-header-actions button.blocked{
+  border-color:color-mix(in srgb,var(--accent) 48%,var(--border));
+  background:var(--accent-surface);
+  color:var(--accent-bright);
+}
+.planner-day.availability-blocked{
+  border-color:color-mix(in srgb,var(--accent) 34%,var(--border));
+  background:linear-gradient(145deg,color-mix(in srgb,var(--accent) 4%,var(--bg-card)),var(--bg-card-alt));
+}
+.planner-availability-note{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+  padding:10px 16px;
+  border-bottom:1px solid var(--border);
+  background:color-mix(in srgb,var(--accent) 6%,var(--bg-card-alt));
+}
+.planner-availability-note>div{display:grid;gap:2px;min-width:0}
+.planner-availability-note span{color:var(--accent-bright);font-size:8px;font-weight:900;letter-spacing:.08em;text-transform:uppercase}
+.planner-availability-note strong{font-size:12px;line-height:1.35}
+.planner-availability-note small{color:var(--muted);font-size:10px;line-height:1.4}
+.planner-availability-note button{padding:6px 9px;background:transparent;font-size:9px}
+.planner-empty-blocked{display:grid;gap:3px;cursor:default}
+.planner-empty-blocked strong{color:var(--text-soft);font-size:12px}
+.planner-empty-blocked span{color:var(--muted);font-size:10px}
+
+.planner-availability-modal{width:min(620px,100%)}
+.planner-availability-reasons{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0}
+.planner-availability-reasons button{padding:8px 11px;border-color:var(--border);background:var(--bg-input);font-size:10px}
+.planner-availability-reasons button.selected{border-color:var(--accent);background:var(--accent);color:var(--accent-text)}
+.planner-availability-modal .modal-actions{display:grid;grid-template-columns:auto auto 1fr;gap:9px;margin-top:16px}
+.planner-availability-modal .modal-actions .primary{width:100%}
+
+@media (max-width:760px){
+  .planner-availability-conflict{grid-template-columns:1fr}
+  .planner-availability-conflict button{width:100%}
+  .planner-day>header{align-items:flex-start}
+  .planner-day-header-actions{align-items:flex-end;flex-direction:column}
+  .planner-availability-note{align-items:flex-start;flex-direction:column}
+  .planner-availability-note button{width:100%}
+  .planner-availability-modal .modal-actions{grid-template-columns:1fr}
+}

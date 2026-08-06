@@ -36,3 +36,19 @@ test("commitments are ordered by weekday and time", () => {
   ]);
   assert.deepEqual(sorted.map((item) => item.id), ["early", "mid", "late"]);
 });
+
+test("configuration migration normalizes one-time availability exceptions", () => {
+  const state = migrateConfiguration({
+    planner: {
+      legacyMigrationComplete: true,
+      recurringCommitments: [],
+      availabilityExceptions: [
+        { id: "family-day", date: "2026-08-08", reason: "Familie", note: "Ausflug" },
+        { id: "invalid", date: "Samstag", reason: "Familie" },
+      ],
+    },
+  });
+
+  assert.equal(state.planner.configurationVersion, 7);
+  assert.deepEqual(state.planner.availabilityExceptions.map((entry) => entry.date), ["2026-08-08"]);
+});
