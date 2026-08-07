@@ -77,7 +77,7 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-      <HashRouter>
+      <HashRouter unstable_useTransitions={false}>
         <Routes>
           <Route element={<Layout />}>
             <Route index element={<Briefing />} />
