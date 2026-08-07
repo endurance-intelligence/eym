@@ -13,14 +13,13 @@ export function completedActivityDestination(activityId) {
 }
 
 export function briefingWorkoutDestination(item = {}) {
-  const activityDestination = completedActivityDestination(item.activityId);
-  if (activityDestination) return activityDestination;
+  const activityId = validId(item.activityId);
+  if (activityId) return { pathname: "/training" };
 
   const workoutId = validId(item.planItemId);
   if (workoutId) {
     return {
       pathname: "/planner",
-      state: { workoutId },
     };
   }
 

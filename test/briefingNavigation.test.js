@@ -16,22 +16,20 @@ test("opens a completed weekly activity directly in its review", () => {
   assert.equal(completedActivityDestination(""), null);
 });
 
-test("opens a linked completed activity directly in Training", () => {
+test("opens a linked completed activity in Training without forcing review state", () => {
   assert.deepEqual(
     briefingWorkoutDestination({ planItemId: "plan-1", activityId: 4711 }),
     {
       pathname: "/training",
-      state: { activityId: "4711" },
     },
   );
 });
 
-test("opens a planned workout directly in the planner editor", () => {
+test("opens a planned workout in the planner without forcing editor state", () => {
   assert.deepEqual(
     briefingWorkoutDestination({ planItemId: "orc-track-1" }),
     {
       pathname: "/planner",
-      state: { workoutId: "orc-track-1" },
     },
   );
 });

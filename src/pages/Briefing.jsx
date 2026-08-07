@@ -132,7 +132,6 @@ function todayOverview(plan, activities) {
 
 function TodayWorkoutRow({ item }) {
   const destination = briefingWorkoutDestination(item);
-  const opensReview = destination?.pathname === "/training";
   const content = (
     <>
       <span className="today-status-pill">{item.status}</span>
@@ -141,7 +140,7 @@ function TodayWorkoutRow({ item }) {
         {item.detail && <strong>{item.detail}</strong>}
         {item.note && <p>{item.note}</p>}
       </div>
-      {destination && <span className={`today-workout-arrow ${opensReview ? "review" : ""}`} aria-hidden="true">{opensReview ? "Review →" : "→"}</span>}
+      {destination && <span className="today-workout-arrow" aria-hidden="true">→</span>}
     </>
   );
 
@@ -151,10 +150,9 @@ function TodayWorkoutRow({ item }) {
 
   return (
     <Link
-      className={`today-workout-row today-workout-link ${opensReview ? "opens-review" : ""} ${item.tone}`}
+      className={`today-workout-row today-workout-link ${item.tone}`}
       to={destination.pathname}
-      state={destination.state}
-      aria-label={opensReview ? `${item.title}: Review öffnen` : `${item.title} direkt öffnen`}
+      aria-label={`${item.title} öffnen`}
     >
       {content}
     </Link>
