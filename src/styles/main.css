@@ -1727,3 +1727,43 @@ button:focus-visible,a:focus-visible,summary:focus-visible{
 @media(max-width:1050px){.briefing-hub-grid .briefing-key-session-link{grid-column:1/-1}.briefing-hub-grid .briefing-key-session-card{min-height:0}}
 @media(max-width:800px){.briefing-hub-grid .briefing-key-session-link{grid-column:auto}.briefing-hub-card{min-height:0}.briefing-current-focus small{font-size:11px}}
 @media(max-width:540px){.briefing-corridor{align-items:flex-start;flex-direction:column}.briefing-week-disclosure summary span{font-size:11px}}
+
+/* v3.9.46 – unified training roles and compact coach mission status */
+.workout-role-badges>summary>span{
+  box-sizing:border-box;
+  min-height:28px;
+  height:28px;
+  padding:0 9px;
+  line-height:1;
+}
+.workout-role-badges>summary>span i{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:12px;
+  flex:none;
+}
+.coach-outlook-heading{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:start;
+  gap:18px;
+}
+.coach-readiness-badge.status-only{
+  display:inline-flex;
+  align-items:center;
+  justify-content:flex-start;
+  gap:7px;
+  min-width:0;
+  width:max-content;
+  max-width:100%;
+  padding:8px 11px;
+  border-radius:999px;
+  white-space:nowrap;
+  text-align:left;
+}
+.coach-readiness-badge.status-only i{
+  grid-row:auto;
+  align-self:center;
+  width:8px;
+  height:8px;

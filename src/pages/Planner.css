@@ -1808,3 +1808,32 @@
 .planner-day:has(.workout-role-badges[open]){overflow:visible;position:relative;z-index:5}
 @media(max-width:760px){.planner-workout{grid-template-columns:auto minmax(0,1fr) auto}.planner-workout.no-marker{grid-template-columns:minmax(0,1fr) auto}.planner-workout-roles{grid-column:2/-1;grid-row:2;justify-self:start;padding-top:5px}.planner-workout.no-marker .planner-workout-roles{grid-column:1/-1}.planner-actions{grid-column:3;grid-row:1}.planner-workout.no-marker .planner-actions{grid-column:2}.planner-review-cue{grid-column:3;grid-row:1}.planner-workout.no-marker .planner-review-cue{grid-column:2}}
 @media(max-width:620px){.planner-actions-menu{grid-column:3;grid-row:1}.planner-workout.no-marker .planner-actions-menu{grid-column:2}.planner-actions-menu[open]{grid-column:1/-1;grid-row:3}.planner-workout-roles .workout-role-popover{right:auto;left:0}}
+
+/* v3.9.46 – stable workout role and action rails */
+@media(min-width:980px){
+  .planner-workout{
+    grid-template-columns:auto minmax(0,1fr) 225px 112px;
+    column-gap:12px;
+    align-items:start;
+  }
+  .planner-workout.no-marker{
+    grid-template-columns:minmax(0,1fr) 225px 112px;
+  }
+  .planner-workout-roles{
+    width:100%;
+    min-width:0;
+    padding-top:0;
+  }
+  .planner-workout-roles>summary{
+    min-height:29px;
+    flex-wrap:nowrap;
+    justify-content:flex-end;
+  }
+  .planner-review-cue{
+    display:flex;
+    align-items:center;
+    justify-content:flex-end;
+    align-self:start;
+    justify-self:stretch;
+    min-height:29px;
+    padding-top:0;
