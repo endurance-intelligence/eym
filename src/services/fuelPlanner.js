@@ -181,10 +181,18 @@ function fuelExperience(activities = [], reviews = {}) {
         uses: 0,
         successes: 0,
         eventSuccesses: 0,
+        explicitGood: 0,
+        explicitWatch: 0,
+        explicitBad: 0,
       };
       current.uses += 1;
-      if (successful) current.successes += 1;
-      if (successful && review?.isEvent) current.eventSuccesses += 1;
+      if (item.intakeTolerance === "good") current.explicitGood += 1;
+      if (item.intakeTolerance === "watch") current.explicitWatch += 1;
+      if (item.intakeTolerance === "bad") current.explicitBad += 1;
+      const explicitlyNegative = item.intakeTolerance === "watch" || item.intakeTolerance === "bad";
+      const itemSuccessful = item.intakeTolerance === "good" || (!explicitlyNegative && successful);
+      if (itemSuccessful) current.successes += 1;
+      if (itemSuccessful && review?.isEvent) current.eventSuccesses += 1;
       productStats.set(item.fuelItemId, current);
     });
   });
@@ -243,7 +251,12 @@ function fluidRange(durationMinutes, temperature, experience) {
 function productHistoryScore(item, experience) {
   const history = experience.productStats.get(item.id);
   if (!history) return 0;
-  return history.uses * 2 + history.successes * 12 + history.eventSuccesses * 18;
+  return history.uses * 2
+    + history.successes * 12
+    + history.eventSuccesses * 18
+    + history.explicitGood * 18
+    - history.explicitWatch * 24
+    - history.explicitBad * 60;
 }
 
 function isPreparedDrink(item) {

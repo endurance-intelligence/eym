@@ -8,6 +8,7 @@ import {
   isFuelRelevantWorkout,
   suggestedFuelMode,
 } from "../services/fuelPlanner";
+import { raceFuelStrategy } from "../services/raceFuelStrategy";
 import "./FuelPartner.css";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", {
@@ -74,6 +75,10 @@ export default function FuelPartner() {
   const recommendation = useMemo(
     () => workout ? fuelRecommendationFromState(state, workout, mode) : null,
     [mode, state, workout],
+  );
+  const raceStrategy = useMemo(
+    () => raceFuelStrategy({ workout, recommendation, reviews: state.reviews }),
+    [recommendation, state.reviews, workout],
   );
 
   function selectWorkout(workoutId) {
@@ -180,6 +185,50 @@ export default function FuelPartner() {
           <strong>{recommendation.target.sodiumTotal ? `${Math.round(recommendation.target.sodiumTotal)} mg` : "nicht abgedeckt"}</strong>
         </span>
       </div>
+
+      {raceStrategy && (
+        <section className="fuel-race-strategy">
+          <div className="fuel-race-strategy-heading">
+            <div>
+              <span>Race Strategy</span>
+              <h3>{raceStrategy.label}</h3>
+              <p>{raceStrategy.description}</p>
+            </div>
+            <div className="fuel-race-evidence">
+              <span><b>{raceStrategy.evidence.goodIntakes}</b> gut verträgliche Einzelaufnahmen</span>
+              <span><b>{raceStrategy.evidence.testedProducts}</b> eingeplante Produkte bestätigt</span>
+              <span><b>{raceStrategy.evidence.hydrationSamples}</b> persönliche Hydration-Messungen</span>
+            </div>
+          </div>
+          <div className={`fuel-race-strategy-rows ${raceStrategy.kind}`}>
+            {raceStrategy.rows.map((row) => (
+              <article key={row.key}>
+                <div className="fuel-race-marker">
+                  <b>{row.marker}</b>
+                  <span>{row.secondary}</span>
+                </div>
+                <div className="fuel-race-actions">
+                  {row.drinkMl > 0 && <span className="drink">💧 {Math.round(row.drinkMl)} ml trinken</span>}
+                  {row.fuel.map((fuel, index) => (
+                    <div className={`fuel tone-${fuel.evidenceTone}`} key={`${fuel.product}-${index}`}>
+                      <strong>{fuel.product}</strong>
+                      <span>{fuel.detail}</span>
+                      <small>{fuel.evidence}</small>
+                    </div>
+                  ))}
+                  {row.drinkMl <= 0 && row.fuel.length === 0 && <span className="quiet">Nur Rhythmus halten · keine zusätzliche Aufnahme geplant</span>}
+                </div>
+              </article>
+            ))}
+          </div>
+          {raceStrategy.warnings.length > 0 && (
+            <div className="fuel-race-strategy-warnings">
+              <b>Vor dem Wettkampf prüfen</b>
+              {raceStrategy.warnings.map((warning) => <span key={warning}>{warning}</span>)}
+            </div>
+          )}
+        </section>
+      )}
 
       <div className="fuel-partner-plan-grid">
         <section>
