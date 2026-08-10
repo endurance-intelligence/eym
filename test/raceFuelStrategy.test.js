@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { raceFuelStrategy } from "../src/services/raceFuelStrategy.js";
-import { fuelRecommendationForWorkout } from "../src/services/fuelPlanner.js";
+import { backyardCrewPlan, raceFuelStrategy } from "../src/services/raceFuelStrategy.js";
+import { fuelRecommendationForWorkout, suggestedFuelMode } from "../src/services/fuelPlanner.js";
 
 test("Backyard race strategy creates one crew-ready row per planned round", () => {
   const strategy = raceFuelStrategy({
@@ -82,4 +82,30 @@ test("explicit GI tolerance steers Fuel Partner away from a repeatedly bad produ
 
   const result = fuelRecommendationForWorkout({ workout, fuel, activities, reviews, mode: "race" });
   assert.equal(result.consume.find((entry) => entry.unit !== "ml")?.fuelItemId, "good");
+});
+
+
+test("Backyard crew plan exposes one preparation row per race round plus a quick return checklist", () => {
+  const crew = backyardCrewPlan({
+    kind: "loop",
+    rows: [
+      { key: "round-1", marker: "Runde 1", secondary: "6,7 km gesamt", drinkMl: 300, fuel: [] },
+      { key: "round-2", marker: "Runde 2", secondary: "13,4 km gesamt", drinkMl: 350, fuel: [{ product: "Gel 100", detail: "1 Stück" }] },
+    ],
+  });
+
+  assert.equal(crew.totalRounds, 2);
+  assert.equal(crew.rows[1].drinkMl, 350);
+  assert.equal(crew.rows[1].fuel[0].product, "Gel 100");
+  assert.ok(crew.checklist.some((item) => /Magen/.test(item)));
+  assert.ok(crew.checklist.some((item) => /süß/.test(item)));
+});
+
+test("crew mode stays hidden for non-loop race strategies", () => {
+  assert.equal(backyardCrewPlan({ kind: "distance", rows: [] }), null);
+});
+
+
+test("planned race events open Fuel Partner in race mode automatically", () => {
+  assert.equal(suggestedFuelMode({ title: "Backyard", type: "Backyard", raceEvent: true, distance: 100 }), "race");
 });

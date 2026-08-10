@@ -78,6 +78,7 @@ function workoutTemperature(workout) {
 function isRaceContext(workout) {
   return Boolean(
     workout?.officialEvent
+    || workout?.raceEvent
     || workout?.race
     || /wettkampf|race|marathon|halbmarathon|half marathon|heartbeat ultra/.test(sessionText(workout)),
   );

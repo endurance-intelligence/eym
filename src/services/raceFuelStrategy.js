@@ -215,3 +215,27 @@ export function raceFuelStrategy({ workout, recommendation, reviews = {} } = {})
     warnings: [...new Set(warnings)],
   };
 }
+
+export function backyardCrewPlan(strategy) {
+  if (!strategy || strategy.kind !== "loop" || !Array.isArray(strategy.rows) || strategy.rows.length === 0) return null;
+
+  const rows = strategy.rows.map((row, index) => ({
+    round: index + 1,
+    key: row.key || `round-${index + 1}`,
+    marker: row.marker || `Runde ${index + 1}`,
+    secondary: row.secondary || "",
+    drinkMl: Math.max(0, Math.round(numeric(row.drinkMl))),
+    fuel: Array.isArray(row.fuel) ? row.fuel : [],
+  }));
+
+  return {
+    totalRounds: rows.length,
+    rows,
+    checklist: [
+      "Flasche leer / Trinkmenge geschafft?",
+      "Magen okay?",
+      "Durst normal?",
+      "Noch Lust auf süß?",
+    ],
+  };
+}

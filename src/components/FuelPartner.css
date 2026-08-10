@@ -676,3 +676,172 @@
     justify-content: flex-start;
   }
 }
+
+/* v3.9.58 – Backyard crew / tent mode */
+.fuel-crew-mode {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--warning) 68%, var(--border));
+  border-radius: 16px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--warning) 8%, var(--bg-card)), var(--bg-sidebar));
+}
+
+.fuel-crew-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: end;
+}
+
+.fuel-crew-heading > div:first-child > span {
+  color: var(--warning);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.fuel-crew-heading h3 {
+  margin: 3px 0 4px;
+  font-size: 22px;
+}
+
+.fuel-crew-heading p,
+.fuel-crew-card small,
+.fuel-crew-progress-label {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.fuel-crew-round-control {
+  display: flex;
+  gap: 7px;
+  align-items: end;
+}
+
+.fuel-crew-round-control button {
+  width: 38px;
+  min-height: 38px;
+  padding: 0;
+}
+
+.fuel-crew-round-control label {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.fuel-crew-round-control select {
+  min-width: 84px;
+}
+
+.fuel-crew-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.fuel-crew-card {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: var(--bg-input);
+}
+
+.fuel-crew-card.prepare {
+  border-color: color-mix(in srgb, var(--warning) 70%, var(--border));
+  background: color-mix(in srgb, var(--warning) 6%, var(--bg-input));
+}
+
+.fuel-crew-card > span {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.fuel-crew-card.prepare > span {
+  color: var(--warning);
+}
+
+.fuel-crew-card h4 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.fuel-crew-supply,
+.fuel-crew-checklist {
+  display: grid;
+  gap: 6px;
+}
+
+.fuel-crew-supply b,
+.fuel-crew-checklist b {
+  padding: 8px 9px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--bg-sidebar) 90%, transparent);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.fuel-crew-card.prepare .fuel-crew-supply b {
+  border-color: color-mix(in srgb, var(--warning) 45%, var(--border));
+}
+
+.fuel-crew-checklist b {
+  color: var(--muted-bright);
+  font-weight: 700;
+}
+
+.fuel-crew-progress {
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--bg-input);
+}
+
+.fuel-crew-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--warning);
+  transition: width .18s ease;
+}
+
+@media (max-width: 900px) {
+  .fuel-crew-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .fuel-crew-card.check {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 650px) {
+  .fuel-crew-heading,
+  .fuel-crew-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .fuel-crew-card.check {
+    grid-column: auto;
+  }
+
+  .fuel-crew-round-control {
+    justify-content: flex-start;
+  }
+}

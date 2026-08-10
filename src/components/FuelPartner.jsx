@@ -8,7 +8,7 @@ import {
   isFuelRelevantWorkout,
   suggestedFuelMode,
 } from "../services/fuelPlanner";
-import { raceFuelStrategy } from "../services/raceFuelStrategy";
+import { backyardCrewPlan, raceFuelStrategy } from "../services/raceFuelStrategy";
 import "./FuelPartner.css";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", {
@@ -80,10 +80,24 @@ export default function FuelPartner() {
     () => raceFuelStrategy({ workout, recommendation, reviews: state.reviews }),
     [recommendation, state.reviews, workout],
   );
+  const crewPlan = useMemo(() => backyardCrewPlan(raceStrategy), [raceStrategy]);
+  const requestedCrewRound = Math.max(1, Number(searchParams.get("round") || 1));
+  const crewRound = crewPlan ? Math.min(crewPlan.totalRounds, requestedCrewRound) : 1;
+  const crewCurrent = crewPlan?.rows[crewRound - 1] || null;
+  const crewNext = crewPlan?.rows[crewRound] || null;
 
   function selectWorkout(workoutId) {
     const next = new URLSearchParams(searchParams);
     next.set("workout", workoutId);
+    next.delete("round");
+    setSearchParams(next, { replace: true });
+  }
+
+  function selectCrewRound(round) {
+    if (!crewPlan) return;
+    const nextRound = Math.max(1, Math.min(crewPlan.totalRounds, Number(round) || 1));
+    const next = new URLSearchParams(searchParams);
+    next.set("round", String(nextRound));
     setSearchParams(next, { replace: true });
   }
 
@@ -227,6 +241,70 @@ export default function FuelPartner() {
               {raceStrategy.warnings.map((warning) => <span key={warning}>{warning}</span>)}
             </div>
           )}
+        </section>
+      )}
+
+      {crewPlan && crewCurrent && (
+        <section className="fuel-crew-mode">
+          <div className="fuel-crew-heading">
+            <div>
+              <span>Backyard Crew · Zeltmodus</span>
+              <h3>Runde {crewRound} läuft</h3>
+              <p>{crewCurrent.secondary} · Das Team bereitet parallel die nächste Runde vor.</p>
+            </div>
+            <div className="fuel-crew-round-control" aria-label="Aktuelle Backyard-Runde">
+              <button type="button" onClick={() => selectCrewRound(crewRound - 1)} disabled={crewRound <= 1}>←</button>
+              <label>
+                Runde
+                <select value={crewRound} onChange={(event) => selectCrewRound(event.target.value)}>
+                  {crewPlan.rows.map((row) => <option value={row.round} key={row.key}>{row.round}</option>)}
+                </select>
+              </label>
+              <button type="button" onClick={() => selectCrewRound(crewRound + 1)} disabled={crewRound >= crewPlan.totalRounds}>→</button>
+            </div>
+          </div>
+
+          <div className="fuel-crew-grid">
+            <article className="fuel-crew-card current">
+              <span>Aktuell draußen</span>
+              <h4>{crewCurrent.marker}</h4>
+              <div className="fuel-crew-supply">
+                {crewCurrent.drinkMl > 0 && <b>💧 {crewCurrent.drinkMl} ml Drink</b>}
+                {crewCurrent.fuel.map((fuel, index) => <b key={`${fuel.product}-${index}`}>⚡ {fuel.product} · {fuel.detail}</b>)}
+                {crewCurrent.drinkMl <= 0 && crewCurrent.fuel.length === 0 && <b>Keine zusätzliche Versorgung geplant</b>}
+              </div>
+              <small>Das wurde für diese Runde mitgegeben bzw. eingeplant.</small>
+            </article>
+
+            <article className="fuel-crew-card prepare">
+              <span>{crewNext ? "Jetzt vorbereiten" : "Letzte geplante Runde"}</span>
+              <h4>{crewNext ? crewNext.marker : "Finish / nächste Entscheidung"}</h4>
+              {crewNext ? (
+                <div className="fuel-crew-supply">
+                  {crewNext.drinkMl > 0 && <b>💧 {crewNext.drinkMl} ml Drink bereitstellen</b>}
+                  {crewNext.fuel.map((fuel, index) => <b key={`${fuel.product}-${index}`}>⚡ {fuel.product} · {fuel.detail}</b>)}
+                  {crewNext.drinkMl <= 0 && crewNext.fuel.length === 0 && <b>Nur Flasche / Rhythmus prüfen</b>}
+                </div>
+              ) : (
+                <div className="fuel-crew-supply"><b>Keine weitere Runde im aktuellen Plan.</b></div>
+              )}
+              <small>{crewNext ? "Alles vor der Rückkehr fertig hinstellen." : "Weiterlaufen nur nach aktuellem Race-Status planen."}</small>
+            </article>
+
+            <article className="fuel-crew-card check">
+              <span>Bei Rückkehr kurz checken</span>
+              <h4>30-Sekunden Crew-Check</h4>
+              <div className="fuel-crew-checklist">
+                {crewPlan.checklist.map((item) => <b key={item}>□ {item}</b>)}
+              </div>
+              <small>Nur auffällige Antworten merken – die detaillierte Bewertung landet später im Review.</small>
+            </article>
+          </div>
+
+          <div className="fuel-crew-progress">
+            <span style={{ width: `${Math.round((crewRound / crewPlan.totalRounds) * 100)}%` }} />
+          </div>
+          <small className="fuel-crew-progress-label">Runde {crewRound} von {crewPlan.totalRounds} · {Math.round((crewRound / crewPlan.totalRounds) * 100)} % des geplanten Rundenblocks</small>
         </section>
       )}
 
