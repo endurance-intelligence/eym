@@ -110,7 +110,7 @@ function carbohydrateRange(mode, durationMinutes, ultraRace) {
 
   if (mode === "race") {
     if (ultraRace) return { low: 30, high: 50, optional: false };
-    if (durationMinutes < 60) return { low: 20, high: 30, optional: true };
+    if (durationMinutes < 75) return { low: 0, high: 30, optional: true };
     if (durationMinutes < 150) return { low: 45, high: 60, optional: false };
     return { low: 60, high: 75, optional: false };
   }
@@ -612,7 +612,7 @@ export function fuelRecommendationForWorkout({
   const targetCarbsPerHour = selectedCarbohydrateRate(range, mode, experience);
   const targetCarbs = roundTo(targetCarbsPerHour * durationInHours, 5);
   const fluid = fluidRange(durationMinutes, temperature, experience);
-  const fluidNeeded = durationMinutes >= 60 || Number(temperature) >= 23;
+  const fluidNeeded = durationMinutes >= 75 || Number(temperature) >= 23;
   const targetFluidPerHour = fluidNeeded ? roundTo((fluid.low + fluid.high) / 2, 25) : 0;
   const fluidTotal = targetFluidPerHour > 0
     ? Math.max(300, roundTo(targetFluidPerHour * durationInHours, 100))

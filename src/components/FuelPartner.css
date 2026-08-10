@@ -845,3 +845,360 @@
     justify-content: flex-start;
   }
 }
+
+/* v3.9.59 – generic race prep / provisioning planner */
+.fuel-partner-view-tabs {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  gap: 5px;
+  width: fit-content;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-input);
+}
+
+.fuel-partner-view-tabs button {
+  min-height: 34px;
+  padding: 7px 13px;
+  border: 0;
+  border-radius: 9px;
+  color: var(--muted-bright);
+  background: transparent;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.fuel-partner-view-tabs button.selected {
+  color: var(--text);
+  background: var(--accent-surface-strong);
+}
+
+.race-prep-planner {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 16px;
+}
+
+.race-prep-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(230px, 320px);
+  gap: 20px;
+  align-items: end;
+}
+
+.race-prep-heading h2 {
+  margin: 3px 0 6px;
+}
+
+.race-prep-heading p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.race-prep-heading > label,
+.race-prep-editor-grid label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.race-prep-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.race-prep-presets button {
+  min-height: 32px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.race-prep-editor {
+  display: grid;
+  gap: 11px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--bg-input) 86%, transparent);
+}
+
+.race-prep-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  align-items: start;
+}
+
+.race-prep-editor-grid label small {
+  color: var(--warning);
+  font-size: 9px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.race-prep-editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.race-prep-editor-actions .secondary,
+.race-prep-schedule-toggle {
+  color: var(--muted-bright);
+  background: var(--bg-input);
+}
+
+.race-prep-error,
+.race-prep-warnings,
+.race-prep-empty {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-input);
+}
+
+.race-prep-error,
+.race-prep-warnings {
+  border-color: color-mix(in srgb, var(--warning) 55%, var(--border));
+}
+
+.race-prep-error b,
+.race-prep-warnings b {
+  color: var(--warning);
+}
+
+.race-prep-error span,
+.race-prep-warnings span,
+.race-prep-empty span {
+  color: var(--muted-bright);
+  font-size: 11px;
+}
+
+.race-prep-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.race-prep-summary article {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-input);
+}
+
+.race-prep-summary article.ready {
+  border-color: var(--success-border);
+}
+
+.race-prep-summary article.warn {
+  border-color: color-mix(in srgb, var(--warning) 60%, var(--border));
+}
+
+.race-prep-summary span,
+.race-prep-summary small {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.race-prep-summary strong {
+  font-size: 16px;
+}
+
+.race-prep-phases {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.race-prep-phases article {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  padding: 13px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: var(--bg-input);
+}
+
+.race-prep-phases article.during {
+  border-color: color-mix(in srgb, var(--accent-bright) 45%, var(--border));
+  background: color-mix(in srgb, var(--accent-surface-strong) 55%, var(--bg-input));
+}
+
+.race-prep-phases article > span,
+.race-prep-section-heading span {
+  color: var(--accent-bright);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.race-prep-phases h3,
+.race-prep-section-heading h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.race-prep-phases p,
+.race-prep-phases small {
+  margin: 0;
+  color: var(--muted-bright);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.race-prep-phases small {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.race-prep-columns {
+  display: grid;
+  grid-template-columns: 1.2fr .8fr;
+  gap: 10px;
+}
+
+.race-prep-stock,
+.race-prep-pack,
+.race-prep-schedule {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--bg-sidebar) 88%, transparent);
+}
+
+.race-prep-section-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: end;
+}
+
+.race-prep-section-heading small {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.race-prep-stock-list,
+.race-prep-pack-list {
+  display: grid;
+  gap: 7px;
+}
+
+.race-prep-stock-list article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-input);
+}
+
+.race-prep-stock-list article.ready {
+  border-color: var(--success-border);
+}
+
+.race-prep-stock-list article.warn {
+  border-color: color-mix(in srgb, var(--warning) 60%, var(--border));
+}
+
+.race-prep-stock-list article > div {
+  display: grid;
+  gap: 3px;
+}
+
+.race-prep-stock-list span,
+.race-prep-pack-list span {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.race-prep-stock-list b {
+  color: var(--success);
+  font-size: 10px;
+}
+
+.race-prep-stock-list article.warn b {
+  color: var(--warning);
+}
+
+.race-prep-pack-list article {
+  display: grid;
+  gap: 3px;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-input);
+}
+
+.race-prep-schedule .fuel-race-strategy-rows {
+  max-height: none;
+}
+
+.race-prep-gap {
+  display: block !important;
+  padding: 10px !important;
+  text-align: center;
+}
+
+.race-prep-gap b {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.race-prep-schedule-toggle {
+  justify-self: start;
+  min-height: 34px;
+  font-size: 10px;
+}
+
+@media (max-width: 1050px) {
+  .race-prep-editor-grid,
+  .race-prep-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .race-prep-columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .race-prep-heading,
+  .race-prep-editor-grid,
+  .race-prep-summary,
+  .race-prep-phases {
+    grid-template-columns: 1fr;
+  }
+
+  .race-prep-stock-list article {
+    grid-template-columns: 1fr;
+  }
+
+  .fuel-partner-view-tabs {
+    width: 100%;
+  }
+
+  .fuel-partner-view-tabs button {
+    flex: 1;
+  }
+}

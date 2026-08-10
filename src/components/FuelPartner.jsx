@@ -9,6 +9,7 @@ import {
   suggestedFuelMode,
 } from "../services/fuelPlanner";
 import { backyardCrewPlan, raceFuelStrategy } from "../services/raceFuelStrategy";
+import RacePrepPlanner from "./RacePrepPlanner";
 import "./FuelPartner.css";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", {
@@ -49,6 +50,16 @@ function consumptionDetail(item) {
   return values.join(" · ") || "Nährwerte noch offen";
 }
 
+
+function PartnerViewTabs({ active, onSelect }) {
+  return (
+    <div className="fuel-partner-view-tabs" role="tablist" aria-label="Fuel Partner Bereich">
+      <button type="button" role="tab" aria-selected={active === "partner"} className={active === "partner" ? "selected" : ""} onClick={() => onSelect("partner")}>Nächster Lauf</button>
+      <button type="button" role="tab" aria-selected={active === "prep"} className={active === "prep" ? "selected" : ""} onClick={() => onSelect("prep")}>Race Prep</button>
+    </div>
+  );
+}
+
 function upcomingFuelWorkouts(plan = [], todayKey = localDateKey()) {
   return plan
     .filter((item) => (
@@ -69,6 +80,7 @@ export default function FuelPartner() {
   const { state, setState } = useApp();
   const [searchParams, setSearchParams] = useSearchParams();
   const workouts = useMemo(() => upcomingFuelWorkouts(state.plan), [state.plan]);
+  const view = searchParams.get("view") === "prep" ? "prep" : "partner";
   const requestedWorkoutId = searchParams.get("workout");
   const workout = workouts.find((item) => item.id === requestedWorkoutId) || workouts[0] || null;
   const mode = workout?.fuelMode || suggestedFuelMode(workout);
@@ -85,6 +97,14 @@ export default function FuelPartner() {
   const crewRound = crewPlan ? Math.min(crewPlan.totalRounds, requestedCrewRound) : 1;
   const crewCurrent = crewPlan?.rows[crewRound - 1] || null;
   const crewNext = crewPlan?.rows[crewRound] || null;
+
+  function selectView(nextView) {
+    const next = new URLSearchParams(searchParams);
+    if (nextView === "prep") next.set("view", "prep");
+    else next.delete("view");
+    next.delete("round");
+    setSearchParams(next, { replace: true });
+  }
 
   function selectWorkout(workoutId) {
     const next = new URLSearchParams(searchParams);
@@ -111,9 +131,19 @@ export default function FuelPartner() {
     }));
   }
 
+  if (view === "prep") {
+    return (
+      <Card className="wide fuel-partner">
+        <PartnerViewTabs active={view} onSelect={selectView} />
+        <RacePrepPlanner />
+      </Card>
+    );
+  }
+
   if (!workout || !recommendation) {
     return (
       <Card className="wide fuel-partner fuel-partner-empty">
+        <PartnerViewTabs active={view} onSelect={selectView} />
         <div>
           <p className="eyebrow">Fuel Partner</p>
           <h2>Noch kein kommender Lauf</h2>
@@ -132,6 +162,7 @@ export default function FuelPartner() {
 
   return (
     <Card className="wide fuel-partner">
+      <PartnerViewTabs active={view} onSelect={selectView} />
       <div className="fuel-partner-heading">
         <div>
           <p className="eyebrow">Fuel Partner</p>
