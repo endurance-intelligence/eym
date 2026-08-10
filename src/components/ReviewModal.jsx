@@ -738,8 +738,6 @@ export default function ReviewModal({ activity, onClose }) {
                         {!selectedFuel && <label className="nutrition-catalog-select">Produkt aus Fuel Lab
                           <select value={item.fuelItemId || ""} onChange={(event) => selectFuelItem(item.id, event.target.value)}>
                             <option value="">Produkt auswählen …</option>
-                            {state.fuel.filter((fuel) => !fuel.archived).map((fuel) => <option key={fuel.id} value={fuel.id}>{fuelDisplayName(fuel)} · {fuel.quantity} {fuel.stockUnit || "Stück"}</option>)}
-                          </select>
                       <div className="nutrition-timing-fields">
                         <label>Wann genommen?
                           <select value={item.intakeTimingMode || "minute"} onChange={(event) => updateNutritionItem(item.id, "intakeTimingMode", event.target.value)}>
@@ -760,6 +758,8 @@ export default function ReviewModal({ activity, onClose }) {
                           <input value={item.intakeNote || ""} onChange={(event) => updateNutritionItem(item.id, "intakeNote", event.target.value)} placeholder="z. B. mit Wasser · im Zelt · halbe Portion" />
                         </label>
                       </div>
+                            {state.fuel.filter((fuel) => !fuel.archived).map((fuel) => <option key={fuel.id} value={fuel.id}>{fuelDisplayName(fuel)} · {fuel.quantity} {fuel.stockUnit || "Stück"}</option>)}
+                          </select>
                         </label>}
                         {selectedFuel && <div className="nutrition-catalog-card">
                           <div className="nutrition-catalog-copy">
