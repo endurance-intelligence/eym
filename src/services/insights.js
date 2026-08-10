@@ -92,35 +92,75 @@ export function hydration(activity, review) {
   if (!review) return null;
   const h = durationHours(activity);
   if (!h) return null;
-  const drunk = Number(review.drinkMl || 0);
+
+  const before = Math.max(0, Number(review.drinkBeforeMl || 0));
+  const during = Math.max(0, Number(review.drinkMl || 0));
+  const after = Math.max(0, Number(review.drinkAfterMl || 0));
+  const urine = Math.max(0, Number(review.urineMl || 0));
+  const measured = Boolean(Number(review.weightBefore) > 0 && Number(review.weightAfter) > 0);
+
   let loss;
-  const measured = Boolean(review.weightBefore && review.weightAfter);
   if (measured) {
-    loss = (Number(review.weightBefore) - Number(review.weightAfter)) * 1000 + drunk - Number(review.urineMl || 0);
+    loss = (Number(review.weightBefore) - Number(review.weightAfter)) * 1000 + during - urine;
   } else {
     const temp = Number(reviewWeather(activity, review)?.temperature ?? 18);
-    const effort = Number(review.rpe || 5);
-    loss = h * (420 + Math.max(0, temp - 15) * 22 + effort * 28);
+    const effort = Math.min(10, Math.max(1, Number(review.rpe || 5)));
+    const estimatedRate = Math.min(1200, Math.max(250, 360 + Math.max(0, temp - 15) * 15 + effort * 20));
+    loss = h * estimatedRate;
   }
+
   const rate = Math.max(0, loss / h);
-  const deficit = loss - drunk;
+  const duringRate = during / h;
+  const deficit = loss - during;
+  const recoveryGap = Math.max(0, deficit - after);
   const reliableDuration = h >= 0.5;
   const plausibleRate = rate >= 200 && rate <= 2500;
   const reliable = reliableDuration && plausibleRate;
+
   let reason = "";
-  if (!reliableDuration) reason = "Einheit zu kurz für eine belastbare Schweißraten-Empfehlung.";
+  if (!reliableDuration) reason = "Einheit zu kurz für eine belastbare Hydrationsauswertung.";
   else if (!plausibleRate) reason = "Hydrationswert unplausibel – Gewicht, Trinkmenge und Dauer bitte prüfen.";
-  const recommendedLow = reliable ? Math.min(1200, Math.round(rate * 0.75 / 50) * 50) : null;
-  const recommendedHigh = reliable ? Math.min(1500, Math.round(rate * 0.9 / 50) * 50) : null;
+
+  const thirst = review.hydrationThirst || "normal";
+  const thirstAdjustment = thirst === "stark" ? 0.1 : thirst === "gering" ? -0.1 : 0;
+  const lowShare = (measured ? 0.55 : 0.5) + thirstAdjustment;
+  const highShare = (measured ? 0.8 : 0.7) + thirstAdjustment;
+  const roundTo50 = (value) => Math.round(value / 50) * 50;
+  const upperRateLimit = Math.max(200, Math.min(900, roundTo50(rate)));
+  const recommendedLow = reliable
+    ? Math.max(200, Math.min(800, upperRateLimit, roundTo50(rate * lowShare)))
+    : null;
+  const recommendedHigh = reliable
+    ? Math.max(recommendedLow || 0, Math.min(900, upperRateLimit, roundTo50(rate * highShare)))
+    : null;
+
+  const overdrinking = measured && during > 0 && duringRate > rate * 1.05;
+  let guidance = measured
+    ? "Die Schweißrate basiert auf Gewicht vorher/nachher und der während der Einheit getrunkenen Menge."
+    : "Die Schweißrate ist geschätzt. Nutze die Trinkspanne als Orientierung, nicht als Trinkpflicht.";
+  if (overdrinking) {
+    guidance = "Die Trinkrate lag über dem gemessenen Flüssigkeitsverlust. Nicht weiter steigern; Durst und Verträglichkeit beachten.";
+  } else if (thirst === "stark" && recommendedLow && duringRate < recommendedLow) {
+    guidance += " Starker Durst bei niedrigerer Trinkrate spricht dafür, die Zufuhr beim nächsten vergleichbaren Lauf vorsichtig anzuheben.";
+  }
+
   return {
+    before: Math.round(before),
+    during: Math.round(during),
+    after: Math.round(after),
+    phaseTotal: Math.round(before + during + after),
     loss: Math.round(loss),
     rate: Math.round(rate),
+    duringRate: Math.round(duringRate),
     deficit: Math.round(deficit),
+    recoveryGap: Math.round(recoveryGap),
     recommendedLow,
     recommendedHigh,
     reliable,
     measured,
+    overdrinking,
     reason,
+    guidance,
   };
 }
 

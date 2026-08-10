@@ -227,17 +227,17 @@ function fluidRange(durationMinutes, temperature, experience) {
   const personalHigh = average(experience.measuredHydration.map((item) => item.recommendedHigh).filter(Boolean));
   if (personalLow && personalHigh) {
     return {
-      low: roundTo(clamp(personalLow, 300, 1000), 50),
-      high: roundTo(clamp(personalHigh, 400, 1200), 50),
+      low: roundTo(clamp(personalLow, 250, 800), 50),
+      high: roundTo(clamp(personalHigh, 350, 900), 50),
       personal: true,
       samples: experience.measuredHydration.length,
     };
   }
 
-  if (Number(temperature) >= 28) return { low: 550, high: 750, personal: false, samples: 0 };
-  if (Number(temperature) >= 23) return { low: 450, high: 650, personal: false, samples: 0 };
-  if (durationMinutes >= 180) return { low: 450, high: 750, personal: false, samples: 0 };
-  return { low: 350, high: 500, personal: false, samples: 0 };
+  if (Number(temperature) >= 28) return { low: 450, high: 650, personal: false, samples: 0 };
+  if (Number(temperature) >= 23) return { low: 400, high: 600, personal: false, samples: 0 };
+  if (durationMinutes >= 180) return { low: 300, high: 500, personal: false, samples: 0 };
+  return { low: 300, high: 500, personal: false, samples: 0 };
 }
 
 function productHistoryScore(item, experience) {
@@ -557,7 +557,7 @@ function recommendationRationale({
     `${Math.round(durationMinutes)} Minuten`,
     fuelModeLabel(mode),
     targetCarbs > 0 ? `rund ${Math.round(targetCarbs)} g Kohlenhydrate gesamt` : "Fuel optional",
-    fluidTotal > 0 ? `etwa ${Math.round(fluidTotal)} ml trinken` : null,
+    fluidTotal > 0 ? `währenddessen etwa ${Math.round(fluidTotal)} ml trinken` : null,
     temperature != null ? `Tagesmaximum ${Math.round(temperature)} °C` : null,
   ].filter(Boolean);
   const learning = experience.successfulFuelReviews

@@ -235,7 +235,11 @@ export default function ReviewModal({ activity, onClose }) {
     backSoreness: old.backSoreness ?? 0,
     mobility: old.mobility ?? 7,
     impactOnRunning: old.impactOnRunning || "nein",
-    drinkMl: old.drinkMl || (plannedFuelRecommendation?.target.fluidTotal ? String(plannedFuelRecommendation.target.fluidTotal) : ""),
+    drinkBeforeMl: old.drinkBeforeMl || "",
+    drinkMl: old.drinkMl || "",
+    drinkAfterMl: old.drinkAfterMl || "",
+    hydrationThirst: old.hydrationThirst || "normal",
+    hydrationNote: old.hydrationNote || "",
     weightBefore: old.weightBefore || "",
     weightAfter: old.weightAfter || "",
     urineMl: old.urineMl || 0,
@@ -657,11 +661,16 @@ export default function ReviewModal({ activity, onClose }) {
               <SymptomPicker title="Auffälligkeiten Magen" selected={review.stomachSymptoms} onChange={(value) => set("stomachSymptoms", value)} options={["Keine Beschwerden", "Aufstoßen", "Blähungen", "Übelkeit", "Völlegefühl", "Seitenstechen", "Toilettendrang"]} />
             </div>
             <div className="form-grid">
-              <label>Getrunken (ml)<input type="number" min="0" value={review.drinkMl} onChange={(event) => updateDrink(event.target.value)} /></label>
+              <label>PRE · vorher getrunken (ml)<input type="number" min="0" value={review.drinkBeforeMl} onChange={(event) => set("drinkBeforeMl", event.target.value)} /></label>
+              <label>DURING · währenddessen (ml)<input type="number" min="0" value={review.drinkMl} onChange={(event) => updateDrink(event.target.value)} /></label>
+              <label>POST · danach getrunken (ml)<input type="number" min="0" value={review.drinkAfterMl} onChange={(event) => set("drinkAfterMl", event.target.value)} /></label>
+              <label>Durst währenddessen<select value={review.hydrationThirst} onChange={(event) => set("hydrationThirst", event.target.value)}><option value="gering">Gering</option><option value="normal">Normal</option><option value="stark">Stark</option></select></label>
               <label>Schwitzen<select value={review.sweat} onChange={(event) => set("sweat", event.target.value)}><option>niedrig</option><option>mittel</option><option>hoch</option></select></label>
               <label>Gewicht vorher (kg)<input type="number" step="0.1" value={review.weightBefore} onChange={(event) => set("weightBefore", event.target.value)} /></label>
               <label>Gewicht nachher (kg)<input type="number" step="0.1" value={review.weightAfter} onChange={(event) => set("weightAfter", event.target.value)} /></label>
+              <label>Urin währenddessen (ml, optional)<input type="number" min="0" value={review.urineMl} onChange={(event) => set("urineMl", event.target.value)} /></label>
             </div>
+            <label>Hydration-Notiz<input value={review.hydrationNote} onChange={(event) => set("hydrationNote", event.target.value)} placeholder="z. B. Flasche nicht leer · starker Durst ab Runde 4 · danach Recovery Drink" /></label>
 
             <section className={`review-feature-box activity-weather-box ${weather ? "active" : ""}`}>
               <div className="activity-weather-heading">
@@ -886,7 +895,17 @@ export default function ReviewModal({ activity, onClose }) {
         )}
 
         <label>Notizen<textarea value={review.notes} onChange={(event) => set("notes", event.target.value)} /></label>
-        {kind === "endurance" && review.drinkMl && hydrationResult && <div className="hydration-box"><b>Trinkauswertung</b><span>Verlust ca. {hydrationResult.loss} ml · Rate {hydrationResult.rate} ml/h · Defizit {hydrationResult.deficit} ml</span><span>Nächster Ansatz: {hydrationResult.recommendedLow}–{hydrationResult.recommendedHigh} ml/h</span></div>}
+        {kind === "endurance" && hydrationResult && (review.drinkMl || review.drinkBeforeMl || review.drinkAfterMl || (review.weightBefore && review.weightAfter)) && (
+          <div className="hydration-box">
+            <b>Hydration V2 · PRE / DURING / POST</b>
+            <span>Vorher {hydrationResult.before} ml · währenddessen {hydrationResult.during} ml ({hydrationResult.duringRate} ml/h) · danach {hydrationResult.after} ml</span>
+            <span>{hydrationResult.measured ? "Gemessene" : "Geschätzte"} Schweißrate: ca. {hydrationResult.rate} ml/h · Defizit am Ende: {hydrationResult.deficit} ml</span>
+            {hydrationResult.reliable && <span>Orientierung währenddessen: {hydrationResult.recommendedLow}–{hydrationResult.recommendedHigh} ml/h · keine Trinkpflicht.</span>}
+            {!hydrationResult.reliable && hydrationResult.reason && <span>{hydrationResult.reason}</span>}
+            {hydrationResult.recoveryGap > 0 && <span>Nach POST verbleibt rechnerisch ca. {hydrationResult.recoveryGap} ml Restdefizit · ebenfalls keine Trinkpflicht.</span>}
+            <span>{hydrationResult.guidance}</span>
+          </div>
+        )}
         {saveError && <div className="review-save-error">{saveError}</div>}
         <button className="primary">Review speichern</button>
       </form>
