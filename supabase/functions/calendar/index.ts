@@ -44,6 +44,17 @@ function calendarIcon(item: Record<string, unknown>) {
   return "🟢";
 }
 
+function isCalendarItemVisible(item: Record<string, unknown>) {
+  if (item.archived) return false;
+  const missedMeta = item.missedMeta && typeof item.missedMeta === "object"
+    ? item.missedMeta as Record<string, unknown>
+    : {};
+  return !item.missedReason
+    && !item.plannedCancellation
+    && !item.cancelledAt
+    && !missedMeta.plannedCancellation;
+}
+
 function calendarSummary(item: Record<string, unknown>) {
   const distance = Number(item.distance || 0);
   let title = String(item.title || item.type || "Training").trim();
@@ -62,7 +73,7 @@ function calendarSummary(item: Record<string, unknown>) {
 function buildCalendar(plan: Record<string, unknown>[]) {
   const stamp = utcStamp();
   const events = plan
-    .filter((item) => !item.archived && /^\d{4}-\d{2}-\d{2}$/.test(String(item.date || "")))
+    .filter((item) => isCalendarItemVisible(item) && /^\d{4}-\d{2}-\d{2}$/.test(String(item.date || "")))
     .map((item) => {
       const description = [
         item.type,
@@ -118,7 +129,7 @@ Deno.serve(async (request) => {
       ...headers,
       "Content-Type": "text/calendar; charset=utf-8",
       "Content-Disposition": 'inline; filename="endurance-intelligence.ics"',
-      "Cache-Control": "public, max-age=300",
+      "Cache-Control": "no-store, max-age=0",
     },
   });
 });

@@ -58,6 +58,15 @@ function calendarIcon(item) {
   return "🟢";
 }
 
+export function isCalendarItemVisible(item) {
+  if (!item || item.archived) return false;
+  const missedMeta = item.missedMeta && typeof item.missedMeta === "object" ? item.missedMeta : {};
+  return !item.missedReason
+    && !item.plannedCancellation
+    && !item.cancelledAt
+    && !missedMeta.plannedCancellation;
+}
+
 export function calendarSummary(item) {
   const distance = Number(item.distance || 0);
   let title = String(item.title || item.type || "Training").trim();
@@ -76,7 +85,7 @@ export function calendarSummary(item) {
 export function buildCalendar(plan) {
   const stamp = formatUtcStamp(new Date());
   const events = (Array.isArray(plan) ? plan : [])
-    .filter((item) => !item.archived)
+    .filter((item) => isCalendarItemVisible(item))
     .map((item) => {
       const rawDate = item.date || dateForWeekday(item.day);
       if (!/^\d{4}-\d{2}-\d{2}$/.test(String(rawDate))) return "";
