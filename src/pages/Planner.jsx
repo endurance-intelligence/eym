@@ -123,6 +123,7 @@ import {
   upsertAvailabilityException,
 } from "../services/plannerAvailability";
 import { workoutRoleAssessment } from "../services/workoutRoles";
+import { weeklyReviewSummary } from "../services/weeklyReview";
 import "./Planner.css";
 
 const dayFormatter = new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" });
@@ -609,6 +610,16 @@ export default function Planner() {
       activityGroups: state.activityGroups,
     });
   }, [closureOffset, state.plan, state.activities, canonicalActivities, state.reviews, state.activityGroups]);
+  const previousWeekReview = useMemo(() => {
+    if (closureOffset == null || !previousWeekClosure?.ready) return null;
+    return weeklyReviewSummary({
+      weekStart: startOfWeek(new Date(), closureOffset),
+      plan: state.plan,
+      activities: groupedActivities,
+      allActivities: state.activities,
+      reviews: state.reviews,
+    });
+  }, [closureOffset, previousWeekClosure?.ready, state.plan, groupedActivities, state.activities, state.reviews]);
   const matchedActivityIds = useMemo(() => new Set([...matches.values()].map((activity) => activity.id)), [matches]);
   const todayKey = isoDate(new Date());
   const footballEditable = mondayDate >= todayKey && !footballSlot?.completed;
@@ -2399,6 +2410,25 @@ export default function Planner() {
             <div className={previousWeekClosure?.unresolvedItems.length ? "open" : "done"}><b>{previousWeekClosure?.unresolvedItems.length ? "!" : "✓"}</b><span><strong>Geplante Einheiten</strong><small>{previousWeekClosure?.unresolvedItems.length ? `${previousWeekClosure.unresolvedItems.length} Einheit${previousWeekClosure.unresolvedItems.length === 1 ? " ist" : "en sind"} noch offen` : "Alles erledigt, verschoben oder als ausgefallen markiert"}</small></span></div>
             <div className="done"><b>✓</b><span><strong>Trainingsdaten</strong><small>{previousWeekClosure?.activityCount || 0} Aktivitäten der {closurePeriodLabel} berücksichtigt</small></span></div>
           </div>
+          {!planningWeekLocked && previousWeekReview && (
+            <div className={`planner-week-review ${previousWeekReview.tone}`}>
+              <div className="planner-week-review-head">
+                <div><span>Coach-Wochenreview</span><strong>{previousWeekReview.headline}</strong><small>{previousWeekReview.summary}</small></div>
+                <b>{previousWeekReview.tone === "good" ? "✓ stabil" : previousWeekReview.tone === "mixed" ? "↗ beobachten" : "! steuern"}</b>
+              </div>
+              <div className="planner-week-review-metrics">
+                <div><span>Laufumfang</span><strong>{previousWeekReview.metrics.actualRunningKm.toFixed(1).replace(".0", "")} km</strong><small>Plan {previousWeekReview.metrics.plannedRunningKm.toFixed(1).replace(".0", "")} km</small></div>
+                <div><span>Schlüsselreize</span><strong>{previousWeekReview.metrics.keyCompleted}/{previousWeekReview.metrics.keyPlanned}</strong><small>absolviert</small></div>
+                <div><span>Zusatzbelastung</span><strong>{previousWeekReview.metrics.extraActivities}</strong><small>ungeplante Aktivitäten</small></div>
+                <div><span>Reviews</span><strong>{previousWeekReview.metrics.reviewCount}</strong><small>Ø RPE {previousWeekReview.metrics.averageRpe?.toFixed(1).replace(".", ",") || "–"}</small></div>
+              </div>
+              <div className="planner-week-review-columns">
+                <article className="positive"><span>Was gut war</span>{previousWeekReview.positives.map((item) => <p key={item}>✓ {item}</p>)}</article>
+                <article className="watch"><span>Auffällig</span>{previousWeekReview.watchouts.map((item) => <p key={item}>• {item}</p>)}</article>
+                <article className="consequence"><span>Konsequenz</span><p>{previousWeekReview.consequence}</p></article>
+              </div>
+            </div>
+          )}
           <div className="planner-gate-actions">
             {previousWeekClosure?.missingReviews.length > 0 && <Link className="secondary" to="/training">Reviews abschließen</Link>}
             {previousWeekClosure?.unresolvedItems.length > 0 && closureOffset != null && <button type="button" onClick={() => setOffsetWeeks(closureOffset)}>{closurePeriodLabel === "Vorwoche" ? "Vorwoche öffnen" : "Aktuelle Woche öffnen"}</button>}
