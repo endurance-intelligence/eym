@@ -113,6 +113,7 @@ function mergeState(localState = {}, cloudState = {}) {
     equipment: asArray(cloud.equipment, asArray(local.equipment)),
     fuel: inventory.fuel,
     racePrepPlans: asArray(cloud.racePrepPlans, asArray(local.racePrepPlans)),
+    raceCoachSessions: { ...(local.raceCoachSessions || {}), ...(cloud.raceCoachSessions || {}) },
     fuelCatalogExclusions: [...new Set([
       ...asArray(local.fuelCatalogExclusions),
       ...asArray(cloud.fuelCatalogExclusions),

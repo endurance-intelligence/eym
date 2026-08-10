@@ -47,6 +47,7 @@ export const defaultState = {
   equipment: [],
   fuel: [],
   racePrepPlans: [],
+  raceCoachSessions: {},
   fuelCatalogExclusions: [],
   healthCheckins: [],
   coachRecommendationHistory: [],

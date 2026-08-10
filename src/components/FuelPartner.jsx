@@ -10,6 +10,7 @@ import {
 } from "../services/fuelPlanner";
 import { backyardCrewPlan, raceFuelStrategy } from "../services/raceFuelStrategy";
 import RacePrepPlanner from "./RacePrepPlanner";
+import RaceCoach from "./RaceCoach";
 import "./FuelPartner.css";
 
 const dateFormatter = new Intl.DateTimeFormat("de-DE", {
@@ -56,6 +57,7 @@ function PartnerViewTabs({ active, onSelect }) {
     <div className="fuel-partner-view-tabs" role="tablist" aria-label="Fuel Partner Bereich">
       <button type="button" role="tab" aria-selected={active === "partner"} className={active === "partner" ? "selected" : ""} onClick={() => onSelect("partner")}>Nächster Lauf</button>
       <button type="button" role="tab" aria-selected={active === "prep"} className={active === "prep" ? "selected" : ""} onClick={() => onSelect("prep")}>Race Prep</button>
+      <button type="button" role="tab" aria-selected={active === "coach"} className={active === "coach" ? "selected" : ""} onClick={() => onSelect("coach")}>Race Coach</button>
     </div>
   );
 }
@@ -80,7 +82,8 @@ export default function FuelPartner() {
   const { state, setState } = useApp();
   const [searchParams, setSearchParams] = useSearchParams();
   const workouts = useMemo(() => upcomingFuelWorkouts(state.plan), [state.plan]);
-  const view = searchParams.get("view") === "prep" ? "prep" : "partner";
+  const requestedView = searchParams.get("view");
+  const view = requestedView === "prep" || requestedView === "coach" ? requestedView : "partner";
   const requestedWorkoutId = searchParams.get("workout");
   const workout = workouts.find((item) => item.id === requestedWorkoutId) || workouts[0] || null;
   const mode = workout?.fuelMode || suggestedFuelMode(workout);
@@ -100,7 +103,7 @@ export default function FuelPartner() {
 
   function selectView(nextView) {
     const next = new URLSearchParams(searchParams);
-    if (nextView === "prep") next.set("view", "prep");
+    if (nextView === "prep" || nextView === "coach") next.set("view", nextView);
     else next.delete("view");
     next.delete("round");
     setSearchParams(next, { replace: true });
@@ -136,6 +139,15 @@ export default function FuelPartner() {
       <Card className="wide fuel-partner">
         <PartnerViewTabs active={view} onSelect={selectView} />
         <RacePrepPlanner />
+      </Card>
+    );
+  }
+
+  if (view === "coach") {
+    return (
+      <Card className="wide fuel-partner">
+        <PartnerViewTabs active={view} onSelect={selectView} />
+        <RaceCoach />
       </Card>
     );
   }

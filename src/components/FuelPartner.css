@@ -1202,3 +1202,277 @@
     flex: 1;
   }
 }
+
+/* v3.9.60 – generic race coach / live checkpoint engine */
+.race-coach,
+.race-coach-empty {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 16px;
+}
+
+.race-coach-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(230px, 320px);
+  gap: 20px;
+  align-items: end;
+}
+
+.race-coach-heading h2,
+.race-coach-empty h2 {
+  margin: 3px 0 6px;
+}
+
+.race-coach-heading p,
+.race-coach-empty p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.race-coach-heading > label,
+.race-coach-live-form label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.race-coach-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.race-coach-summary article {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-input);
+}
+
+.race-coach-summary span,
+.race-coach-summary small {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.race-coach-summary strong {
+  font-size: 15px;
+}
+
+.race-coach-status.hold,
+.race-coach-decision.hold {
+  border-color: var(--success-border);
+}
+
+.race-coach-status.caution,
+.race-coach-decision.caution {
+  border-color: color-mix(in srgb, var(--warning) 65%, var(--border));
+}
+
+.race-coach-status.adjust,
+.race-coach-decision.adjust {
+  border-color: color-mix(in srgb, #ff7777 68%, var(--border));
+}
+
+.race-coach-blueprint,
+.race-coach-live,
+.race-coach-decision,
+.race-coach-checkpoints {
+  display: grid;
+  gap: 11px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--bg-sidebar) 88%, transparent);
+}
+
+.race-coach-section-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: end;
+}
+
+.race-coach-section-heading span,
+.race-coach-decision > span {
+  color: var(--accent-bright);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.race-coach-section-heading h3,
+.race-coach-decision h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.race-coach-section-heading small {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.race-coach-section-heading button {
+  min-height: 31px;
+  padding: 5px 9px;
+  font-size: 9px;
+}
+
+.race-coach-phase-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.race-coach-phase-grid article {
+  display: grid;
+  align-content: start;
+  gap: 5px;
+  padding: 11px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--bg-input);
+}
+
+.race-coach-phase-grid article.active {
+  border-color: var(--accent-border-strong);
+  background: color-mix(in srgb, var(--accent-surface-strong) 55%, var(--bg-input));
+}
+
+.race-coach-phase-grid span {
+  color: var(--accent-bright);
+  font-size: 9px;
+  font-weight: 850;
+}
+
+.race-coach-phase-grid h4 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.race-coach-phase-grid p {
+  margin: 0;
+  color: var(--muted-bright);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.race-coach-live-grid {
+  display: grid;
+  grid-template-columns: 1.1fr .9fr;
+  gap: 10px;
+}
+
+.race-coach-live-form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.race-coach-decision {
+  align-content: start;
+}
+
+.race-coach-decision > strong {
+  color: var(--text);
+  font-size: 20px;
+}
+
+.race-coach-decision > p {
+  margin: 0;
+  color: var(--muted-bright);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.race-coach-actions {
+  display: grid;
+  gap: 6px;
+}
+
+.race-coach-actions div {
+  padding: 8px 9px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--bg-input);
+  color: var(--muted-bright);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.race-coach-decision > small {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.race-coach-checkpoint-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 7px;
+}
+
+.race-coach-checkpoint-list article {
+  display: grid;
+  gap: 3px;
+  padding: 9px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-input);
+}
+
+.race-coach-checkpoint-list article.done {
+  opacity: .62;
+}
+
+.race-coach-checkpoint-list article.next {
+  opacity: 1;
+  border-color: var(--accent-border-strong);
+  background: color-mix(in srgb, var(--accent-surface-strong) 48%, var(--bg-input));
+}
+
+.race-coach-checkpoint-list span {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.race-coach-checkpoint-list strong {
+  font-size: 11px;
+}
+
+.race-coach-checkpoint-list small {
+  color: var(--muted);
+  font-size: 8px;
+}
+
+@media (max-width: 1050px) {
+  .race-coach-summary,
+  .race-coach-phase-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .race-coach-live-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .race-coach-heading,
+  .race-coach-summary,
+  .race-coach-phase-grid,
+  .race-coach-live-form {
+    grid-template-columns: 1fr;
+  }
+
+  .race-coach-section-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
