@@ -18,6 +18,29 @@ import {
 import { activityCoachAssessment } from "../services/activityCoach";
 import { fuelRecommendationFromState, plannedWorkoutForActivity } from "../services/fuelPlanner";
 import ActivityRouteMap from "./ActivityRouteMap";
+
+const FUEL_TIMING_OPTIONS = [
+  { value: "round", label: "Runde" },
+  { value: "minute", label: "Minute" },
+  { value: "km", label: "Kilometer" },
+  { value: "free", label: "Freitext" },
+];
+
+function fuelTimingFieldLabel(mode) {
+  return {
+    round: "Runde",
+    minute: "Minute",
+    km: "Kilometer",
+    free: "Zeitpunkt",
+  }[mode] || "Minute";
+}
+
+function fuelTimingPlaceholder(mode) {
+  if (mode === "round") return "z. B. 4";
+  if (mode === "km") return "z. B. 18,5";
+  if (mode === "free") return "z. B. direkt am VP";
+  return "z. B. 45";
+}
 import "./ReviewModal.css";
 
 const emptyNutritionItem = (mode = "catalog") => ({
@@ -717,6 +740,26 @@ export default function ReviewModal({ activity, onClose }) {
                             <option value="">Produkt auswählen …</option>
                             {state.fuel.filter((fuel) => !fuel.archived).map((fuel) => <option key={fuel.id} value={fuel.id}>{fuelDisplayName(fuel)} · {fuel.quantity} {fuel.stockUnit || "Stück"}</option>)}
                           </select>
+                      <div className="nutrition-timing-fields">
+                        <label>Wann genommen?
+                          <select value={item.intakeTimingMode || "minute"} onChange={(event) => updateNutritionItem(item.id, "intakeTimingMode", event.target.value)}>
+                            {FUEL_TIMING_OPTIONS.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
+                          </select>
+                        </label>
+                        <label>{fuelTimingFieldLabel(item.intakeTimingMode || "minute")}
+                          <input
+                            type={(item.intakeTimingMode || "minute") === "free" ? "text" : "number"}
+                            min={(item.intakeTimingMode || "minute") === "round" ? "1" : "0"}
+                            step={(item.intakeTimingMode || "minute") === "km" ? "0.1" : "1"}
+                            value={item.intakeTimingValue || ""}
+                            onChange={(event) => updateNutritionItem(item.id, "intakeTimingValue", event.target.value)}
+                            placeholder={fuelTimingPlaceholder(item.intakeTimingMode || "minute")}
+                          />
+                        </label>
+                        <label className="nutrition-timing-note">Kurze Notiz
+                          <input value={item.intakeNote || ""} onChange={(event) => updateNutritionItem(item.id, "intakeNote", event.target.value)} placeholder="z. B. mit Wasser · im Zelt · halbe Portion" />
+                        </label>
+                      </div>
                         </label>}
                         {selectedFuel && <div className="nutrition-catalog-card">
                           <div className="nutrition-catalog-copy">

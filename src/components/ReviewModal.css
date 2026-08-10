@@ -405,6 +405,44 @@
   .review-score-segments {
     gap: 3px;
     padding: 2px;
+
+/* v3.9.50 – detailed fueling timing */
+.nutrition-timing-fields {
+  display: grid;
+  grid-template-columns: minmax(150px, .7fr) minmax(150px, .7fr) minmax(240px, 1.6fr);
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.nutrition-timing-fields label {
+  min-width: 0;
+}
+
+.nutrition-timing-fields input,
+.nutrition-timing-fields select {
+  width: 100%;
+}
+
+@media (max-width: 700px) {
+  .nutrition-timing-fields {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .nutrition-timing-note {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 520px) {
+  .nutrition-timing-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .nutrition-timing-note {
+    grid-column: auto;
+  }
+}
   }
 
   .review-score-segments button {
