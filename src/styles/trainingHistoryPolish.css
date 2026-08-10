@@ -1,0 +1,57 @@
+/* v3.9.52 – clearer hierarchy between months and calendar weeks */
+.training-month-toggle {
+  border-left: 4px solid var(--accent-border-strong);
+}
+
+.training-month.open > .training-month-toggle {
+  background: color-mix(in srgb, var(--accent-surface) 40%, var(--bg-card));
+}
+
+.training-month-title > span {
+  color: var(--accent-bright);
+}
+
+.training-month-weeks {
+  padding-left: 10px;
+}
+
+.training-week {
+  border-left: 3px solid color-mix(in srgb, var(--warning) 70%, var(--border));
+}
+
+.training-week + .training-week {
+  border-top: 1px solid var(--border);
+}
+
+.training-week-toggle {
+  padding-left: 14px;
+}
+
+.training-week-title > span {
+  color: var(--warning);
+}
+
+.training-week.open {
+  background: color-mix(in srgb, var(--warning) 4%, transparent);
+}
+
+/* Intake-specific GI controls reuse the existing review component language. */
+.nutrition-intake-tolerance {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-input) 88%, transparent);
+}
+
+.nutrition-intake-tolerance > label {
+  display: grid;
+  gap: 6px;
+}
+
+.nutrition-intake-tolerance input,
+.nutrition-intake-tolerance select {
+  width: 100%;
+}

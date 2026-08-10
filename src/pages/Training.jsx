@@ -30,6 +30,7 @@ import {
   reviewTrackingStartDate,
 } from "../services/reviewCoverage";
 import { goalRequirements } from "../services/scienceCoach";
+import "../styles/trainingHistoryPolish.css";
 import { workoutRoleAssessment } from "../services/workoutRoles";
 
 const monthFormatter = new Intl.DateTimeFormat("de-DE", { month: "long", year: "numeric" });
