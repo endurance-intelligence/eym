@@ -762,28 +762,6 @@ export default function ReviewModal({ activity, onClose }) {
                         </label>
                       </div>
                       {(selectedFuel || item.mode === "manual") && (
-                        <div className="nutrition-timing-fields">
-                          <label>Wann genommen?
-                            <select value={item.intakeTimingMode || "minute"} onChange={(event) => updateNutritionItem(item.id, "intakeTimingMode", event.target.value)}>
-                              {FUEL_TIMING_OPTIONS.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
-                            </select>
-                          </label>
-                          <label>{fuelTimingFieldLabel(item.intakeTimingMode || "minute")}
-                            <input
-                              type={(item.intakeTimingMode || "minute") === "free" ? "text" : "number"}
-                              min={(item.intakeTimingMode || "minute") === "round" ? "1" : "0"}
-                              step={(item.intakeTimingMode || "minute") === "km" ? "0.1" : "1"}
-                              value={item.intakeTimingValue || ""}
-                              onChange={(event) => updateNutritionItem(item.id, "intakeTimingValue", event.target.value)}
-                              placeholder={fuelTimingPlaceholder(item.intakeTimingMode || "minute")}
-                            />
-                          </label>
-                          <label className="nutrition-timing-note">Kurze Notiz
-                            <input value={item.intakeNote || ""} onChange={(event) => updateNutritionItem(item.id, "intakeNote", event.target.value)} placeholder="z. B. mit Wasser · im Zelt · halbe Portion" />
-                          </label>
-                        </div>
-                      )}
-                      {(selectedFuel || item.mode === "manual") && (
                         <div className="nutrition-intake-tolerance">
                           <label>Magenverträglichkeit dieser Aufnahme
                             <select value={item.intakeTolerance || "unknown"} onChange={(event) => updateNutritionItem(item.id, "intakeTolerance", event.target.value)}>

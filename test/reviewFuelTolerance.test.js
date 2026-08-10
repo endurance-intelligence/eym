@@ -9,4 +9,5 @@ test("Fuel Lab entries expose timing and intake-specific GI feedback", () => {
   assert.match(reviewSource, /Magenverträglichkeit dieser Aufnahme/);
   assert.match(reviewSource, /intakeSymptoms/);
   assert.match(reviewSource, /intakeReactionNote/);
+  assert.equal((reviewSource.match(/className="nutrition-timing-fields"/g) || []).length, 1);
 });
