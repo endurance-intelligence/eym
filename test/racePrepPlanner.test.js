@@ -5,6 +5,7 @@ import {
   RACE_PREP_PRESETS,
   racePrepFuelEvidence,
   racePrepProfileFromEvent,
+  racePrepProfileWithEvidenceDefaults,
   racePrepProfileFromPreset,
 } from "../src/services/racePrepPlanner.js";
 
@@ -166,4 +167,75 @@ test("1000 km Race Prep remains calculable without turning inventory into a plan
   assert.ok(plan.summary.schedulePoints > 100);
   assert.ok(plan.recommendation.consume.length >= 2);
   assert.ok(plan.warnings.some((warning) => /Renndauer ist aktuell geschätzt/.test(warning)));
+});
+
+test("Race Prep keeps a training-proven electrolyte drink separate from gels", () => {
+  const electrolyte = {
+    id: "electrolyte-500",
+    brand: "Isostar",
+    name: "Hydrate",
+    category: "Elektrolyte",
+    carbs: 0,
+    sodium: 450,
+    caffeine: 0,
+    preparedVolumeMl: 500,
+    stockUnit: "Portionen",
+  };
+  const state = {
+    fuel: [gel, electrolyte],
+    activities: [{ id: "drink-test", type: "Run", distance: 24, duration: 150, date: "2026-08-08" }],
+    reviews: {
+      "drink-test": {
+        stomach: 9,
+        stomachSymptoms: [],
+        nutritionItems: [
+          { fuelItemId: "gel-160", intakeTolerance: "good" },
+          { fuelItemId: "electrolyte-500", intakeTolerance: "good" },
+        ],
+      },
+    },
+  };
+
+  const profile = racePrepProfileWithEvidenceDefaults(
+    { name: "50k", format: "distance", distanceKm: 50, durationMinutes: 360 },
+    state,
+  );
+  const plan = buildRacePrepPlan({ profile, state });
+
+  assert.deepEqual(new Set(plan.effectiveFuelItemIds), new Set(["gel-160", "electrolyte-500"]));
+  assert.equal(plan.recommendation.hydrationProduct?.product, "Isostar Hydrate");
+  assert.ok(plan.strategy.rows.some((row) => row.drinkMl > 0 && row.drinkProduct === "Isostar Hydrate"));
+  assert.ok(plan.recommendation.consume.some((item) => item.fuelItemId === "gel-160" && item.unit !== "ml"));
+  assert.ok(plan.recommendation.consume.some((item) => item.fuelItemId === "electrolyte-500" && item.unit === "ml"));
+});
+
+test("a short race still surfaces a proven drink without inventing a DURING slot", () => {
+  const electrolyte = {
+    id: "short-drink",
+    name: "Trusted Electrolyte",
+    category: "Elektrolyte",
+    carbs: 0,
+    sodium: 400,
+    preparedVolumeMl: 500,
+  };
+  const state = {
+    fuel: [electrolyte],
+    activities: [{ id: "short-drink-test", duration: 90 }],
+    reviews: {
+      "short-drink-test": {
+        stomach: 9,
+        stomachSymptoms: [],
+        nutritionItems: [{ fuelItemId: "short-drink", intakeTolerance: "good" }],
+      },
+    },
+  };
+  const profile = racePrepProfileWithEvidenceDefaults(
+    { name: "10k", format: "distance", distanceKm: 10, durationMinutes: 45 },
+    state,
+  );
+  const plan = buildRacePrepPlan({ profile, state });
+
+  assert.equal(plan.summary.schedulePoints, 0);
+  assert.equal(plan.recommendation.hydrationProduct?.product, "Trusted Electrolyte");
+  assert.match(plan.phases.find((phase) => phase.key === "during").detail, /Trusted Electrolyte/);
 });

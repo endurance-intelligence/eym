@@ -274,6 +274,7 @@ export function buildRoutePacingPlan({ route, targetDurationMinutes, fuelStrateg
       cumulativeMinutes: cumulativeSeconds / 60,
       fuel: [],
       drinkMl: 0,
+      drinkProduct: "",
     };
   });
 
@@ -282,6 +283,7 @@ export function buildRoutePacingPlan({ route, targetDurationMinutes, fuelStrateg
     const index = chooseFuelSegment(segments, minute);
     if (index < 0) return;
     segments[index].drinkMl += Math.max(0, Math.round(numeric(row.drinkMl)));
+    if (row.drinkProduct) segments[index].drinkProduct = row.drinkProduct;
     if (Array.isArray(row.fuel)) segments[index].fuel.push(...row.fuel.map((item) => ({ ...item, plannedMinute: minute })));
   });
 

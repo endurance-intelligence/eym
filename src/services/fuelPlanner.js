@@ -261,8 +261,11 @@ function productHistoryScore(item, experience) {
 }
 
 function isPreparedDrink(item) {
-  return numeric(item?.preparedVolumeMl) > 0
-    || (item?.servingUnit === "ml" && numeric(item?.servingQuantity) > 0);
+  if (numeric(item?.preparedVolumeMl) > 0) return true;
+  const category = String(item?.category || "");
+  return ["Drink Mix", "Elektrolyte"].includes(category)
+    && item?.servingUnit === "ml"
+    && numeric(item?.servingQuantity) > 0;
 }
 
 function productScore(item, experience, kind, targetCarbs) {

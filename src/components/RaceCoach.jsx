@@ -80,6 +80,19 @@ function elevationPolyline(route) {
     return `${x.toFixed(1)},${y.toFixed(1)}`;
   }).join(" ");
 }
+function routeDistanceTicks(route) {
+  const distance = Math.max(0, Number(route?.distanceKm || 0));
+  if (!(distance > 0)) return [];
+  const step = distance <= 15 ? 1 : distance <= 30 ? 2 : distance <= 60 ? 5 : distance <= 120 ? 10 : distance <= 300 ? 25 : 50;
+  const ticks = [0];
+  for (let km = step; km < distance - 0.05; km += step) ticks.push(km);
+  if (Math.abs((ticks.at(-1) || 0) - distance) > 0.05) ticks.push(distance);
+  return ticks.map((km) => ({
+    km,
+    left: Math.min(100, Math.max(0, (km / distance) * 100)),
+    label: Number.isInteger(km) ? String(km) : km.toLocaleString("de-DE", { maximumFractionDigits: 1 }),
+  }));
+}
 
 function compactRouteSegments(segments, showAll) {
   if (showAll || segments.length <= 24) return segments;
@@ -136,6 +149,7 @@ export default function RaceCoach() {
   );
   const routeRows = compactRouteSegments(plan?.routePlan?.segments || [], showAllRoute);
   const profilePolyline = elevationPolyline(setup.routeProfile);
+  const routeTicks = routeDistanceTicks(setup.routeProfile);
 
   useEffect(() => {
     const url = source?.profile?.routeGpxUrl;
@@ -360,7 +374,14 @@ export default function RaceCoach() {
               </div>
               <button type="button" className="secondary" onClick={removeRoute}>Strecke entfernen</button>
             </div>
-            {profilePolyline && <svg className="race-coach-elevation" viewBox="0 0 1000 130" preserveAspectRatio="none" role="img" aria-label="Höhenprofil der Rennstrecke"><polyline points={profilePolyline} /></svg>}
+            {profilePolyline && (
+              <div className="race-coach-elevation-wrap">
+                <svg className="race-coach-elevation" viewBox="0 0 1000 130" preserveAspectRatio="none" role="img" aria-label="Höhenprofil der Rennstrecke"><polyline points={profilePolyline} /></svg>
+                <div className="race-coach-elevation-axis" aria-hidden="true">
+                  {routeTicks.map((tick) => <span key={tick.km} style={{ left: `${tick.left}%` }}><i />{tick.label}<small>km</small></span>)}
+                </div>
+              </div>
+            )}
             {routeWarning && <div className="race-coach-route-warning">⚠ {routeWarning}</div>}
           </div>
         )}
@@ -389,7 +410,7 @@ export default function RaceCoach() {
                 <div className="race-coach-segment-elevation"><span>+{numberLabel(segment.gainM)} m</span><span>−{numberLabel(segment.lossM)} m</span></div>
                 <p>{segment.cue}</p>
                 {(segment.drinkMl > 0 || segment.fuel.length > 0) && <div className="race-coach-segment-fuel">
-                  {segment.drinkMl > 0 && <span>💧 {segment.drinkMl} ml</span>}
+                  {segment.drinkMl > 0 && <span>💧 {segment.drinkMl} ml{segment.drinkProduct ? ` · ${segment.drinkProduct}` : ""}</span>}
                   {segment.fuel.map((fuel, fuelIndex) => <span key={`${fuel.product}-${fuelIndex}`}>⚡ {fuel.product}</span>)}
                 </div>}
               </article>

@@ -1,5 +1,5 @@
 import { fuelRecommendationForWorkout } from "./fuelPlanner.js";
-import { defaultConsumptionUnit, fuelDisplayName } from "./fuelNutrition.js";
+import { defaultConsumptionUnit, fuelDisplayName, nutritionForConsumption } from "./fuelNutrition.js";
 import { raceFuelStrategy } from "./raceFuelStrategy.js";
 
 const MINUTES_PER_HOUR = 60;
@@ -54,6 +54,16 @@ function activityDurationMinutes(activity = {}) {
 function cleanSymptoms(review = {}) {
   return (Array.isArray(review.stomachSymptoms) ? review.stomachSymptoms : [])
     .filter((entry) => !String(entry).startsWith("Keine"));
+}
+function isHydrationFuelItem(item = {}) {
+  return Number(item?.preparedVolumeMl || 0) > 0
+    || ["Drink Mix", "Elektrolyte"].includes(String(item?.category || ""));
+}
+function hydrationReferenceVolume(item = {}) {
+  const prepared = numeric(item.preparedVolumeMl);
+  if (prepared > 0) return prepared;
+  if (item.servingUnit === "ml") return numeric(item.servingQuantity);
+  return 0;
 }
 
 export const RACE_PREP_FORMATS = [
@@ -221,6 +231,7 @@ export function racePrepFuelEvidence(state = {}) {
         sodium: numeric(item.sodium),
         caffeine: numeric(item.caffeine),
         category: item.category || "Sonstiges",
+        role: isHydrationFuelItem(item) ? "hydration" : "fuel",
         tone,
         recommended,
         detail,
@@ -237,11 +248,16 @@ export function racePrepFuelEvidence(state = {}) {
 export function racePrepProfileWithEvidenceDefaults(profile, state = {}) {
   const normalized = normalizeRacePrepProfile(profile);
   if (normalized.fuelItemIds !== null) return normalized;
-  const defaults = racePrepFuelEvidence(state)
-    .filter((entry) => entry.recommended && entry.carbs > 0)
-    .slice(0, 4)
+  const evidence = racePrepFuelEvidence(state);
+  const fuelDefaults = evidence
+    .filter((entry) => entry.recommended && entry.role === "fuel" && entry.carbs > 0)
+    .slice(0, 3)
     .map((entry) => entry.id);
-  return { ...normalized, fuelItemIds: defaults };
+  const hydrationDefault = evidence
+    .filter((entry) => entry.recommended && entry.role === "hydration")
+    .slice(0, 1)
+    .map((entry) => entry.id);
+  return { ...normalized, fuelItemIds: [...new Set([...fuelDefaults, ...hydrationDefault])] };
 }
 
 function syntheticRaceWorkout(profile) {
@@ -267,15 +283,18 @@ function syntheticRaceWorkout(profile) {
 }
 
 function phasePlan(profile, recommendation) {
+  const hydrationName = recommendation.hydrationProduct?.product || "";
   const duringFuel = recommendation.target.carbsPerHour > 0
     ? `${Math.round(recommendation.target.carbsPerHour)} g KH/h · insgesamt ca. ${Math.round(recommendation.target.carbsTotal)} g`
     : "Während des Rennens ist kein zusätzlicher Kohlenhydrat-Plan nötig.";
   const duringFluid = recommendation.target.fluidTotal > 0
-    ? `Orientierung ${Math.round(recommendation.target.fluidPerHour)} ml/h · insgesamt ca. ${Math.round(recommendation.target.fluidTotal)} ml`
-    : "Trinken nach Durst und Bedingungen; kein fixer DURING-Block erforderlich.";
+    ? `Orientierung ${Math.round(recommendation.target.fluidPerHour)} ml/h · insgesamt ca. ${Math.round(recommendation.target.fluidTotal)} ml${hydrationName ? ` · bewährter Drink: ${hydrationName}` : ""}`
+    : hydrationName
+      ? `Kein fixer DURING-Drink nötig. ${hydrationName} bleibt als bewährte Option für PRE, Hitze oder tatsächlichen Durst sichtbar.`
+      : "Trinken nach Durst und Bedingungen; kein fixer DURING-Block erforderlich.";
 
   return [
-    { key: "pre", label: "PRE", title: "Vor dem Start", detail: "Vertraute Mahlzeit und Getränke einplanen. Keine neuen Produkte am Renntag testen.", note: "PRE wird bewusst nicht in die DURING-Mengen eingerechnet." },
+    { key: "pre", label: "PRE", title: "Vor dem Start", detail: `Vertraute Mahlzeit und Getränke einplanen. Keine neuen Produkte am Renntag testen.${hydrationName ? ` Bewährte Getränkebasis: ${hydrationName}.` : ""}`, note: "PRE wird bewusst nicht in die DURING-Mengen eingerechnet." },
     { key: "during", label: "DURING", title: profile.format === "loop" ? "Pro Runde / Rennstunde" : "Während des Rennens", detail: `${duringFuel} · ${duringFluid}`, note: "Konkrete Produkte stammen aus deiner ausgewählten und im Training belegten Fuel-Basis." },
     { key: "post", label: "POST", title: "Nach dem Ziel / Tagesblock", detail: "Recovery-Verpflegung separat bereitlegen und nach tatsächlichem Hunger, Durst und Verträglichkeit nutzen.", note: "POST wird im Review getrennt erfasst und verändert die DURING-Rate nicht." },
   ];
@@ -316,6 +335,30 @@ function consumptionEntryFromManual(entry, quantity) {
     item: { id: entry.id, name: entry.name, carbs: numeric(entry.carbs), sodium: numeric(entry.sodium), caffeine: numeric(entry.caffeine) },
     evidenceLabel: "Manuell ergänzt · nicht automatisch als trainingsbewährt gewertet",
     evidenceTone: "base",
+  };
+}
+
+function hydrationEntryFromCatalog(entry, fluidTotal) {
+  if (!entry || !(fluidTotal > 0)) return null;
+  const referenceVolumeMl = hydrationReferenceVolume(entry.item);
+  if (!(referenceVolumeMl > 0)) return null;
+  const nutrition = nutritionForConsumption({ quantity: fluidTotal, unit: "ml" }, entry.item);
+  return {
+    fuelItemId: entry.id,
+    product: entry.name,
+    category: entry.category,
+    quantity: fluidTotal,
+    unit: "ml",
+    carbs: numeric(nutrition.carbs),
+    sodium: numeric(nutrition.sodium),
+    caffeine: numeric(nutrition.caffeine),
+    inventoryUnits: 0,
+    stockUnit: entry.item?.stockUnit || "",
+    availableInventory: 0,
+    item: entry.item,
+    evidenceLabel: entry.detail,
+    evidenceTone: entry.tone,
+    hydration: true,
   };
 }
 
@@ -375,23 +418,39 @@ export function buildRacePrepPlan({ profile: inputProfile, state = {} } = {}) {
   });
   const evidenceCatalog = racePrepFuelEvidence(state);
   const effectiveFuelItemIds = profile.fuelItemIds === null
-    ? evidenceCatalog.filter((entry) => entry.recommended && entry.carbs > 0).slice(0, 4).map((entry) => entry.id)
+    ? racePrepProfileWithEvidenceDefaults(profile, state).fuelItemIds
     : profile.fuelItemIds;
   const selectedCatalog = effectiveFuelItemIds.map((id) => evidenceCatalog.find((entry) => entry.id === String(id))).filter(Boolean);
+  const selectedHydration = selectedCatalog.find((entry) => entry.role === "hydration") || null;
+  const selectedFuelCatalog = selectedCatalog.filter((entry) => entry.role !== "hydration");
   const manualItems = profile.manualFuelItems || [];
-  const consume = buildEvidenceConsumption(baseRecommendation.target.carbsTotal, selectedCatalog, manualItems);
+  const hydrationEntry = hydrationEntryFromCatalog(selectedHydration, baseRecommendation.target.fluidTotal);
+  const carbTargetAfterDrink = Math.max(0, baseRecommendation.target.carbsTotal - numeric(hydrationEntry?.carbs));
+  const fuelConsume = buildEvidenceConsumption(carbTargetAfterDrink, selectedFuelCatalog, manualItems);
+  const consume = [...(hydrationEntry ? [hydrationEntry] : []), ...fuelConsume];
   const confidence = selectionConfidence(selectedCatalog, manualItems);
+  const hydrationProduct = selectedHydration ? {
+    id: selectedHydration.id,
+    product: selectedHydration.name,
+    category: selectedHydration.category,
+    evidenceLabel: selectedHydration.detail,
+    evidenceTone: selectedHydration.tone,
+    referenceVolumeMl: hydrationReferenceVolume(selectedHydration.item),
+  } : null;
   const warnings = [];
 
   if (profile.durationEstimated) warnings.push(`Renndauer ist aktuell geschätzt (${formatDuration(profile.durationMinutes)}). Für den finalen Plan bitte die erwartete Dauer anpassen.`);
   selectedCatalog.filter((entry) => entry.tone === "bad").forEach((entry) => warnings.push(`${entry.name}: im Training bereits problematisch bewertet. Nur bewusst und nicht automatisch als sichere Race-Basis verwenden.`));
   selectedCatalog.filter((entry) => entry.tone === "watch").forEach((entry) => warnings.push(`${entry.name}: bisher nur auffällige Aufnahme dokumentiert.`));
-  if (baseRecommendation.target.carbsTotal > 0 && consume.length === 0) warnings.push("Für dieses Rennen ist DURING-Fuel sinnvoll, aber es ist noch keine geeignete Fuel-Quelle ausgewählt. Wähle bevorzugt im Training gut verträgliche Produkte oder ergänze bewusst ein eigenes Lebensmittel.");
-  if (profile.durationMinutes >= 6 * 60 && consume.length === 1) warnings.push("Langes Rennen: Die Strategie hängt aktuell an nur einer Fuel-Quelle. Ergänze eine zweite im Training verträgliche Option für Rotation und Geschmackswechsel.");
+  if (baseRecommendation.target.carbsTotal > 0 && fuelConsume.length === 0 && numeric(hydrationEntry?.carbs) < baseRecommendation.target.carbsTotal * 0.8) warnings.push("Für dieses Rennen ist DURING-Fuel sinnvoll, aber es ist noch keine geeignete Fuel-Quelle ausgewählt. Wähle bevorzugt im Training gut verträgliche Gels, Riegel oder Lebensmittel.");
+  if (baseRecommendation.target.fluidTotal > 0 && !selectedHydration) warnings.push("Für die Trinkstrategie ist noch kein im Training bewährtes Drink-/Elektrolytprodukt ausgewählt. Die ml bleiben als Flüssigkeitsziel bestehen; wähle bevorzugt ein getestetes Getränk aus dem Fuel Lab.");
+  if (baseRecommendation.target.fluidTotal > 0 && selectedHydration && !hydrationEntry) warnings.push(`${selectedHydration.name}: Als Drink/Elektrolyt ausgewählt, aber das Mischvolumen pro Portion fehlt. Hinterlege im Fuel Lab den Mischvorschlag, damit Menge und Nährwerte korrekt berechnet werden.`);
+  if (profile.durationMinutes >= 6 * 60 && fuelConsume.length === 1) warnings.push("Langes Rennen: Die Strategie hängt aktuell an nur einer festen Fuel-Quelle. Ergänze eine zweite im Training verträgliche Option für Rotation und Geschmackswechsel.");
 
   const recommendation = {
     ...baseRecommendation,
     consume,
+    hydrationProduct,
     pack: [],
     warnings,
     confidence,
@@ -410,7 +469,6 @@ export function buildRacePrepPlan({ profile: inputProfile, state = {} } = {}) {
     selectedCatalog,
     manualItems,
     warnings: [...new Set([...warnings, ...(strategy?.warnings || [])])],
-    // Kept for backwards compatibility; inventory is intentionally not part of the coaching recommendation.
     pack: [],
     shopping: [],
     shoppingNeeded: [],
@@ -423,7 +481,7 @@ export function buildRacePrepPlan({ profile: inputProfile, state = {} } = {}) {
       fluidTotal: Math.round(recommendation.target.fluidTotal),
       fluidPerHour: Math.round(recommendation.target.fluidPerHour),
       schedulePoints: strategy?.rows?.length || 0,
-      selectedFuelSources: consume.length,
+      selectedFuelSources: new Set(consume.map((entry) => entry.fuelItemId)).size,
     },
   };
 }

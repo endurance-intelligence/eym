@@ -106,6 +106,7 @@ function loopStrategy(workout, recommendation, evidence) {
     marker: `Runde ${index + 1}`,
     secondary: `${roundTo((index + 1) * loopKm, 0.1).toLocaleString("de-DE")} km gesamt`,
     drinkMl: fluids[index],
+    drinkProduct: recommendation?.hydrationProduct?.product || "",
     fuel: [],
   }));
 
@@ -135,7 +136,7 @@ function timeStrategy(workout, recommendation, evidence) {
   const events = new Map();
   const ensure = (minute) => {
     const key = Math.max(1, Math.min(duration, Math.round(minute)));
-    if (!events.has(key)) events.set(key, { minute: key, drinkMl: 0, fuel: [] });
+    if (!events.has(key)) events.set(key, { minute: key, drinkMl: 0, drinkProduct: recommendation?.hydrationProduct?.product || "", fuel: [] });
     return events.get(key);
   };
 
@@ -178,6 +179,7 @@ function timeStrategy(workout, recommendation, evidence) {
         marker: km > 0 ? `km ${km.toLocaleString("de-DE")}` : `Min ${entry.minute}`,
         secondary: km > 0 ? `ca. Min ${entry.minute}` : "Zeitplan",
         drinkMl: entry.drinkMl,
+        drinkProduct: entry.drinkProduct || "",
         fuel: entry.fuel,
       };
     });
@@ -237,6 +239,7 @@ export function backyardCrewPlan(strategy) {
     marker: row.marker || `Runde ${index + 1}`,
     secondary: row.secondary || "",
     drinkMl: Math.max(0, Math.round(numeric(row.drinkMl))),
+    drinkProduct: row.drinkProduct || "",
     fuel: Array.isArray(row.fuel) ? row.fuel : [],
   }));
 

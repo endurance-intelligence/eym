@@ -247,3 +247,33 @@ test("long runs default to fuel training and completed activities find their pla
   assert.equal(suggestedFuelMode(planned), "training");
   assert.equal(plannedWorkoutForActivity(state, activity)?.id, "planned-long");
 });
+
+test("a gel with millilitre serving data is never mistaken for a sports drink", () => {
+  const liquidMeasuredGel = {
+    ...gel160,
+    id: "beta-gel",
+    name: "Beta Fuel Gel",
+    category: "Gel",
+    servingUnit: "ml",
+    servingQuantity: 60,
+    carbs: 40,
+  };
+  const result = fuelRecommendationForWorkout({
+    workout: {
+      id: "mixed-fuel-run",
+      date: "2026-08-16",
+      title: "17 km Longrun",
+      type: "Long Run",
+      distance: 17,
+      duration: 108,
+    },
+    fuel: [liquidMeasuredGel, hydrate],
+    mode: "training",
+  });
+
+  const drink = result.consume.find((item) => item.unit === "ml");
+  const gel = result.consume.find((item) => item.fuelItemId === "beta-gel");
+  assert.equal(drink?.fuelItemId, "hydrate-500");
+  assert.equal(gel?.unit, "Stück");
+  assert.ok(result.actualPlan.carbsTotal < 200);
+});

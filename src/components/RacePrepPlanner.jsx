@@ -16,9 +16,9 @@ function numberLabel(value, digits = 1) {
   return Number(value || 0).toLocaleString("de-DE", { maximumFractionDigits: digits });
 }
 
-function durationHoursValue(minutes) {
-  if (!(Number(minutes) > 0)) return "";
-  return Number((Number(minutes) / 60).toFixed(2));
+function durationParts(minutes) {
+  const total = Math.max(0, Math.round(Number(minutes || 0)));
+  return { hours: Math.floor(total / 60), minutes: total % 60 };
 }
 
 function scheduleRows(strategy, limit) {
@@ -56,6 +56,7 @@ export default function RacePrepPlanner() {
 
   const plan = useMemo(() => buildRacePrepPlan({ profile: draft, state }), [draft, state]);
   const rows = scheduleRows(plan.strategy, scheduleLimit);
+  const duration = durationParts(draft.durationMinutes);
   const selectedIds = new Set(plan.effectiveFuelItemIds || []);
   const provenProducts = (plan.evidenceCatalog || []).filter((entry) => entry.evidence.uses > 0);
   const otherProducts = (plan.evidenceCatalog || []).filter((entry) => entry.evidence.uses === 0);
@@ -96,6 +97,12 @@ export default function RacePrepPlanner() {
       if (["loopKm", "loopIntervalMinutes", "rounds"].includes(field)) next.durationMinutes = 0;
       return next;
     });
+  }
+  function updateDuration(part, value) {
+    const nextValue = Math.max(0, Number(value || 0));
+    const hours = part === "hours" ? Math.floor(nextValue) : duration.hours;
+    const minutes = part === "minutes" ? Math.min(59, Math.floor(nextValue)) : duration.minutes;
+    update("durationMinutes", hours * 60 + minutes);
   }
 
   function toggleFuelItem(id) {
@@ -169,7 +176,7 @@ export default function RacePrepPlanner() {
         <span className="race-prep-evidence-copy">
           <span><b>{entry.name}</b><em>{evidenceToneLabel(entry.tone)}</em></span>
           <small>{entry.detail}</small>
-          <small>{entry.carbs > 0 ? `${numberLabel(entry.carbs, 1)} g KH pro Portion` : "Kohlenhydrate noch nicht hinterlegt"}{entry.caffeine > 0 ? ` · ${Math.round(entry.caffeine)} mg Koffein` : ""}</small>
+          <small><b>{entry.role === "hydration" ? "Drink / Elektrolyt" : "Fuel"}</b> · {entry.carbs > 0 ? `${numberLabel(entry.carbs, 1)} g KH pro Portion` : "keine relevanten KH pro Portion"}{entry.caffeine > 0 ? ` · ${Math.round(entry.caffeine)} mg Koffein` : ""}</small>
         </span>
       </label>
     );
@@ -206,7 +213,14 @@ export default function RacePrepPlanner() {
           <label>Rennen / Name<input value={draft.name} onChange={(event) => update("name", event.target.value)} /></label>
           <label>Format<select value={draft.format} onChange={(event) => update("format", event.target.value)}>{RACE_PREP_FORMATS.map((item) => <option value={item.key} key={item.key}>{item.label}</option>)}</select></label>
           {draft.format !== "time" && <label>Distanz (km)<input type="number" min="0.1" step="0.1" value={draft.format === "loop" ? Number(draft.loopKm || 0) * Number(draft.rounds || 0) : draft.distanceKm || ""} disabled={draft.format === "loop"} onChange={(event) => update("distanceKm", event.target.value)} /></label>}
-          <label>Erwartete Dauer (Stunden)<input type="number" min="0.1" step="0.25" value={durationHoursValue(draft.durationMinutes)} onChange={(event) => update("durationMinutes", Number(event.target.value || 0) * 60)} />{draft.durationEstimated && <small>Aktuell aus der Distanz geschätzt – für den finalen Plan bitte anpassen.</small>}</label>
+          <div className="race-prep-duration-field">
+            <span>Erwartete Dauer</span>
+            <div className="race-prep-duration-inputs">
+              <label><input aria-label="Erwartete Dauer Stunden" type="number" min="0" step="1" value={duration.hours} onChange={(event) => updateDuration("hours", event.target.value)} /><span>h</span></label>
+              <label><input aria-label="Erwartete Dauer Minuten" type="number" min="0" max="59" step="1" value={duration.minutes} onChange={(event) => updateDuration("minutes", event.target.value)} /><span>min</span></label>
+            </div>
+            {draft.durationEstimated && <small>Aktuell aus der Distanz geschätzt – für den finalen Plan bitte Stunden und Minuten anpassen.</small>}
+          </div>
           {draft.format === "loop" && <>
             <label>Rundenlänge (km)<input type="number" min="0.1" step="0.1" value={draft.loopKm} onChange={(event) => update("loopKm", event.target.value)} /></label>
             <label>Starttakt je Runde (min)<input type="number" min="10" step="1" value={draft.loopIntervalMinutes} onChange={(event) => update("loopIntervalMinutes", event.target.value)} /></label>
@@ -261,18 +275,25 @@ export default function RacePrepPlanner() {
         {plan.strategy && (
           <section className="race-prep-schedule">
             <div className="race-prep-section-heading"><div><span>Race Ablauf</span><h3>Wann kommt was?</h3></div><small>{plan.summary.schedulePoints} Versorgungspunkte</small></div>
-            <div className={`fuel-race-strategy-rows ${plan.strategy.kind}`}>
-              {rows.map((row) => row.gap ? <article className="race-prep-gap" key={row.key}><b>… {row.hidden} weitere Versorgungspunkte …</b></article> : (
-                <article key={row.key}>
-                  <div className="fuel-race-marker"><b>{row.marker}</b><span>{row.secondary}</span></div>
-                  <div className="fuel-race-actions">
-                    {row.drinkMl > 0 && <span className="drink">💧 {Math.round(row.drinkMl)} ml</span>}
-                    {row.fuel.map((fuel, index) => <div className={`fuel tone-${fuel.evidenceTone}`} key={`${fuel.product}-${index}`}><strong>{fuel.product}</strong><span>{fuel.detail}</span><small>{fuel.evidence}</small></div>)}
-                    {row.drinkMl <= 0 && row.fuel.length === 0 && <span className="quiet">Keine zusätzliche Aufnahme geplant</span>}
-                  </div>
-                </article>
-              ))}
-            </div>
+            {rows.length > 0 ? (
+              <div className={`fuel-race-strategy-rows ${plan.strategy.kind}`}>
+                {rows.map((row) => row.gap ? <article className="race-prep-gap" key={row.key}><b>… {row.hidden} weitere Versorgungspunkte …</b></article> : (
+                  <article key={row.key}>
+                    <div className="fuel-race-marker"><b>{row.marker}</b><span>{row.secondary}</span></div>
+                    <div className="fuel-race-actions">
+                      {row.drinkMl > 0 && <span className="drink">💧 {Math.round(row.drinkMl)} ml{row.drinkProduct ? ` · ${row.drinkProduct}` : ""}</span>}
+                      {row.fuel.map((fuel, index) => <div className={`fuel tone-${fuel.evidenceTone}`} key={`${fuel.product}-${index}`}><strong>{fuel.product}</strong><span>{fuel.detail}</span><small>{fuel.evidence}</small></div>)}
+                      {row.drinkMl <= 0 && row.fuel.length === 0 && <span className="quiet">Keine zusätzliche Aufnahme geplant</span>}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="race-prep-no-schedule">
+                <b>Für {plan.summary.durationLabel} ist kein fixer DURING-Slot nötig.</b>
+                <span>{plan.recommendation.hydrationProduct?.product ? `${plan.recommendation.hydrationProduct.product} bleibt als bewährte Drink-Option für PRE, Hitze oder tatsächlichen Durst sichtbar.` : "Vor dem Start normal hydrieren; während des Rennens nach Durst und Bedingungen trinken. Kein Gel nur deshalb nehmen, weil ein Race Plan existiert."}</span>
+              </div>
+            )}
             {plan.strategy.rows.length > 24 && <button type="button" className="race-prep-schedule-toggle" onClick={() => setScheduleLimit((current) => current === "all" ? 24 : "all")}>{scheduleLimit === "all" ? "Kompakt anzeigen" : `Alle ${plan.strategy.rows.length} Versorgungspunkte anzeigen`}</button>}
           </section>
         )}
