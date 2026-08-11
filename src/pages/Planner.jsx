@@ -562,6 +562,7 @@ export default function Planner() {
   const [adjustmentOpen, setAdjustmentOpen] = useState(false);
   const [adjustmentDraft, setAdjustmentDraft] = useState(null);
   const [planningInfoOpen, setPlanningInfoOpen] = useState(false);
+  const [weekPrescriptionOpen, setWeekPrescriptionOpen] = useState(false);
   const [crossTrainingPreviewOpen, setCrossTrainingPreviewOpen] = useState(false);
   const [pendingPlanChange, setPendingPlanChange] = useState(null);
   const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
@@ -774,7 +775,7 @@ export default function Planner() {
   const planningTargetLabel = offsetWeeks === 1 ? "Nächste Woche" : "Aktuelle Woche";
   const closurePeriodLabel = offsetWeeks === 1 ? "aktuelle Woche" : "Vorwoche";
   const isPastWeek = offsetWeeks < 0;
-  const modalVisible = Boolean(editing || missedEditing || availabilityEditing || planningOpen || adjustmentOpen || planningInfoOpen || crossTrainingPreviewOpen || pendingPlanChange || publishConfirmOpen);
+  const modalVisible = Boolean(editing || missedEditing || availabilityEditing || planningOpen || adjustmentOpen || planningInfoOpen || weekPrescriptionOpen || crossTrainingPreviewOpen || pendingPlanChange || publishConfirmOpen);
   const editingTrackWorkout = editing && isTrackWorkout(editing)
     ? editing.structuredWorkout
     : null;
@@ -2231,35 +2232,21 @@ export default function Planner() {
         )}
 
         {weekPlan.length > 0 && weekPrescription && (
-          <details className={`planner-week-prescription ${weekPrescription.weekType?.tone || "neutral"}`}>
-            <summary>
-              <div className="planner-week-prescription-head">
-                <span>Wochentyp</span>
-                <strong>{weekPrescription.weekType?.label || "Trainingswoche"}</strong>
-              </div>
-              <div className="planner-week-prescription-footer">
-                <span className="planner-week-prescription-range">{weekPrescription.corridor?.label || `${weekPrescription.targetKm || config.lastTarget || "–"} km`}</span>
-                <b className="planner-week-prescription-toggle">Details →</b>
-              </div>
-            </summary>
-            <div className="planner-week-prescription-body">
-              <div className="planner-week-prescription-focus">
-                <span>Ziel dieser Woche</span>
-                <strong>{weekPrescription.focus}</strong>
-                <small>{weekPrescription.weekType?.summary}</small>
-                <small>{weekPrescription.deliveryNote}</small>
-              </div>
-              <div className="planner-week-prescription-details">
-                <ul>{(weekPrescription.why || []).map((reason, index) => <li key={`${weekPrescription.weekStart || weekKey}-${index}`}>{reason}</li>)}</ul>
-                <div>
-                  <strong>Nächster Schritt</strong>
-                  <p>{weekPrescription.nextStep}</p>
-                  <small>{weekPrescription.confidenceText}</small>
-                  <small>{weekPrescription.noDebtText}</small>
-                </div>
-              </div>
+          <button
+            type="button"
+            className={`planner-week-prescription-card ${weekPrescription.weekType?.tone || "neutral"}`}
+            onClick={() => setWeekPrescriptionOpen(true)}
+            aria-label={`${weekPrescription.weekType?.label || "Trainingswoche"}: Details zum Wochentyp öffnen`}
+          >
+            <div className="planner-week-prescription-card-copy">
+              <span>Wochentyp</span>
+              <strong>{weekPrescription.weekType?.label || "Trainingswoche"}</strong>
             </div>
-          </details>
+            <div className="planner-week-prescription-card-footer">
+              <span>{weekPrescription.corridor?.label || `${weekPrescription.targetKm || config.lastTarget || "–"} km`}</span>
+              <b>Details →</b>
+            </div>
+          </button>
         )}
 
         {!isPastWeek && !weekAccepted && lastPlanChangeForWeek && lastPlanChangeUndoable && (
@@ -2920,6 +2907,47 @@ export default function Planner() {
               <div className="planner-adjustment-scope-note">Nicht ausgewählte Einheiten und Tage bleiben unverändert. Die Woche wird nicht neu berechnet.</div>
             </section>
           </form>
+        </div>
+      )}
+
+      {weekPrescriptionOpen && weekPrescription && (
+        <div className="modal-backdrop">
+          <section className={`modal planner-week-prescription-modal ${weekPrescription.weekType?.tone || "neutral"}`} role="dialog" aria-modal="true" aria-labelledby="week-prescription-title">
+            <button type="button" className="close" onClick={() => setWeekPrescriptionOpen(false)}>×</button>
+            <div className="planner-week-prescription-modal-heading">
+              <div>
+                <p className="eyebrow">Wochentyp</p>
+                <h2 id="week-prescription-title">{weekPrescription.weekType?.label || "Trainingswoche"}</h2>
+              </div>
+              <span>{weekPrescription.corridor?.label || `${weekPrescription.targetKm || config.lastTarget || "–"} km`}</span>
+            </div>
+
+            <section className="planner-week-prescription-modal-focus">
+              <span>Ziel dieser Woche</span>
+              <strong>{weekPrescription.focus}</strong>
+              {weekPrescription.weekType?.summary && <p>{weekPrescription.weekType.summary}</p>}
+              {weekPrescription.deliveryNote && <p>{weekPrescription.deliveryNote}</p>}
+            </section>
+
+            <div className="planner-week-prescription-modal-grid">
+              <section>
+                <span>Warum diese Woche?</span>
+                <div className="planner-week-prescription-reasons">
+                  {(weekPrescription.why || []).map((reason, index) => (
+                    <p key={`${weekPrescription.weekStart || weekKey}-${index}`}><b>✓</b>{reason}</p>
+                  ))}
+                </div>
+              </section>
+              <section className="planner-week-prescription-next">
+                <span>Nächster Schritt</span>
+                <strong>{weekPrescription.nextStep}</strong>
+                {weekPrescription.confidenceText && <p>{weekPrescription.confidenceText}</p>}
+                {weekPrescription.noDebtText && <p>{weekPrescription.noDebtText}</p>}
+              </section>
+            </div>
+
+            <button type="button" className="primary planner-week-prescription-modal-close" onClick={() => setWeekPrescriptionOpen(false)}>Verstanden</button>
+          </section>
         </div>
       )}
 
