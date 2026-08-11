@@ -20,6 +20,7 @@ import {
   recommendationFeedbackEntry,
 } from "../services/coachState";
 import { reviewCoverageSummary } from "../services/reviewCoverage";
+import { buildGoalEngine } from "../services/goalEngine";
 import {
   buildMobilityWorkout,
   equipmentLabel,
@@ -109,6 +110,15 @@ export default function Coach() {
   const analysis = unifiedCoach.dashboard;
   const athleteAssessment = unifiedCoach.athlete;
   const outlook = unifiedCoach.outlook;
+  const goalEngine = useMemo(() => buildGoalEngine({
+    mission: state.mission,
+    activities: state.activities,
+    activityGroups: state.activityGroups,
+    reviews: state.reviews,
+    profile: state.profile,
+    planner: state.planner,
+    referenceDate: now,
+  }), [state.mission, state.activities, state.activityGroups, state.reviews, state.profile, state.planner, now]);
   const recommendationHistory = Array.isArray(state.coachRecommendationHistory) ? state.coachRecommendationHistory : [];
   const currentRecommendationFeedback = recommendationHistory.find((entry) => entry.recommendationId === unifiedCoach.recommendation.id);
 
@@ -657,6 +667,34 @@ export default function Coach() {
             {outlook.roadmap.length > 0 && <div className="coach-roadmap">{outlook.roadmap.map((step) => <article className={step.current ? "current" : ""} key={`${step.label}-${step.title}`}><span>{step.label}</span><h3>{step.title}</h3><p>{step.text}</p></article>)}</div>}
             {outlook.mainTarget && outlook.strategicTarget && outlook.mainTarget.id !== outlook.strategicTarget.id && <p className="coach-main-target-note"><strong>Nach {outlook.strategicTarget.name}:</strong> {outlook.mainTarget.name} in {outlook.mainDays} Tagen.</p>}
           </Card>
+          {goalEngine.target && (
+            <details className={`card wide mission-goal-engine mission-goal-engine-compact coach-goal-assessment ${goalEngine.feasibility.status}`}>
+              <summary className="mission-goal-engine-heading">
+                <div>
+                  <p className="eyebrow">Zielanalyse</p>
+                  <h2>{goalEngine.feasibility.label} · {goalEngine.phase.label}</h2>
+                  <p>{goalEngine.feasibility.summary}</p>
+                </div>
+                <span>Coach-Einschätzung öffnen →</span>
+              </summary>
+              <div className="mission-goal-engine-body">
+                <div className="mission-goal-engine-metrics">
+                  <div><small>Zielart</small><strong>{{ finish: "Finish", time: "Zielzeit", pb: "Bestzeit", distance: "Distanz / Runden", training: "Vorbereitung" }[goalEngine.goalType] || goalEngine.goalType}</strong></div>
+                  <div><small>Zielpace</small><strong>{goalEngine.targetPaceLabel || "Nicht pacegesteuert"}</strong></div>
+                  <div><small>Wochenrahmen</small><strong>mind. {goalEngine.requiredRuns} passende Läufe</strong></div>
+                  <div><small>Noch verfügbar</small><strong>{goalEngine.preparation?.remainingWeeksLabel || `${Math.max(0, Math.ceil(goalEngine.weeksLeft))} Wochen`}</strong></div>
+                </div>
+                <div className="mission-goal-engine-evidence">
+                  <div><small>Langzeiterfahrung</small><strong>{goalEngine.experience.label}</strong><p>{goalEngine.experience.summary}</p></div>
+                  <div><small>Aktuelle Form</small><strong>{goalEngine.currentForm.label}</strong><p>{goalEngine.currentForm.summary}</p></div>
+                  <div><small>Zielspezifischer Aufbau</small><strong>{goalEngine.targetGap.label}</strong><p>{goalEngine.targetGap.summary}</p></div>
+                </div>
+                {goalEngine.preparation?.summary && <p className="mission-goal-engine-preparation"><strong>Vorbereitungslogik:</strong> {goalEngine.preparation.summary}</p>}
+                <div className="mission-goal-engine-abilities"><strong>Dafür trainiert der Coach:</strong><div>{goalEngine.abilities.map((ability) => <span key={ability}>{ability}</span>)}</div></div>
+                {(goalEngine.feasibility.reasons.length > 0 || goalEngine.constraintWarnings.length > 0) && <div className="mission-goal-engine-warnings">{[...goalEngine.feasibility.reasons, ...goalEngine.constraintWarnings].map((reason) => <span key={reason}>! {reason}</span>)}</div>}
+              </div>
+            </details>
+          )}
           <SignalCard eyebrow="Schlüsseleinheiten" signal={analysis.keySessions} />
         </div>
       )}

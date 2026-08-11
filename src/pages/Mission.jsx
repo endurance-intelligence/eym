@@ -17,7 +17,6 @@ import {
 } from "../services/goalPlanning";
 import {
   GOAL_DISCIPLINE_OPTIONS,
-  buildGoalEngine,
   formatGoalDuration,
   formatGoalDurationInput,
   formatPaceSeconds,
@@ -29,6 +28,12 @@ import {
   eventSourceStatusLabel,
   eventSuggestionMissionPatch,
 } from "../services/eventCatalog";
+import {
+  buildGoalPath,
+  eventDateLabel,
+  forecastAvailableFromLabel,
+  weatherGlyph,
+} from "../services/goalTimeline";
 
 const emptyEvent = {
   name: "",
@@ -73,12 +78,14 @@ export default function Mission() {
   const [draft, setDraft] = useState(emptyEvent);
   const [editingId, setEditingId] = useState(null);
   const [showEditor, setShowEditor] = useState(false);
+  const [selectedMilestoneId, setSelectedMilestoneId] = useState(null);
   const [forecasts, setForecasts] = useState({});
   const [showArchived, setShowArchived] = useState(false);
   const [showAllAchievements, setShowAllAchievements] = useState(false);
   const [placeSuggestions, setPlaceSuggestions] = useState([]);
   const [placeStatus, setPlaceStatus] = useState("");
   const placeRequest = useRef(null);
+  const forecastRequests = useRef(new Set());
 
   const activities = useMemo(() => preferredActivities(state.activities), [state.activities]);
   const achievements = useMemo(() => deriveAchievements(activities, state.reviews), [activities, state.reviews]);
@@ -116,23 +123,32 @@ export default function Mission() {
     }];
   }, [state.mission, preparationStartDate]);
 
-  const activeMilestones = milestones.filter((item) => !item.archived);
-  const mainTarget = activeMilestones.find((item) => item.isMainTarget) || activeMilestones[0];
+  const activeMilestones = useMemo(() => milestones.filter((item) => !item.archived), [milestones]);
+  const mainTarget = useMemo(() => activeMilestones.find((item) => item.isMainTarget) || activeMilestones[0], [activeMilestones]);
   const mainCourseProfile = eventCourseProfile(mainTarget || {});
   const mainLoopMatchPlan = mainCourseProfile.loopMode === LOOP_MODES.TIME_LIMIT
     ? loopMatchPlan({ ...mainCourseProfile, targetKm: Number(mainTarget?.targetKm || 0) })
     : null;
-  const upcomingMilestones = activeMilestones.filter((item) => item.id !== mainTarget?.id);
+  const goalPath = useMemo(() => buildGoalPath(activeMilestones, mainTarget, new Date()), [activeMilestones, mainTarget]);
+  const selectedMilestone = goalPath.find((item) => item.id === selectedMilestoneId) || null;
   const archivedMilestones = milestones.filter((item) => item.archived);
-  const goalEngine = useMemo(() => buildGoalEngine({
-    mission: { ...state.mission, milestones },
-    activities: state.activities,
-    activityGroups: state.activityGroups,
-    reviews: state.reviews,
-    profile: state.profile,
-    planner: state.planner,
-    referenceDate: new Date(),
-  }), [state.mission, state.activities, state.activityGroups, state.reviews, state.profile, state.planner, milestones]);
+
+  useEffect(() => {
+    goalPath.forEach((item) => {
+      const days = daysUntil(item.date);
+      if (!item.location || days < 0 || days > 16) return;
+      const placeKey = item.place?.latitude && item.place?.longitude
+        ? `${item.place.latitude}:${item.place.longitude}`
+        : item.location;
+      const requestKey = `${item.id}:${item.date}:${placeKey}`;
+      if (forecastRequests.current.has(requestKey)) return;
+      forecastRequests.current.add(requestKey);
+      setForecasts((current) => ({ ...current, [item.id]: { loading: true } }));
+      fetchEventForecast(item.place || item.location, item.date)
+        .then((forecast) => setForecasts((current) => ({ ...current, [item.id]: forecast })))
+        .catch((error) => setForecasts((current) => ({ ...current, [item.id]: { error: error.message } })));
+    });
+  }, [goalPath]);
 
   function change(event) {
     const { name, value, type, checked } = event.target;
@@ -268,6 +284,7 @@ export default function Mission() {
   }
 
   function edit(item) {
+    setSelectedMilestoneId(null);
     const courseProfile = eventCourseProfile(item);
     setEditingId(item.id);
     setDraft({
@@ -390,6 +407,18 @@ export default function Mission() {
     }
   }
 
+  function timelineWeather(item) {
+    if (!item.location) return null;
+    const days = daysUntil(item.date);
+    const forecast = forecasts[item.id];
+    if (days > 16) return <span className="mission-goal-path-weather future">Wetter ab {forecastAvailableFromLabel(item.date)} verfügbar</span>;
+    if (forecast?.loading) return <span className="mission-goal-path-weather">Wetter wird geladen …</span>;
+    if (forecast?.error) return <span className="mission-goal-path-weather muted">Wetter aktuell nicht verfügbar</span>;
+    if (forecast?.unavailable) return <span className="mission-goal-path-weather future">{forecast.reason}</span>;
+    if (!forecast) return null;
+    return <span className="mission-goal-path-weather available">{weatherGlyph(forecast.condition)} {forecast.min}–{forecast.max} °C · Regen {forecast.rainChance}% · Wind {forecast.wind} km/h</span>;
+  }
+
   function eventCard(item, archived = false) {
     const forecast = forecasts[item.id];
     const courseProfile = eventCourseProfile(item);
@@ -479,35 +508,6 @@ export default function Mission() {
           </Card>
         )}
 
-        {mainTarget && goalEngine.target && (
-          <details className={`card wide mission-goal-engine mission-goal-engine-compact ${goalEngine.feasibility.status}`}>
-            <summary className="mission-goal-engine-heading">
-              <div>
-                <p className="eyebrow">Zielbewertung</p>
-                <h2>{goalEngine.feasibility.label} · {goalEngine.phase.label}</h2>
-                <p>{goalEngine.feasibility.summary}</p>
-              </div>
-              <span>Warum bewertet der Coach das so? →</span>
-            </summary>
-            <div className="mission-goal-engine-body">
-              <div className="mission-goal-engine-metrics">
-                <div><small>Zielart</small><strong>{{ finish: "Finish", time: "Zielzeit", pb: "Bestzeit", distance: "Distanz / Runden", training: "Vorbereitung" }[goalEngine.goalType] || goalEngine.goalType}</strong></div>
-                <div><small>Zielpace</small><strong>{goalEngine.targetPaceLabel || "Nicht pacegesteuert"}</strong></div>
-                <div><small>Wochenrahmen</small><strong>mind. {goalEngine.requiredRuns} passende Läufe</strong></div>
-                <div><small>Noch verfügbar</small><strong>{goalEngine.preparation?.remainingWeeksLabel || `${Math.max(0, Math.ceil(goalEngine.weeksLeft))} Wochen`}</strong></div>
-              </div>
-              <div className="mission-goal-engine-evidence">
-                <div><small>Langzeiterfahrung</small><strong>{goalEngine.experience.label}</strong><p>{goalEngine.experience.summary}</p></div>
-                <div><small>Aktuelle Form</small><strong>{goalEngine.currentForm.label}</strong><p>{goalEngine.currentForm.summary}</p></div>
-                <div><small>Zielspezifischer Aufbau</small><strong>{goalEngine.targetGap.label}</strong><p>{goalEngine.targetGap.summary}</p></div>
-              </div>
-              {goalEngine.preparation?.summary && <p className="mission-goal-engine-preparation"><strong>Vorbereitungslogik:</strong> {goalEngine.preparation.summary}</p>}
-              <div className="mission-goal-engine-abilities"><strong>Dafür trainiert der Coach:</strong><div>{goalEngine.abilities.map((ability) => <span key={ability}>{ability}</span>)}</div></div>
-              {(goalEngine.feasibility.reasons.length > 0 || goalEngine.constraintWarnings.length > 0) && <div className="mission-goal-engine-warnings">{[...goalEngine.feasibility.reasons, ...goalEngine.constraintWarnings].map((reason) => <span key={reason}>! {reason}</span>)}</div>}
-            </div>
-          </details>
-        )}
-
         {!mainTarget && !showEditor && (
           <Card className="hero wide mission-empty-state">
             <p className="eyebrow">Deine Mission</p>
@@ -580,10 +580,38 @@ export default function Mission() {
           </form>
         </EditorModal>}
 
-        {upcomingMilestones.length > 0 && <Card className="wide mission-upcoming-section">
-          <div className="card-heading-row"><div><p className="eyebrow">Nächste Meilensteine</p><h2>Auf dem Weg zum Hauptziel</h2></div><span className="achievement-count">{upcomingMilestones.length}</span></div>
-          <div className="mission-event-grid mission-event-timeline">{upcomingMilestones.map((item, index) => <div className="mission-timeline-entry" key={item.id}><span className="mission-timeline-marker">{index + 1}</span>{eventCard(item)}</div>)}</div>
+        {goalPath.length > 0 && <Card className="wide mission-goal-path">
+          <div className="mission-goal-path-heading">
+            <p className="eyebrow">Auf dem Weg zum Hauptziel</p>
+            <h2>{mainTarget ? `Nächste Stationen bis ${mainTarget.name}` : "Nächste Stationen"}</h2>
+          </div>
+          <div className="mission-goal-path-list">
+            {goalPath.map((item) => {
+              const days = daysUntil(item.date);
+              const role = item.isMainTarget ? "Hauptziel" : `${item.priority || "B"}-Event`;
+              return <article className={`mission-goal-path-item ${item.isMainTarget ? "main" : ""}`} key={item.id}>
+                <time dateTime={item.date}>{eventDateLabel(item.date)}</time>
+                <div className="mission-goal-path-copy">
+                  <div className="mission-goal-path-title"><h3>{item.name}</h3>{item.isMainTarget && <span>★ Hauptziel</span>}</div>
+                  <p>{role} · {days} {days === 1 ? "Tag" : "Tage"}</p>
+                  {timelineWeather(item)}
+                </div>
+                <button type="button" className="mission-goal-path-details" onClick={() => setSelectedMilestoneId(item.id)}>Details →</button>
+              </article>;
+            })}
+          </div>
         </Card>}
+
+        {selectedMilestone && <EditorModal
+          eyebrow={selectedMilestone.isMainTarget ? "Hauptziel" : "Meilenstein"}
+          title={selectedMilestone.name}
+          description={`${fmtDate(selectedMilestone.date)}${selectedMilestone.time ? ` · ${selectedMilestone.time} Uhr` : ""}`}
+          width="wide"
+          className="mission-goal-path-modal"
+          onClose={() => setSelectedMilestoneId(null)}
+        >
+          <div className="mission-goal-path-detail">{eventCard(selectedMilestone)}</div>
+        </EditorModal>}
 
         <Card className="wide">
           <div className="card-heading-row"><div><p className="eyebrow">Achievements</p><h2>Absolvierte offizielle Läufe</h2></div><span className="achievement-count">{achievements.length}</span></div>
