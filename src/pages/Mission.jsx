@@ -589,14 +589,15 @@ export default function Mission() {
             {goalPath.map((item) => {
               const days = daysUntil(item.date);
               const role = item.isMainTarget ? "Hauptziel" : `${item.priority || "B"}-Event`;
-              return <article className={`mission-goal-path-item ${item.isMainTarget ? "main" : ""}`} key={item.id}>
+              const priorityClass = item.isMainTarget ? "main" : `priority-${String(item.priority || "B").toLowerCase()}`;
+              return <article className={`mission-goal-path-item ${priorityClass}`} key={item.id}>
                 <time dateTime={item.date}>{eventDateLabel(item.date)}</time>
                 <div className="mission-goal-path-copy">
                   <div className="mission-goal-path-title"><h3>{item.name}</h3>{item.isMainTarget && <span>★ Hauptziel</span>}</div>
-                  <p>{role} · {days} {days === 1 ? "Tag" : "Tage"}</p>
+                  <div className="mission-goal-path-meta"><span>{role}</span><span>{days} {days === 1 ? "Tag" : "Tage"}</span></div>
                   {timelineWeather(item)}
                 </div>
-                <button type="button" className="mission-goal-path-details" onClick={() => setSelectedMilestoneId(item.id)}>Details →</button>
+                <button type="button" className="mission-goal-path-details" onClick={() => setSelectedMilestoneId(item.id)}>Details <span aria-hidden="true">→</span></button>
               </article>;
             })}
           </div>
