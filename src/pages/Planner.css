@@ -1990,145 +1990,23 @@
 }
 
 
-/* v3.9.63 – finish compact week type dashboard card */
-.planner-week-dashboard>.planner-week-prescription>summary{
-  display:grid;
-  grid-template-columns:1fr;
-  grid-template-rows:minmax(0,1fr) auto;
-  gap:10px;
-  align-items:stretch;
-  min-height:100%;
-  padding:13px 14px;
-}
-.planner-week-dashboard>.planner-week-prescription .planner-week-prescription-head{
-  display:grid;
-  grid-template-columns:1fr;
-  align-content:start;
-  gap:4px;
-  min-width:0;
-}
-.planner-week-dashboard>.planner-week-prescription .planner-week-prescription-head>span{
-  line-height:1.1;
-}
-.planner-week-dashboard>.planner-week-prescription .planner-week-prescription-head>strong{
-  display:block;
-  max-width:100%;
-  overflow:visible;
-  font-size:17px;
-  line-height:1.2;
-  text-overflow:clip;
-  white-space:normal;
-}
-.planner-week-prescription-footer{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:10px;
-  min-width:0;
-}
-.planner-week-dashboard>.planner-week-prescription .planner-week-prescription-range{
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  min-width:0;
-  padding:4px 8px;
-  border:1px solid var(--accent-border);
-  border-radius:999px;
-  background:color-mix(in srgb,var(--bg-input) 88%,transparent);
-  color:var(--accent-bright);
-  font-size:10px;
-  font-weight:900;
-  line-height:1;
-  letter-spacing:0;
-  white-space:nowrap;
-}
-.planner-week-prescription-footer .planner-week-prescription-toggle{
-  grid-column:auto;
-  align-self:auto;
-  justify-self:auto;
-  margin-left:auto;
-  font-size:10px;
-}
-.planner-week-dashboard>.planner-week-prescription[open]>summary{
-  grid-template-rows:auto auto;
-}
-.planner-week-dashboard>.planner-week-prescription[open] .planner-week-prescription-footer{
-  justify-content:flex-end;
-}
-.planner-week-dashboard>.planner-week-prescription[open] .planner-week-prescription-range{
-  display:none;
-}
-@media(max-width:720px){
-  .planner-week-prescription-footer{align-items:flex-end}
-}
 
 
-/* v3.9.66 – make week type a native dashboard card instead of a button widget */
-.planner-week-dashboard>.planner-week-prescription-card{
-  display:grid;
-  grid-template-rows:1fr auto;
-  align-items:start;
-  gap:8px;
-  min-width:0;
-  min-height:122px;
-  height:122px;
-  margin:0;
-  padding:13px;
-  overflow:hidden;
-  border:1px solid var(--border);
-  border-radius:13px;
-  background:linear-gradient(145deg,var(--bg-card),var(--bg-card-alt));
-  color:var(--text);
-  box-shadow:none;
+/* v3.9.67 – consolidate week type into the weekly load card */
+.planner-week-dashboard{
+  grid-template-columns:minmax(220px,.92fr) minmax(300px,1.08fr) minmax(360px,1.2fr);
 }
-.planner-week-dashboard>.planner-week-prescription-card.recovery,
-.planner-week-dashboard>.planner-week-prescription-card.event,
-.planner-week-dashboard>.planner-week-prescription-card.taper,
-.planner-week-dashboard>.planner-week-prescription-card.load,
-.planner-week-dashboard>.planner-week-prescription-card.peak,
-.planner-week-dashboard>.planner-week-prescription-card.specific,
-.planner-week-dashboard>.planner-week-prescription-card.build,
-.planner-week-dashboard>.planner-week-prescription-card.neutral{
-  border-color:var(--border);
-  background:linear-gradient(145deg,var(--bg-card),var(--bg-card-alt));
+.planner-week-dashboard>.planner-coach-alert{
+  grid-column:1/-1;
+  min-height:0;
+  height:auto;
 }
-.planner-week-prescription-card-copy{
-  display:grid;
-  grid-template-columns:minmax(0,1fr);
-  align-content:start;
-  justify-items:start;
-  gap:2px;
-  width:100%;
-  min-width:0;
-  text-align:left;
-}
-.planner-week-prescription-card-copy>span,
-.planner-week-prescription-card-copy>strong,
-.planner-week-prescription-card-copy>small{
-  display:block;
-  width:100%;
-  min-width:0;
-  text-align:left;
-}
-.planner-week-prescription-card-copy>span{
-  color:var(--accent-bright);
-  font-size:9px;
-  font-weight:900;
-  line-height:1.1;
-  letter-spacing:.09em;
-  text-transform:uppercase;
-}
-.planner-week-prescription-card-copy>strong{
-  margin-top:1px;
-  overflow:hidden;
-  color:var(--text);
+.planner-week-dashboard>.planner-week-logic .planner-week-logic-lead>strong{
   font-size:17px;
   line-height:1.15;
-  text-overflow:ellipsis;
-  white-space:nowrap;
 }
-.planner-week-prescription-card-copy>small{
-  margin-top:2px;
+.planner-week-dashboard>.planner-week-logic .planner-week-logic-lead>small{
+  display:block;
   overflow:hidden;
   color:var(--muted);
   font-size:10px;
@@ -2136,130 +2014,17 @@
   text-overflow:ellipsis;
   white-space:nowrap;
 }
-.planner-week-prescription-card-link{
-  appearance:none;
-  align-self:end;
-  justify-self:start;
-  width:max-content;
-  min-height:0;
-  margin:0;
-  padding:0;
-  border:0;
-  border-radius:0;
-  background:transparent;
-  color:var(--accent-bright);
-  font:inherit;
-  font-size:10px;
-  font-weight:900;
-  line-height:1.2;
-  text-align:left;
-  white-space:nowrap;
-  box-shadow:none;
-}
-.planner-week-prescription-card-link:hover,
-.planner-week-prescription-card-link:focus-visible{
-  border:0;
-  background:transparent;
-  color:var(--text);
-  transform:none;
-  box-shadow:none;
+.planner-week-logic-body .planner-week-logic-focus{
+  grid-column:1/-1;
+  border-color:color-mix(in srgb,var(--accent) 38%,var(--border));
+  background:color-mix(in srgb,var(--accent-surface) 34%,var(--bg-input));
 }
 @media(max-width:1180px){
-  .planner-week-dashboard>.planner-week-prescription-card{height:auto;min-height:112px}
-}
-
-.planner-week-prescription-modal{
-  display:grid;
-  gap:16px;
-  width:min(760px,calc(100vw - 32px));
-  max-height:min(760px,calc(100vh - 40px));
-  overflow:auto;
-}
-.planner-week-prescription-modal-heading{
-  display:flex;
-  align-items:flex-start;
-  justify-content:space-between;
-  gap:20px;
-  padding-right:34px;
-}
-.planner-week-prescription-modal-heading h2{margin:3px 0 0}
-.planner-week-prescription-modal-heading>span{
-  display:inline-flex;
-  align-items:center;
-  flex:none;
-  margin-top:3px;
-  padding:7px 10px;
-  border:1px solid var(--accent-border);
-  border-radius:999px;
-  background:var(--accent-surface);
-  color:var(--accent-bright);
-  font-size:11px;
-  font-weight:900;
-  white-space:nowrap;
-}
-.planner-week-prescription-modal-focus{
-  display:grid;
-  gap:6px;
-  padding:14px 16px;
-  border:1px solid var(--accent-border);
-  border-radius:13px;
-  background:color-mix(in srgb,var(--accent-surface) 45%,var(--bg-sidebar));
-}
-.planner-week-prescription-modal-focus>span,
-.planner-week-prescription-modal-grid section>span{
-  color:var(--accent-bright);
-  font-size:9px;
-  font-weight:900;
-  letter-spacing:.09em;
-  text-transform:uppercase;
-}
-.planner-week-prescription-modal-focus>strong{font-size:16px;line-height:1.4}
-.planner-week-prescription-modal-focus>p{
-  margin:0;
-  color:var(--muted-bright);
-  font-size:12px;
-  line-height:1.5;
-}
-.planner-week-prescription-modal-grid{
-  display:grid;
-  grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);
-  gap:12px;
-}
-.planner-week-prescription-modal-grid>section{
-  display:grid;
-  align-content:start;
-  gap:10px;
-  min-width:0;
-  padding:14px;
-  border:1px solid var(--border);
-  border-radius:13px;
-  background:var(--bg-sidebar);
-}
-.planner-week-prescription-reasons{display:grid;gap:8px}
-.planner-week-prescription-reasons>p{
-  display:grid;
-  grid-template-columns:18px minmax(0,1fr);
-  gap:7px;
-  margin:0;
-  color:var(--muted-bright);
-  font-size:12px;
-  line-height:1.5;
-}
-.planner-week-prescription-reasons b{color:var(--accent-bright)}
-.planner-week-prescription-next>strong{font-size:14px;line-height:1.45}
-.planner-week-prescription-next>p{
-  margin:0;
-  color:var(--muted);
-  font-size:11px;
-  line-height:1.5;
-}
-.planner-week-prescription-modal-close{justify-self:end;min-width:130px}
-@media(max-width:1180px){
-  .planner-week-dashboard>.planner-week-prescription-card{height:auto;min-height:112px}
+  .planner-week-dashboard{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .planner-week-dashboard>.planner-week-logic{grid-column:1/-1;height:auto;min-height:112px}
 }
 @media(max-width:720px){
-  .planner-week-prescription-modal-heading{display:grid;gap:10px}
-  .planner-week-prescription-modal-heading>span{justify-self:start}
-  .planner-week-prescription-modal-grid{grid-template-columns:1fr}
-  .planner-week-prescription-modal-close{width:100%}
+  .planner-week-dashboard{grid-template-columns:1fr}
+  .planner-week-dashboard>.planner-week-logic{grid-column:auto}
+  .planner-week-dashboard>.planner-week-logic .planner-week-logic-lead>small{white-space:normal}
 }

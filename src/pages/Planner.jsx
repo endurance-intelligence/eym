@@ -562,7 +562,6 @@ export default function Planner() {
   const [adjustmentOpen, setAdjustmentOpen] = useState(false);
   const [adjustmentDraft, setAdjustmentDraft] = useState(null);
   const [planningInfoOpen, setPlanningInfoOpen] = useState(false);
-  const [weekPrescriptionOpen, setWeekPrescriptionOpen] = useState(false);
   const [crossTrainingPreviewOpen, setCrossTrainingPreviewOpen] = useState(false);
   const [pendingPlanChange, setPendingPlanChange] = useState(null);
   const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
@@ -723,17 +722,6 @@ export default function Planner() {
   );
   const weekKey = isoDate(weekStart);
   const weekPrescription = config.weekPrescriptions?.[weekKey] || null;
-  const weekTypeCardSummary = {
-    recovery: "Belastung bewusst reduziert.",
-    event: "Event im Fokus · Frische geschützt.",
-    taper: "Umfang reduziert · Rhythmus erhalten.",
-    peak: "Wettkampfnah absichern · Müdigkeit vermeiden.",
-    specific_load: "Zielspezifischen Reiz kontrolliert setzen.",
-    specific: "Training gezielt an den Wettkampf annähern.",
-    load: "Belastung kontrolliert erhöhen.",
-    build: "Umfang und Reize schrittweise entwickeln.",
-    base: "Grundlage und Routine festigen.",
-  }[weekPrescription?.weekType?.key] || "Training passend zur aktuellen Phase steuern.";
   const coachSuggestionDecisions = config.coachSuggestionDecisions || {};
   const coachSuggestionContext = {
     weekKey,
@@ -786,7 +774,7 @@ export default function Planner() {
   const planningTargetLabel = offsetWeeks === 1 ? "Nächste Woche" : "Aktuelle Woche";
   const closurePeriodLabel = offsetWeeks === 1 ? "aktuelle Woche" : "Vorwoche";
   const isPastWeek = offsetWeeks < 0;
-  const modalVisible = Boolean(editing || missedEditing || availabilityEditing || planningOpen || adjustmentOpen || planningInfoOpen || weekPrescriptionOpen || crossTrainingPreviewOpen || pendingPlanChange || publishConfirmOpen);
+  const modalVisible = Boolean(editing || missedEditing || availabilityEditing || planningOpen || adjustmentOpen || planningInfoOpen || crossTrainingPreviewOpen || pendingPlanChange || publishConfirmOpen);
   const editingTrackWorkout = editing && isTrackWorkout(editing)
     ? editing.structuredWorkout
     : null;
@@ -2242,24 +2230,6 @@ export default function Planner() {
           </section>
         )}
 
-        {weekPlan.length > 0 && weekPrescription && (
-          <section className={`planner-week-prescription-card ${weekPrescription.weekType?.tone || "neutral"}`}>
-            <div className="planner-week-prescription-card-copy">
-              <span>Wochentyp</span>
-              <strong>{weekPrescription.weekType?.label || "Trainingswoche"}</strong>
-              <small>{weekTypeCardSummary}</small>
-            </div>
-            <button
-              type="button"
-              className="planner-week-prescription-card-link"
-              onClick={() => setWeekPrescriptionOpen(true)}
-              aria-label={`${weekPrescription.weekType?.label || "Trainingswoche"}: Details zum Wochentyp öffnen`}
-            >
-              Details →
-            </button>
-          </section>
-        )}
-
         {!isPastWeek && !weekAccepted && lastPlanChangeForWeek && lastPlanChangeUndoable && (
           <section className="planner-undo-banner">
             <div>
@@ -2312,9 +2282,9 @@ export default function Planner() {
           <details className={`planner-week-logic ${scienceAssessment.loadBand?.tone || "neutral"}`}>
             <summary>
               <div className="planner-week-logic-lead">
-                <span>Wochenbelastung</span>
-                <strong>{loadComparisonLabel} · {scienceAssessment.loadBand?.label || "Wird eingeordnet"}</strong>
-                <small>{scienceAssessment.loadBand?.summary || "Belastung und Erholung werden aus Plan, Aktivitäten und Reviews zusammengeführt."}</small>
+                <span>Wochentyp</span>
+                <strong>{weekPrescription?.weekType?.label || "Trainingswoche"}</strong>
+                <small>{loadComparisonLabel} · {scienceAssessment.loadBand?.label || "Wird eingeordnet"}</small>
               </div>
               <div className="planner-week-logic-metrics">
                 <span><b>{weekPrescription?.corridor?.label || (config.lastTarget ? `${config.lastTarget} km` : "–")}</b></span>
@@ -2324,6 +2294,23 @@ export default function Planner() {
               <b className="planner-week-logic-toggle">Details →</b>
             </summary>
             <div className="planner-week-logic-body">
+              <article className="planner-week-logic-focus">
+                <span>Ziel dieser Woche</span>
+                <strong>{weekPrescription?.focus || "Training passend zur aktuellen Phase steuern."}</strong>
+                {weekPrescription?.weekType?.summary && <p>{weekPrescription.weekType.summary}</p>}
+                {weekPrescription?.deliveryNote && <p>{weekPrescription.deliveryNote}</p>}
+              </article>
+              <article>
+                <span>Warum dieser Wochentyp?</span>
+                <strong>{weekPrescription?.why?.[0] || "Der Coach ordnet Belastung und Erholung aus dem aktuellen Verlauf ein."}</strong>
+                {weekPrescription?.why?.length > 1 && <p>{weekPrescription.why.slice(1).join(" ")}</p>}
+              </article>
+              <article>
+                <span>Nächster Schritt</span>
+                <strong>{weekPrescription?.nextStep || "Woche wie geplant umsetzen und Reviews als Rückmeldung nutzen."}</strong>
+                {weekPrescription?.confidenceText && <p>{weekPrescription.confidenceText}</p>}
+                {weekPrescription?.noDebtText && <p>{weekPrescription.noDebtText}</p>}
+              </article>
               <article>
                 <span>Belastungsrechnung</span>
                 <strong>{scienceAssessment.projected} Punkte geplant · jüngstes Mittel {scienceAssessment.average || "–"} aus {scienceAssessment.baselineWeeks || 0} Wochen</strong>
@@ -2918,47 +2905,6 @@ export default function Planner() {
               <div className="planner-adjustment-scope-note">Nicht ausgewählte Einheiten und Tage bleiben unverändert. Die Woche wird nicht neu berechnet.</div>
             </section>
           </form>
-        </div>
-      )}
-
-      {weekPrescriptionOpen && weekPrescription && (
-        <div className="modal-backdrop">
-          <section className={`modal planner-week-prescription-modal ${weekPrescription.weekType?.tone || "neutral"}`} role="dialog" aria-modal="true" aria-labelledby="week-prescription-title">
-            <button type="button" className="close" onClick={() => setWeekPrescriptionOpen(false)}>×</button>
-            <div className="planner-week-prescription-modal-heading">
-              <div>
-                <p className="eyebrow">Wochentyp</p>
-                <h2 id="week-prescription-title">{weekPrescription.weekType?.label || "Trainingswoche"}</h2>
-              </div>
-              <span>{weekPrescription.corridor?.label || `${weekPrescription.targetKm || config.lastTarget || "–"} km`}</span>
-            </div>
-
-            <section className="planner-week-prescription-modal-focus">
-              <span>Ziel dieser Woche</span>
-              <strong>{weekPrescription.focus}</strong>
-              {weekPrescription.weekType?.summary && <p>{weekPrescription.weekType.summary}</p>}
-              {weekPrescription.deliveryNote && <p>{weekPrescription.deliveryNote}</p>}
-            </section>
-
-            <div className="planner-week-prescription-modal-grid">
-              <section>
-                <span>Warum diese Woche?</span>
-                <div className="planner-week-prescription-reasons">
-                  {(weekPrescription.why || []).map((reason, index) => (
-                    <p key={`${weekPrescription.weekStart || weekKey}-${index}`}><b>✓</b>{reason}</p>
-                  ))}
-                </div>
-              </section>
-              <section className="planner-week-prescription-next">
-                <span>Nächster Schritt</span>
-                <strong>{weekPrescription.nextStep}</strong>
-                {weekPrescription.confidenceText && <p>{weekPrescription.confidenceText}</p>}
-                {weekPrescription.noDebtText && <p>{weekPrescription.noDebtText}</p>}
-              </section>
-            </div>
-
-            <button type="button" className="primary planner-week-prescription-modal-close" onClick={() => setWeekPrescriptionOpen(false)}>Verstanden</button>
-          </section>
         </div>
       )}
 
