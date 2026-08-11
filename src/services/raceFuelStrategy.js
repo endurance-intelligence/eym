@@ -46,6 +46,16 @@ function reviewEvidence(reviews = {}) {
 }
 
 function evidenceForProduct(entry, evidence) {
+  if (entry?.evidenceLabel) {
+    return {
+      good: entry.evidenceTone === "good" ? 1 : 0,
+      watch: entry.evidenceTone === "watch" ? 1 : 0,
+      bad: entry.evidenceTone === "bad" ? 1 : 0,
+      timings: [],
+      lastGoodTiming: "",
+      label: entry.evidenceLabel,
+    };
+  }
   const result = evidence.get(entry.fuelItemId);
   if (!result) return null;
   const lastGoodTiming = result.timings.at(-1) || "";

@@ -1,4 +1,5 @@
 import { fuelRecommendationForWorkout } from "./fuelPlanner.js";
+import { defaultConsumptionUnit, fuelDisplayName } from "./fuelNutrition.js";
 import { raceFuelStrategy } from "./raceFuelStrategy.js";
 
 const MINUTES_PER_HOUR = 60;
@@ -40,6 +41,21 @@ function formatDuration(minutes) {
   return `${hours}:${String(mins).padStart(2, "0")} h`;
 }
 
+function localActivityId(activity = {}) {
+  return String(activity.id || activity.activityId || "");
+}
+
+function activityDurationMinutes(activity = {}) {
+  const seconds = numeric(activity.durationSeconds);
+  if (seconds > 0) return seconds / 60;
+  return numeric(activity.duration);
+}
+
+function cleanSymptoms(review = {}) {
+  return (Array.isArray(review.stomachSymptoms) ? review.stomachSymptoms : [])
+    .filter((entry) => !String(entry).startsWith("Keine"));
+}
+
 export const RACE_PREP_FORMATS = [
   { key: "distance", label: "Distanzrennen", description: "5 km bis Ultra · Versorgung nach Zeit und Strecke" },
   { key: "time", label: "Zeitrennen", description: "6 h, 12 h, 24 h oder frei definierte Dauer" },
@@ -72,6 +88,8 @@ export function emptyRacePrepProfile() {
     rounds: 10,
     source: "custom",
     originEventId: "",
+    fuelItemIds: null,
+    manualFuelItems: [],
   };
 }
 
@@ -133,7 +151,95 @@ export function normalizeRacePrepProfile(input = {}) {
     loopKm,
     loopIntervalMinutes,
     rounds,
+    fuelItemIds: input.fuelItemIds == null ? null : [...new Set((Array.isArray(input.fuelItemIds) ? input.fuelItemIds : []).map(String))],
+    manualFuelItems: (Array.isArray(input.manualFuelItems) ? input.manualFuelItems : []).map((item) => ({
+      id: String(item.id || `manual-${Math.random().toString(36).slice(2)}`),
+      name: String(item.name || "Eigenes Lebensmittel").trim() || "Eigenes Lebensmittel",
+      carbs: numeric(item.carbs),
+      sodium: numeric(item.sodium),
+      caffeine: numeric(item.caffeine),
+    })),
   };
+}
+
+export function racePrepFuelEvidence(state = {}) {
+  const activities = new Map((Array.isArray(state.activities) ? state.activities : []).map((activity) => [localActivityId(activity), activity]));
+  const stats = new Map();
+
+  Object.entries(state.reviews || {}).forEach(([activityId, review]) => {
+    const activity = activities.get(String(activityId));
+    const durationMinutes = activityDurationMinutes(activity);
+    const reviewSuccessful = numeric(review?.stomach) >= 7 && cleanSymptoms(review).length === 0;
+    (Array.isArray(review?.nutritionItems) ? review.nutritionItems : []).forEach((item) => {
+      if (!item?.fuelItemId) return;
+      const id = String(item.fuelItemId);
+      const current = stats.get(id) || { uses: 0, good: 0, watch: 0, bad: 0, longestGoodMinutes: 0, lastGoodTiming: "" };
+      current.uses += 1;
+      const explicitGood = item.intakeTolerance === "good";
+      const explicitWatch = item.intakeTolerance === "watch";
+      const explicitBad = item.intakeTolerance === "bad";
+      const inferredGood = !item.intakeTolerance && reviewSuccessful;
+      if (explicitGood || inferredGood) {
+        current.good += 1;
+        current.longestGoodMinutes = Math.max(current.longestGoodMinutes, durationMinutes);
+        const timingValue = String(item.intakeTimingValue || "").trim();
+        if (timingValue) {
+          const prefix = item.intakeTimingMode === "round" ? "Runde " : item.intakeTimingMode === "km" ? "km " : item.intakeTimingMode === "minute" ? "Min " : "";
+          current.lastGoodTiming = `${prefix}${timingValue}`;
+        }
+      }
+      if (explicitWatch) current.watch += 1;
+      if (explicitBad) current.bad += 1;
+      stats.set(id, current);
+    });
+  });
+
+  return (Array.isArray(state.fuel) ? state.fuel : [])
+    .filter((item) => !item.archived)
+    .map((item) => {
+      const evidence = stats.get(String(item.id)) || { uses: 0, good: 0, watch: 0, bad: 0, longestGoodMinutes: 0, lastGoodTiming: "" };
+      const tone = evidence.bad > 0 ? "bad" : evidence.watch > 0 && evidence.good === 0 ? "watch" : evidence.good > 0 ? "good" : evidence.uses > 0 ? "used" : "untested";
+      const recommended = evidence.good > 0 && evidence.bad === 0;
+      const durationLabel = evidence.longestGoodMinutes >= 60
+        ? `${(evidence.longestGoodMinutes / 60).toLocaleString("de-DE", { maximumFractionDigits: 1 })} h`
+        : evidence.longestGoodMinutes > 0 ? `${Math.round(evidence.longestGoodMinutes)} min` : "";
+      const detail = evidence.good > 0
+        ? `${evidence.good}× gut vertragen${durationLabel ? ` · längster guter Test ${durationLabel}` : ""}${evidence.lastGoodTiming ? ` · zuletzt ${evidence.lastGoodTiming}` : ""}`
+        : evidence.bad > 0
+          ? `${evidence.bad}× problematisch${evidence.watch ? ` · ${evidence.watch}× auffällig` : ""}`
+          : evidence.watch > 0
+            ? `${evidence.watch}× auffällig`
+            : evidence.uses > 0
+              ? `${evidence.uses}× eingesetzt · noch ohne positive Einzelbewertung`
+              : "Noch nicht im Training dokumentiert";
+      return {
+        id: String(item.id),
+        name: fuelDisplayName(item),
+        carbs: numeric(item.carbs),
+        sodium: numeric(item.sodium),
+        caffeine: numeric(item.caffeine),
+        category: item.category || "Sonstiges",
+        tone,
+        recommended,
+        detail,
+        evidence,
+        item,
+      };
+    })
+    .sort((left, right) => {
+      const score = (entry) => entry.evidence.good * 100 + entry.evidence.uses * 8 - entry.evidence.watch * 50 - entry.evidence.bad * 250;
+      return score(right) - score(left) || left.name.localeCompare(right.name);
+    });
+}
+
+export function racePrepProfileWithEvidenceDefaults(profile, state = {}) {
+  const normalized = normalizeRacePrepProfile(profile);
+  if (normalized.fuelItemIds !== null) return normalized;
+  const defaults = racePrepFuelEvidence(state)
+    .filter((entry) => entry.recommended && entry.carbs > 0)
+    .slice(0, 4)
+    .map((entry) => entry.id);
+  return { ...normalized, fuelItemIds: defaults };
 }
 
 function syntheticRaceWorkout(profile) {
@@ -158,49 +264,6 @@ function syntheticRaceWorkout(profile) {
   return workout;
 }
 
-function reserveRate(durationMinutes) {
-  if (durationMinutes >= 12 * 60) return 0.15;
-  if (durationMinutes >= 4 * 60) return 0.1;
-  return 0.05;
-}
-
-function prepPack(pack = [], durationMinutes = 0) {
-  const rate = reserveRate(durationMinutes);
-  return pack.map((item) => {
-    if (item.generic) return { ...item, prepReserveQuantity: 0 };
-    const consumed = numeric(item.consumeQuantity);
-    const originalQuantity = Math.max(numeric(item.quantity), consumed, 1);
-    const reserve = item.unit === "ml"
-      ? roundTo(consumed * rate, 100)
-      : Math.max(numeric(item.reserveQuantity), Math.ceil(consumed * rate));
-    const quantity = consumed + reserve;
-    const requiredInventory = numeric(item.requiredInventory) * (quantity / originalQuantity);
-    const availableInventory = numeric(item.availableInventory);
-    return {
-      ...item,
-      quantity,
-      reserveQuantity: reserve,
-      prepReserveQuantity: reserve,
-      requiredInventory,
-      shortage: Math.max(0, requiredInventory - availableInventory),
-    };
-  });
-}
-
-function shoppingList(pack = []) {
-  return pack
-    .filter((item) => !item.generic)
-    .map((item) => ({
-      fuelItemId: item.fuelItemId,
-      label: item.label,
-      required: numeric(item.requiredInventory),
-      available: numeric(item.availableInventory),
-      missing: numeric(item.shortage),
-      unit: item.stockUnit || "Einheiten",
-      ready: numeric(item.shortage) <= 0,
-    }));
-}
-
 function phasePlan(profile, recommendation) {
   const duringFuel = recommendation.target.carbsPerHour > 0
     ? `${Math.round(recommendation.target.carbsPerHour)} g KH/h · insgesamt ca. ${Math.round(recommendation.target.carbsTotal)} g`
@@ -210,69 +273,128 @@ function phasePlan(profile, recommendation) {
     : "Trinken nach Durst und Bedingungen; kein fixer DURING-Block erforderlich.";
 
   return [
-    {
-      key: "pre",
-      label: "PRE",
-      title: "Vor dem Start",
-      detail: "Vertraute Mahlzeit und Getränke einplanen. Keine neuen Produkte am Renntag testen.",
-      note: "PRE wird bewusst nicht in die DURING-Mengen eingerechnet.",
-    },
-    {
-      key: "during",
-      label: "DURING",
-      title: profile.format === "loop" ? "Pro Runde / Rennstunde" : "Während des Rennens",
-      detail: `${duringFuel} · ${duringFluid}`,
-      note: "Konkrete Produkte und Zeitpunkte stehen im Versorgungsplan unten.",
-    },
-    {
-      key: "post",
-      label: "POST",
-      title: "Nach dem Ziel / Tagesblock",
-      detail: "Recovery-Verpflegung separat bereitlegen und nach tatsächlichem Hunger, Durst und Verträglichkeit nutzen.",
-      note: "POST wird im Review getrennt erfasst und verändert die DURING-Rate nicht.",
-    },
+    { key: "pre", label: "PRE", title: "Vor dem Start", detail: "Vertraute Mahlzeit und Getränke einplanen. Keine neuen Produkte am Renntag testen.", note: "PRE wird bewusst nicht in die DURING-Mengen eingerechnet." },
+    { key: "during", label: "DURING", title: profile.format === "loop" ? "Pro Runde / Rennstunde" : "Während des Rennens", detail: `${duringFuel} · ${duringFluid}`, note: "Konkrete Produkte stammen aus deiner ausgewählten und im Training belegten Fuel-Basis." },
+    { key: "post", label: "POST", title: "Nach dem Ziel / Tagesblock", detail: "Recovery-Verpflegung separat bereitlegen und nach tatsächlichem Hunger, Durst und Verträglichkeit nutzen.", note: "POST wird im Review getrennt erfasst und verändert die DURING-Rate nicht." },
   ];
+}
+
+function consumptionEntryFromCatalog(entry, quantity) {
+  return {
+    fuelItemId: entry.id,
+    product: entry.name,
+    category: entry.category,
+    quantity,
+    unit: defaultConsumptionUnit(entry.item),
+    carbs: quantity * entry.carbs,
+    sodium: quantity * entry.sodium,
+    caffeine: quantity * entry.caffeine,
+    inventoryUnits: 0,
+    stockUnit: entry.item?.stockUnit || "",
+    availableInventory: 0,
+    item: entry.item,
+    evidenceLabel: entry.detail,
+    evidenceTone: entry.tone,
+  };
+}
+
+function consumptionEntryFromManual(entry, quantity) {
+  return {
+    fuelItemId: entry.id,
+    product: entry.name,
+    category: "Eigenes Lebensmittel",
+    quantity,
+    unit: "Portionen",
+    carbs: quantity * numeric(entry.carbs),
+    sodium: quantity * numeric(entry.sodium),
+    caffeine: quantity * numeric(entry.caffeine),
+    inventoryUnits: 0,
+    stockUnit: "",
+    availableInventory: 0,
+    item: { id: entry.id, name: entry.name, carbs: numeric(entry.carbs), sodium: numeric(entry.sodium), caffeine: numeric(entry.caffeine) },
+    evidenceLabel: "Manuell ergänzt · nicht automatisch als trainingsbewährt gewertet",
+    evidenceTone: "base",
+  };
+}
+
+function buildEvidenceConsumption(targetCarbs, selectedCatalog, manualItems) {
+  const sources = [
+    ...selectedCatalog.filter((entry) => entry.carbs > 0).map((entry) => ({ ...entry, source: "catalog" })),
+    ...manualItems.filter((entry) => numeric(entry.carbs) > 0).map((entry) => ({ ...entry, source: "manual" })),
+  ];
+  if (!(targetCarbs > 0) || !sources.length) return [];
+
+  const counts = new Map();
+  let remaining = targetCarbs;
+  let index = 0;
+  const safetyLimit = 5000;
+  while (remaining > 1 && index < safetyLimit) {
+    const source = sources[index % sources.length];
+    const carbs = source.source === "catalog" ? source.carbs : numeric(source.carbs);
+    if (carbs > 0) {
+      counts.set(source.id, (counts.get(source.id) || 0) + 1);
+      remaining -= carbs;
+    }
+    index += 1;
+  }
+
+  return sources
+    .filter((source) => counts.get(source.id))
+    .map((source) => source.source === "catalog"
+      ? consumptionEntryFromCatalog(source, counts.get(source.id))
+      : consumptionEntryFromManual(source, counts.get(source.id)));
+}
+
+function selectionConfidence(selectedCatalog, manualItems) {
+  if (selectedCatalog.length > 0 && selectedCatalog.every((entry) => entry.tone === "good") && manualItems.length === 0) {
+    return { key: "training-proven", label: "Trainingserprobt", detail: "Alle eingeplanten Fuel-Quellen wurden in deinen Reviews positiv bestätigt." };
+  }
+  if (selectedCatalog.some((entry) => entry.tone === "good")) {
+    return { key: "personal", label: "Mit Trainingsbelegen", detail: "Mindestens eine eingeplante Fuel-Quelle ist aus deinen Reviews positiv belegt." };
+  }
+  if (manualItems.length > 0) {
+    return { key: "manual", label: "Manuell ergänzt", detail: "Die Auswahl enthält eigene Lebensmittel ohne automatische Trainingsfreigabe." };
+  }
+  return { key: "open", label: "Fuel-Basis offen", detail: "Für die automatische Race-Planung fehlt noch eine ausgewählte, getestete Fuel-Quelle." };
 }
 
 export function buildRacePrepPlan({ profile: inputProfile, state = {} } = {}) {
   const profile = normalizeRacePrepProfile(inputProfile);
-  if (!(profile.durationMinutes > 0)) {
-    return {
-      valid: false,
-      profile,
-      error: "Für die Verpflegungsplanung fehlt eine erwartete Renndauer.",
-    };
-  }
-  if (profile.format === "distance" && !(profile.distanceKm > 0)) {
-    return {
-      valid: false,
-      profile,
-      error: "Für ein Distanzrennen fehlt die Distanz.",
-    };
-  }
+  if (!(profile.durationMinutes > 0)) return { valid: false, profile, error: "Für die Verpflegungsplanung fehlt eine erwartete Renndauer." };
+  if (profile.format === "distance" && !(profile.distanceKm > 0)) return { valid: false, profile, error: "Für ein Distanzrennen fehlt die Distanz." };
 
   const workout = syntheticRaceWorkout(profile);
-  const recommendation = fuelRecommendationForWorkout({
+  const baseRecommendation = fuelRecommendationForWorkout({
     workout,
-    fuel: state.fuel,
+    fuel: (Array.isArray(state.fuel) ? state.fuel : []).map((item) => ({ ...item, quantity: 9999 })),
     activities: state.activities,
     reviews: state.reviews,
     mode: "race",
   });
-  const strategy = raceFuelStrategy({ workout, recommendation, reviews: state.reviews });
-  const pack = prepPack(recommendation.pack, profile.durationMinutes);
-  const shopping = shoppingList(pack);
-  const warnings = [...recommendation.warnings, ...(strategy?.warnings || [])];
+  const evidenceCatalog = racePrepFuelEvidence(state);
+  const effectiveFuelItemIds = profile.fuelItemIds === null
+    ? evidenceCatalog.filter((entry) => entry.recommended && entry.carbs > 0).slice(0, 4).map((entry) => entry.id)
+    : profile.fuelItemIds;
+  const selectedCatalog = effectiveFuelItemIds.map((id) => evidenceCatalog.find((entry) => entry.id === String(id))).filter(Boolean);
+  const manualItems = profile.manualFuelItems || [];
+  const consume = buildEvidenceConsumption(baseRecommendation.target.carbsTotal, selectedCatalog, manualItems);
+  const confidence = selectionConfidence(selectedCatalog, manualItems);
+  const warnings = [];
 
-  if (profile.durationEstimated) {
-    warnings.unshift(`Renndauer ist aktuell geschätzt (${formatDuration(profile.durationMinutes)}). Für den finalen Einkaufsplan bitte die erwartete Dauer anpassen.`);
-  }
-  if (profile.durationMinutes >= 6 * 60) {
-    const solidProducts = new Set(recommendation.consume.filter((item) => item.unit !== "ml").map((item) => item.fuelItemId));
-    if (solidProducts.size < 2 && recommendation.target.carbsTotal > 0) {
-      warnings.push("Langes Rennen: Der aktuelle Plan hängt fast vollständig an einer Fuel-Quelle. Produktrotation und eine herzhafte Alternative vor dem Rennen testen.");
-    }
-  }
+  if (profile.durationEstimated) warnings.push(`Renndauer ist aktuell geschätzt (${formatDuration(profile.durationMinutes)}). Für den finalen Plan bitte die erwartete Dauer anpassen.`);
+  selectedCatalog.filter((entry) => entry.tone === "bad").forEach((entry) => warnings.push(`${entry.name}: im Training bereits problematisch bewertet. Nur bewusst und nicht automatisch als sichere Race-Basis verwenden.`));
+  selectedCatalog.filter((entry) => entry.tone === "watch").forEach((entry) => warnings.push(`${entry.name}: bisher nur auffällige Aufnahme dokumentiert.`));
+  if (baseRecommendation.target.carbsTotal > 0 && consume.length === 0) warnings.push("Für dieses Rennen ist DURING-Fuel sinnvoll, aber es ist noch keine geeignete Fuel-Quelle ausgewählt. Wähle bevorzugt im Training gut verträgliche Produkte oder ergänze bewusst ein eigenes Lebensmittel.");
+  if (profile.durationMinutes >= 6 * 60 && consume.length === 1) warnings.push("Langes Rennen: Die Strategie hängt aktuell an nur einer Fuel-Quelle. Ergänze eine zweite im Training verträgliche Option für Rotation und Geschmackswechsel.");
+
+  const recommendation = {
+    ...baseRecommendation,
+    consume,
+    pack: [],
+    warnings,
+    confidence,
+  };
+  const strategy = raceFuelStrategy({ workout, recommendation, reviews: state.reviews });
 
   return {
     valid: true,
@@ -281,11 +403,16 @@ export function buildRacePrepPlan({ profile: inputProfile, state = {} } = {}) {
     recommendation,
     strategy,
     phases: phasePlan(profile, recommendation),
-    pack,
-    shopping,
-    shoppingNeeded: shopping.filter((item) => item.missing > 0),
-    stockReady: shopping.every((item) => item.ready),
-    warnings: [...new Set(warnings)],
+    evidenceCatalog,
+    effectiveFuelItemIds,
+    selectedCatalog,
+    manualItems,
+    warnings: [...new Set([...warnings, ...(strategy?.warnings || [])])],
+    // Kept for backwards compatibility; inventory is intentionally not part of the coaching recommendation.
+    pack: [],
+    shopping: [],
+    shoppingNeeded: [],
+    stockReady: true,
     summary: {
       durationLabel: formatDuration(profile.durationMinutes),
       distanceLabel: profile.distanceKm > 0 ? `${profile.distanceKm.toLocaleString("de-DE")} km` : "offene Distanz",
@@ -294,6 +421,7 @@ export function buildRacePrepPlan({ profile: inputProfile, state = {} } = {}) {
       fluidTotal: Math.round(recommendation.target.fluidTotal),
       fluidPerHour: Math.round(recommendation.target.fluidPerHour),
       schedulePoints: strategy?.rows?.length || 0,
+      selectedFuelSources: consume.length,
     },
   };
 }

@@ -9,6 +9,8 @@ import {
 } from "../services/activityUtils";
 import ReviewModal from "../components/ReviewModal";
 import ExerciseGuide, { ExerciseGuideButton } from "../components/ExerciseGuide";
+import RacePrepPlanner from "../components/RacePrepPlanner";
+import RaceCoach from "../components/RaceCoach";
 import { activitiesWithGroups } from "../services/activityGroups";
 import { fmtDate } from "../utils/format";
 import { playWorkoutAudioDemo, playWorkoutCue, primeWorkoutAudio, speakWorkoutCue, workoutAudioCapabilities } from "../services/workoutAudio";
@@ -49,6 +51,7 @@ const DEFAULT_MOBILITY_EQUIPMENT = ["mat", "band"];
 const coachTabs = [
   ["today", "Heute"],
   ["development", "Entwicklung"],
+  ["race", "Race"],
   ["mobility", "Stabi & Mobility"],
 ];
 
@@ -655,6 +658,17 @@ export default function Coach() {
             {outlook.mainTarget && outlook.strategicTarget && outlook.mainTarget.id !== outlook.strategicTarget.id && <p className="coach-main-target-note"><strong>Nach {outlook.strategicTarget.name}:</strong> {outlook.mainTarget.name} in {outlook.mainDays} Tagen.</p>}
           </Card>
           <SignalCard eyebrow="Schlüsseleinheiten" signal={analysis.keySessions} />
+        </div>
+      )}
+
+      {activeTab === "race" && (
+        <div className="grid coach-race-grid">
+          <Card className="wide coach-race-shell">
+            <RacePrepPlanner />
+          </Card>
+          <Card className="wide coach-race-shell">
+            <RaceCoach />
+          </Card>
         </div>
       )}
 

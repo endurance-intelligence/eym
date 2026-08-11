@@ -1476,3 +1476,41 @@
     flex-direction: column;
   }
 }
+
+/* v3.9.61 – evidence-based Race Prep inside Coach */
+.coach-race-grid{gap:16px}
+.coach-race-shell{padding:0;overflow:hidden}
+.coach-race-shell>.race-prep-planner,.coach-race-shell>.race-coach{padding:20px}
+.race-prep-fuel-builder{display:grid;gap:14px;padding:16px;border:1px solid var(--accent-border);border-radius:16px;background:color-mix(in srgb,var(--accent-surface) 34%,var(--bg-card-alt))}
+.race-prep-evidence-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.race-prep-evidence-product{display:grid;grid-template-columns:auto 1fr;align-items:start;gap:10px;padding:12px;border:1px solid var(--border);border-radius:12px;background:var(--bg-card-alt);cursor:pointer}
+.race-prep-evidence-product.selected{border-color:var(--accent-border-strong);background:var(--accent-surface)}
+.race-prep-evidence-product.good.selected{box-shadow:inset 3px 0 0 var(--success)}
+.race-prep-evidence-product.watch{border-color:color-mix(in srgb,var(--warning) 42%,var(--border))}
+.race-prep-evidence-product.bad{border-color:color-mix(in srgb,var(--danger) 48%,var(--border))}
+.race-prep-evidence-product input{margin-top:3px}
+.race-prep-evidence-copy{display:grid;gap:4px;min-width:0}
+.race-prep-evidence-copy>span{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.race-prep-evidence-copy b{font-size:12px}
+.race-prep-evidence-copy em{padding:3px 6px;border-radius:999px;background:var(--bg-input);color:var(--muted-bright);font-size:8px;font-style:normal;font-weight:900;text-transform:uppercase}
+.race-prep-evidence-product.good em{color:var(--success)}
+.race-prep-evidence-product.watch em{color:var(--warning)}
+.race-prep-evidence-product.bad em{color:var(--danger)}
+.race-prep-evidence-copy small{color:var(--muted);font-size:10px;line-height:1.4}
+.race-prep-other-products{overflow:hidden;border:1px solid var(--border);border-radius:12px;background:var(--bg-card-alt)}
+.race-prep-other-products>summary{display:flex;justify-content:space-between;gap:10px;padding:11px 12px;cursor:pointer;list-style:none;color:var(--muted-bright);font-size:11px;font-weight:800}
+.race-prep-other-products>summary::-webkit-details-marker{display:none}
+.race-prep-other-products>.race-prep-evidence-list{padding:0 10px 10px}
+.race-prep-manual-fuel{display:grid;gap:10px;padding-top:12px;border-top:1px solid var(--border)}
+.race-prep-manual-fuel>div:first-child{display:grid;gap:3px}
+.race-prep-manual-fuel>div:first-child>span{color:var(--accent-bright);font-size:9px;font-weight:900;letter-spacing:.08em;text-transform:uppercase}
+.race-prep-manual-fuel h3{margin:0;font-size:14px}
+.race-prep-manual-fuel small{color:var(--muted);font-size:10px}
+.race-prep-manual-grid{display:grid;grid-template-columns:minmax(180px,1.4fr) repeat(3,minmax(120px,.7fr)) auto;gap:8px;align-items:end}
+.race-prep-manual-grid label{display:grid;gap:5px;color:var(--muted-bright);font-size:9px;font-weight:800}
+.race-prep-manual-grid input{width:100%}
+.race-prep-manual-list{display:flex;flex-wrap:wrap;gap:7px}
+.race-prep-manual-list span{display:flex;align-items:center;gap:6px;padding:6px 8px;border:1px solid var(--border);border-radius:999px;background:var(--bg-input);font-size:10px}
+.race-prep-manual-list button{width:22px;height:22px;padding:0;border-radius:999px}
+@media(max-width:900px){.race-prep-evidence-list{grid-template-columns:1fr}.race-prep-manual-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.race-prep-manual-grid button{grid-column:1/-1}}
+@media(max-width:600px){.coach-race-shell>.race-prep-planner,.coach-race-shell>.race-coach{padding:14px}.race-prep-manual-grid{grid-template-columns:1fr}}
