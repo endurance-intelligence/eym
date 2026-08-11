@@ -2231,25 +2231,25 @@ export default function Planner() {
         )}
 
         {weekPlan.length > 0 && weekPrescription && (
-          <section className={`planner-week-prescription ${weekPrescription.weekType?.tone || "neutral"}`}>
-            <div className="planner-week-prescription-head">
-              <div>
+          <details className={`planner-week-prescription ${weekPrescription.weekType?.tone || "neutral"}`}>
+            <summary>
+              <div className="planner-week-prescription-head">
                 <span>Wochentyp</span>
                 <strong>{weekPrescription.weekType?.label || "Trainingswoche"}</strong>
-                <small>{weekPrescription.weekType?.summary}</small>
               </div>
               <div className="planner-week-prescription-range">
                 <b>{weekPrescription.corridor?.label || `${weekPrescription.targetKm || config.lastTarget || "–"} km`}</b>
-                <span>automatisch gesteuert</span>
+                <span>Wochenkorridor</span>
               </div>
-            </div>
-            <div className="planner-week-prescription-focus">
-              <span>Ziel dieser Woche</span>
-              <strong>{weekPrescription.focus}</strong>
-              <small>{weekPrescription.deliveryNote}</small>
-            </div>
-            <details>
-              <summary>Warum plant der Coach genau diese Woche? <b>Details →</b></summary>
+              <b className="planner-week-prescription-toggle">Details →</b>
+            </summary>
+            <div className="planner-week-prescription-body">
+              <div className="planner-week-prescription-focus">
+                <span>Ziel dieser Woche</span>
+                <strong>{weekPrescription.focus}</strong>
+                <small>{weekPrescription.weekType?.summary}</small>
+                <small>{weekPrescription.deliveryNote}</small>
+              </div>
               <div className="planner-week-prescription-details">
                 <ul>{(weekPrescription.why || []).map((reason, index) => <li key={`${weekPrescription.weekStart || weekKey}-${index}`}>{reason}</li>)}</ul>
                 <div>
@@ -2259,8 +2259,8 @@ export default function Planner() {
                   <small>{weekPrescription.noDebtText}</small>
                 </div>
               </div>
-            </details>
-          </section>
+            </div>
+          </details>
         )}
 
         {!isPastWeek && !weekAccepted && lastPlanChangeForWeek && lastPlanChangeUndoable && (

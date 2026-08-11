@@ -238,48 +238,58 @@ export function currentWeekAssessment(state, now = new Date()) {
   });
   const nonEmptyLoads = recentLoads.filter((value) => value > 0);
   const average = recentLoads.reduce((left, right) => left + right, 0) / Math.max(1, nonEmptyLoads.length);
-  const completed = activities
-    .filter((activity) => activityTimestamp(activity) >= start && activityTimestamp(activity) < end)
+  const weekActivities = activities.filter((activity) => activityTimestamp(activity) >= start && activityTimestamp(activity) < end);
+  const completed = weekActivities
     .reduce((sum, activity) => sum + activityLoad(activity, reviewFor(state.reviews, activity)), 0);
   const todayKey = `${reference.getFullYear()}-${String(reference.getMonth() + 1).padStart(2, "0")}-${String(reference.getDate()).padStart(2, "0")}`;
-  const open = (state.plan || []).filter((item) => (
+  const weekEndKey = end.toISOString().slice(0, 10);
+  const plannedWeek = (state.plan || []).filter((item) => (
     !item.archived
-    && item.date >= todayKey
-    && item.date < end.toISOString().slice(0, 10)
-    && !item.completed
+    && item.date >= start.toISOString().slice(0, 10)
+    && item.date < weekEndKey
     && !item.missedReason
     && item.type !== "Ruhetag"
   ));
+  const open = plannedWeek.filter((item) => (
+    item.date >= todayKey
+    && !item.completed
+  ));
+  const plannedWeekLoad = plannedWeek.reduce((sum, item) => sum + plannedLoad(item), 0);
   const remaining = open.reduce((sum, item) => sum + plannedLoad(item), 0);
   const projected = completed + remaining;
   const hasBaseline = nonEmptyLoads.length >= 2 && average > 0;
   const ratio = hasBaseline ? projected / average : 1;
+  const planDeltaRatio = plannedWeekLoad > 0 ? projected / plannedWeekLoad : 1;
   const hard = open.filter((item) => intensityFactor(`${item.title} ${item.type}`) >= 1.2);
-  const reviewCutoff = new Date(reference.getTime() - 21 * DAY);
-  const recentReviewed = activities
-    .filter((activity) => activityTimestamp(activity) >= reviewCutoff && activityTimestamp(activity) < end && state.reviews?.[activity.id])
-    .sort((left, right) => activityTimestamp(right) - activityTimestamp(left))
-    .slice(0, 4);
-  const lowReviews = recentReviewed.filter((activity) => {
+  const currentWeekReviewed = weekActivities
+    .filter((activity) => state.reviews?.[activity.id])
+    .sort((left, right) => activityTimestamp(right) - activityTimestamp(left));
+  const lowReviews = currentWeekReviewed.filter((activity) => {
     const review = reviewFor(state.reviews, activity);
     return (numeric(review.energy) > 0 && numeric(review.energy) <= 5)
       || (numeric(review.legs) > 0 && numeric(review.legs) <= 5);
   }).length;
   const reasons = [];
-  if (ratio >= 1.3) reasons.push(`projizierte Wochenbelastung liegt etwa ${Math.round((ratio - 1) * 100)} % über deinem jüngsten Mittel`);
-  if (hard.length >= 3) reasons.push(`${hard.length} belastende Reize liegen in der verbleibenden Woche`);
-  if (lowReviews >= 2) reasons.push("mehrere aktuelle Reviews melden müde Beine oder niedrige Energie");
-  const level = reasons.length >= 2 || ratio >= 1.5 ? "adjust" : reasons.length ? "watch" : "ok";
+  if (weekActivities.length > 0 && plannedWeekLoad > 0 && planDeltaRatio >= 1.15) {
+    reasons.push(`reale Zusatzbelastung hebt die aktuelle Wochenprognose etwa ${Math.round((planDeltaRatio - 1) * 100)} % über den angenommenen Wochenplan`);
+  }
+  if (lowReviews === 1) reasons.push("ein aktuelles Review meldet müde Beine oder niedrige Energie");
+  if (lowReviews >= 2) reasons.push("mehrere Reviews aus dieser Woche melden müde Beine oder niedrige Energie");
+  const level = planDeltaRatio >= 1.3 || lowReviews >= 2 || (planDeltaRatio >= 1.15 && lowReviews >= 1)
+    ? "adjust"
+    : reasons.length ? "watch" : "ok";
   const availableKeys = availableAlternativeKeys(state);
   const flexible = open.filter((item) => !item.fixed && !item.commitmentId && !item.keySession);
   const flexibleKey = open.filter((item) => !item.fixed && !item.commitmentId && item.keySession);
   const fixed = open.filter((item) => item.fixed || item.commitmentId);
-  const flexiblePool = [
-    ...flexible,
-    ...(level === "adjust" ? flexibleKey : []),
-  ];
-  // Fixtermine are an escalation path, never the first place to create recovery.
-  // As long as a flexible unit exists, coach suggestions stay on flexible days.
+  const flexiblePool = level === "ok"
+    ? []
+    : [
+      ...flexible,
+      ...(level === "adjust" ? flexibleKey : []),
+    ];
+  // Der Coach greift erst ein, nachdem die laufende Woche reale Überlastungs- oder Erholungssignale liefert.
+  // Fixtermine bleiben dabei die letzte Eskalationsstufe; flexible Einheiten werden zuerst angepasst.
   const candidatePool = flexiblePool.length > 0
     ? flexiblePool
     : level === "adjust" ? fixed : [];
@@ -336,6 +346,9 @@ export function currentWeekAssessment(state, now = new Date()) {
     completed: Math.round(completed),
     remaining: Math.round(remaining),
     projected: Math.round(projected),
+    plannedWeekLoad: Math.round(plannedWeekLoad),
+    planDeltaRatio,
+    observedCurrentWeek: weekActivities.length > 0,
     ratio,
     hasBaseline,
     baselineWeeks: nonEmptyLoads.length,
@@ -343,7 +356,7 @@ export function currentWeekAssessment(state, now = new Date()) {
     hardCount: hard.length,
     openCount: open.length,
     lowReviews,
-    reviewedSignals: recentReviewed.length,
+    reviewedSignals: currentWeekReviewed.length,
     candidates,
   };
 }

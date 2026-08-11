@@ -1878,3 +1878,113 @@
   .planner-week-review-head>b{justify-self:start}
   .planner-week-review-metrics{grid-template-columns:1fr}
 }
+
+/* v3.9.62 – compact week type card and evidence-gated in-week coaching */
+.planner-week-dashboard>.planner-week-prescription{
+  min-width:0;
+  min-height:122px;
+  height:122px;
+  margin:0;
+  padding:0;
+  overflow:hidden;
+  border-radius:14px;
+  box-shadow:none;
+}
+.planner-week-dashboard>.planner-week-prescription>summary{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  grid-template-rows:1fr auto;
+  gap:7px 12px;
+  align-items:start;
+  min-height:100%;
+  padding:13px;
+  cursor:pointer;
+  list-style:none;
+}
+.planner-week-dashboard>.planner-week-prescription>summary::-webkit-details-marker{display:none}
+.planner-week-dashboard>.planner-week-prescription .planner-week-prescription-head{
+  display:grid;
+  grid-template-columns:1fr;
+  gap:2px;
+  min-width:0;
+}
+.planner-week-dashboard>.planner-week-prescription .planner-week-prescription-head>span{
+  color:var(--accent-bright);
+  font-size:9px;
+  font-weight:900;
+  letter-spacing:.09em;
+  text-transform:uppercase;
+}
+.planner-week-dashboard>.planner-week-prescription .planner-week-prescription-head>strong{
+  overflow:hidden;
+  font-size:17px;
+  line-height:1.2;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.planner-week-dashboard>.planner-week-prescription .planner-week-prescription-range{
+  display:grid;
+  gap:2px;
+  justify-items:end;
+  padding:0;
+  border:0;
+  background:transparent;
+}
+.planner-week-dashboard>.planner-week-prescription .planner-week-prescription-range>b{
+  color:var(--accent-bright);
+  font-size:18px;
+  line-height:1.2;
+}
+.planner-week-dashboard>.planner-week-prescription .planner-week-prescription-range>span{
+  color:var(--muted);
+  font-size:8px;
+  letter-spacing:.06em;
+}
+.planner-week-prescription-toggle{
+  grid-column:1/-1;
+  align-self:end;
+  justify-self:start;
+  color:var(--accent-bright);
+  font-size:10px;
+  white-space:nowrap;
+}
+.planner-week-dashboard>.planner-week-prescription[open]{
+  grid-column:1/-1;
+  height:auto;
+  min-height:0;
+  overflow:visible;
+}
+.planner-week-dashboard>.planner-week-prescription[open]>summary{
+  min-height:0;
+  border-bottom:1px solid var(--border);
+}
+.planner-week-dashboard>.planner-week-prescription[open] .planner-week-prescription-toggle{font-size:0}
+.planner-week-dashboard>.planner-week-prescription[open] .planner-week-prescription-toggle::after{
+  content:"Schließen";
+  font-size:10px;
+}
+.planner-week-prescription-body{
+  display:grid;
+  gap:12px;
+  padding:13px;
+}
+.planner-week-prescription-body .planner-week-prescription-focus{
+  margin:0;
+}
+.planner-week-prescription-body .planner-week-prescription-details{
+  margin-top:0;
+}
+@media(max-width:1180px){
+  .planner-week-dashboard>.planner-week-prescription{
+    height:auto;
+    min-height:112px;
+  }
+}
+@media(max-width:720px){
+  .planner-week-dashboard>.planner-week-prescription>summary{
+    padding:12px;
+  }
+  .planner-week-dashboard>.planner-week-prescription .planner-week-prescription-range{
+    justify-items:end;
+  }
+}
