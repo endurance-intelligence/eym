@@ -1,4 +1,5 @@
 import { normalizeRacePrepProfile } from "./racePrepPlanner.js";
+import { buildRoutePacingPlan } from "./raceRoute.js";
 
 const DISTANCE_CHECKPOINTS = [0.1, 0.25, 0.5, 0.75, 0.9, 1];
 const TIME_CHECKPOINTS = [0.1, 0.25, 0.5, 0.75, 0.9, 1];
@@ -10,6 +11,29 @@ function numeric(value) {
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
+}
+
+export function formatRaceDurationInput(minutes) {
+  const totalMinutes = numeric(minutes);
+  if (!(totalMinutes > 0)) return "";
+  const totalSeconds = Math.round(totalMinutes * 60);
+  const hours = Math.floor(totalSeconds / 3600);
+  const mins = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return seconds > 0
+    ? `${hours}:${String(mins).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`
+    : `${hours}:${String(mins).padStart(2, "0")}`;
+}
+
+export function parseRaceDurationInput(value) {
+  const text = String(value || "").trim().replace(",", ".");
+  if (!text) return 0;
+  if (/^\d+(?:\.\d+)?$/.test(text)) return Number(text) * 60;
+  const parts = text.split(":").map((part) => Number(part));
+  if (parts.some((part) => !Number.isFinite(part) || part < 0)) return 0;
+  if (parts.length === 2) return parts[0] * 60 + parts[1];
+  if (parts.length === 3) return parts[0] * 60 + parts[1] + parts[2] / 60;
+  return 0;
 }
 
 function round(value, digits = 0) {
@@ -171,7 +195,7 @@ export function normalizeRaceCoachStatus(input = {}, profile = {}) {
   };
 }
 
-export function buildRaceCoachPlan(inputProfile = {}) {
+export function buildRaceCoachPlan(inputProfile = {}, { routeProfile = null, fuelStrategy = null } = {}) {
   const profile = normalizeRacePrepProfile(inputProfile);
   if (!(profile.durationMinutes > 0)) {
     return { valid: false, profile, error: "Für den Race Coach fehlt eine erwartete Renndauer." };
@@ -188,6 +212,9 @@ export function buildRaceCoachPlan(inputProfile = {}) {
     : profile.format === "time"
       ? timeCheckpoints(profile)
       : distanceCheckpoints(profile);
+  const routePlan = profile.format === "distance" && routeProfile
+    ? buildRoutePacingPlan({ route: routeProfile, targetDurationMinutes: profile.durationMinutes, fuelStrategy })
+    : null;
 
   return {
     valid: true,
@@ -195,6 +222,7 @@ export function buildRaceCoachPlan(inputProfile = {}) {
     targetPaceSeconds,
     phases: phaseBlueprint(profile, targetPaceSeconds),
     checkpoints,
+    routePlan,
     summary: {
       duration: durationLabel(profile.durationMinutes),
       distance: profile.distanceKm > 0 ? `${round(profile.distanceKm, 1).toLocaleString("de-DE")} km` : "offene Distanz",

@@ -4,6 +4,8 @@ import {
   buildRaceCoachPlan,
   emptyRaceCoachStatus,
   evaluateRaceCoach,
+  formatRaceDurationInput,
+  parseRaceDurationInput,
 } from "../src/services/raceCoach.js";
 
 function halfMarathonProfile() {
@@ -121,4 +123,27 @@ test("time race coach remains effort-led without inventing a distance pace", () 
   assert.equal(plan.targetPaceSeconds, 0);
   assert.equal(plan.summary.pace, "nach Belastung");
   assert.match(result.position, /50 % der geplanten Rennzeit/);
+});
+
+
+test("race coach target time input supports long ultra durations", () => {
+  assert.equal(parseRaceDurationInput("0:55:30"), 55.5);
+  assert.equal(parseRaceDurationInput("30:00"), 1800);
+  assert.equal(formatRaceDurationInput(1800), "30:00");
+});
+
+test("race coach exposes route pacing when a GPX profile is available", () => {
+  const routeProfile = {
+    distanceKm: 2,
+    segments: [
+      { startKm: 0, endKm: 1, distanceKm: 1, gainM: 80, lossM: 0, netGradePercent: 4 },
+      { startKm: 1, endKm: 2, distanceKm: 1, gainM: 0, lossM: 80, netGradePercent: -4 },
+    ],
+  };
+  const plan = buildRaceCoachPlan({ name: "2k", format: "distance", distanceKm: 2, durationMinutes: 12 }, { routeProfile });
+
+  assert.ok(plan.routePlan);
+  assert.equal(plan.routePlan.segments.length, 2);
+  assert.ok(plan.routePlan.segments[0].paceSecondsPerKm > plan.routePlan.segments[1].paceSecondsPerKm);
+  assert.ok(Math.abs(plan.routePlan.segments.at(-1).cumulativeMinutes - 12) < 0.01);
 });

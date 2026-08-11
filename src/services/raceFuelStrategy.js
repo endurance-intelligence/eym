@@ -173,6 +173,8 @@ function timeStrategy(workout, recommendation, evidence) {
       const km = distance > 0 ? roundTo((distance * entry.minute) / duration, 0.5) : 0;
       return {
         key: `minute-${entry.minute}`,
+        minute: entry.minute,
+        distanceKm: km,
         marker: km > 0 ? `km ${km.toLocaleString("de-DE")}` : `Min ${entry.minute}`,
         secondary: km > 0 ? `ca. Min ${entry.minute}` : "Zeitplan",
         drinkMl: entry.drinkMl,

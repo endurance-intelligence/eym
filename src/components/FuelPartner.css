@@ -1514,3 +1514,343 @@
 .race-prep-manual-list button{width:22px;height:22px;padding:0;border-radius:999px}
 @media(max-width:900px){.race-prep-evidence-list{grid-template-columns:1fr}.race-prep-manual-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.race-prep-manual-grid button{grid-column:1/-1}}
 @media(max-width:600px){.coach-race-shell>.race-prep-planner,.coach-race-shell>.race-coach{padding:14px}.race-prep-manual-grid{grid-template-columns:1fr}}
+
+/* v3.9.71 – route-aware Race Coach / GPX blueprint */
+.race-coach-setup,
+.race-coach-route-plan {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--bg-sidebar) 88%, transparent);
+}
+
+.race-coach-setup-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, .7fr) minmax(360px, 1.3fr);
+  gap: 12px;
+}
+
+.race-coach-target-time,
+.race-coach-route-import {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-input);
+}
+
+.race-coach-target-time label,
+.race-coach-route-import {
+  color: var(--muted-bright);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.race-coach-target-time small,
+.race-coach-route-import small {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.race-coach-target-row,
+.race-coach-url-row {
+  display: flex;
+  gap: 7px;
+  margin-top: 5px;
+}
+
+.race-coach-target-row input,
+.race-coach-url-row input {
+  min-width: 0;
+  flex: 1;
+}
+
+.race-coach-target-row button,
+.race-coach-url-row button {
+  flex: 0 0 auto;
+}
+
+.race-coach-text-button {
+  justify-self: start;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent-bright);
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.race-coach-route-actions {
+  display: grid;
+  grid-template-columns: auto auto minmax(220px, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.race-coach-route-actions > span {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.race-coach-file-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid var(--accent-border);
+  border-radius: 9px;
+  background: var(--accent-surface);
+  color: var(--text);
+  font-size: 10px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.race-coach-file-button input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.race-coach-setup-error,
+.race-coach-route-warning {
+  padding: 9px 11px;
+  border: 1px solid color-mix(in srgb, var(--warning) 55%, var(--border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--warning) 8%, var(--bg-input));
+  color: var(--muted-bright);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.race-coach-route-card {
+  display: grid;
+  gap: 9px;
+  padding: 12px;
+  border: 1px solid var(--accent-border);
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--accent-surface) 26%, var(--bg-input));
+}
+
+.race-coach-route-head {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto auto;
+  gap: 16px;
+  align-items: center;
+}
+
+.race-coach-route-head > div:first-child {
+  display: grid;
+  gap: 2px;
+}
+
+.race-coach-route-head > div:first-child > span {
+  color: var(--accent-bright);
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .08em;
+}
+
+.race-coach-route-head > div:first-child strong {
+  font-size: 13px;
+}
+
+.race-coach-route-head > div:first-child small {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.race-coach-route-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.race-coach-route-metrics span {
+  display: grid;
+  gap: 1px;
+  min-width: 84px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--bg-input);
+  color: var(--muted);
+  font-size: 8px;
+}
+
+.race-coach-route-metrics b {
+  color: var(--text);
+  font-size: 10px;
+}
+
+.race-coach-elevation {
+  width: 100%;
+  height: 118px;
+  overflow: visible;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent-surface) 30%, transparent), transparent);
+}
+
+.race-coach-elevation polyline {
+  fill: none;
+  stroke: var(--accent-bright);
+  stroke-width: 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.race-coach-route-segments {
+  display: grid;
+  gap: 7px;
+}
+
+.race-coach-route-segments article {
+  display: grid;
+  grid-template-columns: minmax(120px, .8fr) minmax(110px, .65fr) minmax(90px, .55fr) minmax(220px, 1.5fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 11px;
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: 11px;
+  background: var(--bg-input);
+}
+
+.race-coach-route-segments article.terrain-flat { border-left-color: var(--success); }
+.race-coach-route-segments article.terrain-rolling { border-left-color: var(--accent-bright); }
+.race-coach-route-segments article.terrain-up { border-left-color: var(--warning); }
+.race-coach-route-segments article.terrain-steep-up { border-left-color: var(--danger); }
+.race-coach-route-segments article.terrain-down { border-left-color: #6fd7ff; }
+
+.race-coach-segment-marker,
+.race-coach-segment-target,
+.race-coach-segment-elevation {
+  display: grid;
+  gap: 2px;
+}
+
+.race-coach-segment-marker span,
+.race-coach-segment-target span,
+.race-coach-segment-elevation span {
+  color: var(--muted);
+  font-size: 8px;
+}
+
+.race-coach-segment-marker b,
+.race-coach-segment-target strong {
+  font-size: 11px;
+}
+
+.race-coach-segment-elevation {
+  grid-template-columns: repeat(2, auto);
+  justify-content: start;
+  gap: 6px;
+}
+
+.race-coach-route-segments article > p {
+  margin: 0;
+  color: var(--muted-bright);
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.race-coach-segment-fuel {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+  max-width: 240px;
+}
+
+.race-coach-segment-fuel span {
+  padding: 4px 6px;
+  border: 1px solid var(--accent-border);
+  border-radius: 999px;
+  background: var(--accent-surface);
+  color: var(--text);
+  font-size: 8px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.race-coach-route-gap {
+  padding: 9px;
+  border: 1px dashed var(--border);
+  border-radius: 9px;
+  color: var(--muted);
+  text-align: center;
+  font-size: 9px;
+}
+
+.race-coach-route-toggle {
+  justify-self: start;
+  min-height: 32px;
+  padding: 6px 9px;
+  font-size: 9px;
+}
+
+.race-coach-route-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+@media (max-width: 1050px) {
+  .race-coach-setup-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .race-coach-route-head {
+    grid-template-columns: 1fr;
+  }
+
+  .race-coach-route-segments article {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .race-coach-route-segments article > p {
+    grid-column: 1 / -1;
+  }
+
+  .race-coach-segment-fuel {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    max-width: none;
+  }
+}
+
+@media (max-width: 700px) {
+  .race-coach-route-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .race-coach-route-actions > span {
+    display: none;
+  }
+
+  .race-coach-url-row,
+  .race-coach-target-row {
+    flex-direction: column;
+  }
+
+  .race-coach-route-segments article {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .race-coach-route-segments article > p,
+  .race-coach-segment-fuel {
+    grid-column: 1 / -1;
+  }
+}

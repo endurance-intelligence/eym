@@ -88,6 +88,7 @@ export function emptyRacePrepProfile() {
     rounds: 10,
     source: "custom",
     originEventId: "",
+    routeGpxUrl: "",
     fuelItemIds: null,
     manualFuelItems: [],
   };
@@ -120,6 +121,7 @@ export function racePrepProfileFromEvent(event = {}) {
     rounds: rounds || 10,
     source: "mission",
     originEventId: event.id || "",
+    routeGpxUrl: event.routeGpxUrl || event.gpxUrl || "",
   });
 }
 
