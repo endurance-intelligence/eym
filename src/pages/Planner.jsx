@@ -723,6 +723,17 @@ export default function Planner() {
   );
   const weekKey = isoDate(weekStart);
   const weekPrescription = config.weekPrescriptions?.[weekKey] || null;
+  const weekTypeCardSummary = {
+    recovery: "Belastung bewusst reduziert.",
+    event: "Event im Fokus · Frische geschützt.",
+    taper: "Umfang reduziert · Rhythmus erhalten.",
+    peak: "Wettkampfnah absichern · Müdigkeit vermeiden.",
+    specific_load: "Zielspezifischen Reiz kontrolliert setzen.",
+    specific: "Training gezielt an den Wettkampf annähern.",
+    load: "Belastung kontrolliert erhöhen.",
+    build: "Umfang und Reize schrittweise entwickeln.",
+    base: "Grundlage und Routine festigen.",
+  }[weekPrescription?.weekType?.key] || "Training passend zur aktuellen Phase steuern.";
   const coachSuggestionDecisions = config.coachSuggestionDecisions || {};
   const coachSuggestionContext = {
     weekKey,
@@ -2232,19 +2243,21 @@ export default function Planner() {
         )}
 
         {weekPlan.length > 0 && weekPrescription && (
-          <button
-            type="button"
-            className={`planner-week-prescription-card ${weekPrescription.weekType?.tone || "neutral"}`}
-            onClick={() => setWeekPrescriptionOpen(true)}
-            aria-label={`${weekPrescription.weekType?.label || "Trainingswoche"}: Details zum Wochentyp öffnen`}
-          >
+          <section className={`planner-week-prescription-card ${weekPrescription.weekType?.tone || "neutral"}`}>
             <div className="planner-week-prescription-card-copy">
               <span>Wochentyp</span>
               <strong>{weekPrescription.weekType?.label || "Trainingswoche"}</strong>
-              <small>{weekPrescription.corridor?.label || `${weekPrescription.targetKm || config.lastTarget || "–"} km`} Wochenkorridor</small>
+              <small>{weekTypeCardSummary}</small>
             </div>
-            <b className="planner-week-prescription-card-link">Details →</b>
-          </button>
+            <button
+              type="button"
+              className="planner-week-prescription-card-link"
+              onClick={() => setWeekPrescriptionOpen(true)}
+              aria-label={`${weekPrescription.weekType?.label || "Trainingswoche"}: Details zum Wochentyp öffnen`}
+            >
+              Details →
+            </button>
+          </section>
         )}
 
         {!isPastWeek && !weekAccepted && lastPlanChangeForWeek && lastPlanChangeUndoable && (

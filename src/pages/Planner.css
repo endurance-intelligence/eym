@@ -2063,11 +2063,9 @@
 }
 
 
-/* v3.9.65 – week type follows the same visual grammar as the surrounding dashboard cards */
+/* v3.9.66 – make week type a native dashboard card instead of a button widget */
 .planner-week-dashboard>.planner-week-prescription-card{
-  appearance:none;
   display:grid;
-  grid-template-columns:minmax(0,1fr);
   grid-template-rows:1fr auto;
   align-items:start;
   gap:8px;
@@ -2082,28 +2080,35 @@
   background:linear-gradient(145deg,var(--bg-card),var(--bg-card-alt));
   color:var(--text);
   box-shadow:none;
-  cursor:pointer;
-  text-align:left;
 }
 .planner-week-dashboard>.planner-week-prescription-card.recovery,
 .planner-week-dashboard>.planner-week-prescription-card.event,
 .planner-week-dashboard>.planner-week-prescription-card.taper,
 .planner-week-dashboard>.planner-week-prescription-card.load,
-.planner-week-dashboard>.planner-week-prescription-card.peak{
+.planner-week-dashboard>.planner-week-prescription-card.peak,
+.planner-week-dashboard>.planner-week-prescription-card.specific,
+.planner-week-dashboard>.planner-week-prescription-card.build,
+.planner-week-dashboard>.planner-week-prescription-card.neutral{
   border-color:var(--border);
   background:linear-gradient(145deg,var(--bg-card),var(--bg-card-alt));
 }
-.planner-week-dashboard>.planner-week-prescription-card:hover,
-.planner-week-dashboard>.planner-week-prescription-card:focus-visible{
-  border-color:var(--accent-border-strong);
-  background:linear-gradient(145deg,var(--bg-card),var(--bg-card-alt));
-  transform:none;
-}
 .planner-week-prescription-card-copy{
   display:grid;
+  grid-template-columns:minmax(0,1fr);
   align-content:start;
+  justify-items:start;
   gap:2px;
+  width:100%;
   min-width:0;
+  text-align:left;
+}
+.planner-week-prescription-card-copy>span,
+.planner-week-prescription-card-copy>strong,
+.planner-week-prescription-card-copy>small{
+  display:block;
+  width:100%;
+  min-width:0;
+  text-align:left;
 }
 .planner-week-prescription-card-copy>span{
   color:var(--accent-bright);
@@ -2114,18 +2119,17 @@
   text-transform:uppercase;
 }
 .planner-week-prescription-card-copy>strong{
-  display:block;
-  overflow:hidden;
   margin-top:1px;
+  overflow:hidden;
+  color:var(--text);
   font-size:17px;
   line-height:1.15;
   text-overflow:ellipsis;
   white-space:nowrap;
 }
 .planner-week-prescription-card-copy>small{
-  display:block;
-  overflow:hidden;
   margin-top:2px;
+  overflow:hidden;
   color:var(--muted);
   font-size:10px;
   line-height:1.35;
@@ -2133,13 +2137,37 @@
   white-space:nowrap;
 }
 .planner-week-prescription-card-link{
+  appearance:none;
   align-self:end;
   justify-self:start;
+  width:max-content;
+  min-height:0;
+  margin:0;
+  padding:0;
+  border:0;
+  border-radius:0;
+  background:transparent;
   color:var(--accent-bright);
+  font:inherit;
   font-size:10px;
+  font-weight:900;
   line-height:1.2;
+  text-align:left;
   white-space:nowrap;
+  box-shadow:none;
 }
+.planner-week-prescription-card-link:hover,
+.planner-week-prescription-card-link:focus-visible{
+  border:0;
+  background:transparent;
+  color:var(--text);
+  transform:none;
+  box-shadow:none;
+}
+@media(max-width:1180px){
+  .planner-week-dashboard>.planner-week-prescription-card{height:auto;min-height:112px}
+}
+
 .planner-week-prescription-modal{
   display:grid;
   gap:16px;
