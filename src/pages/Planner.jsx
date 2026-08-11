@@ -2237,11 +2237,10 @@ export default function Planner() {
                 <span>Wochentyp</span>
                 <strong>{weekPrescription.weekType?.label || "Trainingswoche"}</strong>
               </div>
-              <div className="planner-week-prescription-range">
-                <b>{weekPrescription.corridor?.label || `${weekPrescription.targetKm || config.lastTarget || "–"} km`}</b>
-                <span>Wochenkorridor</span>
+              <div className="planner-week-prescription-footer">
+                <span className="planner-week-prescription-range">{weekPrescription.corridor?.label || `${weekPrescription.targetKm || config.lastTarget || "–"} km`}</span>
+                <b className="planner-week-prescription-toggle">Details →</b>
               </div>
-              <b className="planner-week-prescription-toggle">Details →</b>
             </summary>
             <div className="planner-week-prescription-body">
               <div className="planner-week-prescription-focus">

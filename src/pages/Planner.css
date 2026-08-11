@@ -1988,3 +1988,76 @@
     justify-items:end;
   }
 }
+
+
+/* v3.9.63 – finish compact week type dashboard card */
+.planner-week-dashboard>.planner-week-prescription>summary{
+  display:grid;
+  grid-template-columns:1fr;
+  grid-template-rows:minmax(0,1fr) auto;
+  gap:10px;
+  align-items:stretch;
+  min-height:100%;
+  padding:13px 14px;
+}
+.planner-week-dashboard>.planner-week-prescription .planner-week-prescription-head{
+  display:grid;
+  grid-template-columns:1fr;
+  align-content:start;
+  gap:4px;
+  min-width:0;
+}
+.planner-week-dashboard>.planner-week-prescription .planner-week-prescription-head>span{
+  line-height:1.1;
+}
+.planner-week-dashboard>.planner-week-prescription .planner-week-prescription-head>strong{
+  display:block;
+  max-width:100%;
+  overflow:visible;
+  font-size:17px;
+  line-height:1.2;
+  text-overflow:clip;
+  white-space:normal;
+}
+.planner-week-prescription-footer{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  min-width:0;
+}
+.planner-week-dashboard>.planner-week-prescription .planner-week-prescription-range{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:0;
+  padding:4px 8px;
+  border:1px solid var(--accent-border);
+  border-radius:999px;
+  background:color-mix(in srgb,var(--bg-input) 88%,transparent);
+  color:var(--accent-bright);
+  font-size:10px;
+  font-weight:900;
+  line-height:1;
+  letter-spacing:0;
+  white-space:nowrap;
+}
+.planner-week-prescription-footer .planner-week-prescription-toggle{
+  grid-column:auto;
+  align-self:auto;
+  justify-self:auto;
+  margin-left:auto;
+  font-size:10px;
+}
+.planner-week-dashboard>.planner-week-prescription[open]>summary{
+  grid-template-rows:auto auto;
+}
+.planner-week-dashboard>.planner-week-prescription[open] .planner-week-prescription-footer{
+  justify-content:flex-end;
+}
+.planner-week-dashboard>.planner-week-prescription[open] .planner-week-prescription-range{
+  display:none;
+}
+@media(max-width:720px){
+  .planner-week-prescription-footer{align-items:flex-end}
+}
