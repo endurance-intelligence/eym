@@ -78,6 +78,7 @@ export default function Mission() {
   const [draft, setDraft] = useState(emptyEvent);
   const [editingId, setEditingId] = useState(null);
   const [showEditor, setShowEditor] = useState(false);
+  const [eventSearchQuery, setEventSearchQuery] = useState("");
   const [selectedMilestoneId, setSelectedMilestoneId] = useState(null);
   const [forecasts, setForecasts] = useState({});
   const [showArchived, setShowArchived] = useState(false);
@@ -167,6 +168,7 @@ export default function Mission() {
       ...current,
       ...eventSuggestionMissionPatch(event),
     }));
+    setEventSearchQuery("");
     setPlaceSuggestions([]);
     setPlaceStatus("");
   }
@@ -280,6 +282,7 @@ export default function Mission() {
 
     setDraft(emptyEvent);
     setEditingId(null);
+    setEventSearchQuery("");
     setShowEditor(false);
   }
 
@@ -287,6 +290,7 @@ export default function Mission() {
     setSelectedMilestoneId(null);
     const courseProfile = eventCourseProfile(item);
     setEditingId(item.id);
+    setEventSearchQuery("");
     setDraft({
       name: item.name,
       date: item.date,
@@ -474,6 +478,7 @@ export default function Mission() {
         <button className="mission-add-button" onClick={() => {
           setEditingId(null);
           setDraft(emptyEvent);
+          setEventSearchQuery("");
           setShowEditor(true);
         }}>+ Meilenstein / Event</button>
       </PageTitle>
@@ -513,7 +518,7 @@ export default function Mission() {
             <p className="eyebrow">Deine Mission</p>
             <h2>Noch kein Hauptziel hinterlegt</h2>
             <p className="muted">Lege dein persönliches Ziel, das Datum und optional eine Distanz fest. Coach, Analyse und künftige Wochenplanungen richten sich danach aus.</p>
-            <button type="button" className="primary compact-primary" onClick={() => { setEditingId(null); setDraft({ ...emptyEvent, isMainTarget: true, priority: "A" }); setShowEditor(true); }}>Hauptziel anlegen</button>
+            <button type="button" className="primary compact-primary" onClick={() => { setEditingId(null); setDraft({ ...emptyEvent, isMainTarget: true, priority: "A" }); setEventSearchQuery(""); setShowEditor(true); }}>Hauptziel anlegen</button>
           </Card>
         )}
 
@@ -523,19 +528,20 @@ export default function Mission() {
           description="Event suchen oder manuell anlegen. Änderungen werden erst mit dem Speichern übernommen."
           width="xl"
           className="mission-editor-modal"
-          onClose={() => { setShowEditor(false); setEditingId(null); setDraft(emptyEvent); }}
+          onClose={() => { setShowEditor(false); setEditingId(null); setDraft(emptyEvent); setEventSearchQuery(""); }}
         >
           <form className="editor-form mission-editor" onSubmit={save}>
-            <label className="event-search-field">Event
+            <label className="event-search-field">Event suchen
               <EventAutocomplete
-                value={draft.name}
-                onChange={(value) => change({ target: { name: "name", value, type: "text", checked: false } })}
+                value={eventSearchQuery}
+                onChange={setEventSearchQuery}
                 onSelect={selectEventSuggestion}
-                placeholder="Eventname oder Ort"
-                inputProps={{ required: true, maxLength: 100 }}
+                placeholder={draft.eventCatalogId ? "Anderes veröffentlichtes Event suchen …" : "Name oder Ort eingeben …"}
+                inputProps={{ maxLength: 100 }}
               />
-              <small>Tippe mindestens drei Zeichen. Veröffentlichte Events füllen verfügbare Angaben wie Datum, Startzeit, Ort und Distanz; fehlende Werte bleiben offen.</small>
+              <small>Suche unabhängig vom gespeicherten Eventnamen nach Veranstaltung oder Ort. Ein Treffer übernimmt nur bekannte Angaben; alles bleibt danach editierbar.</small>
             </label>
+            <label>Eventname<input name="name" value={draft.name} onChange={change} required maxLength="100" autoComplete="off" /></label>
             {draft.eventCatalogId && <div className={`event-source-card ${draft.eventDataStatus || "verified"}`}>
               <div>
                 <span>{eventSourceStatusLabel(draft.eventDataStatus)}</span>
@@ -576,7 +582,7 @@ export default function Mission() {
             {draft.isMainTarget && <label>Vorbereitung ab<input name="preparationStartDate" type="date" value={draft.preparationStartDate} onChange={change} /></label>}
             <label className="checkbox-label"><input name="isMainTarget" type="checkbox" checked={draft.isMainTarget} onChange={change} /> Als Hauptziel markieren</label>
             <button className="primary" type="submit">{editingId ? "Änderung speichern" : "Event hinzufügen"}</button>
-            {editingId && <button type="button" onClick={() => { setEditingId(null); setDraft(emptyEvent); setShowEditor(false); }}>Abbrechen</button>}
+            {editingId && <button type="button" onClick={() => { setEditingId(null); setDraft(emptyEvent); setEventSearchQuery(""); setShowEditor(false); }}>Abbrechen</button>}
           </form>
         </EditorModal>}
 

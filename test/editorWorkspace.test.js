@@ -36,3 +36,20 @@ test("mobility workout page no longer renders the full exercise library inline",
   assert.doesNotMatch(coach, /Übung aus Reel oder Video hinzufügen/);
   assert.match(coach, /Physio, Favoriten und Reel-Übungen separat verwalten/);
 });
+
+test("editor modal focuses only when it opens and keeps focus while controlled fields rerender", () => {
+  const modal = source("../src/components/EditorModal.jsx");
+
+  assert.match(modal, /const onCloseRef = useRef\(onClose\)/);
+  assert.match(modal, /onCloseRef\.current = onClose/);
+  assert.match(modal, /useEffect\(\(\) => \{[\s\S]*requestAnimationFrame[\s\S]*\}, \[\]\)/);
+});
+
+test("mission editor separates provider search from the editable event name", () => {
+  const mission = source("../src/pages/Mission.jsx");
+
+  assert.match(mission, /const \[eventSearchQuery, setEventSearchQuery\] = useState\(""\)/);
+  assert.match(mission, /<EventAutocomplete[\s\S]*value=\{eventSearchQuery\}[\s\S]*onChange=\{setEventSearchQuery\}/);
+  assert.match(mission, /Eventname<input name="name" value=\{draft\.name\}/);
+  assert.doesNotMatch(mission, /<EventAutocomplete[\s\S]{0,250}value=\{draft\.name\}/);
+});

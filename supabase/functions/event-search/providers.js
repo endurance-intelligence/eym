@@ -195,14 +195,18 @@ export function parseJsonResponseText(value) {
   }
 }
 
-function findEventArray(payload) {
+function findEventArray(payload, depth = 0) {
   if (Array.isArray(payload)) return payload;
-  if (!payload || typeof payload !== "object") return [];
+  if (!payload || typeof payload !== "object" || depth > 4) return [];
   for (const key of ["events", "data", "results", "items", "topResults", "list", "Events", "Data", "Results"]) {
     if (Array.isArray(payload[key])) return payload[key];
   }
   for (const value of Object.values(payload)) {
     if (Array.isArray(value) && value.some((item) => item && typeof item === "object")) return value;
+  }
+  for (const value of Object.values(payload)) {
+    const nested = findEventArray(value, depth + 1);
+    if (nested.length) return nested;
   }
   return [];
 }
@@ -220,10 +224,10 @@ function raceResultLocation(item) {
 export function parseRaceResultPayload(payload, query, { referenceDate = new Date().toISOString().slice(0, 10) } = {}) {
   return findEventArray(payload)
     .map((item) => {
-      const providerEventId = cleanText(item.id || item.ID || item.eventId || item.EventID || item.eventid, 80);
-      const name = cleanText(item.name || item.Name || item.eventName || item.EventName || item.event || item.Event || item.title, 220);
-      const date = normalizeDateValue(item.dateFrom || item.DateFrom || item.startDate || item.StartDate || item.date || item.Date);
-      const endDate = normalizeDateValue(item.dateTo || item.DateTo || item.endDate || item.EndDate) || date;
+      const providerEventId = cleanText(item.id || item.ID || item.eventId || item.EventId || item.EventID || item.eventid || item.event_id, 80);
+      const name = cleanText(item.name || item.Name || item.eventName || item.EventName || item.event || item.Event || item.title || item.Title, 220);
+      const date = normalizeDateValue(item.dateFrom || item.DateFrom || item.startDate || item.StartDate || item.eventDate || item.EventDate || item.date || item.Date);
+      const endDate = normalizeDateValue(item.dateTo || item.DateTo || item.endDate || item.EndDate || item.eventEndDate || item.EventEndDate) || date;
       const location = raceResultLocation(item);
       const eventCountryCode = countryCode(item.countryCode || item.CountryCode || item.countryISO || item.CountryISO || item.country || item.Country);
       const targetKm = parseDistanceKm(`${name} ${item.description || item.Description || ""}`);

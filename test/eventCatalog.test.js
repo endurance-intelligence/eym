@@ -117,3 +117,27 @@ test("an official event remains authoritative when a provider returns the same r
   assert.equal(merged.status, "verified");
   assert.deepEqual(merged.sourceAlternatives, ["Davengo"]);
 });
+
+test("multi-word provider search requires every meaningful token to match", async () => {
+  const { rankRunningEventSuggestions } = await import("../src/services/eventCatalog.js");
+  const events = rankRunningEventSuggestions([
+    {
+      id: "rr-urland",
+      provider: "raceresult",
+      name: "7. UrLand-Lauf Oerlinghausen",
+      date: "2026-08-21",
+      location: "Oerlinghausen",
+      status: "provider",
+    },
+    {
+      id: "rr-other",
+      provider: "raceresult",
+      name: "Sommer Lauf Bielefeld",
+      date: "2026-08-22",
+      location: "Bielefeld",
+      status: "provider",
+    },
+  ], "Lauf Oerlinghausen", { referenceDate: new Date("2026-08-11T07:00:00Z") });
+
+  assert.deepEqual(events.map((event) => event.id), ["rr-urland"]);
+});

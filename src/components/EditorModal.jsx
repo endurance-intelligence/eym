@@ -23,7 +23,12 @@ export default function EditorModal({
   const titleId = useId();
   const descriptionId = useId();
   const dialogRef = useRef(null);
+  const onCloseRef = useRef(onClose);
   useModalScrollLock(true);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     const previousFocus = document.activeElement;
@@ -35,7 +40,7 @@ export default function EditorModal({
     function handleKeyDown(event) {
       if (event.key === "Escape") {
         event.preventDefault();
-        onClose?.();
+        onCloseRef.current?.();
         return;
       }
       if (event.key !== "Tab" || !dialog) return;
@@ -57,10 +62,11 @@ export default function EditorModal({
       document.removeEventListener("keydown", handleKeyDown);
       if (previousFocus instanceof HTMLElement) previousFocus.focus();
     };
-  }, [onClose]);
+  }, []);
 
+  const close = () => onCloseRef.current?.();
   const modal = (
-    <div className="modal-backdrop editor-modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose?.()}>
+    <div className="modal-backdrop editor-modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && close()}>
       <section
         ref={dialogRef}
         className={`modal editor-modal editor-modal-${width} ${className}`.trim()}
@@ -69,7 +75,7 @@ export default function EditorModal({
         aria-labelledby={titleId}
         aria-describedby={description ? descriptionId : undefined}
       >
-        <button type="button" className="close" onClick={onClose} aria-label="Schließen">×</button>
+        <button type="button" className="close" onClick={close} aria-label="Schließen">×</button>
         <header className="editor-modal-heading">
           {eyebrow && <p className="eyebrow">{eyebrow}</p>}
           <h2 id={titleId}>{title}</h2>

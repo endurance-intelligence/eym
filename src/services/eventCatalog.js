@@ -45,6 +45,9 @@ export function eventSearchScore(event, query) {
   const location = normalizeEventSearchText(event.location);
   const aliases = (event.aliases || []).map(normalizeEventSearchText);
   const haystacks = [name, edition, disciplineName, location, ...aliases].filter(Boolean);
+  const tokenMatched = (token) => haystacks.some((value) => value.includes(token));
+  if (!queryTokens.every(tokenMatched)) return 0;
+
   let matchScore = 0;
 
   if (name === normalizedQuery || edition === normalizedQuery || disciplineName === normalizedQuery) matchScore += 120;

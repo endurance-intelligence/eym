@@ -215,14 +215,13 @@ async function davengoEvents(query: string, limit: number) {
     const response = await fetchWithTimeout(searchUrl.toString(), 5000);
     if (response.ok && allowedProviderUrl(response.url, "davengo")) {
       extractDavengoLinks(await response.text())
-        .filter((link) => normalizeProviderText(`${link.name} ${link.url}`).includes(normalizeProviderText(query)))
         .forEach((link) => candidateUrls.add(link.url));
     }
   } catch {
     // Direct event slug candidates remain available when the homepage search is unavailable.
   }
 
-  const urls = [...candidateUrls].slice(0, 10);
+  const urls = [...candidateUrls].slice(0, 14);
   const responses = await Promise.allSettled(urls.map(async (url) => {
     const response = await fetchWithTimeout(url, 4600);
     if (!response.ok || !allowedProviderUrl(response.url, "davengo")) return [];

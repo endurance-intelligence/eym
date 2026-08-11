@@ -118,3 +118,19 @@ test("provider dedupe prefers Race Result for identical provider records", () =>
   assert.equal(events.length, 1);
   assert.equal(events[0].provider, "raceresult");
 });
+
+test("Race Result parser also finds event arrays inside nested response envelopes", () => {
+  const events = parseRaceResultPayload({ response: { payload: { Results: [
+    {
+      EventId: 987654,
+      EventName: "Oerlinghausen Stadtlauf 2026",
+      EventDate: "2026-09-06",
+      City: "Oerlinghausen",
+      CountryCode: "DE",
+    },
+  ] } } }, "Oerlinghausen", { referenceDate: "2026-08-11" });
+
+  assert.equal(events.length, 1);
+  assert.equal(events[0].providerEventId, "987654");
+  assert.equal(events[0].date, "2026-09-06");
+});
