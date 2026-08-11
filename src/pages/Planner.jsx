@@ -2241,11 +2241,9 @@ export default function Planner() {
             <div className="planner-week-prescription-card-copy">
               <span>Wochentyp</span>
               <strong>{weekPrescription.weekType?.label || "Trainingswoche"}</strong>
+              <small>{weekPrescription.corridor?.label || `${weekPrescription.targetKm || config.lastTarget || "–"} km`} Wochenkorridor</small>
             </div>
-            <div className="planner-week-prescription-card-footer">
-              <span>{weekPrescription.corridor?.label || `${weekPrescription.targetKm || config.lastTarget || "–"} km`}</span>
-              <b>Details →</b>
-            </div>
+            <b className="planner-week-prescription-card-link">Details →</b>
           </button>
         )}
 
