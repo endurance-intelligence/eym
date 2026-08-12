@@ -2544,3 +2544,17 @@
 .race-prep-selection-hint b{color:var(--text)}
 .race-prep-stock{color:var(--muted-bright)!important;font-weight:800}
 .race-prep-stock.empty{color:var(--warning)!important}
+
+/* v3.9.79 – one carbohydrate budget across drink + gel + food */
+.race-prep-carb-balance{display:grid;gap:11px;padding:14px 16px;border:1px solid var(--accent-border);border-radius:14px;background:color-mix(in srgb,var(--accent-surface) 18%,var(--bg-card-alt))}
+.race-prep-carb-balance-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.race-prep-carb-balance-grid article{display:grid;gap:3px;padding:10px 11px;border:1px solid var(--border);border-radius:10px;background:var(--bg-input)}
+.race-prep-carb-balance-grid article.total{border-color:var(--success-border);background:color-mix(in srgb,var(--success) 8%,var(--bg-input))}
+.race-prep-carb-balance-grid span{color:var(--muted);font-size:8px;font-weight:850;text-transform:uppercase;letter-spacing:.05em}
+.race-prep-carb-balance-grid strong{font-size:16px}
+.race-prep-carb-balance-grid small{color:var(--muted-bright);font-size:9px}
+.race-prep-carb-balance-bar{height:6px;overflow:hidden;border-radius:999px;background:var(--bg-input)}
+.race-prep-carb-balance-bar i{display:block;height:100%;border-radius:inherit;background:var(--success)}
+.race-prep-carb-balance p{margin:0;color:var(--muted);font-size:10px;line-height:1.5}
+@media(max-width:800px){.race-prep-carb-balance-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:520px){.race-prep-carb-balance-grid{grid-template-columns:1fr}}

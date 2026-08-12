@@ -76,8 +76,21 @@ function solidUnits(consumption = []) {
   return consumption.flatMap((entry) => {
     if (entry.unit === "ml") return [];
     const count = Math.max(0, Math.round(numeric(entry.quantity)));
-    return Array.from({ length: count }, () => entry);
+    const unitCarbs = count > 0 ? numeric(entry.carbs) / count : 0;
+    return Array.from({ length: count }, () => ({ ...entry, unitCarbs }));
   });
+}
+
+function hydrationCarbsPerMl(recommendation) {
+  const hydration = (Array.isArray(recommendation?.consume) ? recommendation.consume : [])
+    .find((entry) => entry.unit === "ml" && numeric(entry.quantity) > 0);
+  if (!hydration) return 0;
+  return numeric(hydration.carbs) / numeric(hydration.quantity);
+}
+
+function fuelDetail(entry) {
+  const unitLabel = entry.unit === "Stück" ? "Stück" : entry.unit;
+  return `1 ${unitLabel}${entry.unitCarbs > 0 ? ` · ${Math.round(entry.unitCarbs)} g KH` : ""}`;
 }
 
 function fluidDistribution(total, slots) {
@@ -101,11 +114,13 @@ function loopStrategy(workout, recommendation, evidence) {
     ),
   );
   const fluids = fluidDistribution(numeric(recommendation?.target?.fluidTotal), rounds);
+  const drinkCarbsPerMl = hydrationCarbsPerMl(recommendation);
   const rows = Array.from({ length: rounds }, (_, index) => ({
     key: `round-${index + 1}`,
     marker: `Runde ${index + 1}`,
     secondary: `${roundTo((index + 1) * loopKm, 0.1).toLocaleString("de-DE")} km gesamt`,
     drinkMl: fluids[index],
+    drinkCarbs: fluids[index] * drinkCarbsPerMl,
     drinkProduct: recommendation?.hydrationProduct?.product || "",
     fuel: [],
   }));
@@ -116,7 +131,7 @@ function loopStrategy(workout, recommendation, evidence) {
     const productEvidence = evidenceForProduct(entry, evidence);
     rows[roundNumber - 1].fuel.push({
       product: entry.product,
-      detail: `1 ${entry.unit === "Stück" ? "Stück" : entry.unit}`,
+      detail: fuelDetail(entry),
       evidence: productEvidence?.label || "Noch nicht einzeln bewertet",
       evidenceTone: productEvidence?.bad > 0 ? "bad" : productEvidence?.watch > 0 ? "watch" : productEvidence?.good > 0 ? "good" : "base",
     });
@@ -134,9 +149,10 @@ function timeStrategy(workout, recommendation, evidence) {
   const duration = Math.max(1, Math.round(numeric(recommendation.durationMinutes)));
   const distance = numeric(recommendation.distanceKm || workout?.distance);
   const events = new Map();
+  const drinkCarbsPerMl = hydrationCarbsPerMl(recommendation);
   const ensure = (minute) => {
     const key = Math.max(1, Math.min(duration, Math.round(minute)));
-    if (!events.has(key)) events.set(key, { minute: key, drinkMl: 0, drinkProduct: recommendation?.hydrationProduct?.product || "", fuel: [] });
+    if (!events.has(key)) events.set(key, { minute: key, drinkMl: 0, drinkCarbs: 0, drinkProduct: recommendation?.hydrationProduct?.product || "", fuel: [] });
     return events.get(key);
   };
 
@@ -148,7 +164,9 @@ function timeStrategy(workout, recommendation, evidence) {
     if (!drinkMinutes.length) drinkMinutes.push(Math.min(15, duration));
     const amounts = fluidDistribution(fluidTotal, drinkMinutes.length);
     drinkMinutes.forEach((minute, index) => {
-      ensure(minute).drinkMl += amounts[index];
+      const event = ensure(minute);
+      event.drinkMl += amounts[index];
+      event.drinkCarbs += amounts[index] * drinkCarbsPerMl;
     });
   }
 
@@ -162,7 +180,7 @@ function timeStrategy(workout, recommendation, evidence) {
     const productEvidence = evidenceForProduct(entry, evidence);
     ensure(minute).fuel.push({
       product: entry.product,
-      detail: `1 ${entry.unit === "Stück" ? "Stück" : entry.unit}`,
+      detail: fuelDetail(entry),
       evidence: productEvidence?.label || "Noch nicht einzeln bewertet",
       evidenceTone: productEvidence?.bad > 0 ? "bad" : productEvidence?.watch > 0 ? "watch" : productEvidence?.good > 0 ? "good" : "base",
     });
@@ -179,6 +197,7 @@ function timeStrategy(workout, recommendation, evidence) {
         marker: km > 0 ? `km ${km.toLocaleString("de-DE")}` : `Min ${entry.minute}`,
         secondary: km > 0 ? `ca. Min ${entry.minute}` : "Zeitplan",
         drinkMl: entry.drinkMl,
+        drinkCarbs: entry.drinkCarbs,
         drinkProduct: entry.drinkProduct || "",
         fuel: entry.fuel,
       };
@@ -188,7 +207,7 @@ function timeStrategy(workout, recommendation, evidence) {
     kind: distance > 0 ? "distance" : "time",
     label: distance > 0 ? "Kilometer- & Zeitstrategie" : "Zeitstrategie",
     description: distance > 0
-      ? `${distance.toLocaleString("de-DE")} km · Gel und Trinken nach Strecke und ungefährer Rennzeit.`
+      ? `${distance.toLocaleString("de-DE")} km · Drink und Fuel stammen aus einer gemeinsamen KH-Bilanz und werden nach Strecke und Rennzeit verteilt.`
       : `${duration} Minuten · Versorgung nach Rennzeit.`,
     rows,
   };

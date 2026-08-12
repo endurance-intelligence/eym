@@ -251,3 +251,106 @@ test("a short race keeps a proven drink visible without preselecting it", () => 
   assert.equal(plan.recommendation.hydrationProduct, null);
   assert.ok(plan.evidenceCatalog.some((entry) => entry.id === "short-drink" && entry.tone === "good"));
 });
+
+test("carbohydrate drink is counted against the same race budget and suppresses unnecessary gels", () => {
+  const drink = {
+    id: "isostar-500",
+    brand: "Isostar",
+    name: "Hydrate & Perform",
+    category: "Drink Mix",
+    carbs: 35,
+    sodium: 300,
+    caffeine: 0,
+    preparedVolumeMl: 500,
+    quantity: 0,
+    stockUnit: "Portionen",
+  };
+  const gel100 = {
+    id: "maurten-100",
+    brand: "Maurten",
+    name: "Gel 100",
+    category: "Gel",
+    carbs: 25,
+    sodium: 34,
+    caffeine: 0,
+    quantity: 0,
+    stockUnit: "Stück",
+  };
+  const state = {
+    fuel: [drink, gel100],
+    activities: [{ id: "sweat-650", type: "Run", duration: 120, durationSeconds: 7200 }],
+    reviews: {
+      "sweat-650": {
+        weightBefore: 80,
+        weightAfter: 78.2,
+        drinkMl: 600,
+        urineMl: 0,
+        hydrationThirst: "normal",
+      },
+    },
+  };
+
+  const plan = buildRacePrepPlan({
+    profile: {
+      name: "Halbmarathon 2:19",
+      format: "distance",
+      distanceKm: 21.1,
+      durationMinutes: 139,
+      fuelItemIds: ["isostar-500", "maurten-100"],
+    },
+    state,
+  });
+
+  assert.equal(plan.recommendation.target.carbsTotal, 105);
+  assert.equal(plan.recommendation.target.fluidTotal, 1500);
+  assert.equal(plan.summary.carbsDrinkTotal, 105);
+  assert.equal(plan.summary.carbsFuelTotal, 0);
+  assert.equal(plan.summary.carbsPlannedTotal, 105);
+  assert.equal(plan.recommendation.consume.filter((entry) => entry.unit !== "ml").length, 0);
+  assert.equal(plan.strategy.rows.reduce((sum, row) => sum + row.fuel.length, 0), 0);
+  assert.equal(Math.round(plan.strategy.rows.reduce((sum, row) => sum + Number(row.drinkCarbs || 0), 0)), 105);
+});
+
+test("carb-free drink leaves the carbohydrate budget to fuel instead of creating a gel every drink slot", () => {
+  const drink = {
+    id: "water-electrolyte",
+    brand: "Test",
+    name: "Zero Drink",
+    category: "Elektrolyte",
+    carbs: 0,
+    sodium: 300,
+    caffeine: 0,
+    preparedVolumeMl: 500,
+    quantity: 0,
+    stockUnit: "Portionen",
+  };
+  const gel100 = {
+    id: "maurten-100-zero-drink",
+    brand: "Maurten",
+    name: "Gel 100",
+    category: "Gel",
+    carbs: 25,
+    sodium: 34,
+    caffeine: 0,
+    quantity: 0,
+    stockUnit: "Stück",
+  };
+  const state = { fuel: [drink, gel100], activities: [], reviews: {} };
+  const plan = buildRacePrepPlan({
+    profile: {
+      name: "Halbmarathon 2:19",
+      format: "distance",
+      distanceKm: 21.1,
+      durationMinutes: 139,
+      fuelItemIds: ["water-electrolyte", "maurten-100-zero-drink"],
+    },
+    state,
+  });
+
+  const gelEntry = plan.recommendation.consume.find((entry) => entry.fuelItemId === "maurten-100-zero-drink");
+  assert.equal(plan.summary.carbsDrinkTotal, 0);
+  assert.equal(gelEntry.quantity, 4);
+  assert.equal(plan.summary.carbsFuelTotal, 100);
+  assert.equal(plan.strategy.rows.reduce((sum, row) => sum + row.fuel.length, 0), 4);
+  assert.ok(plan.strategy.rows.flatMap((row) => row.fuel).every((entry) => /25 g KH/.test(entry.detail)));
+});

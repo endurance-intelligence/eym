@@ -287,7 +287,7 @@ function phasePlan(profile, recommendation) {
 
   return [
     { key: "pre", label: "PRE", title: "Vor dem Start", detail: `Vertraute Mahlzeit und Getränke einplanen. Keine neuen Produkte am Renntag testen.${hydrationName ? ` Gewählte Getränkebasis: ${hydrationName}.` : ""}`, note: "PRE wird bewusst nicht in die DURING-Mengen eingerechnet." },
-    { key: "during", label: "DURING", title: profile.format === "loop" ? "Pro Runde / Rennstunde" : "Während des Rennens", detail: `${duringFuel} · ${duringFluid}`, note: "Die Mengen sind eine Planbasis. Produkte wählst du selbst; Trainingsbelege und Bestand dienen nur als Entscheidungshilfe." },
+    { key: "during", label: "DURING", title: profile.format === "loop" ? "Pro Runde / Rennstunde" : "Während des Rennens", detail: `${duringFuel} · ${duringFluid}`, note: "Ein gemeinsames KH-Budget: Kohlenhydrate aus dem Drink werden vollständig angerechnet; Gels und Food schließen nur den verbleibenden Bedarf." },
     { key: "post", label: "POST", title: "Nach dem Ziel / Tagesblock", detail: "Recovery-Verpflegung separat bereitlegen und nach tatsächlichem Hunger, Durst und Verträglichkeit nutzen.", note: "POST wird im Review getrennt erfasst und verändert die DURING-Rate nicht." },
   ];
 }
@@ -356,22 +356,35 @@ function hydrationEntryFromCatalog(entry, fluidTotal) {
 
 function buildEvidenceConsumption(targetCarbs, selectedCatalog, manualItems) {
   const sources = [
-    ...selectedCatalog.filter((entry) => entry.carbs > 0).map((entry) => ({ ...entry, source: "catalog" })),
-    ...manualItems.filter((entry) => numeric(entry.carbs) > 0).map((entry) => ({ ...entry, source: "manual" })),
+    ...selectedCatalog.filter((entry) => entry.carbs > 0).map((entry) => ({ ...entry, source: "catalog", unitCarbs: numeric(entry.carbs) })),
+    ...manualItems.filter((entry) => numeric(entry.carbs) > 0).map((entry) => ({ ...entry, source: "manual", unitCarbs: numeric(entry.carbs) })),
   ];
   if (!(targetCarbs > 0) || !sources.length) return [];
 
+  // Do not add a whole gel/portion just to close a tiny mathematical remainder.
+  // The selected drink has already been counted against the same carbohydrate budget.
+  const smallestUnit = Math.min(...sources.map((entry) => entry.unitCarbs).filter((value) => value > 0));
+  if (targetCarbs <= Math.max(5, smallestUnit * 0.2)) return [];
+
   const counts = new Map();
-  let remaining = targetCarbs;
+  let planned = 0;
   let index = 0;
+  const targetLow = Math.max(0, targetCarbs * 0.95);
   const safetyLimit = 5000;
-  while (remaining > 1 && index < safetyLimit) {
-    const source = sources[index % sources.length];
-    const carbs = source.source === "catalog" ? source.carbs : numeric(source.carbs);
-    if (carbs > 0) {
-      counts.set(source.id, (counts.get(source.id) || 0) + 1);
-      remaining -= carbs;
-    }
+
+  while (planned < targetLow && index < safetyLimit) {
+    const remaining = Math.max(0, targetCarbs - planned);
+    const rotationSource = sources[index % sources.length];
+    const bestFit = [...sources]
+      .sort((left, right) => {
+        const leftDelta = Math.abs(remaining - left.unitCarbs);
+        const rightDelta = Math.abs(remaining - right.unitCarbs);
+        return leftDelta - rightDelta;
+      })[0];
+    const source = remaining <= smallestUnit * 1.5 ? bestFit : rotationSource;
+    if (!(source?.unitCarbs > 0)) break;
+    counts.set(source.id, (counts.get(source.id) || 0) + 1);
+    planned += source.unitCarbs;
     index += 1;
   }
 
@@ -380,6 +393,25 @@ function buildEvidenceConsumption(targetCarbs, selectedCatalog, manualItems) {
     .map((source) => source.source === "catalog"
       ? consumptionEntryFromCatalog(source, counts.get(source.id))
       : consumptionEntryFromManual(source, counts.get(source.id)));
+}
+
+function carbohydrateBudget(target, hydrationEntry, fuelConsume, durationMinutes) {
+  const targetTotal = numeric(target?.carbsTotal);
+  const drinkCarbs = numeric(hydrationEntry?.carbs);
+  const fuelCarbs = fuelConsume.reduce((sum, entry) => sum + numeric(entry.carbs), 0);
+  const plannedTotal = drinkCarbs + fuelCarbs;
+  const durationHours = numeric(durationMinutes) / 60;
+  return {
+    targetTotal,
+    targetPerHour: numeric(target?.carbsPerHour),
+    drinkCarbs,
+    fuelCarbs,
+    plannedTotal,
+    plannedPerHour: durationHours > 0 ? plannedTotal / durationHours : 0,
+    remainingBeforeFuel: Math.max(0, targetTotal - drinkCarbs),
+    delta: plannedTotal - targetTotal,
+    coveragePercent: targetTotal > 0 ? plannedTotal / targetTotal * 100 : 100,
+  };
 }
 
 function selectionConfidence(selectedCatalog, manualItems) {
@@ -419,6 +451,7 @@ export function buildRacePrepPlan({ profile: inputProfile, state = {} } = {}) {
   const hydrationEntry = hydrationEntryFromCatalog(selectedHydration, baseRecommendation.target.fluidTotal);
   const carbTargetAfterDrink = Math.max(0, baseRecommendation.target.carbsTotal - numeric(hydrationEntry?.carbs));
   const fuelConsume = buildEvidenceConsumption(carbTargetAfterDrink, selectedFuelCatalog, manualItems);
+  const carbBudget = carbohydrateBudget(baseRecommendation.target, hydrationEntry, fuelConsume, profile.durationMinutes);
   const consume = [...(hydrationEntry ? [hydrationEntry] : []), ...fuelConsume];
   const confidence = selectionConfidence(selectedCatalog, manualItems);
   const hydrationProduct = selectedHydration ? {
@@ -435,7 +468,9 @@ export function buildRacePrepPlan({ profile: inputProfile, state = {} } = {}) {
   selectedCatalog.filter((entry) => entry.tone === "bad").forEach((entry) => warnings.push(`${entry.name}: im Training bereits problematisch bewertet. Nur bewusst und nicht automatisch als sichere Race-Basis verwenden.`));
   selectedCatalog.filter((entry) => entry.tone === "watch").forEach((entry) => warnings.push(`${entry.name}: bisher nur auffällige Aufnahme dokumentiert.`));
   selectedCatalog.filter((entry) => numeric(entry.item?.quantity) <= 0).forEach((entry) => warnings.push(`${entry.name}: aktuell nicht im Bestand. Die Auswahl bleibt erlaubt, damit du das Produkt bewusst einplanen oder vorher besorgen kannst.`));
-  if (baseRecommendation.target.carbsTotal > 0 && fuelConsume.length === 0 && numeric(hydrationEntry?.carbs) < baseRecommendation.target.carbsTotal * 0.8) warnings.push("Für dieses Rennen ist DURING-Fuel sinnvoll, aber es ist noch keine geeignete Fuel-Quelle ausgewählt. Wähle bevorzugt im Training gut verträgliche Gels, Riegel oder Lebensmittel.");
+  if (baseRecommendation.target.carbsTotal > 0 && fuelConsume.length === 0 && numeric(hydrationEntry?.carbs) < baseRecommendation.target.carbsTotal * 0.8) warnings.push("Für dieses Rennen ist DURING-Fuel sinnvoll, aber es ist noch keine geeignete Fuel-Quelle ausgewählt oder der gewählte Drink deckt das KH-Ziel nicht ausreichend. Wähle ein Gel, einen Riegel oder ein anderes Fuel-Produkt dazu.");
+  if (baseRecommendation.target.carbsTotal > 0 && carbBudget.coveragePercent < 80) warnings.push(`KH-Bilanz noch offen: geplant sind ca. ${Math.round(carbBudget.plannedTotal)} von ${Math.round(carbBudget.targetTotal)} g. Getränk und Fuel werden gemeinsam gegen dasselbe DURING-Ziel gerechnet.`);
+  if (baseRecommendation.target.carbsTotal > 0 && carbBudget.coveragePercent > 125) warnings.push(`KH-Bilanz deutlich über Ziel: geplant sind ca. ${Math.round(carbBudget.plannedTotal)} statt ${Math.round(carbBudget.targetTotal)} g. Prüfe Auswahl oder Portionsgrößen.`);
   if (baseRecommendation.target.fluidTotal > 0 && !selectedHydration) warnings.push("Für die Trinkstrategie ist noch kein Drink-/Elektrolytprodukt ausgewählt. Die ml sind nur eine Planbasis; wähle dein Getränk bewusst aus dem Fuel Lab.");
   if (baseRecommendation.target.fluidTotal > 0 && selectedHydration && !hydrationEntry) warnings.push(`${selectedHydration.name}: Als Drink/Elektrolyt ausgewählt, aber das Mischvolumen pro Portion fehlt. Hinterlege im Fuel Lab den Mischvorschlag, damit Menge und Nährwerte korrekt berechnet werden.`);
   if (profile.durationMinutes >= 6 * 60 && fuelConsume.length === 1) warnings.push("Langes Rennen: Die Strategie hängt aktuell an nur einer festen Fuel-Quelle. Ergänze eine zweite im Training verträgliche Option für Rotation und Geschmackswechsel.");
@@ -447,6 +482,7 @@ export function buildRacePrepPlan({ profile: inputProfile, state = {} } = {}) {
     pack: [],
     warnings,
     confidence,
+    carbBudget,
   };
   const strategy = raceFuelStrategy({ workout, recommendation, reviews: state.reviews });
 
@@ -471,6 +507,11 @@ export function buildRacePrepPlan({ profile: inputProfile, state = {} } = {}) {
       distanceLabel: profile.distanceKm > 0 ? `${profile.distanceKm.toLocaleString("de-DE")} km` : "offene Distanz",
       carbsTotal: Math.round(recommendation.target.carbsTotal),
       carbsPerHour: Math.round(recommendation.target.carbsPerHour),
+      carbsDrinkTotal: Math.round(carbBudget.drinkCarbs),
+      carbsFuelTotal: Math.round(carbBudget.fuelCarbs),
+      carbsPlannedTotal: Math.round(carbBudget.plannedTotal),
+      carbsPlannedPerHour: Math.round(carbBudget.plannedPerHour),
+      carbCoveragePercent: Math.round(carbBudget.coveragePercent),
       fluidTotal: Math.round(recommendation.target.fluidTotal),
       fluidPerHour: Math.round(recommendation.target.fluidPerHour),
       schedulePoints: strategy?.rows?.length || 0,

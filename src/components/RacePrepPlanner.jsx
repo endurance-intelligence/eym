@@ -277,10 +277,25 @@ export default function RacePrepPlanner() {
       ) : <>
         <div className="race-prep-summary">
           <article><span>Rennumfang</span><strong>{plan.summary.distanceLabel}</strong><small>{plan.summary.durationLabel}{plan.profile.durationEstimated ? " · geschätzt" : ""}</small></article>
-          <article><span>Carbs DURING</span><strong>{plan.summary.carbsPerHour ? `${plan.summary.carbsPerHour} g/h` : "nicht nötig"}</strong><small>{plan.summary.carbsTotal ? `${plan.summary.carbsTotal} g gesamt` : "Kurz genug ohne Race-Fuel"}</small></article>
+          <article><span>Carbs DURING</span><strong>{plan.summary.carbsPerHour ? `${plan.summary.carbsPerHour} g/h` : "nicht nötig"}</strong><small>{plan.summary.carbsTotal ? `Ziel ca. ${plan.summary.carbsTotal} g · Plan ${plan.summary.carbsPlannedPerHour} g/h` : "Kurz genug ohne Race-Fuel"}</small></article>
           <article><span>Trinken DURING</span><strong>{plan.summary.fluidPerHour ? `${Math.round(plan.recommendation.target.fluidLowPerHour)}–${Math.round(plan.recommendation.target.fluidHighPerHour)} ml/h` : "nach Bedarf"}</strong><small>{plan.summary.fluidTotal ? `Planbasis ${plan.summary.fluidPerHour} ml/h · ca. ${numberLabel(plan.summary.fluidTotal, 0)} ml${plan.recommendation.target.personalHydration ? ` · persönlich aus ${plan.recommendation.target.hydrationSamples} Review${plan.recommendation.target.hydrationSamples === 1 ? "" : "s"}` : " · allgemeine Orientierung"}` : "kein fixer Block"}</small></article>
           <article><span>Fuel-Basis</span><strong>{plan.summary.selectedFuelSources ? `${plan.summary.selectedFuelSources} Quellen` : "noch offen"}</strong><small>{plan.recommendation.confidence.label}</small></article>
         </div>
+
+        {plan.summary.carbsTotal > 0 && <section className="race-prep-carb-balance">
+          <div className="race-prep-section-heading">
+            <div><span>KH-BILANZ DURING</span><h3>Ein Ziel. Drink + Gel + Food zählen zusammen.</h3></div>
+            <small>{plan.summary.carbCoveragePercent}% des Zielwerts</small>
+          </div>
+          <div className="race-prep-carb-balance-grid">
+            <article><span>Ziel</span><strong>{plan.summary.carbsTotal} g</strong><small>{plan.summary.carbsPerHour} g/h</small></article>
+            <article><span>Aus Getränk</span><strong>{plan.summary.carbsDrinkTotal} g</strong><small>wird voll angerechnet</small></article>
+            <article><span>Gel / Food</span><strong>{plan.summary.carbsFuelTotal} g</strong><small>nur für den Restbedarf</small></article>
+            <article className="total"><span>Geplant</span><strong>{plan.summary.carbsPlannedTotal} g</strong><small>≈ {plan.summary.carbsPlannedPerHour} g/h</small></article>
+          </div>
+          <div className="race-prep-carb-balance-bar" aria-label={`${plan.summary.carbCoveragePercent} Prozent des Kohlenhydrat-Ziels geplant`}><i style={{ width: `${Math.min(100, plan.summary.carbCoveragePercent)}%` }} /></div>
+          <p>Ein kohlenhydrathaltiges Getränk reduziert automatisch die Anzahl der nötigen Gels. Es gibt keinen separaten Gel-Timer.</p>
+        </section>}
 
         <section className="race-prep-phases">{plan.phases.map((phase) => <article key={phase.key} className={phase.key}><span>{phase.label}</span><h3>{phase.title}</h3><p>{phase.detail}</p><small>{phase.note}</small></article>)}</section>
 
@@ -293,7 +308,7 @@ export default function RacePrepPlanner() {
                   <article key={row.key}>
                     <div className="fuel-race-marker"><b>{row.marker}</b><span>{row.secondary}</span></div>
                     <div className="fuel-race-actions">
-                      {row.drinkMl > 0 && <span className="drink">💧 {Math.round(row.drinkMl)} ml{row.drinkProduct ? ` · ${row.drinkProduct}` : ""}</span>}
+                      {row.drinkMl > 0 && <span className="drink">💧 {Math.round(row.drinkMl)} ml{row.drinkProduct ? ` · ${row.drinkProduct}` : ""}{row.drinkCarbs > 0 ? ` · ${Math.round(row.drinkCarbs)} g KH` : ""}</span>}
                       {row.fuel.map((fuel, index) => <div className={`fuel tone-${fuel.evidenceTone}`} key={`${fuel.product}-${index}`}><strong>{fuel.product}</strong><span>{fuel.detail}</span><small>{fuel.evidence}</small></div>)}
                       {row.drinkMl <= 0 && row.fuel.length === 0 && <span className="quiet">Keine zusätzliche Aufnahme geplant</span>}
                     </div>
