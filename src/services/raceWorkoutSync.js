@@ -56,6 +56,7 @@ export function raceWorkoutPublicationFingerprint(workout, publishDate = "") {
   if (!workout) return "";
   const payload = {
     publishDate: String(publishDate || ""),
+    name: cleanText(workout.name, ""),
     tolerance: clampInteger(workout.paceToleranceSeconds, 1, 30, 10),
     steps: (Array.isArray(workout.steps) ? workout.steps : []).map((step) => [
       clampInteger(step?.distanceM, 1, 100000, 0),
@@ -72,7 +73,7 @@ export function buildIntervalsRaceWorkoutPublication({
   publishDate,
 } = {}) {
   if (!workout?.compatible || !Array.isArray(workout?.steps) || workout.steps.length === 0) {
-    throw new Error(workout?.compatibilityMessage || "Der Race-Schlachtplan ist noch nicht Garmin-kompatibel.");
+    throw new Error(workout?.compatibilityMessage || "Die Rennstrategie ist noch nicht Garmin-kompatibel.");
   }
   if (!validDate(publishDate)) {
     throw new Error("Bitte einen gültigen Garmin-Sync-Tag wählen.");
@@ -83,7 +84,7 @@ export function buildIntervalsRaceWorkoutPublication({
     paceSecondsPerKm: clampInteger(step?.paceSecondsPerKm, 120, 1200, 360),
   }));
   if (steps.length > Number(workout.maxSteps || 50)) {
-    throw new Error(workout.compatibilityMessage || "Der Race-Schlachtplan hat zu viele Garmin-Schritte.");
+    throw new Error(workout.compatibilityMessage || "Die Rennstrategie hat zu viele Garmin-Schritte.");
   }
 
   return {

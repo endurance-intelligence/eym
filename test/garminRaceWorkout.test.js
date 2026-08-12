@@ -47,7 +47,9 @@ test("buildGarminRaceWorkout turns race splits into distance steps with pace cor
   assert.ok(workout.steps[0].speedLowMps < workout.steps[0].speedHighMps);
   assert.match(workout.steps[0].name, /KM 1/);
   assert.match(workout.steps[2].name, /0\.62km/);
-  assert.match(workout.name, /^EI /);
+  assert.match(workout.name, /^EI Race · /);
+  assert.equal(workout.defaultName, workout.name);
+  assert.ok(workout.fitName.length <= 31);
   assert.equal(workout.paceToleranceSeconds, 5);
 });
 
@@ -108,4 +110,16 @@ test("garminRaceWorkoutFilename creates a portable fit filename", () => {
   const filename = garminRaceWorkoutFilename(workout);
   assert.match(filename, /^[a-z0-9-]+\.fit$/);
   assert.ok(filename.length < 60);
+});
+
+
+test("Garmin race workout accepts an explicit searchable workout name", () => {
+  const workout = buildGarminRaceWorkout({
+    routePlan: sampleRoutePlan(),
+    raceName: "Urland Lauf",
+    workoutNameOverride: "EI TEST Urland 45min",
+  });
+  assert.equal(workout.name, "EI TEST Urland 45min");
+  assert.equal(workout.fitName, "EI TEST Urland 45min");
+  assert.match(workout.defaultName, /Urland Lauf/);
 });

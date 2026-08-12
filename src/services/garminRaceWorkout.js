@@ -49,10 +49,21 @@ function limitedText(value, maxLength) {
   return asciiText(value).slice(0, maxLength).trim();
 }
 
-function workoutName(name, targetDurationMinutes) {
-  const raceName = limitedText(name || "Race Strategy", 22) || "Race Strategy";
-  const target = durationLabel(targetDurationMinutes);
-  return limitedText(`EI ${raceName} ${target}`, 31);
+function cleanSyncName(value, maxLength = 80) {
+  return String(value || "")
+    .replace(/[\r\n]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, maxLength);
+}
+
+export function defaultGarminRaceWorkoutName(raceName, targetDurationMinutes) {
+  const race = cleanSyncName(raceName || "Race Strategy", 52) || "Race Strategy";
+  return cleanSyncName(`EI Race · ${race} · ${durationLabel(targetDurationMinutes)}`, 80);
+}
+
+function fitWorkoutName(name) {
+  return limitedText(name || "EI Race Strategy", 31) || "EI Race Strategy";
 }
 
 function stepNotes(segment) {
@@ -68,6 +79,7 @@ function stepNotes(segment) {
 export function buildGarminRaceWorkout({
   routePlan,
   raceName = "Race Strategy",
+  workoutNameOverride = "",
   paceToleranceSeconds = 10,
 } = {}) {
   const sourceSegments = Array.isArray(routePlan?.segments) ? routePlan.segments : [];
@@ -104,8 +116,13 @@ export function buildGarminRaceWorkout({
   const targetDurationMinutes = numeric(routePlan?.targetDurationMinutes);
   const compatible = steps.length > 0 && steps.length <= GARMIN_MAX_WORKOUT_STEPS;
 
+  const defaultName = defaultGarminRaceWorkoutName(raceName, targetDurationMinutes);
+  const name = cleanSyncName(workoutNameOverride, 80) || defaultName;
+
   return {
-    name: workoutName(raceName, targetDurationMinutes),
+    name,
+    defaultName,
+    fitName: fitWorkoutName(name),
     description: limitedText(
       `Endurance Intelligence Race Strategy - ${Math.round(totalDistanceM / 10) / 100} km in ${durationLabel(targetDurationMinutes)}`,
       94,
@@ -230,7 +247,7 @@ export function encodeGarminRaceWorkoutFit(workout, { createdAt = new Date() } =
       Uint8Array.of(1),
       uint32(FIT_WORKOUT_CAPABILITIES),
       uint16(workout.steps.length),
-      fitString(workout.name, 32),
+      fitString(workout.fitName || workout.name, 32),
       fitString(workout.description, 96),
     ]),
     definition(2, 27, stepFields),

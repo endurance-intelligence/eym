@@ -58,8 +58,13 @@ export default function RacePrepPlanner() {
   const rows = scheduleRows(plan.strategy, scheduleLimit);
   const duration = durationParts(draft.durationMinutes);
   const selectedIds = new Set(plan.effectiveFuelItemIds || []);
-  const provenProducts = (plan.evidenceCatalog || []).filter((entry) => entry.evidence.uses > 0);
-  const otherProducts = (plan.evidenceCatalog || []).filter((entry) => entry.evidence.uses === 0);
+  const carbsDuringNeeded = Number(plan.recommendation?.target?.carbsTotal || 0) > 0;
+  const hydrationDuringNeeded = Number(plan.recommendation?.target?.fluidTotal || 0) > 0;
+  const relevantProducts = (plan.evidenceCatalog || []).filter((entry) => (
+    entry.role === "hydration" ? hydrationDuringNeeded : carbsDuringNeeded
+  ));
+  const provenProducts = relevantProducts.filter((entry) => entry.evidence.uses > 0);
+  const otherProducts = relevantProducts.filter((entry) => entry.evidence.uses === 0);
 
   function withDefaults(profile) {
     return racePrepProfileWithEvidenceDefaults(profile, state);
@@ -229,24 +234,33 @@ export default function RacePrepPlanner() {
         </div>
       </section>
 
-      {plan.valid && (
+      {plan.valid && <section className={`race-prep-fuel-decision ${carbsDuringNeeded ? "fuel" : "none"}`}>
+        <div>
+          <span>AUTOMATISCHE FUEL-ENTSCHEIDUNG</span>
+          <h3>{carbsDuringNeeded ? "DURING-Fuel ist sinnvoll" : "Kein Gel fest eingeplant"}</h3>
+          <p>{plan.recommendation.rationale}</p>
+        </div>
+        <strong>{carbsDuringNeeded ? `${Math.round(plan.recommendation.target.carbsPerHour)} g KH/h` : "0 g KH/h"}</strong>
+      </section>}
+
+      {plan.valid && (carbsDuringNeeded || hydrationDuringNeeded) && (
         <section className="race-prep-fuel-builder">
           <div className="race-prep-section-heading">
-            <div><span>Fuel-Basis</span><h3>Was hat im Training funktioniert?</h3></div>
-            <small>Bestand wird ignoriert</small>
+            <div><span>Fuel-Basis</span><h3>{carbsDuringNeeded ? "Was hat im Training funktioniert?" : "Welches Getränk hat im Training funktioniert?"}</h3></div>
+            <small>{carbsDuringNeeded && hydrationDuringNeeded ? "Fuel + Drink" : carbsDuringNeeded ? "Fuel" : "Drink / Elektrolyt"} · Bestand wird ignoriert</small>
           </div>
           {provenProducts.length > 0 ? (
             <div className="race-prep-evidence-list">{provenProducts.map(renderEvidenceProduct)}</div>
           ) : (
-            <div className="race-prep-empty"><b>Noch keine produktbezogenen Trainingsbelege</b><span>Dokumentiere im Review konkrete Produkte und ihre Verträglichkeit. Bis dahin wählt der Coach nichts automatisch für den Wettkampf aus.</span></div>
+            <div className="race-prep-empty"><b>Noch keine produktbezogenen Trainingsbelege</b><span>Dokumentiere im Review konkrete Produkte und ihre Verträglichkeit. Bis dahin wählt der Coach für den benötigten DURING-Baustein nichts automatisch aus.</span></div>
           )}
           {otherProducts.length > 0 && (
             <details className="race-prep-other-products">
-              <summary>Weitere Fuel-Lab-Produkte bewusst auswählen <b>{otherProducts.length}</b></summary>
+              <summary>Weitere passende Fuel-Lab-Produkte bewusst auswählen <b>{otherProducts.length}</b></summary>
               <div className="race-prep-evidence-list">{otherProducts.map(renderEvidenceProduct)}</div>
             </details>
           )}
-          <div className="race-prep-manual-fuel">
+          {carbsDuringNeeded && <div className="race-prep-manual-fuel">
             <div><span>Eigenes Lebensmittel</span><h3>Etwas ergänzen, das nicht im Fuel Lab steht</h3><small>Manuelle Einträge werden nicht automatisch als trainingsbewährt markiert.</small></div>
             <div className="race-prep-manual-grid">
               <label>Name<input value={manualDraft.name} onChange={(event) => setManualDraft((current) => ({ ...current, name: event.target.value }))} placeholder="z. B. Toast + Honig" /></label>
@@ -256,7 +270,7 @@ export default function RacePrepPlanner() {
               <button type="button" onClick={addManualFuel} disabled={!manualDraft.name.trim() || !(Number(manualDraft.carbs) > 0)}>+ Hinzufügen</button>
             </div>
             {(draft.manualFuelItems || []).length > 0 && <div className="race-prep-manual-list">{draft.manualFuelItems.map((item) => <span key={item.id}><b>{item.name}</b>{item.carbs} g KH/Portion<button type="button" onClick={() => removeManualFuel(item.id)} aria-label={`${item.name} entfernen`}>×</button></span>)}</div>}
-          </div>
+          </div>}
         </section>
       )}
 

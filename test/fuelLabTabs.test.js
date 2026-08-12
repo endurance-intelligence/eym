@@ -7,8 +7,9 @@ test("Fuel Lab opens the Fuel Partner by default", () => {
   assert.equal(resolveFuelLabTab("unknown"), "partner");
 });
 
-test("Fuel Lab keeps both tab destinations explicit", () => {
+test("Fuel Lab keeps all tab destinations explicit", () => {
   assert.equal(resolveFuelLabTab("partner"), "partner");
+  assert.equal(resolveFuelLabTab("race-prep"), "race-prep");
   assert.equal(resolveFuelLabTab("products"), "products");
 });
 

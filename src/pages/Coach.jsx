@@ -9,7 +9,6 @@ import {
 } from "../services/activityUtils";
 import ReviewModal from "../components/ReviewModal";
 import ExerciseGuide, { ExerciseGuideButton } from "../components/ExerciseGuide";
-import RacePrepPlanner from "../components/RacePrepPlanner";
 import RaceCoach from "../components/RaceCoach";
 import { activitiesWithGroups } from "../services/activityGroups";
 import { fmtDate } from "../utils/format";
@@ -701,9 +700,6 @@ export default function Coach() {
 
       {activeTab === "race" && (
         <div className="grid coach-race-grid">
-          <Card className="wide coach-race-shell">
-            <RacePrepPlanner />
-          </Card>
           <Card className="wide coach-race-shell">
             <RaceCoach />
           </Card>

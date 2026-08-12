@@ -19,6 +19,7 @@ import { extractNutritionLabel } from "../services/nutritionOcr";
 import { isManagedImage, queueEntityImageDeletion, resolveImageUrl, uploadEntityImages } from "../services/imageStorage";
 import { FUEL_LAB_TABS, fuelLabTabSearchParams, resolveFuelLabTab } from "../services/fuelLabTabs";
 import FuelPartner from "../components/FuelPartner";
+import RacePrepPlanner from "../components/RacePrepPlanner";
 
 const categories = ["Gel", "Drink Mix", "Elektrolyte", "Riegel", "Recovery", "Kapseln", "Sonstiges"];
 const stockUnits = ["Stück", "Portionen", "Tabletten", "Beutel"];
@@ -634,6 +635,10 @@ export default function Fuel() {
 
     {activeTab === "partner" && <div className="fuel-tab-panel" id="fuel-panel-partner" role="tabpanel" aria-labelledby="fuel-tab-partner">
       <FuelPartner />
+    </div>}
+
+    {activeTab === "race-prep" && <div className="fuel-tab-panel" id="fuel-panel-race-prep" role="tabpanel" aria-labelledby="fuel-tab-race-prep">
+      <Card className="wide fuel-race-prep-shell"><RacePrepPlanner /></Card>
     </div>}
 
     {activeTab === "products" && <div className="fuel-tab-panel" id="fuel-panel-products" role="tabpanel" aria-labelledby="fuel-tab-products">

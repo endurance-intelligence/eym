@@ -174,6 +174,7 @@ export default function RaceCoach() {
   const garminWorkout = plan?.routePlan ? buildGarminRaceWorkout({
     routePlan: plan.routePlan,
     raceName: source?.label || setup.routeProfile?.name || "Race Strategy",
+    workoutNameOverride: setup.garminWorkoutName || "",
     paceToleranceSeconds: garminTolerance,
   }) : null;
   const garminSteps = compactGarminSteps(garminWorkout?.steps || []);
@@ -366,7 +367,7 @@ export default function RaceCoach() {
       return;
     }
     setGarminPublishBusy(true);
-    setGarminExportMessage("Schlachtplan wird an Intervals.icu übergeben …");
+    setGarminExportMessage("Rennstrategie wird an Intervals.icu übergeben …");
     try {
       const publication = buildIntervalsRaceWorkoutPublication({
         workout: garminWorkout,
@@ -383,9 +384,9 @@ export default function RaceCoach() {
         garminPublishedFingerprint: raceWorkoutPublicationFingerprint(garminWorkout, garminPublishDate),
         garminPublishedEventId: result.eventId || null,
       });
-      setGarminExportMessage(`An Intervals.icu gesendet ✓ · ${Number(result.stepCount || garminWorkout.steps.length)} Pace-Abschnitte · ${garminPublishDate}`);
+      setGarminExportMessage(`„${garminWorkout.name}“ gesendet ✓ · ${Number(result.stepCount || garminWorkout.steps.length)} Pace-Abschnitte · ${garminPublishDate}`);
     } catch (error) {
-      setGarminExportMessage(error?.message || "Der Race-Schlachtplan konnte nicht an Intervals.icu gesendet werden.");
+      setGarminExportMessage(error?.message || "Die Rennstrategie konnte nicht an Intervals.icu gesendet werden.");
     } finally {
       setGarminPublishBusy(false);
     }
@@ -396,7 +397,7 @@ export default function RaceCoach() {
       <div className="race-coach-empty">
         <p className="eyebrow">Race Strategy</p>
         <h2>Erst Rennen vorbereiten</h2>
-        <p>Lege unter Race Prep ein Rennen an oder hinterlege ein Wettkampfziel. Danach baut die Race Strategy daraus deinen Schlachtplan.</p>
+        <p>Lege im Fuel Lab → Race Prep ein Rennen an oder hinterlege ein Wettkampfziel. Danach baut Race Strategy daraus deine Rennstrategie.</p>
       </div>
     );
   }
@@ -416,7 +417,7 @@ export default function RaceCoach() {
       <div className="race-coach-heading">
         <div>
           <p className="eyebrow">Race Strategy</p>
-          <h2>Schlachtplan festlegen. Am Renntag nur noch abarbeiten.</h2>
+          <h2>Rennstrategie festlegen. Am Renntag nur noch abarbeiten.</h2>
           <p>Zielzeit und Strecke vor dem Start festlegen. Höhenprofil und Rennziel werden in konkrete Kilometer-Paces übersetzt.</p>
         </div>
         <label>
@@ -508,7 +509,7 @@ export default function RaceCoach() {
       {plan.routePlan && (
         <section className="race-coach-route-plan">
           <div className="race-coach-section-heading race-coach-route-plan-heading">
-            <div><span>Route Intelligence</span><h3>Dein Kilometer-Schlachtplan</h3></div>
+            <div><span>Route Intelligence</span><h3>Deine Kilometerstrategie</h3></div>
             <div className="race-coach-route-plan-meta">
               <small>Gesamt {clockLabel(plan.routePlan.targetDurationMinutes)} · Ø {paceLabel(plan.routePlan.averagePaceSecondsPerKm)} · Zielzeit bleibt fix</small>
               {plan.routePlan.manualPaceCount > 0 && <button type="button" className="race-coach-text-button" onClick={resetAllSegmentPaces}>Alle Pace-Anpassungen zurücksetzen</button>}
@@ -581,7 +582,7 @@ export default function RaceCoach() {
       {garminWorkout && (
         <section className="race-coach-garmin-export">
           <div className="race-coach-section-heading">
-            <div><span>Garmin Sync</span><h3>Schlachtplan ohne Kabel auf die Uhr bringen</h3></div>
+            <div><span>Garmin Sync</span><h3>Rennstrategie ohne Kabel auf die Uhr bringen</h3></div>
             <small>EI → Intervals.icu → Garmin</small>
           </div>
 
@@ -589,13 +590,27 @@ export default function RaceCoach() {
             <div className="race-coach-garmin-copy">
               <span className="race-coach-garmin-badge">GARMIN VIA INTERVALS.ICU</span>
               <h4>Jeder Kilometer bleibt ein eigener Distanzschritt mit genau deinem Pace-Korridor.</h4>
-              <p>Endurance Intelligence veröffentlicht den finalen Schlachtplan als strukturiertes Run-Workout in deinem verbundenen Intervals.icu-Konto. Ist dort der Garmin-Sync aktiv, wird das Workout von Intervals.icu an Garmin Connect weitergereicht und landet beim nächsten Sync auf deiner Uhr.</p>
+              <p>Endurance Intelligence veröffentlicht die finale Rennstrategie als strukturiertes Run-Workout in deinem verbundenen Intervals.icu-Konto. Ist dort der Garmin-Sync aktiv, wird das Workout von Intervals.icu an Garmin Connect weitergereicht und landet beim nächsten Sync auf deiner Uhr.</p>
             </div>
 
             <div className="race-coach-garmin-metrics">
               <span><small>Schritte</small><b>{garminWorkout.steps.length}</b></span>
               <span><small>Distanz</small><b>{numberLabel(garminWorkout.totalDistanceM / 1000, 2)} km</b></span>
               <span><small>Zielzeit</small><b>{clockLabel(garminWorkout.targetDurationMinutes)}</b></span>
+              <label className="race-coach-garmin-name-field">
+                <small>Workout-Name</small>
+                <input
+                  type="text"
+                  value={setup.garminWorkoutName || ""}
+                  placeholder={garminWorkout.defaultName}
+                  maxLength={80}
+                  onChange={(event) => {
+                    setGarminExportMessage("");
+                    updateSetup({ garminWorkoutName: event.target.value });
+                  }}
+                />
+                <em>{setup.garminWorkoutName ? "Eigener Name" : "Automatisch"} · {garminWorkout.name}</em>
+              </label>
               <label>
                 <small>Pace-Korridor</small>
                 <select
@@ -649,7 +664,7 @@ export default function RaceCoach() {
               </button>
               <button type="button" className="secondary" onClick={downloadGarminWorkout} disabled={!garminWorkout.compatible}>FIT herunterladen</button>
               <div>
-                <b>{!state.intervals?.connected ? "Intervals.icu nicht verbunden" : !garminWorkout.compatible ? "Noch nicht exportierbar" : garminPublicationCurrent ? "Schlachtplan ist aktuell übertragen" : setup.garminPublishedAt ? "Änderungen noch nicht übertragen" : "Bereit zum Senden"}</b>
+                <b>{!state.intervals?.connected ? "Intervals.icu nicht verbunden" : !garminWorkout.compatible ? "Noch nicht exportierbar" : garminPublicationCurrent ? "Rennstrategie ist aktuell übertragen" : setup.garminPublishedAt ? "Änderungen noch nicht übertragen" : "Bereit zum Senden"}</b>
                 <small>{!state.intervals?.connected ? "Verbindung zuerst unter Einstellungen aktivieren." : garminWorkout.compatible ? `${garminWorkout.steps.length} strukturierte Pace-Schritte · ${garminPublishDate}` : garminWorkout.compatibilityMessage}</small>
               </div>
             </div>

@@ -568,6 +568,9 @@ function recommendationRationale({
   experience,
 }) {
   if (targetCarbs <= 0 && fluidTotal <= 0) {
+    if (mode === "race" && durationMinutes >= 45 && durationMinutes < 75) {
+      return `Für ${Math.round(durationMinutes)} Minuten wird kein Gel als DURING-Standard eingeplant. Kleine Kohlenhydratmengen können bei hoher Rennintensität optional sein; ein Pflicht-Gel ist für diese Renndauer nicht nötig.`;
+    }
     return `Für ${Math.round(durationMinutes)} Minuten ist während des Laufs normalerweise kein Fuel nötig. Normal essen und trinken reicht in der Regel aus.`;
   }
   const parts = [

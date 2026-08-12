@@ -48,7 +48,9 @@ test("publication fingerprint changes for pace, corridor or sync day changes", (
   const base = raceWorkoutPublicationFingerprint(source, "2026-08-12");
   const changedPace = { ...source, steps: source.steps.map((step, index) => index === 0 ? { ...step, paceSecondsPerKm: 275 } : step) };
   const changedTolerance = { ...source, paceToleranceSeconds: 15 };
+  const changedName = { ...source, name: "EI Race · anderer Name · 12:48" };
   assert.notEqual(base, raceWorkoutPublicationFingerprint(changedPace, "2026-08-12"));
   assert.notEqual(base, raceWorkoutPublicationFingerprint(changedTolerance, "2026-08-12"));
+  assert.notEqual(base, raceWorkoutPublicationFingerprint(changedName, "2026-08-12"));
   assert.notEqual(base, raceWorkoutPublicationFingerprint(source, "2026-08-13"));
 });

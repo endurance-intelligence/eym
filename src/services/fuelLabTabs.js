@@ -1,5 +1,6 @@
 export const FUEL_LAB_TABS = [
   ["partner", "Fuel Partner"],
+  ["race-prep", "Race Prep"],
   ["products", "Produkte"],
 ];
 

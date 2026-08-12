@@ -2519,3 +2519,22 @@
     grid-template-columns: 1fr;
   }
 }
+
+
+/* v3.9.77 – move Race Prep to Fuel Lab, explicit race-fuel decision and Garmin naming */
+.fuel-race-prep-shell{padding:0;overflow:hidden}
+.fuel-race-prep-shell>.race-prep-planner{padding:20px}
+.race-prep-fuel-decision{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:14px 16px;border:1px solid var(--border);border-radius:14px;background:var(--bg-card-alt)}
+.race-prep-fuel-decision>div{display:grid;gap:4px}
+.race-prep-fuel-decision span{color:var(--accent-bright);font-size:8px;font-weight:900;letter-spacing:.08em}
+.race-prep-fuel-decision h3{margin:0;font-size:15px}
+.race-prep-fuel-decision p{margin:0;color:var(--muted);font-size:10px;line-height:1.5}
+.race-prep-fuel-decision>strong{flex:0 0 auto;padding:8px 10px;border:1px solid var(--border);border-radius:10px;background:var(--bg-input);font-size:14px}
+.race-prep-fuel-decision.none>strong{color:var(--success)}
+.race-coach-garmin-metrics{grid-template-columns:repeat(3,minmax(105px,.5fr)) minmax(250px,1.35fr) minmax(190px,.9fr) minmax(165px,.8fr)}
+.race-coach-garmin-name-field{grid-column:span 2}
+.race-coach-garmin-name-field input{min-height:30px;width:100%;padding:5px 8px;font-size:9px}
+.race-coach-garmin-name-field em{overflow:hidden;color:var(--muted);font-size:8px;font-style:normal;text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:1120px){.race-coach-garmin-name-field{grid-column:span 2}}
+@media(max-width:720px){.race-coach-garmin-name-field{grid-column:1/-1}.race-prep-fuel-decision{align-items:flex-start;flex-direction:column}}
+@media(max-width:600px){.fuel-race-prep-shell>.race-prep-planner{padding:14px}}

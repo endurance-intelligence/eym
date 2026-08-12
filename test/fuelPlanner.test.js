@@ -277,3 +277,25 @@ test("a gel with millilitre serving data is never mistaken for a sports drink", 
   assert.equal(gel?.unit, "Stück");
   assert.ok(result.actualPlan.carbsTotal < 200);
 });
+
+
+test("a 45 minute race deliberately schedules no during gel", () => {
+  const result = fuelRecommendationForWorkout({
+    workout: {
+      id: "short-race",
+      date: "2026-08-21",
+      title: "Urland-Lauf",
+      type: "Race",
+      raceEvent: true,
+      distance: 9.62,
+      duration: 45,
+    },
+    fuel: [gel160, hydrate],
+    mode: "race",
+  });
+
+  assert.equal(result.target.carbsPerHour, 0);
+  assert.equal(result.target.carbsTotal, 0);
+  assert.equal(result.consume.some((item) => item.fuelItemId === "gel-160"), false);
+  assert.match(result.rationale, /45 Minuten.*kein Gel.*DURING-Standard/i);
+});
