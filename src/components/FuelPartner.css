@@ -2458,3 +2458,64 @@
     width: 100%;
   }
 }
+
+/* v3.9.76 – Race Strategy Garmin sync via Intervals.icu */
+.race-coach-garmin-metrics {
+  grid-template-columns: repeat(3, minmax(105px, .55fr)) minmax(190px, .95fr) minmax(165px, .8fr);
+}
+
+.race-coach-garmin-metrics input[type="date"] {
+  min-height: 30px;
+  width: 100%;
+  padding: 5px 8px;
+  font-size: 9px;
+}
+
+.race-coach-garmin-sync-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-sidebar) 52%, transparent);
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.race-coach-garmin-sync-hint .race-coach-text-button {
+  flex: 0 0 auto;
+}
+
+.race-coach-garmin-primary {
+  min-width: 158px;
+  font-weight: 850;
+}
+
+.race-coach-garmin-actions > button.secondary {
+  min-width: 118px;
+}
+
+@media (max-width: 1120px) {
+  .race-coach-garmin-metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .race-coach-garmin-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .race-coach-garmin-sync-hint {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 600px) {
+  .race-coach-garmin-metrics {
+    grid-template-columns: 1fr;
+  }
+}

@@ -17,6 +17,8 @@ const corsHeaders = {
 
 const jsonHeaders = { ...corsHeaders, "Content-Type": "application/json; charset=utf-8" };
 const PLAN_PREFIX = "endurance-intelligence:";
+const RACE_PREFIX = "endurance-intelligence:race:";
+const MAX_RACE_WORKOUT_STEPS = 50;
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: jsonHeaders });
@@ -217,6 +219,83 @@ function workoutType(item: Record<string, unknown>) {
   return "Run";
 }
 
+function safeRaceText(value: unknown, fallback = "") {
+  const text = String(value || "").replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim();
+  return (text || fallback).slice(0, 120);
+}
+
+function safeRaceKey(value: unknown) {
+  const key = safeRaceText(value, "race-strategy")
+    .replace(/[^a-zA-Z0-9._:-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 120);
+  return key || "race-strategy";
+}
+
+function boundedInteger(value: unknown, minimum: number, maximum: number, fallback: number) {
+  const parsed = Math.round(Number(value));
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(minimum, Math.min(maximum, parsed));
+}
+
+function racePaceText(seconds: number) {
+  const value = Math.max(0, Math.round(seconds));
+  return `${Math.floor(value / 60)}:${String(value % 60).padStart(2, "0")}`;
+}
+
+function raceDistanceToken(distanceM: number) {
+  const meters = Math.max(1, Math.round(distanceM));
+  if (Math.abs(meters - 1000) <= 10) return "1km";
+  if (meters >= 1000 && meters % 1000 === 0) return `${meters / 1000}km`;
+  return `${meters}mtr`;
+}
+
+function normalizedRaceWorkout(input: unknown) {
+  const workout = input && typeof input === "object" ? input as Record<string, unknown> : {};
+  const publishDate = String(workout.publishDate || "");
+  if (!validDate(publishDate)) throw new Error("Bitte einen gültigen Garmin-Sync-Tag wählen.");
+
+  const rawSteps = Array.isArray(workout.steps) ? workout.steps : [];
+  if (!rawSteps.length) throw new Error("Für den Garmin-Sync fehlen gültige Pace-Schritte.");
+  if (rawSteps.length > MAX_RACE_WORKOUT_STEPS) {
+    throw new Error(`Garmin erlaubt maximal ${MAX_RACE_WORKOUT_STEPS} Schritte pro Workout. Dieser Plan hat ${rawSteps.length}.`);
+  }
+
+  const tolerance = boundedInteger(workout.paceToleranceSeconds, 1, 30, 10);
+  const steps = rawSteps.map((raw, index) => {
+    const step = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
+    const distanceM = boundedInteger(step.distanceM, 20, 100000, 0);
+    const paceSecondsPerKm = boundedInteger(step.paceSecondsPerKm, 120, 1200, 0);
+    if (!(distanceM > 0) || !(paceSecondsPerKm > 0)) {
+      throw new Error(`Garmin-Schritt ${index + 1} ist ungültig.`);
+    }
+    return { distanceM, paceSecondsPerKm };
+  });
+
+  const targetDuration = Number(workout.targetDurationMinutes);
+  return {
+    raceKey: safeRaceKey(workout.raceKey),
+    raceName: safeRaceText(workout.raceName, "EI Race Strategy"),
+    publishDate,
+    targetDurationMinutes: Number.isFinite(targetDuration) ? Math.max(0.1, Math.min(24 * 60 * 7, targetDuration)) : 0.1,
+    paceToleranceSeconds: tolerance,
+    steps,
+  };
+}
+
+function raceWorkoutDescription(workout: ReturnType<typeof normalizedRaceWorkout>) {
+  const lines = ["Race Strategy"];
+  workout.steps.forEach((step, index) => {
+    const fast = Math.max(120, step.paceSecondsPerKm - workout.paceToleranceSeconds);
+    const slow = Math.min(1200, step.paceSecondsPerKm + workout.paceToleranceSeconds);
+    const partial = Math.abs(step.distanceM - 1000) > 20;
+    const label = partial ? `KM ${index + 1} · ${(step.distanceM / 1000).toFixed(2)} km` : `KM ${index + 1}`;
+    lines.push("", label, `- ${raceDistanceToken(step.distanceM)} ${racePaceText(fast)}-${racePaceText(slow)}/km Pace intensity=active`);
+  });
+  return lines.join("\n");
+}
+
 function planEvent(item: Record<string, unknown>, existingId?: unknown) {
   const guided = isGuidedPlanItem(item);
   const externalId = `${PLAN_PREFIX}${String(item.id || crypto.randomUUID())}`;
@@ -399,6 +478,40 @@ Deno.serve(async (request) => {
       const activities = await intervalsGet(`/athlete/${athleteId}/activities?${query.toString()}`, apiKey);
       if (!Array.isArray(activities)) throw new Error("Intervals.icu hat kein gültiges Aktivitäten-Array geliefert.");
       return json({ activities, syncedAt: new Date().toISOString() });
+    }
+
+    if (action === "publish-race-workout") {
+      const workout = normalizedRaceWorkout(body.workout);
+      const externalId = `${RACE_PREFIX}${workout.raceKey}`;
+      const movingTime = Math.max(1, Math.round(workout.steps.reduce(
+        (sum, step) => sum + (step.distanceM / 1000) * step.paceSecondsPerKm,
+        0,
+      )));
+      const event = {
+        category: "WORKOUT",
+        start_date_local: `${workout.publishDate}T00:00:00`,
+        name: workout.raceName,
+        type: "Run",
+        target: "PACE",
+        moving_time: movingTime,
+        description: raceWorkoutDescription(workout),
+        external_id: externalId,
+      };
+      const result = await intervalsRequest(`/athlete/${athleteId}/events/bulk?upsert=true`, apiKey, {
+        method: "POST",
+        body: JSON.stringify([event]),
+      });
+      const uploaded = Array.isArray(result) ? result[0] : null;
+      return json({
+        connected: true,
+        publishedAt: new Date().toISOString(),
+        publishDate: workout.publishDate,
+        stepCount: workout.steps.length,
+        targetDurationMinutes: workout.targetDurationMinutes,
+        externalId,
+        eventId: uploaded?.id || null,
+        category: uploaded?.category || "WORKOUT",
+      });
     }
 
     if (action === "publish-plan") {

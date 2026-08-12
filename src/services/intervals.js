@@ -58,6 +58,10 @@ export async function publishIntervalsWeek({ weekStart, weekEnd, plan }) {
   return invokeIntervals("publish-plan", { weekStart, weekEnd, plan });
 }
 
+export async function publishIntervalsRaceWorkout(workout) {
+  return invokeIntervals("publish-race-workout", { workout });
+}
+
 
 function zoneData(activity) {
   const times = Array.isArray(activity.icu_hr_zone_times) ? activity.icu_hr_zone_times.map(Number) : [];
