@@ -2538,3 +2538,9 @@
 @media(max-width:1120px){.race-coach-garmin-name-field{grid-column:span 2}}
 @media(max-width:720px){.race-coach-garmin-name-field{grid-column:1/-1}.race-prep-fuel-decision{align-items:flex-start;flex-direction:column}}
 @media(max-width:600px){.fuel-race-prep-shell>.race-prep-planner{padding:14px}}
+
+/* v3.9.78 – athlete-controlled Race Prep selection + transparent hydration guidance */
+.race-prep-selection-hint{padding:10px 12px;border:1px dashed var(--accent-border);border-radius:11px;background:color-mix(in srgb,var(--accent-surface) 20%,var(--bg-card-alt));color:var(--muted);font-size:10px;line-height:1.45}
+.race-prep-selection-hint b{color:var(--text)}
+.race-prep-stock{color:var(--muted-bright)!important;font-weight:800}
+.race-prep-stock.empty{color:var(--warning)!important}

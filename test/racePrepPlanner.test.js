@@ -93,17 +93,18 @@ test("training evidence ranks positively reviewed products even when stock is ze
   assert.match(evidence[0].detail, /2× gut vertragen/);
 });
 
-test("half marathon Race Prep rotates training-proven products and ignores inventory", () => {
-  const plan = buildRacePrepPlan({
-    profile: { name: "Halbmarathon Test", format: "distance", distanceKm: 21.1, durationMinutes: 120 },
-    state: evidenceState,
-  });
+test("half marathon Race Prep shows evidence but never preselects products", () => {
+  const profile = racePrepProfileWithEvidenceDefaults(
+    { name: "Halbmarathon Test", format: "distance", distanceKm: 21.1, durationMinutes: 120 },
+    evidenceState,
+  );
+  const plan = buildRacePrepPlan({ profile, state: evidenceState });
   assert.equal(plan.valid, true);
   assert.equal(plan.strategy.kind, "distance");
-  assert.deepEqual(new Set(plan.effectiveFuelItemIds), new Set(["gel-160", "bar-1"]));
-  assert.ok(plan.recommendation.consume.some((item) => item.fuelItemId === "gel-160"));
-  assert.ok(plan.recommendation.consume.some((item) => item.fuelItemId === "bar-1"));
-  assert.equal(plan.shoppingNeeded.length, 0);
+  assert.deepEqual(plan.effectiveFuelItemIds, []);
+  assert.equal(plan.recommendation.consume.length, 0);
+  assert.ok(plan.evidenceCatalog.some((entry) => entry.id === "gel-160" && entry.tone === "good"));
+  assert.ok(plan.warnings.some((warning) => /keine geeignete Fuel-Quelle ausgewählt/.test(warning)));
 });
 
 test("user can intentionally choose no product without a 275-gel fallback", () => {
@@ -130,6 +131,15 @@ test("manual food can be added without pretending it is training-proven", () => 
   });
   assert.ok(plan.recommendation.consume.some((item) => item.product === "Toast + Honig"));
   assert.ok(plan.recommendation.consume.find((item) => item.product === "Toast + Honig").evidenceLabel.includes("Manuell ergänzt"));
+});
+
+test("a consciously selected out-of-stock product stays allowed but raises a stock warning", () => {
+  const plan = buildRacePrepPlan({
+    profile: { name: "HM", format: "distance", distanceKm: 21.1, durationMinutes: 120, fuelItemIds: ["gel-160"] },
+    state: evidenceState,
+  });
+  assert.ok(plan.recommendation.consume.some((item) => item.fuelItemId === "gel-160"));
+  assert.ok(plan.warnings.some((warning) => /aktuell nicht im Bestand/.test(warning)));
 });
 
 test("Backyard Race Prep uses the planning horizon as round horizon", () => {
@@ -165,7 +175,8 @@ test("1000 km Race Prep remains calculable without turning inventory into a plan
   assert.equal(plan.profile.distanceKm, 1000);
   assert.equal(plan.profile.durationEstimated, true);
   assert.ok(plan.summary.schedulePoints > 100);
-  assert.ok(plan.recommendation.consume.length >= 2);
+  assert.equal(plan.recommendation.consume.length, 0);
+  assert.ok(plan.warnings.some((warning) => /keine geeignete Fuel-Quelle ausgewählt/.test(warning)));
   assert.ok(plan.warnings.some((warning) => /Renndauer ist aktuell geschätzt/.test(warning)));
 });
 
@@ -197,7 +208,7 @@ test("Race Prep keeps a training-proven electrolyte drink separate from gels", (
   };
 
   const profile = racePrepProfileWithEvidenceDefaults(
-    { name: "50k", format: "distance", distanceKm: 50, durationMinutes: 360 },
+    { name: "50k", format: "distance", distanceKm: 50, durationMinutes: 360, fuelItemIds: ["gel-160", "electrolyte-500"] },
     state,
   );
   const plan = buildRacePrepPlan({ profile, state });
@@ -209,7 +220,7 @@ test("Race Prep keeps a training-proven electrolyte drink separate from gels", (
   assert.ok(plan.recommendation.consume.some((item) => item.fuelItemId === "electrolyte-500" && item.unit === "ml"));
 });
 
-test("a short race still surfaces a proven drink without inventing a DURING slot", () => {
+test("a short race keeps a proven drink visible without preselecting it", () => {
   const electrolyte = {
     id: "short-drink",
     name: "Trusted Electrolyte",
@@ -236,6 +247,7 @@ test("a short race still surfaces a proven drink without inventing a DURING slot
   const plan = buildRacePrepPlan({ profile, state });
 
   assert.equal(plan.summary.schedulePoints, 0);
-  assert.equal(plan.recommendation.hydrationProduct?.product, "Trusted Electrolyte");
-  assert.match(plan.phases.find((phase) => phase.key === "during").detail, /Trusted Electrolyte/);
+  assert.deepEqual(plan.effectiveFuelItemIds, []);
+  assert.equal(plan.recommendation.hydrationProduct, null);
+  assert.ok(plan.evidenceCatalog.some((entry) => entry.id === "short-drink" && entry.tone === "good"));
 });

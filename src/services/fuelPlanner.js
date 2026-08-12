@@ -564,6 +564,8 @@ function recommendationRationale({
   temperature,
   targetCarbs,
   fluidTotal,
+  fluid,
+  targetFluidPerHour,
   range,
   experience,
 }) {
@@ -577,7 +579,9 @@ function recommendationRationale({
     `${Math.round(durationMinutes)} Minuten`,
     fuelModeLabel(mode),
     targetCarbs > 0 ? `rund ${Math.round(targetCarbs)} g Kohlenhydrate gesamt` : "Fuel optional",
-    fluidTotal > 0 ? `währenddessen etwa ${Math.round(fluidTotal)} ml trinken` : null,
+    fluidTotal > 0
+      ? `Trinkorientierung ${Math.round(fluid.low)}–${Math.round(fluid.high)} ml/h · Planbasis ${Math.round(targetFluidPerHour)} ml/h, nicht als Trinkpflicht`
+      : null,
     temperature != null ? `Tagesmaximum ${Math.round(temperature)} °C` : null,
   ].filter(Boolean);
   const learning = experience.successfulFuelReviews
@@ -619,7 +623,11 @@ export function fuelRecommendationForWorkout({
   const targetCarbs = roundTo(targetCarbsPerHour * durationInHours, 5);
   const fluid = fluidRange(durationMinutes, temperature, experience);
   const fluidNeeded = durationMinutes >= 75 || Number(temperature) >= 23;
-  const targetFluidPerHour = fluidNeeded ? roundTo((fluid.low + fluid.high) / 2, 25) : 0;
+  const targetFluidPerHour = fluidNeeded
+    ? fluid.personal
+      ? roundTo(fluid.low, 25)
+      : roundTo((fluid.low + fluid.high) / 2, 25)
+    : 0;
   const fluidTotal = targetFluidPerHour > 0
     ? Math.max(300, roundTo(targetFluidPerHour * durationInHours, 100))
     : 0;
@@ -693,6 +701,8 @@ export function fuelRecommendationForWorkout({
       temperature,
       targetCarbs,
       fluidTotal,
+      fluid,
+      targetFluidPerHour,
       range,
       experience,
     }),

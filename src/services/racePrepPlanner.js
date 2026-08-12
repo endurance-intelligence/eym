@@ -245,19 +245,11 @@ export function racePrepFuelEvidence(state = {}) {
     });
 }
 
-export function racePrepProfileWithEvidenceDefaults(profile, state = {}) {
+export function racePrepProfileWithEvidenceDefaults(profile) {
   const normalized = normalizeRacePrepProfile(profile);
   if (normalized.fuelItemIds !== null) return normalized;
-  const evidence = racePrepFuelEvidence(state);
-  const fuelDefaults = evidence
-    .filter((entry) => entry.recommended && entry.role === "fuel" && entry.carbs > 0)
-    .slice(0, 3)
-    .map((entry) => entry.id);
-  const hydrationDefault = evidence
-    .filter((entry) => entry.recommended && entry.role === "hydration")
-    .slice(0, 1)
-    .map((entry) => entry.id);
-  return { ...normalized, fuelItemIds: [...new Set([...fuelDefaults, ...hydrationDefault])] };
+  // Evidence is decision support only. Race Prep never selects products on the athlete's behalf.
+  return { ...normalized, fuelItemIds: [] };
 }
 
 function syntheticRaceWorkout(profile) {
@@ -288,14 +280,14 @@ function phasePlan(profile, recommendation) {
     ? `${Math.round(recommendation.target.carbsPerHour)} g KH/h · insgesamt ca. ${Math.round(recommendation.target.carbsTotal)} g`
     : "Während des Rennens ist kein zusätzlicher Kohlenhydrat-Plan nötig.";
   const duringFluid = recommendation.target.fluidTotal > 0
-    ? `Orientierung ${Math.round(recommendation.target.fluidPerHour)} ml/h · insgesamt ca. ${Math.round(recommendation.target.fluidTotal)} ml${hydrationName ? ` · bewährter Drink: ${hydrationName}` : ""}`
+    ? `Orientierung ${Math.round(recommendation.target.fluidLowPerHour)}–${Math.round(recommendation.target.fluidHighPerHour)} ml/h · Planbasis ${Math.round(recommendation.target.fluidPerHour)} ml/h / ca. ${Math.round(recommendation.target.fluidTotal)} ml · nach Durst, Bedingungen und Verpflegungsstellen${hydrationName ? ` · gewählter Drink: ${hydrationName}` : ""}`
     : hydrationName
-      ? `Kein fixer DURING-Drink nötig. ${hydrationName} bleibt als bewährte Option für PRE, Hitze oder tatsächlichen Durst sichtbar.`
+      ? `Kein fixer DURING-Drink nötig. ${hydrationName} bleibt als gewählte Option für PRE, Hitze oder tatsächlichen Durst sichtbar.`
       : "Trinken nach Durst und Bedingungen; kein fixer DURING-Block erforderlich.";
 
   return [
-    { key: "pre", label: "PRE", title: "Vor dem Start", detail: `Vertraute Mahlzeit und Getränke einplanen. Keine neuen Produkte am Renntag testen.${hydrationName ? ` Bewährte Getränkebasis: ${hydrationName}.` : ""}`, note: "PRE wird bewusst nicht in die DURING-Mengen eingerechnet." },
-    { key: "during", label: "DURING", title: profile.format === "loop" ? "Pro Runde / Rennstunde" : "Während des Rennens", detail: `${duringFuel} · ${duringFluid}`, note: "Konkrete Produkte stammen aus deiner ausgewählten und im Training belegten Fuel-Basis." },
+    { key: "pre", label: "PRE", title: "Vor dem Start", detail: `Vertraute Mahlzeit und Getränke einplanen. Keine neuen Produkte am Renntag testen.${hydrationName ? ` Gewählte Getränkebasis: ${hydrationName}.` : ""}`, note: "PRE wird bewusst nicht in die DURING-Mengen eingerechnet." },
+    { key: "during", label: "DURING", title: profile.format === "loop" ? "Pro Runde / Rennstunde" : "Während des Rennens", detail: `${duringFuel} · ${duringFluid}`, note: "Die Mengen sind eine Planbasis. Produkte wählst du selbst; Trainingsbelege und Bestand dienen nur als Entscheidungshilfe." },
     { key: "post", label: "POST", title: "Nach dem Ziel / Tagesblock", detail: "Recovery-Verpflegung separat bereitlegen und nach tatsächlichem Hunger, Durst und Verträglichkeit nutzen.", note: "POST wird im Review getrennt erfasst und verändert die DURING-Rate nicht." },
   ];
 }
@@ -442,8 +434,9 @@ export function buildRacePrepPlan({ profile: inputProfile, state = {} } = {}) {
   if (profile.durationEstimated) warnings.push(`Renndauer ist aktuell geschätzt (${formatDuration(profile.durationMinutes)}). Für den finalen Plan bitte die erwartete Dauer anpassen.`);
   selectedCatalog.filter((entry) => entry.tone === "bad").forEach((entry) => warnings.push(`${entry.name}: im Training bereits problematisch bewertet. Nur bewusst und nicht automatisch als sichere Race-Basis verwenden.`));
   selectedCatalog.filter((entry) => entry.tone === "watch").forEach((entry) => warnings.push(`${entry.name}: bisher nur auffällige Aufnahme dokumentiert.`));
+  selectedCatalog.filter((entry) => numeric(entry.item?.quantity) <= 0).forEach((entry) => warnings.push(`${entry.name}: aktuell nicht im Bestand. Die Auswahl bleibt erlaubt, damit du das Produkt bewusst einplanen oder vorher besorgen kannst.`));
   if (baseRecommendation.target.carbsTotal > 0 && fuelConsume.length === 0 && numeric(hydrationEntry?.carbs) < baseRecommendation.target.carbsTotal * 0.8) warnings.push("Für dieses Rennen ist DURING-Fuel sinnvoll, aber es ist noch keine geeignete Fuel-Quelle ausgewählt. Wähle bevorzugt im Training gut verträgliche Gels, Riegel oder Lebensmittel.");
-  if (baseRecommendation.target.fluidTotal > 0 && !selectedHydration) warnings.push("Für die Trinkstrategie ist noch kein im Training bewährtes Drink-/Elektrolytprodukt ausgewählt. Die ml bleiben als Flüssigkeitsziel bestehen; wähle bevorzugt ein getestetes Getränk aus dem Fuel Lab.");
+  if (baseRecommendation.target.fluidTotal > 0 && !selectedHydration) warnings.push("Für die Trinkstrategie ist noch kein Drink-/Elektrolytprodukt ausgewählt. Die ml sind nur eine Planbasis; wähle dein Getränk bewusst aus dem Fuel Lab.");
   if (baseRecommendation.target.fluidTotal > 0 && selectedHydration && !hydrationEntry) warnings.push(`${selectedHydration.name}: Als Drink/Elektrolyt ausgewählt, aber das Mischvolumen pro Portion fehlt. Hinterlege im Fuel Lab den Mischvorschlag, damit Menge und Nährwerte korrekt berechnet werden.`);
   if (profile.durationMinutes >= 6 * 60 && fuelConsume.length === 1) warnings.push("Langes Rennen: Die Strategie hängt aktuell an nur einer festen Fuel-Quelle. Ergänze eine zweite im Training verträgliche Option für Rotation und Geschmackswechsel.");
 

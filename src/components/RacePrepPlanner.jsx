@@ -63,8 +63,6 @@ export default function RacePrepPlanner() {
   const relevantProducts = (plan.evidenceCatalog || []).filter((entry) => (
     entry.role === "hydration" ? hydrationDuringNeeded : carbsDuringNeeded
   ));
-  const provenProducts = relevantProducts.filter((entry) => entry.evidence.uses > 0);
-  const otherProducts = relevantProducts.filter((entry) => entry.evidence.uses === 0);
 
   function withDefaults(profile) {
     return racePrepProfileWithEvidenceDefaults(profile, state);
@@ -175,6 +173,8 @@ export default function RacePrepPlanner() {
   }
 
   function renderEvidenceProduct(entry) {
+    const stock = Number(entry.item?.quantity || 0);
+    const stockUnit = entry.item?.stockUnit || "Stück";
     return (
       <label className={`race-prep-evidence-product ${entry.tone} ${selectedIds.has(entry.id) ? "selected" : ""}`} key={entry.id}>
         <input type="checkbox" checked={selectedIds.has(entry.id)} onChange={() => toggleFuelItem(entry.id)} />
@@ -182,6 +182,7 @@ export default function RacePrepPlanner() {
           <span><b>{entry.name}</b><em>{evidenceToneLabel(entry.tone)}</em></span>
           <small>{entry.detail}</small>
           <small><b>{entry.role === "hydration" ? "Drink / Elektrolyt" : "Fuel"}</b> · {entry.carbs > 0 ? `${numberLabel(entry.carbs, 1)} g KH pro Portion` : "keine relevanten KH pro Portion"}{entry.caffeine > 0 ? ` · ${Math.round(entry.caffeine)} mg Koffein` : ""}</small>
+          <small className={stock > 0 ? "race-prep-stock" : "race-prep-stock empty"}>Bestand: {numberLabel(stock, 1)} {stockUnit}</small>
         </span>
       </label>
     );
@@ -246,19 +247,16 @@ export default function RacePrepPlanner() {
       {plan.valid && (carbsDuringNeeded || hydrationDuringNeeded) && (
         <section className="race-prep-fuel-builder">
           <div className="race-prep-section-heading">
-            <div><span>Fuel-Basis</span><h3>{carbsDuringNeeded ? "Was hat im Training funktioniert?" : "Welches Getränk hat im Training funktioniert?"}</h3></div>
-            <small>{carbsDuringNeeded && hydrationDuringNeeded ? "Fuel + Drink" : carbsDuringNeeded ? "Fuel" : "Drink / Elektrolyt"} · Bestand wird ignoriert</small>
+            <div><span>Fuel-Auswahl</span><h3>{carbsDuringNeeded ? "Was willst du im Rennen einsetzen?" : "Welches Getränk willst du einsetzen?"}</h3></div>
+            <small>{carbsDuringNeeded && hydrationDuringNeeded ? "Fuel + Drink" : carbsDuringNeeded ? "Fuel" : "Drink / Elektrolyt"} · du entscheidest selbst</small>
           </div>
-          {provenProducts.length > 0 ? (
-            <div className="race-prep-evidence-list">{provenProducts.map(renderEvidenceProduct)}</div>
+          <div className="race-prep-selection-hint">
+            <b>Nichts wird vorausgewählt.</b> Bewährt bedeutet nur: im Training positiv belegt. Bestand und Erfahrung helfen bei der Entscheidung, ersetzen sie aber nicht.
+          </div>
+          {relevantProducts.length > 0 ? (
+            <div className="race-prep-evidence-list">{relevantProducts.map(renderEvidenceProduct)}</div>
           ) : (
-            <div className="race-prep-empty"><b>Noch keine produktbezogenen Trainingsbelege</b><span>Dokumentiere im Review konkrete Produkte und ihre Verträglichkeit. Bis dahin wählt der Coach für den benötigten DURING-Baustein nichts automatisch aus.</span></div>
-          )}
-          {otherProducts.length > 0 && (
-            <details className="race-prep-other-products">
-              <summary>Weitere passende Fuel-Lab-Produkte bewusst auswählen <b>{otherProducts.length}</b></summary>
-              <div className="race-prep-evidence-list">{otherProducts.map(renderEvidenceProduct)}</div>
-            </details>
+            <div className="race-prep-empty"><b>Noch keine passenden Produkte im Fuel Lab</b><span>Lege zuerst ein Gel, Lebensmittel oder Getränk an. Trainingsbelege erscheinen danach als zusätzliche Entscheidungshilfe.</span></div>
           )}
           {carbsDuringNeeded && <div className="race-prep-manual-fuel">
             <div><span>Eigenes Lebensmittel</span><h3>Etwas ergänzen, das nicht im Fuel Lab steht</h3><small>Manuelle Einträge werden nicht automatisch als trainingsbewährt markiert.</small></div>
@@ -280,7 +278,7 @@ export default function RacePrepPlanner() {
         <div className="race-prep-summary">
           <article><span>Rennumfang</span><strong>{plan.summary.distanceLabel}</strong><small>{plan.summary.durationLabel}{plan.profile.durationEstimated ? " · geschätzt" : ""}</small></article>
           <article><span>Carbs DURING</span><strong>{plan.summary.carbsPerHour ? `${plan.summary.carbsPerHour} g/h` : "nicht nötig"}</strong><small>{plan.summary.carbsTotal ? `${plan.summary.carbsTotal} g gesamt` : "Kurz genug ohne Race-Fuel"}</small></article>
-          <article><span>Trinken DURING</span><strong>{plan.summary.fluidPerHour ? `${plan.summary.fluidPerHour} ml/h` : "nach Bedarf"}</strong><small>{plan.summary.fluidTotal ? `${numberLabel(plan.summary.fluidTotal, 0)} ml gesamt` : "kein fixer Block"}</small></article>
+          <article><span>Trinken DURING</span><strong>{plan.summary.fluidPerHour ? `${Math.round(plan.recommendation.target.fluidLowPerHour)}–${Math.round(plan.recommendation.target.fluidHighPerHour)} ml/h` : "nach Bedarf"}</strong><small>{plan.summary.fluidTotal ? `Planbasis ${plan.summary.fluidPerHour} ml/h · ca. ${numberLabel(plan.summary.fluidTotal, 0)} ml${plan.recommendation.target.personalHydration ? ` · persönlich aus ${plan.recommendation.target.hydrationSamples} Review${plan.recommendation.target.hydrationSamples === 1 ? "" : "s"}` : " · allgemeine Orientierung"}` : "kein fixer Block"}</small></article>
           <article><span>Fuel-Basis</span><strong>{plan.summary.selectedFuelSources ? `${plan.summary.selectedFuelSources} Quellen` : "noch offen"}</strong><small>{plan.recommendation.confidence.label}</small></article>
         </div>
 

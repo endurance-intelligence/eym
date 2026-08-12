@@ -63,3 +63,37 @@ test("Fuel Planner reduces the generic three-hour long-run hydration target", ()
   assert.equal(result.target.fluidPerHour, 400);
   assert.equal(result.target.fluidTotal, 1200);
 });
+
+test("Fuel Planner uses the conservative end of a reliable personal hydration range as plan basis", () => {
+  const result = fuelRecommendationForWorkout({
+    workout: {
+      id: "race-personal-hydration",
+      date: "2026-08-21",
+      title: "Halbmarathon Race",
+      type: "Race",
+      raceEvent: true,
+      duration: 139,
+      distance: 21.1,
+    },
+    fuel: [],
+    activities: [{ id: "sweat-test", type: "Run", duration: 120, durationSeconds: 7200 }],
+    reviews: {
+      "sweat-test": {
+        weightBefore: 80,
+        weightAfter: 78.8,
+        drinkMl: 600,
+        urineMl: 0,
+        hydrationThirst: "normal",
+      },
+    },
+    mode: "race",
+  });
+
+  assert.equal(result.target.personalHydration, true);
+  assert.equal(result.target.hydrationSamples, 1);
+  assert.equal(result.target.fluidLowPerHour, 500);
+  assert.equal(result.target.fluidHighPerHour, 700);
+  assert.equal(result.target.fluidPerHour, 500);
+  assert.equal(result.target.fluidTotal, 1200);
+  assert.match(result.rationale, /nicht als Trinkpflicht/);
+});
