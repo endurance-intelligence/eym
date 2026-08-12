@@ -258,18 +258,52 @@ function chooseFuelSegment(segments, minute) {
   })[0];
 }
 
-export function buildRoutePacingPlan({ route, targetDurationMinutes, fuelStrategy = null } = {}) {
+function normalizedPaceOverrides(paceOverrides, segmentCount) {
+  if (!paceOverrides || typeof paceOverrides !== "object") return {};
+  return Object.fromEntries(
+    Object.entries(paceOverrides)
+      .map(([key, value]) => [Number(key), numeric(value)])
+      .filter(([index, pace]) => Number.isInteger(index) && index >= 0 && index < segmentCount && pace >= 120 && pace <= 3600)
+      .map(([index, pace]) => [String(index), Math.round(pace)]),
+  );
+}
+
+export function buildRoutePacingPlan({ route, targetDurationMinutes, fuelStrategy = null, paceOverrides = null } = {}) {
   if (!route?.segments?.length) return null;
   const durationMinutes = numeric(targetDurationMinutes);
   if (!(durationMinutes > 0)) return null;
 
-  const weightedDistance = route.segments.reduce((sum, segment) => sum + numeric(segment.distanceKm) * terrainFactor(segment), 0);
+  const targetSeconds = durationMinutes * 60;
+  const overrides = normalizedPaceOverrides(paceOverrides, route.segments.length);
+  const prepared = route.segments.map((segment, index) => ({
+    segment,
+    distanceKm: Math.max(0, numeric(segment.distanceKm)),
+    factor: terrainFactor(segment),
+    overridePace: numeric(overrides[String(index)]),
+  }));
+  const lockedSeconds = prepared.reduce(
+    (sum, item) => sum + (item.overridePace > 0 ? item.distanceKm * item.overridePace : 0),
+    0,
+  );
+  const unlockedWeightedDistance = prepared.reduce(
+    (sum, item) => sum + (item.overridePace > 0 ? 0 : item.distanceKm * item.factor),
+    0,
+  );
+  const remainingSeconds = targetSeconds - lockedSeconds;
+  const overridesUsable = Object.keys(overrides).length > 0
+    && unlockedWeightedDistance > 0
+    && remainingSeconds > 0;
+  const weightedDistance = prepared.reduce((sum, item) => sum + item.distanceKm * item.factor, 0);
   if (!(weightedDistance > 0)) return null;
-  const secondsPerWeightedKm = durationMinutes * 60 / weightedDistance;
+  const secondsPerWeightedKm = overridesUsable
+    ? remainingSeconds / unlockedWeightedDistance
+    : targetSeconds / weightedDistance;
+
   let cumulativeSeconds = 0;
-  const segments = route.segments.map((segment) => {
-    const factor = terrainFactor(segment);
-    const segmentSeconds = numeric(segment.distanceKm) * factor * secondsPerWeightedKm;
+  const segments = prepared.map(({ segment, distanceKm, factor, overridePace }) => {
+    const manualPace = overridesUsable && overridePace > 0;
+    const paceSecondsPerKm = manualPace ? overridePace : factor * secondsPerWeightedKm;
+    const segmentSeconds = distanceKm * paceSecondsPerKm;
     cumulativeSeconds += segmentSeconds;
     const terrain = terrainClass(segment);
     const copy = terrainCopy(terrain);
@@ -278,9 +312,11 @@ export function buildRoutePacingPlan({ route, targetDurationMinutes, fuelStrateg
       terrain,
       terrainLabel: copy.label,
       cue: copy.cue,
-      paceSecondsPerKm: segment.distanceKm > 0 ? segmentSeconds / segment.distanceKm : 0,
+      paceSecondsPerKm,
       segmentMinutes: segmentSeconds / 60,
       cumulativeMinutes: cumulativeSeconds / 60,
+      manualPace,
+      requestedPaceSecondsPerKm: manualPace ? overridePace : 0,
       fuel: [],
       drinkMl: 0,
       drinkProduct: "",
@@ -299,7 +335,12 @@ export function buildRoutePacingPlan({ route, targetDurationMinutes, fuelStrateg
   return {
     route,
     targetDurationMinutes: durationMinutes,
-    averagePaceSecondsPerKm: route.distanceKm > 0 ? durationMinutes * 60 / route.distanceKm : 0,
+    averagePaceSecondsPerKm: route.distanceKm > 0 ? targetSeconds / route.distanceKm : 0,
+    manualPaceCount: overridesUsable ? Object.keys(overrides).length : 0,
+    paceOverridesApplied: overridesUsable,
+    paceOverrideWarning: Object.keys(overrides).length > 0 && !overridesUsable
+      ? "Die manuellen Paces konnten mit dieser Zielzeit nicht sinnvoll ausgeglichen werden und wurden deshalb ignoriert."
+      : "",
     segments,
   };
 }

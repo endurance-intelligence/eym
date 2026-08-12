@@ -147,3 +147,22 @@ test("race coach exposes route pacing when a GPX profile is available", () => {
   assert.ok(plan.routePlan.segments[0].paceSecondsPerKm > plan.routePlan.segments[1].paceSecondsPerKm);
   assert.ok(Math.abs(plan.routePlan.segments.at(-1).cumulativeMinutes - 12) < 0.01);
 });
+
+test("race coach forwards manual kilometre paces into the route strategy", () => {
+  const routeProfile = {
+    distanceKm: 3,
+    segments: [
+      { startKm: 0, endKm: 1, distanceKm: 1, gainM: 0, lossM: 0, netGradePercent: 0 },
+      { startKm: 1, endKm: 2, distanceKm: 1, gainM: 20, lossM: 0, netGradePercent: 2 },
+      { startKm: 2, endKm: 3, distanceKm: 1, gainM: 0, lossM: 20, netGradePercent: -2 },
+    ],
+  };
+  const plan = buildRaceCoachPlan(
+    { name: "3k", format: "distance", distanceKm: 3, durationMinutes: 15 },
+    { routeProfile, paceOverrides: { 1: 315 } },
+  );
+
+  assert.equal(plan.routePlan.manualPaceCount, 1);
+  assert.equal(Math.round(plan.routePlan.segments[1].paceSecondsPerKm), 315);
+  assert.ok(Math.abs(plan.routePlan.segments.at(-1).cumulativeMinutes - 15) < 0.01);
+});

@@ -61,3 +61,33 @@ test("route mismatch warning stays quiet for normal GPS tolerance", () => {
   assert.equal(routeDistanceWarning({ distanceKm: 9.82 }, 10), "");
   assert.match(routeDistanceWarning({ distanceKm: 8.9 }, 10), /GPX/);
 });
+
+test("manual kilometre pace stays fixed while remaining splits rebalance to the same finish time", () => {
+  const route = parseGpxRoute(SAMPLE_GPX);
+  const baseline = buildRoutePacingPlan({ route, targetDurationMinutes: 24 });
+  const requestedPace = Math.round(baseline.segments[1].paceSecondsPerKm + 15);
+  const adjusted = buildRoutePacingPlan({
+    route,
+    targetDurationMinutes: 24,
+    paceOverrides: { 1: requestedPace },
+  });
+
+  assert.equal(adjusted.manualPaceCount, 1);
+  assert.equal(Math.round(adjusted.segments[1].paceSecondsPerKm), requestedPace);
+  assert.equal(adjusted.segments[1].manualPace, true);
+  assert.ok(Math.abs(adjusted.segments.at(-1).cumulativeMinutes - 24) < 0.01);
+  assert.ok(adjusted.segments.some((segment, index) => index !== 1 && Math.abs(segment.paceSecondsPerKm - baseline.segments[index].paceSecondsPerKm) > 0.1));
+});
+
+test("invalid manual pace overrides fall back to the automatic route plan", () => {
+  const route = parseGpxRoute(SAMPLE_GPX);
+  const plan = buildRoutePacingPlan({
+    route,
+    targetDurationMinutes: 24,
+    paceOverrides: { 1: 20 },
+  });
+
+  assert.equal(plan.manualPaceCount, 0);
+  assert.equal(plan.paceOverrideWarning, "");
+  assert.ok(Math.abs(plan.segments.at(-1).cumulativeMinutes - 24) < 0.01);
+});

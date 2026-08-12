@@ -2165,3 +2165,96 @@
     grid-column: 1 / -1;
   }
 }
+
+/* v3.9.74 – editable kilometre pacing with fixed finish time */
+.race-coach-route-plan-meta {
+  display: grid;
+  justify-items: end;
+  gap: 4px;
+}
+
+.race-coach-route-plan-meta > small {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.race-coach-route-plan-meta .race-coach-text-button {
+  justify-self: end;
+}
+
+.race-coach-route-segments article {
+  grid-template-columns: minmax(105px, .58fr) minmax(175px, .9fr) minmax(145px, .78fr) minmax(115px, .64fr) minmax(230px, 1.55fr);
+}
+
+.race-coach-segment-target {
+  display: grid;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.race-coach-segment-pace-value {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.race-coach-segment-target.manual .race-coach-segment-pace-value strong {
+  color: var(--accent-bright);
+}
+
+.race-coach-segment-target.manual .race-coach-segment-pace-value span {
+  padding: 2px 5px;
+  border: 1px solid var(--accent-border);
+  border-radius: 999px;
+  background: var(--accent-surface);
+  color: var(--accent-bright);
+}
+
+.race-coach-segment-pace-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.race-coach-segment-pace-controls button {
+  min-height: 24px;
+  padding: 3px 7px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--bg-sidebar) 72%, transparent);
+  color: var(--muted-bright);
+  font-size: 8px;
+  font-weight: 850;
+  box-shadow: none;
+}
+
+.race-coach-segment-pace-controls button:hover {
+  border-color: var(--accent-border-strong);
+  background: var(--accent-surface);
+  color: var(--text);
+}
+
+.race-coach-segment-pace-controls button.auto {
+  border-color: var(--accent-border);
+  color: var(--accent-bright);
+}
+
+@media (max-width: 1100px) {
+  .race-coach-route-segments article {
+    grid-template-columns: minmax(100px, .6fr) minmax(175px, .9fr) minmax(145px, .8fr) minmax(115px, .7fr);
+  }
+}
+
+@media (max-width: 760px) {
+  .race-coach-route-plan-meta {
+    justify-items: start;
+  }
+
+  .race-coach-route-plan-meta .race-coach-text-button {
+    justify-self: start;
+  }
+
+  .race-coach-route-segments article {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

@@ -132,8 +132,12 @@ export default function RaceCoach() {
     [effectiveProfile, state],
   );
   const plan = useMemo(
-    () => effectiveProfile ? buildRaceCoachPlan(effectiveProfile, { routeProfile: setup.routeProfile, fuelStrategy: fuelPlan?.strategy }) : null,
-    [effectiveProfile, fuelPlan?.strategy, setup.routeProfile],
+    () => effectiveProfile ? buildRaceCoachPlan(effectiveProfile, {
+      routeProfile: setup.routeProfile,
+      fuelStrategy: fuelPlan?.strategy,
+      paceOverrides: setup.paceOverrides,
+    }) : null,
+    [effectiveProfile, fuelPlan?.strategy, setup.paceOverrides, setup.routeProfile],
   );
   const routeWarning = useMemo(
     () => routeDistanceWarning(setup.routeProfile, plan?.profile?.distanceKm),
@@ -214,13 +218,13 @@ export default function RaceCoach() {
       return;
     }
     setSetupError("");
-    updateSetup({ targetDurationMinutes: Math.round(minutes * 10) / 10 });
+    updateSetup({ targetDurationMinutes: Math.round(minutes * 10) / 10, paceOverrides: {} });
   }
 
   function resetTargetTime() {
     setSetupError("");
     setTargetDrafts((current) => ({ ...current, [sourceKey]: formatRaceDurationInput(source?.profile?.durationMinutes || 0) }));
-    updateSetup({ targetDurationMinutes: 0 });
+    updateSetup({ targetDurationMinutes: 0, paceOverrides: {} });
   }
 
   async function applyGpxText(text, meta = {}) {
@@ -231,7 +235,7 @@ export default function RaceCoach() {
       setSelectedSegmentIndex(null);
       setHoveredSegmentIndex(null);
       setRouteView("map");
-      updateSetup({ routeProfile, routeUrl: meta.url || "" });
+      updateSetup({ routeProfile, routeUrl: meta.url || "", paceOverrides: {} });
       if (meta.url) setRouteUrls((current) => ({ ...current, [sourceKey]: meta.url }));
     } catch (error) {
       setSetupError(error?.message || "GPX konnte nicht gelesen werden.");
@@ -270,7 +274,29 @@ export default function RaceCoach() {
     setRouteUrls((current) => ({ ...current, [sourceKey]: "" }));
     setSelectedSegmentIndex(null);
     setHoveredSegmentIndex(null);
-    updateSetup({ routeProfile: null, routeUrl: "" });
+    updateSetup({ routeProfile: null, routeUrl: "", paceOverrides: {} });
+  }
+
+  function adjustSegmentPace(segmentIndex, deltaSeconds) {
+    const segment = plan?.routePlan?.segments?.[segmentIndex];
+    if (!segment) return;
+    const nextPace = Math.max(120, Math.min(3600, Math.round(Number(segment.paceSecondsPerKm || 0) + deltaSeconds)));
+    updateSetup({
+      paceOverrides: {
+        ...(setup.paceOverrides || {}),
+        [segmentIndex]: nextPace,
+      },
+    });
+  }
+
+  function resetSegmentPace(segmentIndex) {
+    const nextOverrides = { ...(setup.paceOverrides || {}) };
+    delete nextOverrides[segmentIndex];
+    updateSetup({ paceOverrides: nextOverrides });
+  }
+
+  function resetAllSegmentPaces() {
+    updateSetup({ paceOverrides: {} });
   }
 
   if (!source) {
@@ -389,10 +415,14 @@ export default function RaceCoach() {
 
       {plan.routePlan && (
         <section className="race-coach-route-plan">
-          <div className="race-coach-section-heading">
+          <div className="race-coach-section-heading race-coach-route-plan-heading">
             <div><span>Route Intelligence</span><h3>Dein Kilometer-Schlachtplan</h3></div>
-            <small>Gesamt {clockLabel(plan.routePlan.targetDurationMinutes)} · Ø {paceLabel(plan.routePlan.averagePaceSecondsPerKm)}</small>
+            <div className="race-coach-route-plan-meta">
+              <small>Gesamt {clockLabel(plan.routePlan.targetDurationMinutes)} · Ø {paceLabel(plan.routePlan.averagePaceSecondsPerKm)} · Zielzeit bleibt fix</small>
+              {plan.routePlan.manualPaceCount > 0 && <button type="button" className="race-coach-text-button" onClick={resetAllSegmentPaces}>Alle Pace-Anpassungen zurücksetzen</button>}
+            </div>
           </div>
+          {plan.routePlan.paceOverrideWarning && <div className="race-coach-route-warning">⚠ {plan.routePlan.paceOverrideWarning}</div>}
           <div className="race-coach-route-segments">
             {routeRows.map((segment, rowIndex) => {
               if (segment.gap) return <div className="race-coach-route-gap" key={`gap-${rowIndex}`}>… {segment.hidden} weitere Kilometer …</div>;
@@ -419,9 +449,20 @@ export default function RaceCoach() {
                     <span>{numberLabel(segment.startKm, 1)}–{numberLabel(segment.endKm, 1)} km</span>
                     <b>{segmentMarker(segment, segmentIndex, plan.routePlan.segments.length)}</b>
                   </div>
-                  <div className="race-coach-segment-target">
-                    <strong>{paceLabel(segment.paceSecondsPerKm)}</strong>
-                    <span>Zielpace</span>
+                  <div className={`race-coach-segment-target ${segment.manualPace ? "manual" : ""}`}>
+                    <div className="race-coach-segment-pace-value">
+                      <strong>{paceLabel(segment.paceSecondsPerKm)}</strong>
+                      <span>{segment.manualPace ? "manuell" : "Zielpace"}</span>
+                    </div>
+                    <div
+                      className="race-coach-segment-pace-controls"
+                      onClick={(event) => event.stopPropagation()}
+                      onKeyDown={(event) => event.stopPropagation()}
+                    >
+                      <button type="button" onClick={() => adjustSegmentPace(segmentIndex, -5)} title="5 Sekunden pro Kilometer schneller" aria-label={`${segmentMarker(segment, segmentIndex, plan.routePlan.segments.length)} fünf Sekunden pro Kilometer schneller`}>−5 s</button>
+                      <button type="button" onClick={() => adjustSegmentPace(segmentIndex, 5)} title="5 Sekunden pro Kilometer langsamer" aria-label={`${segmentMarker(segment, segmentIndex, plan.routePlan.segments.length)} fünf Sekunden pro Kilometer langsamer`}>+5 s</button>
+                      {segment.manualPace && <button type="button" className="auto" onClick={() => resetSegmentPace(segmentIndex)} title="Diesen Kilometer wieder automatisch berechnen">Auto</button>}
+                    </div>
                   </div>
                   <div className="race-coach-segment-splits">
                     <span><small>Abschnitt</small><b>{clockLabel(segment.segmentMinutes)}</b></span>
@@ -441,7 +482,7 @@ export default function RaceCoach() {
             })}
           </div>
           {(plan.routePlan.segments?.length || 0) > 24 && <button type="button" className="race-coach-route-toggle" onClick={() => setShowAllRoute((current) => !current)}>{showAllRoute ? "Kompakt anzeigen" : `Alle ${plan.routePlan.segments.length} Kilometerabschnitte anzeigen`}</button>}
-          <p className="race-coach-route-note">Die Zielzeit bleibt exakt erhalten. Bergauf darf die Pace bewusst langsamer werden; auf leichteren Passagen wird Zeit kontrolliert zurückgewonnen. Ein Klick auf einen Kilometer hebt denselben Abschnitt auf der Karte hervor.</p>
+          <p className="race-coach-route-note">Die Zielzeit bleibt exakt erhalten. Mit −5 s / +5 s kannst du einzelne Kilometer bewusst schneller oder langsamer festnageln; die übrigen nicht fixierten Splits werden automatisch neu ausbalanciert. „Auto“ gibt einen Kilometer wieder an die Streckenlogik zurück. Ein Klick auf einen Kilometer hebt denselben Abschnitt auf der Karte hervor.</p>
         </section>
       )}
 

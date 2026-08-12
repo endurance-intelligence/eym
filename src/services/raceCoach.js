@@ -195,7 +195,7 @@ export function normalizeRaceCoachStatus(input = {}, profile = {}) {
   };
 }
 
-export function buildRaceCoachPlan(inputProfile = {}, { routeProfile = null, fuelStrategy = null } = {}) {
+export function buildRaceCoachPlan(inputProfile = {}, { routeProfile = null, fuelStrategy = null, paceOverrides = null } = {}) {
   const profile = normalizeRacePrepProfile(inputProfile);
   if (!(profile.durationMinutes > 0)) {
     return { valid: false, profile, error: "Für den Race Coach fehlt eine erwartete Renndauer." };
@@ -213,7 +213,7 @@ export function buildRaceCoachPlan(inputProfile = {}, { routeProfile = null, fue
       ? timeCheckpoints(profile)
       : distanceCheckpoints(profile);
   const routePlan = profile.format === "distance" && routeProfile
-    ? buildRoutePacingPlan({ route: routeProfile, targetDurationMinutes: profile.durationMinutes, fuelStrategy })
+    ? buildRoutePacingPlan({ route: routeProfile, targetDurationMinutes: profile.durationMinutes, fuelStrategy, paceOverrides })
     : null;
 
   return {
