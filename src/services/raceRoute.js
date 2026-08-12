@@ -85,12 +85,21 @@ function elevationTotals(points) {
   return { ascentM: Math.round(ascentM), descentM: Math.round(descentM) };
 }
 
-function downsample(points, maxPoints = 180) {
-  if (points.length <= maxPoints) return points.map((point) => ({ distanceKm: round(point.distanceM / 1000, 3), elevationM: Number.isFinite(point.smoothEle) ? round(point.smoothEle, 1) : null }));
+function compactRoutePoint(point) {
+  return {
+    distanceKm: round(point.distanceM / 1000, 3),
+    elevationM: Number.isFinite(point.smoothEle) ? round(point.smoothEle, 1) : null,
+    lat: round(point.lat, 6),
+    lon: round(point.lon, 6),
+  };
+}
+
+function downsample(points, maxPoints = 600) {
+  if (points.length <= maxPoints) return points.map(compactRoutePoint);
   const step = (points.length - 1) / (maxPoints - 1);
   return Array.from({ length: maxPoints }, (_, index) => {
     const point = points[Math.min(points.length - 1, Math.round(index * step))];
-    return { distanceKm: round(point.distanceM / 1000, 3), elevationM: Number.isFinite(point.smoothEle) ? round(point.smoothEle, 1) : null };
+    return compactRoutePoint(point);
   });
 }
 

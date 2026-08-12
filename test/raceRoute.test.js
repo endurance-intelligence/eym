@@ -24,6 +24,9 @@ test("GPX route parser returns distance, elevation and kilometre segments", () =
   assert.ok(route.descentM > 50);
   assert.ok(route.segments.length >= 4);
   assert.ok(route.profilePoints.length >= 2);
+  assert.ok(Number.isFinite(route.profilePoints[0].lat));
+  assert.ok(Number.isFinite(route.profilePoints[0].lon));
+  assert.ok(route.segments.slice(0, -1).every((segment) => Math.abs(segment.distanceKm - 1) < 0.01));
 });
 
 test("route pacing plan slows climbing kilometres and still lands on target time", () => {

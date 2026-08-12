@@ -4,14 +4,12 @@ import { useApp } from "../context/AppContext";
 import { missionEvents } from "../services/goalPlanning";
 import {
   buildRaceCoachPlan,
-  emptyRaceCoachStatus,
-  evaluateRaceCoach,
   formatRaceDurationInput,
-  normalizeRaceCoachStatus,
   parseRaceDurationInput,
 } from "../services/raceCoach";
 import { buildRacePrepPlan, racePrepProfileFromEvent } from "../services/racePrepPlanner";
 import { parseGpxRoute, routeDistanceWarning } from "../services/raceRoute";
+import RaceStrategyMap from "./RaceStrategyMap";
 import "./FuelPartner.css";
 
 function localDateKey(date = new Date()) {
@@ -40,10 +38,6 @@ function sourceOptions(state) {
   return [...saved, ...events.filter((event) => !saved.some((item) => item.profile.originEventId && item.profile.originEventId === event.profile.originEventId))];
 }
 
-function percent(value) {
-  return `${Math.round(Number(value || 0) * 100)} %`;
-}
-
 function numberLabel(value, digits = 0) {
   return Number(value || 0).toLocaleString("de-DE", { maximumFractionDigits: digits });
 }
@@ -63,7 +57,10 @@ function clockLabel(minutes) {
   return `${mins}:${String(seconds).padStart(2, "0")}`;
 }
 
-function segmentMarker(segment) {
+function segmentMarker(segment, index, total) {
+  const fullKilometre = Math.abs(Number(segment.distanceKm || 0) - 1) < 0.02;
+  if (fullKilometre) return `KM ${index + 1}`;
+  if (index === total - 1) return `KM ${index + 1} · ${numberLabel(segment.distanceKm, 2)} km`;
   return `${numberLabel(segment.startKm, 1)}–${numberLabel(segment.endKm, 1)} km`;
 }
 
@@ -110,6 +107,9 @@ export default function RaceCoach() {
   const [routeUrls, setRouteUrls] = useState({});
   const [setupError, setSetupError] = useState("");
   const [showAllRoute, setShowAllRoute] = useState(false);
+  const [routeView, setRouteView] = useState("map");
+  const [selectedSegmentIndex, setSelectedSegmentIndex] = useState(null);
+  const [hoveredSegmentIndex, setHoveredSegmentIndex] = useState(null);
   const sources = useMemo(() => sourceOptions(state), [state]);
   const requestedSource = searchParams.get("race");
   const source = sources.find((item) => item.key === requestedSource) || sources[0] || null;
@@ -135,14 +135,6 @@ export default function RaceCoach() {
     () => effectiveProfile ? buildRaceCoachPlan(effectiveProfile, { routeProfile: setup.routeProfile, fuelStrategy: fuelPlan?.strategy }) : null,
     [effectiveProfile, fuelPlan?.strategy, setup.routeProfile],
   );
-  const status = useMemo(
-    () => normalizeRaceCoachStatus(storedEntry || emptyRaceCoachStatus(), plan?.profile),
-    [plan?.profile, storedEntry],
-  );
-  const evaluation = useMemo(
-    () => plan?.valid ? evaluateRaceCoach({ plan, status }) : null,
-    [plan, status],
-  );
   const routeWarning = useMemo(
     () => routeDistanceWarning(setup.routeProfile, plan?.profile?.distanceKm),
     [plan?.profile?.distanceKm, setup.routeProfile],
@@ -150,6 +142,7 @@ export default function RaceCoach() {
   const routeRows = compactRouteSegments(plan?.routePlan?.segments || [], showAllRoute);
   const profilePolyline = elevationPolyline(setup.routeProfile);
   const routeTicks = routeDistanceTicks(setup.routeProfile);
+  const activeSegmentIndex = hoveredSegmentIndex ?? selectedSegmentIndex;
 
   useEffect(() => {
     const url = source?.profile?.routeGpxUrl;
@@ -187,25 +180,13 @@ export default function RaceCoach() {
   function selectSource(nextSourceKey) {
     setSetupError("");
     setShowAllRoute(false);
+    setSelectedSegmentIndex(null);
+    setHoveredSegmentIndex(null);
+    setRouteView("map");
     const next = new URLSearchParams(searchParams);
     next.set("view", "coach");
     next.set("race", nextSourceKey);
     setSearchParams(next, { replace: true });
-  }
-
-  function updateStatus(field, value) {
-    if (!sourceKey) return;
-    setState((current) => ({
-      ...current,
-      raceCoachSessions: {
-        ...(current.raceCoachSessions || {}),
-        [sourceKey]: {
-          ...(current.raceCoachSessions?.[sourceKey] || emptyRaceCoachStatus()),
-          [field]: value,
-          updatedAt: new Date().toISOString(),
-        },
-      },
-    }));
   }
 
   function updateSetup(patch) {
@@ -247,6 +228,9 @@ export default function RaceCoach() {
       const routeProfile = parseGpxRoute(text, { name: meta.name || source?.label || "Rennstrecke", source: meta.source || "gpx" });
       setSetupError("");
       setShowAllRoute(false);
+      setSelectedSegmentIndex(null);
+      setHoveredSegmentIndex(null);
+      setRouteView("map");
       updateSetup({ routeProfile, routeUrl: meta.url || "" });
       if (meta.url) setRouteUrls((current) => ({ ...current, [sourceKey]: meta.url }));
     } catch (error) {
@@ -284,26 +268,17 @@ export default function RaceCoach() {
   function removeRoute() {
     setSetupError("");
     setRouteUrls((current) => ({ ...current, [sourceKey]: "" }));
+    setSelectedSegmentIndex(null);
+    setHoveredSegmentIndex(null);
     updateSetup({ routeProfile: null, routeUrl: "" });
-  }
-
-  function resetStatus() {
-    if (!sourceKey) return;
-    setState((current) => {
-      const nextSessions = { ...(current.raceCoachSessions || {}) };
-      const currentEntry = nextSessions[sourceKey];
-      if (currentEntry?.setup) nextSessions[sourceKey] = { setup: currentEntry.setup };
-      else delete nextSessions[sourceKey];
-      return { ...current, raceCoachSessions: nextSessions };
-    });
   }
 
   if (!source) {
     return (
       <div className="race-coach-empty">
-        <p className="eyebrow">Race Coach</p>
+        <p className="eyebrow">Race Strategy</p>
         <h2>Erst Rennen vorbereiten</h2>
-        <p>Lege unter Race Prep ein Rennen an oder hinterlege ein Wettkampfziel. Danach baut der Race Coach daraus Rennplan, Checkpoints und Live-Entscheidungen.</p>
+        <p>Lege unter Race Prep ein Rennen an oder hinterlege ein Wettkampfziel. Danach baut die Race Strategy daraus deinen Schlachtplan.</p>
       </div>
     );
   }
@@ -311,7 +286,7 @@ export default function RaceCoach() {
   if (!plan?.valid) {
     return (
       <div className="race-coach-empty">
-        <p className="eyebrow">Race Coach</p>
+        <p className="eyebrow">Race Strategy</p>
         <h2>{source.label}</h2>
         <p>{plan?.error || "Der Rennplan ist noch nicht vollständig."}</p>
       </div>
@@ -322,9 +297,9 @@ export default function RaceCoach() {
     <div className="race-coach">
       <div className="race-coach-heading">
         <div>
-          <p className="eyebrow">Race Coach</p>
-          <h2>Rennplan ausführen statt spontan reagieren</h2>
-          <p>Zielzeit und Strecke vor dem Start festlegen. Der Coach übersetzt Höhenprofil, Fueling und Rennziel in konkrete Abschnitte.</p>
+          <p className="eyebrow">Race Strategy</p>
+          <h2>Schlachtplan festlegen. Am Renntag nur noch abarbeiten.</h2>
+          <p>Zielzeit und Strecke vor dem Start festlegen. Höhenprofil und Rennziel werden in konkrete Kilometer-Paces übersetzt.</p>
         </div>
         <label>
           Rennen
@@ -336,7 +311,7 @@ export default function RaceCoach() {
 
       <section className="race-coach-setup">
         <div className="race-coach-section-heading">
-          <div><span>Race Setup</span><h3>Zielzeit + echte Strecke statt Durchschnittspause</h3></div>
+          <div><span>Race Setup</span><h3>Zielzeit + echte Strecke statt Durchschnittspace</h3></div>
           <small>{setup.routeProfile ? "GPX analysiert" : "Strecke optional, aber empfohlen"}</small>
         </div>
         <div className="race-coach-setup-grid">
@@ -366,7 +341,7 @@ export default function RaceCoach() {
         {setup.routeProfile && (
           <div className="race-coach-route-card">
             <div className="race-coach-route-head">
-              <div><span>STRECKENPROFIL</span><strong>{setup.routeProfile.name || source.label}</strong><small>{numberLabel(setup.routeProfile.pointCount)} GPX-Punkte</small></div>
+              <div><span>RENNSTRECKE</span><strong>{setup.routeProfile.name || source.label}</strong><small>{numberLabel(setup.routeProfile.pointCount)} GPX-Punkte</small></div>
               <div className="race-coach-route-metrics">
                 <span><b>{numberLabel(setup.routeProfile.distanceKm, 2)} km</b> Strecke</span>
                 <span><b>+{numberLabel(setup.routeProfile.ascentM)} m</b> bergauf</span>
@@ -374,7 +349,25 @@ export default function RaceCoach() {
               </div>
               <button type="button" className="secondary" onClick={removeRoute}>Strecke entfernen</button>
             </div>
-            {profilePolyline && (
+
+            <div className="race-coach-route-viewbar">
+              <div className="race-coach-route-tabs" role="tablist" aria-label="Streckenansicht">
+                <button type="button" className={routeView === "map" ? "active" : ""} onClick={() => setRouteView("map")}>Karte</button>
+                <button type="button" className={routeView === "elevation" ? "active" : ""} onClick={() => setRouteView("elevation")}>Höhenprofil</button>
+              </div>
+              <small>{activeSegmentIndex == null ? "Kilometer auf Karte oder unten auswählen" : `KM ${activeSegmentIndex + 1} hervorgehoben`}</small>
+            </div>
+
+            {routeView === "map" && (
+              <RaceStrategyMap
+                route={setup.routeProfile}
+                segments={plan.routePlan?.segments || []}
+                activeSegmentIndex={activeSegmentIndex}
+                onSegmentSelect={setSelectedSegmentIndex}
+              />
+            )}
+
+            {routeView === "elevation" && profilePolyline && (
               <div className="race-coach-elevation-wrap">
                 <svg className="race-coach-elevation" viewBox="0 0 1000 130" preserveAspectRatio="none" role="img" aria-label="Höhenprofil der Rennstrecke"><polyline points={profilePolyline} /></svg>
                 <div className="race-coach-elevation-axis" aria-hidden="true">
@@ -391,125 +384,77 @@ export default function RaceCoach() {
         <article><span>Rennen</span><strong>{setup.routeProfile ? `${numberLabel(setup.routeProfile.distanceKm, 2)} km` : plan.summary.distance}</strong><small>{source.label}</small></article>
         <article><span>Zielzeit</span><strong>{plan.summary.duration}</strong><small>{setup.targetDurationMinutes > 0 ? "von dir festgelegt" : plan.profile.durationEstimated ? "aus Race Prep geschätzt" : "aus Race Prep"}</small></article>
         <article><span>{plan.profile.format === "loop" ? "Starttakt" : setup.routeProfile ? "Ø Ziel-Schnitt" : "Gesamt-Schnitt"}</span><strong>{plan.profile.format === "loop" ? plan.summary.loopInterval : plan.routePlan ? paceLabel(plan.routePlan.averagePaceSecondsPerKm) : plan.summary.pace}</strong><small>{plan.routePlan ? "Splits werden ans Profil angepasst" : "Race-Plan"}</small></article>
-        <article className={`race-coach-status ${evaluation?.tone || "hold"}`}><span>Live-Status</span><strong>{evaluation?.headline || "Plan halten"}</strong><small>{evaluation?.position}</small></article>
+        <article className="race-coach-strategy-status"><span>Strategie</span><strong>{plan.routePlan ? `${plan.routePlan.segments.length} Splits` : "Basisplan"}</strong><small>{plan.routePlan ? "Kilometerweise vorbereitet" : "GPX ergänzt die exakten Splits"}</small></article>
       </div>
 
       {plan.routePlan && (
         <section className="race-coach-route-plan">
           <div className="race-coach-section-heading">
-            <div><span>Route Intelligence</span><h3>Konkreter Kilometerplan aus Höhenprofil + Zielzeit</h3></div>
-            <small>Summe = {clockLabel(plan.routePlan.targetDurationMinutes)}</small>
+            <div><span>Route Intelligence</span><h3>Dein Kilometer-Schlachtplan</h3></div>
+            <small>Gesamt {clockLabel(plan.routePlan.targetDurationMinutes)} · Ø {paceLabel(plan.routePlan.averagePaceSecondsPerKm)}</small>
           </div>
           <div className="race-coach-route-segments">
-            {routeRows.map((segment, index) => segment.gap ? (
-              <div className="race-coach-route-gap" key={`gap-${index}`}>… {segment.hidden} weitere Kilometer …</div>
-            ) : (
-              <article className={`terrain-${segment.terrain}`} key={`${segment.startKm}-${segment.endKm}`}>
-                <div className="race-coach-segment-marker"><span>{segmentMarker(segment)}</span><b>{segment.terrainLabel}</b></div>
-                <div className="race-coach-segment-target"><strong>{paceLabel(segment.paceSecondsPerKm)}</strong><span>Soll {clockLabel(segment.cumulativeMinutes)}</span></div>
-                <div className="race-coach-segment-elevation"><span>+{numberLabel(segment.gainM)} m</span><span>−{numberLabel(segment.lossM)} m</span></div>
-                <p>{segment.cue}</p>
-                {(segment.drinkMl > 0 || segment.fuel.length > 0) && <div className="race-coach-segment-fuel">
-                  {segment.drinkMl > 0 && <span>💧 {segment.drinkMl} ml{segment.drinkProduct ? ` · ${segment.drinkProduct}` : ""}</span>}
-                  {segment.fuel.map((fuel, fuelIndex) => <span key={`${fuel.product}-${fuelIndex}`}>⚡ {fuel.product}</span>)}
-                </div>}
-              </article>
-            ))}
+            {routeRows.map((segment, rowIndex) => {
+              if (segment.gap) return <div className="race-coach-route-gap" key={`gap-${rowIndex}`}>… {segment.hidden} weitere Kilometer …</div>;
+              const segmentIndex = plan.routePlan.segments.indexOf(segment);
+              const active = activeSegmentIndex === segmentIndex;
+              return (
+                <article
+                  className={`terrain-${segment.terrain} ${active ? "active" : ""}`}
+                  key={`${segment.startKm}-${segment.endKm}`}
+                  onMouseEnter={() => setHoveredSegmentIndex(segmentIndex)}
+                  onMouseLeave={() => setHoveredSegmentIndex(null)}
+                  onClick={() => setSelectedSegmentIndex((current) => current === segmentIndex ? null : segmentIndex)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      setSelectedSegmentIndex((current) => current === segmentIndex ? null : segmentIndex);
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={selectedSegmentIndex === segmentIndex}
+                >
+                  <div className="race-coach-segment-marker">
+                    <span>{numberLabel(segment.startKm, 1)}–{numberLabel(segment.endKm, 1)} km</span>
+                    <b>{segmentMarker(segment, segmentIndex, plan.routePlan.segments.length)}</b>
+                  </div>
+                  <div className="race-coach-segment-target">
+                    <strong>{paceLabel(segment.paceSecondsPerKm)}</strong>
+                    <span>Zielpace</span>
+                  </div>
+                  <div className="race-coach-segment-splits">
+                    <span><small>Abschnitt</small><b>{clockLabel(segment.segmentMinutes)}</b></span>
+                    <span><small>Gesamt</small><b>{clockLabel(segment.cumulativeMinutes)}</b></span>
+                  </div>
+                  <div className="race-coach-segment-terrain">
+                    <b>{segment.terrainLabel}</b>
+                    <span>+{numberLabel(segment.gainM)} m · −{numberLabel(segment.lossM)} m</span>
+                  </div>
+                  <p>{segment.cue}</p>
+                  {(segment.drinkMl > 0 || segment.fuel.length > 0) && <div className="race-coach-segment-fuel">
+                    {segment.drinkMl > 0 && <span>💧 {segment.drinkMl} ml{segment.drinkProduct ? ` · ${segment.drinkProduct}` : ""}</span>}
+                    {segment.fuel.map((fuel, fuelIndex) => <span key={`${fuel.product}-${fuelIndex}`}>⚡ {fuel.product}</span>)}
+                  </div>}
+                </article>
+              );
+            })}
           </div>
-          {(plan.routePlan.segments?.length || 0) > 24 && <button type="button" className="race-coach-route-toggle" onClick={() => setShowAllRoute((current) => !current)}>{showAllRoute ? "Kompakt anzeigen" : `Alle ${plan.routePlan.segments.length} Streckenabschnitte anzeigen`}</button>}
-          <p className="race-coach-route-note">Die Split-Paces sind eine profilorientierte Rennplanung: bergauf wird Zeit bewusst zugelassen, auf flachen/abfallenden Passagen wird sie kontrolliert zurückgewonnen. Im Rennen bleiben RPE, Technik und Sicherheit über einer einzelnen Pace-Zahl.</p>
+          {(plan.routePlan.segments?.length || 0) > 24 && <button type="button" className="race-coach-route-toggle" onClick={() => setShowAllRoute((current) => !current)}>{showAllRoute ? "Kompakt anzeigen" : `Alle ${plan.routePlan.segments.length} Kilometerabschnitte anzeigen`}</button>}
+          <p className="race-coach-route-note">Die Zielzeit bleibt exakt erhalten. Bergauf darf die Pace bewusst langsamer werden; auf leichteren Passagen wird Zeit kontrolliert zurückgewonnen. Ein Klick auf einen Kilometer hebt denselben Abschnitt auf der Karte hervor.</p>
         </section>
       )}
 
       <section className="race-coach-blueprint">
-        <div className="race-coach-section-heading"><div><span>Race Blueprint</span><h3>Vorher festgelegte Rennphasen</h3></div><small>Keine spontane Pace-Jagd</small></div>
+        <div className="race-coach-section-heading"><div><span>Race Blueprint</span><h3>Die vier Rennphasen hinter den Kilometerzahlen</h3></div><small>Plan statt spontane Pace-Jagd</small></div>
         <div className="race-coach-phase-grid">
           {plan.phases.map((phase) => (
-            <article className={evaluation?.phase === phase.key ? "active" : ""} key={phase.key}>
+            <article key={phase.key}>
               <span>{phase.range}</span>
               <h4>{phase.title}</h4>
               <p>{phase.detail}</p>
             </article>
           ))}
-        </div>
-      </section>
-
-      <div className="race-coach-live-grid">
-        <section className="race-coach-live">
-          <div className="race-coach-section-heading"><div><span>Live Check</span><h3>Was ist gerade wirklich los?</h3></div><button type="button" className="secondary" onClick={resetStatus}>Status zurücksetzen</button></div>
-          <div className="race-coach-live-form">
-            <label>
-              Rennzeit bisher (min)
-              <input type="number" min="0" step="1" value={status.elapsedMinutes || ""} onChange={(event) => updateStatus("elapsedMinutes", event.target.value)} />
-            </label>
-            {plan.profile.format === "loop" ? <>
-              <label>
-                Aktuelle Runde
-                <input type="number" min="1" max={plan.profile.rounds} step="1" value={status.currentRound} onChange={(event) => updateStatus("currentRound", event.target.value)} />
-              </label>
-              <label>
-                Letzte Runde Laufzeit (min)
-                <input type="number" min="0" step="0.1" value={status.lastLoopMinutes || ""} onChange={(event) => updateStatus("lastLoopMinutes", event.target.value)} />
-              </label>
-            </> : (
-              <label>
-                Distanz bisher (km)
-                <input type="number" min="0" step="0.1" value={status.distanceKm || ""} onChange={(event) => updateStatus("distanceKm", event.target.value)} />
-              </label>
-            )}
-            <label>
-              RPE aktuell
-              <select value={status.rpe} onChange={(event) => updateStatus("rpe", event.target.value)}>
-                {Array.from({ length: 10 }, (_, index) => index + 1).map((value) => <option value={value} key={value}>{value} / 10</option>)}
-              </select>
-            </label>
-            <label>
-              Beine
-              <select value={status.legs} onChange={(event) => updateStatus("legs", event.target.value)}>
-                <option value="fresh">Frisch / locker</option>
-                <option value="okay">Okay</option>
-                <option value="heavy">Schwer</option>
-              </select>
-            </label>
-            <label>
-              Magen
-              <select value={status.stomach} onChange={(event) => updateStatus("stomach", event.target.value)}>
-                <option value="okay">Gut</option>
-                <option value="notable">Auffällig</option>
-                <option value="problem">Problematisch</option>
-              </select>
-            </label>
-            <label>
-              Fueling
-              <select value={status.fueling} onChange={(event) => updateStatus("fueling", event.target.value)}>
-                <option value="on-plan">Im Plan</option>
-                <option value="behind">Hinter Plan</option>
-                <option value="problem">Nicht verträglich</option>
-              </select>
-            </label>
-          </div>
-        </section>
-
-        <section className={`race-coach-decision ${evaluation?.tone || "hold"}`}>
-          <span>Coach-Entscheidung · {evaluation?.phaseData?.range}</span>
-          <h3>{evaluation?.headline}</h3>
-          <strong>{evaluation?.position}</strong>
-          <p>{evaluation?.phaseData?.title}: {evaluation?.phaseData?.detail}</p>
-          <div className="race-coach-actions">
-            {evaluation?.actions.map((action) => <div key={action}>→ {action}</div>)}
-          </div>
-          {evaluation?.nextCheckpoint && <small>Nächster Checkpoint: <b>{evaluation.nextCheckpoint.marker}</b> · Plan {evaluation.nextCheckpoint.target}</small>}
-        </section>
-      </div>
-
-      <section className="race-coach-checkpoints">
-        <div className="race-coach-section-heading"><div><span>Checkpoints</span><h3>Planposition statt Bauchgefühl</h3></div><small>Aktuell {percent(evaluation?.progress)}</small></div>
-        <div className="race-coach-checkpoint-list">
-          {plan.checkpoints.map((checkpoint) => {
-            const done = checkpoint.fraction <= Number(evaluation?.progress || 0) + 0.001;
-            const next = checkpoint.key === evaluation?.nextCheckpoint?.key;
-            return <article className={`${done ? "done" : ""} ${next ? "next" : ""}`} key={checkpoint.key}><span>{checkpoint.marker}</span><strong>{checkpoint.target}</strong><small>{done ? "erreicht" : next ? "als Nächstes" : "geplant"}</small></article>;
-          })}
         </div>
       </section>
     </div>

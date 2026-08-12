@@ -1906,3 +1906,262 @@
 .race-prep-no-schedule { display:grid; gap:5px; padding:12px; border:1px dashed var(--border); border-radius:11px; background:var(--bg-input); }
 .race-prep-no-schedule b { color:var(--text); font-size:11px; }
 .race-prep-no-schedule span { color:var(--muted-bright); font-size:10px; line-height:1.45; }
+
+/* v3.9.73 – map-first Race Strategy and kilometre-by-kilometre pacing */
+.race-coach-strategy-status {
+  border-color: var(--success-border) !important;
+  background: color-mix(in srgb, var(--success) 6%, var(--bg-input)) !important;
+}
+
+.race-coach-route-viewbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.race-coach-route-viewbar > small {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.race-coach-route-tabs {
+  display: inline-flex;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-input);
+}
+
+.race-coach-route-tabs button {
+  min-height: 29px;
+  padding: 5px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted-bright);
+  font-size: 9px;
+  font-weight: 850;
+  box-shadow: none;
+}
+
+.race-coach-route-tabs button.active {
+  background: var(--accent-surface-strong);
+  color: var(--text);
+}
+
+.race-strategy-map {
+  width: 100%;
+  height: 390px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-input);
+  overflow: hidden;
+  z-index: 0;
+}
+
+.race-strategy-map-missing {
+  display: grid;
+  gap: 4px;
+  min-height: 170px;
+  place-content: center;
+  padding: 22px;
+  border: 1px dashed var(--accent-border);
+  border-radius: 12px;
+  background: var(--bg-input);
+  text-align: center;
+}
+
+.race-strategy-map-missing strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.race-strategy-map-missing span {
+  max-width: 560px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.race-strategy-map .leaflet-control-attribution {
+  background: color-mix(in srgb, var(--bg-sidebar) 88%, transparent);
+  color: #323232;
+  font-size: 9px;
+}
+
+.race-strategy-map .leaflet-bar {
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 8px 20px #0005;
+}
+
+.race-strategy-map .leaflet-bar a {
+  border-color: var(--border);
+  background: var(--bg-sidebar);
+  color: var(--text);
+}
+
+.race-strategy-map .leaflet-bar a:hover {
+  background: var(--surface-strong);
+  color: var(--accent-bright);
+}
+
+.race-strategy-map .race-strategy-km-label {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin: 0 !important;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #241435;
+  font-size: 9px;
+  font-weight: 950;
+  line-height: 20px;
+  text-align: center;
+  box-shadow: none;
+}
+
+.race-strategy-map .race-strategy-km-label::before {
+  display: none;
+}
+
+.race-coach-route-segments {
+  gap: 8px;
+}
+
+.race-coach-route-segments article {
+  grid-template-columns: minmax(105px, .62fr) minmax(132px, .7fr) minmax(145px, .8fr) minmax(115px, .68fr) minmax(250px, 1.7fr);
+  gap: 12px;
+  padding: 12px 13px;
+  cursor: pointer;
+  transition: border-color .15s ease, background .15s ease, transform .15s ease, box-shadow .15s ease;
+}
+
+.race-coach-route-segments article:hover,
+.race-coach-route-segments article.active {
+  border-color: var(--accent-border-strong);
+  background: color-mix(in srgb, var(--accent-surface) 42%, var(--bg-input));
+  box-shadow: 0 8px 22px rgba(0,0,0,.13);
+}
+
+.race-coach-route-segments article.active {
+  transform: translateX(2px);
+}
+
+.race-coach-segment-marker {
+  gap: 3px;
+}
+
+.race-coach-segment-marker span {
+  color: var(--muted);
+  font-size: 8px;
+}
+
+.race-coach-segment-marker b {
+  color: var(--text);
+  font-size: 14px;
+  letter-spacing: -.01em;
+}
+
+.race-coach-segment-target {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.race-coach-segment-target strong {
+  color: var(--text);
+  font-size: 20px;
+  letter-spacing: -.04em;
+}
+
+.race-coach-segment-target span {
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.race-coach-segment-splits {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.race-coach-segment-splits > span {
+  display: grid;
+  gap: 1px;
+  padding: 6px 7px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-sidebar) 55%, transparent);
+}
+
+.race-coach-segment-splits small,
+.race-coach-segment-terrain span {
+  color: var(--muted);
+  font-size: 8px;
+}
+
+.race-coach-segment-splits b,
+.race-coach-segment-terrain b {
+  color: var(--text);
+  font-size: 10px;
+}
+
+.race-coach-segment-terrain {
+  display: grid;
+  gap: 3px;
+}
+
+.race-coach-route-segments article > p {
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.race-coach-segment-fuel {
+  grid-column: 1 / -1;
+  justify-content: flex-start;
+  max-width: none;
+  padding-top: 2px;
+}
+
+@media (max-width: 1100px) {
+  .race-coach-route-segments article {
+    grid-template-columns: minmax(100px, .6fr) minmax(125px, .7fr) minmax(145px, .8fr) minmax(115px, .7fr);
+  }
+
+  .race-coach-route-segments article > p {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 760px) {
+  .race-coach-route-viewbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .race-strategy-map {
+    height: 300px;
+  }
+
+  .race-coach-route-segments article {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .race-coach-segment-target strong {
+    font-size: 18px;
+  }
+
+  .race-coach-segment-splits,
+  .race-coach-route-segments article > p,
+  .race-coach-segment-fuel {
+    grid-column: 1 / -1;
+  }
+}
