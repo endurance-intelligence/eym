@@ -9,6 +9,11 @@ import {
 } from "../services/raceCoach";
 import { buildRacePrepPlan, racePrepProfileFromEvent } from "../services/racePrepPlanner";
 import { parseGpxRoute, routeDistanceWarning } from "../services/raceRoute";
+import {
+  buildGarminRaceWorkout,
+  encodeGarminRaceWorkoutFit,
+  garminRaceWorkoutFilename,
+} from "../services/garminRaceWorkout";
 import RaceStrategyMap from "./RaceStrategyMap";
 import "./FuelPartner.css";
 
@@ -100,6 +105,15 @@ function compactRouteSegments(segments, showAll) {
   ];
 }
 
+function compactGarminSteps(steps) {
+  if (steps.length <= 12) return steps;
+  return [
+    ...steps.slice(0, 7),
+    { gap: true, hidden: steps.length - 10 },
+    ...steps.slice(-3),
+  ];
+}
+
 export default function RaceCoach() {
   const { state, setState } = useApp();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -110,6 +124,7 @@ export default function RaceCoach() {
   const [routeView, setRouteView] = useState("map");
   const [selectedSegmentIndex, setSelectedSegmentIndex] = useState(null);
   const [hoveredSegmentIndex, setHoveredSegmentIndex] = useState(null);
+  const [garminExportMessage, setGarminExportMessage] = useState("");
   const sources = useMemo(() => sourceOptions(state), [state]);
   const requestedSource = searchParams.get("race");
   const source = sources.find((item) => item.key === requestedSource) || sources[0] || null;
@@ -144,6 +159,13 @@ export default function RaceCoach() {
     [plan?.profile?.distanceKm, setup.routeProfile],
   );
   const routeRows = compactRouteSegments(plan?.routePlan?.segments || [], showAllRoute);
+  const garminTolerance = Math.max(1, Number(setup.garminPaceToleranceSeconds || 10));
+  const garminWorkout = plan?.routePlan ? buildGarminRaceWorkout({
+    routePlan: plan.routePlan,
+    raceName: source?.label || setup.routeProfile?.name || "Race Strategy",
+    paceToleranceSeconds: garminTolerance,
+  }) : null;
+  const garminSteps = compactGarminSteps(garminWorkout?.steps || []);
   const profilePolyline = elevationPolyline(setup.routeProfile);
   const routeTicks = routeDistanceTicks(setup.routeProfile);
   const activeSegmentIndex = hoveredSegmentIndex ?? selectedSegmentIndex;
@@ -297,6 +319,25 @@ export default function RaceCoach() {
 
   function resetAllSegmentPaces() {
     updateSetup({ paceOverrides: {} });
+  }
+
+  function downloadGarminWorkout() {
+    if (!garminWorkout) return;
+    try {
+      const bytes = encodeGarminRaceWorkoutFit(garminWorkout);
+      const blob = new Blob([bytes], { type: "application/octet-stream" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = garminRaceWorkoutFilename(garminWorkout);
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+      setGarminExportMessage(`FIT erstellt · ${garminWorkout.steps.length} Schritte · ${garminWorkout.paceToleranceSeconds} s Pace-Korridor`);
+    } catch (error) {
+      setGarminExportMessage(error?.message || "Garmin-FIT konnte nicht erstellt werden.");
+    }
   }
 
   if (!source) {
@@ -483,6 +524,63 @@ export default function RaceCoach() {
           </div>
           {(plan.routePlan.segments?.length || 0) > 24 && <button type="button" className="race-coach-route-toggle" onClick={() => setShowAllRoute((current) => !current)}>{showAllRoute ? "Kompakt anzeigen" : `Alle ${plan.routePlan.segments.length} Kilometerabschnitte anzeigen`}</button>}
           <p className="race-coach-route-note">Die Zielzeit bleibt exakt erhalten. Mit −5 s / +5 s kannst du einzelne Kilometer bewusst schneller oder langsamer festnageln; die übrigen nicht fixierten Splits werden automatisch neu ausbalanciert. „Auto“ gibt einen Kilometer wieder an die Streckenlogik zurück. Ein Klick auf einen Kilometer hebt denselben Abschnitt auf der Karte hervor.</p>
+        </section>
+      )}
+
+      {garminWorkout && (
+        <section className="race-coach-garmin-export">
+          <div className="race-coach-section-heading">
+            <div><span>Garmin Export</span><h3>Schlachtplan als strukturiertes Lauf-Workout</h3></div>
+            <small>FIT · Distanzschritte · Pace-Ziele</small>
+          </div>
+
+          <div className="race-coach-garmin-card">
+            <div className="race-coach-garmin-copy">
+              <span className="race-coach-garmin-badge">GARMIN FIT WORKOUT</span>
+              <h4>Jeder Kilometer bekommt sein eigenes Pace-Ziel auf der Uhr.</h4>
+              <p>Die finalen Splits aus deinem Schlachtplan werden 1:1 als Distanzschritte übernommen. Die Uhr bekommt pro Abschnitt einen kleinen Pace-Korridor, damit sie dich führt, ohne bei jeder GPS-Schwankung sofort zu nerven.</p>
+            </div>
+
+            <div className="race-coach-garmin-metrics">
+              <span><small>Schritte</small><b>{garminWorkout.steps.length}</b></span>
+              <span><small>Distanz</small><b>{numberLabel(garminWorkout.totalDistanceM / 1000, 2)} km</b></span>
+              <span><small>Zielzeit</small><b>{clockLabel(garminWorkout.targetDurationMinutes)}</b></span>
+              <label>
+                <small>Pace-Korridor</small>
+                <select
+                  value={garminTolerance}
+                  onChange={(event) => {
+                    setGarminExportMessage("");
+                    updateSetup({ garminPaceToleranceSeconds: Number(event.target.value) });
+                  }}
+                >
+                  <option value={5}>± 5 s/km · eng</option>
+                  <option value={10}>± 10 s/km · empfohlen</option>
+                  <option value={15}>± 15 s/km · entspannt</option>
+                  <option value={20}>± 20 s/km · wenig Alarme</option>
+                </select>
+              </label>
+            </div>
+
+            <div className="race-coach-garmin-preview" aria-label="Garmin Workout Vorschau">
+              {garminSteps.map((step, index) => step.gap
+                ? <span className="race-coach-garmin-gap" key={`garmin-gap-${index}`}>+{step.hidden}</span>
+                : <span className="race-coach-garmin-step" key={step.index}>
+                    <b>{step.index + 1}</b>
+                    <small>{paceLabel(step.paceFastSecondsPerKm).replace("/km", "")}–{paceLabel(step.paceSlowSecondsPerKm)}</small>
+                  </span>)}
+            </div>
+
+            <div className="race-coach-garmin-actions">
+              <button type="button" onClick={downloadGarminWorkout} disabled={!garminWorkout.compatible}>FIT Workout herunterladen</button>
+              <div>
+                <b>{garminWorkout.compatible ? "Bereit für Garmin" : "Noch nicht exportierbar"}</b>
+                <small>{garminWorkout.compatible ? `Maximal ${garminWorkout.maxSteps} Schritte pro Garmin-Workout.` : garminWorkout.compatibilityMessage}</small>
+              </div>
+            </div>
+            {garminExportMessage && <div className="race-coach-garmin-status">{garminExportMessage}</div>}
+            <p className="race-coach-garmin-note"><b>Wichtig:</b> Das ist ein echtes strukturiertes FIT-Workout, aber noch kein PacePro-File. Der spätere 1-Klick-Sync zu Garmin Connect kann auf derselben Struktur über die Garmin Training API aufsetzen.</p>
+          </div>
         </section>
       )}
 

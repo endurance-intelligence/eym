@@ -2258,3 +2258,203 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* v3.9.75 – Garmin FIT race-workout export */
+.race-coach-garmin-export {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--accent-border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--bg-sidebar) 88%, transparent);
+}
+
+.race-coach-garmin-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: var(--bg-input);
+}
+
+.race-coach-garmin-copy {
+  display: grid;
+  gap: 6px;
+}
+
+.race-coach-garmin-badge {
+  width: fit-content;
+  padding: 4px 7px;
+  border: 1px solid var(--accent-border);
+  border-radius: 999px;
+  background: var(--accent-surface);
+  color: var(--accent-bright);
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .08em;
+}
+
+.race-coach-garmin-copy h4 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.race-coach-garmin-copy p {
+  max-width: 900px;
+  margin: 0;
+  color: var(--muted-bright);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.race-coach-garmin-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(105px, .55fr)) minmax(210px, 1fr);
+  gap: 8px;
+}
+
+.race-coach-garmin-metrics > span,
+.race-coach-garmin-metrics > label {
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  min-height: 58px;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-sidebar) 70%, transparent);
+}
+
+.race-coach-garmin-metrics small {
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.race-coach-garmin-metrics b {
+  font-size: 14px;
+}
+
+.race-coach-garmin-metrics select {
+  min-height: 30px;
+  padding: 5px 8px;
+  font-size: 9px;
+}
+
+.race-coach-garmin-preview {
+  display: flex;
+  gap: 6px;
+  padding: 10px;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--bg-sidebar) 58%, transparent);
+}
+
+.race-coach-garmin-step,
+.race-coach-garmin-gap {
+  flex: 0 0 auto;
+  min-width: 92px;
+  padding: 7px 8px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--bg-input);
+}
+
+.race-coach-garmin-step {
+  display: grid;
+  gap: 2px;
+}
+
+.race-coach-garmin-step b {
+  color: var(--accent-bright);
+  font-size: 10px;
+}
+
+.race-coach-garmin-step small {
+  color: var(--muted-bright);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.race-coach-garmin-gap {
+  display: grid;
+  place-items: center;
+  min-width: 50px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 850;
+}
+
+.race-coach-garmin-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.race-coach-garmin-actions > button {
+  min-height: 38px;
+  padding-inline: 16px;
+}
+
+.race-coach-garmin-actions > div {
+  display: grid;
+  gap: 2px;
+}
+
+.race-coach-garmin-actions > div b {
+  font-size: 10px;
+}
+
+.race-coach-garmin-actions > div small {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.race-coach-garmin-status {
+  width: fit-content;
+  padding: 6px 8px;
+  border: 1px solid var(--success-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--success) 10%, transparent);
+  color: var(--muted-bright);
+  font-size: 9px;
+  font-weight: 750;
+}
+
+.race-coach-garmin-note {
+  margin: 0;
+  padding-top: 9px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.race-coach-garmin-note b {
+  color: var(--muted-bright);
+}
+
+@media (max-width: 900px) {
+  .race-coach-garmin-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .race-coach-garmin-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .race-coach-garmin-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .race-coach-garmin-actions > button {
+    width: 100%;
+  }
+}
