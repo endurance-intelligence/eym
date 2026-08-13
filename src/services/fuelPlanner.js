@@ -3,6 +3,7 @@ import {
   defaultConsumptionUnit,
   fuelDisplayName,
   nutritionForConsumption,
+  usesMixedDrinkTracking,
 } from "./fuelNutrition.js";
 import { hydration } from "./insights.js";
 
@@ -261,11 +262,10 @@ function productHistoryScore(item, experience) {
 }
 
 function isPreparedDrink(item) {
-  if (numeric(item?.preparedVolumeMl) > 0) return true;
-  const category = String(item?.category || "");
-  return ["Drink Mix", "Elektrolyte"].includes(category)
-    && item?.servingUnit === "ml"
-    && numeric(item?.servingQuantity) > 0;
+  // A serving size in ml describes the product portion/package, not the amount
+  // of drink that one portion prepares. Only an explicit prepared volume makes
+  // a Fuel-Lab item eligible for automatic hydration planning.
+  return usesMixedDrinkTracking(item);
 }
 
 function productScore(item, experience, kind, targetCarbs) {
@@ -333,8 +333,14 @@ function chooseConsumption({
 }) {
   const active = (Array.isArray(fuel) ? fuel : []).filter((item) => !item.archived);
   const nonCaffeinated = active.filter((item) => numeric(item.caffeine) <= 0);
+  const preparedDrinks = nonCaffeinated.filter((item) => (
+    isPreparedDrink(item) && (numeric(item.carbs) > 0 || numeric(item.sodium) > 0)
+  ));
+  const eligibleDrinks = targetCarbs > 0
+    ? preparedDrinks
+    : preparedDrinks.filter((item) => numeric(item.carbs) <= 0);
   const drinkCandidates = rankProducts(
-    nonCaffeinated.filter((item) => isPreparedDrink(item) && (numeric(item.carbs) > 0 || numeric(item.sodium) > 0)),
+    eligibleDrinks,
     experience,
     "drink",
     targetCarbs,
@@ -391,7 +397,21 @@ function chooseConsumption({
   }
 
   if (fluidTotal > 0 && !selectedDrink) {
-    warnings.push("Für die Trinkmenge fehlt ein passend zubereitetes Getränk im Fuel Lab. Wasser oder Elektrolytgetränk separat einplanen.");
+    const carbDrinkWasSkipped = targetCarbs <= 0
+      && preparedDrinks.some((item) => numeric(item.carbs) > 0);
+    const ambiguousDrink = nonCaffeinated.find((item) => (
+      !isPreparedDrink(item)
+      && ["Drink Mix", "Elektrolyte"].includes(String(item?.category || ""))
+      && item?.servingUnit === "ml"
+      && numeric(item?.servingQuantity) > 0
+    ));
+    if (carbDrinkWasSkipped) {
+      warnings.push("Für diese Einheit sind Kohlenhydrate nicht nötig. Kohlenhydrathaltige Sportdrinks werden deshalb nicht automatisch gewählt; Wasser oder einen kohlenhydratfreien Elektrolyt-Drink verwenden.");
+    } else if (ambiguousDrink) {
+      warnings.push(`${fuelDisplayName(ambiguousDrink)} hat eine Portionsgröße in ml, aber kein hinterlegtes Misch-/Trinkvolumen. Das Produkt wird deshalb nicht als fertiges Getränk hochgerechnet; Wasser oder Elektrolytgetränk separat einplanen.`);
+    } else {
+      warnings.push("Für die Trinkmenge fehlt ein passend zubereitetes Getränk im Fuel Lab. Wasser oder Elektrolytgetränk separat einplanen.");
+    }
   }
   if (targetCarbs > 0 && !carbCandidates.length && drinkCarbs < targetCarbs * 0.8) {
     const caffeinatedOnly = active.some((item) => numeric(item.carbs) > 0 && numeric(item.caffeine) > 0);
@@ -503,12 +523,20 @@ function packSummary(pack) {
   ].filter(Boolean).join(" + ") || "Nichts erforderlich";
 }
 
-function confidenceFor(consumption, experience) {
+function confidenceFor(consumption, experience, { personalHydration = false, hydrationSamples = 0 } = {}) {
   const linked = consumption
     .map((item) => experience.productStats.get(item.fuelItemId))
     .filter(Boolean);
   const eventSuccesses = linked.reduce((sum, item) => sum + item.eventSuccesses, 0);
   const successes = linked.reduce((sum, item) => sum + item.successes, 0);
+
+  if (!linked.length && personalHydration && hydrationSamples > 0) {
+    return {
+      key: "personal",
+      label: "Mit persönlichen Hydration-Daten",
+      detail: `${hydrationSamples} verlässliche Hydration-Messung${hydrationSamples === 1 ? "" : "en"} beeinflussen die Trinkorientierung.`,
+    };
+  }
 
   if (eventSuccesses > 0) {
     return {
@@ -584,11 +612,18 @@ function recommendationRationale({
       : null,
     temperature != null ? `Tagesmaximum ${Math.round(temperature)} °C` : null,
   ].filter(Boolean);
-  const learning = experience.successfulFuelReviews
-    ? `Die Menge berücksichtigt ${experience.successfulFuelReviews} gut verträgliche Fuel-Review${experience.successfulFuelReviews === 1 ? "" : "s"}.`
-    : "Nach dem Lauf werden tatsächliche Aufnahme, Energie und Magenverträglichkeit zur persönlichen Anpassung genutzt.";
+  const learning = [];
+  if (targetCarbs > 0 && experience.successfulFuelReviews > 0) {
+    learning.push(`${experience.successfulFuelReviews} gut verträgliche Fuel-Review${experience.successfulFuelReviews === 1 ? "" : "s"} beeinflussen die Kohlenhydratmenge.`);
+  }
+  if (fluidTotal > 0 && fluid.personal && fluid.samples > 0) {
+    learning.push(`${fluid.samples} verlässliche Hydration-Messung${fluid.samples === 1 ? "" : "en"} beeinflussen die Trinkorientierung.`);
+  }
+  if (!learning.length) {
+    learning.push("Nach dem Lauf werden tatsächliche Aufnahme, Energie, Magenverträglichkeit und Hydration zur persönlichen Anpassung genutzt.");
+  }
   const optional = range.optional ? " Die Kohlenhydrate sind für diese Einheit optional." : "";
-  return `${parts.join(" · ")}. ${learning}${optional}`;
+  return `${parts.join(" · ")}. ${learning.join(" ")}${optional}`;
 }
 
 export function fuelRecommendationForWorkout({
@@ -653,7 +688,10 @@ export function fuelRecommendationForWorkout({
   const totalCarbs = selection.consume.reduce((sum, item) => sum + item.carbs, 0);
   const totalSodium = selection.consume.reduce((sum, item) => sum + item.sodium, 0);
   const totalCaffeine = selection.consume.reduce((sum, item) => sum + item.caffeine, 0);
-  const confidence = confidenceFor(selection.consume, experience);
+  const confidence = confidenceFor(selection.consume, experience, {
+    personalHydration: fluid.personal,
+    hydrationSamples: fluid.samples,
+  });
 
   return {
     applicable: true,

@@ -299,3 +299,106 @@ test("a 45 minute race deliberately schedules no during gel", () => {
   assert.equal(result.consume.some((item) => item.fuelItemId === "gel-160"), false);
   assert.match(result.rationale, /45 Minuten.*kein Gel.*DURING-Standard/i);
 });
+
+
+test("normal hot runs do not auto-select a carbohydrate sports drink when carbs are not needed", () => {
+  const betaFuel = {
+    id: "beta-fuel-liquid",
+    brand: "SIS",
+    name: "Beta Fuel",
+    category: "Elektrolyte",
+    carbs: 40,
+    sodium: 28,
+    caffeine: 0,
+    servingQuantity: 60,
+    servingUnit: "ml",
+    quantity: 12,
+    stockUnit: "Stück",
+  };
+  const result = fuelRecommendationForWorkout({
+    workout: {
+      id: "hot-easy-10",
+      date: "2026-08-13",
+      title: "10 km locker",
+      type: "Easy Run",
+      distance: 10,
+      duration: 64,
+      weatherForecast: { date: "2026-08-13", maxTemp: 31 },
+    },
+    fuel: [betaFuel],
+    mode: "normal",
+  });
+
+  assert.equal(result.target.carbsTotal, 0);
+  assert.equal(result.actualPlan.carbsTotal, 0);
+  assert.equal(result.consume.some((item) => item.fuelItemId === "beta-fuel-liquid"), false);
+  assert.equal(result.pack.some((item) => item.generic && item.unit === "ml"), true);
+  assert.equal(result.pack.some((item) => item.shortage > 0), false);
+  assert.match(result.warnings.join(" "), /kein hinterlegtes Misch-\/Trinkvolumen/i);
+});
+
+test("a millilitre serving size alone never makes a product a prepared hydration drink", () => {
+  const liquidServing = {
+    id: "liquid-serving",
+    brand: "SIS",
+    name: "Liquid Fuel",
+    category: "Elektrolyte",
+    carbs: 40,
+    sodium: 100,
+    caffeine: 0,
+    servingQuantity: 60,
+    servingUnit: "ml",
+    quantity: 20,
+    stockUnit: "Stück",
+  };
+  const result = fuelRecommendationForWorkout({
+    workout: {
+      id: "training-with-liquid-serving",
+      date: "2026-08-14",
+      title: "16 km Long Run",
+      type: "Long Run",
+      distance: 16,
+      duration: 105,
+    },
+    fuel: [liquidServing],
+    mode: "training",
+  });
+
+  assert.equal(result.consume.some((item) => item.fuelItemId === "liquid-serving" && item.unit === "ml"), false);
+  assert.equal(result.pack.some((item) => item.generic && item.unit === "ml"), true);
+  assert.ok(result.actualPlan.carbsTotal < 200);
+});
+
+test("normal hydration can still auto-select an explicitly prepared zero-carb electrolyte drink", () => {
+  const zeroCarbDrink = {
+    id: "zero-carb-drink",
+    brand: "Test",
+    name: "Electrolyte",
+    category: "Elektrolyte",
+    carbs: 0,
+    sodium: 450,
+    caffeine: 0,
+    preparedVolumeMl: 650,
+    servingQuantity: 1,
+    servingUnit: "g",
+    quantity: 5,
+    stockUnit: "Portionen",
+  };
+  const result = fuelRecommendationForWorkout({
+    workout: {
+      id: "hot-normal-zero-carb",
+      date: "2026-08-13",
+      title: "10 km locker",
+      type: "Easy Run",
+      distance: 10,
+      duration: 64,
+      weatherForecast: { date: "2026-08-13", maxTemp: 31 },
+    },
+    fuel: [zeroCarbDrink],
+    mode: "normal",
+  });
+
+  assert.equal(result.actualPlan.carbsTotal, 0);
+  assert.equal(result.consume.some((item) => item.fuelItemId === "zero-carb-drink" && item.unit === "ml"), true);
+  assert.equal(result.pack.some((item) => item.generic), false);
+});
