@@ -643,11 +643,25 @@ export default function Coach() {
                   ? `${outlook.nextTarget.id !== outlook.strategicTarget?.id ? `Nächster Termin: ${outlook.targetRange.label}. Strategischer Trainingsfokus: ${outlook.strategicTarget?.name || "noch offen"} · Priorität ${outlook.strategicTarget?.priority || "B"} · ${outlook.strategicDays ?? "?"} Tage. ` : `Zielkorridor: ${outlook.targetRange.label}. `}${outlook.phaseLabel}.`
                   : "Lege unter Training → Ziele einen Wettkampf oder Meilenstein an."}</p>
               </div>
-              <div className={`coach-readiness-badge status-only ${outlook.readiness.tone}`}><i aria-hidden="true" /><strong>{outlook.readiness.label}</strong><span>{outlook.phaseLabel}</span></div>
+              <div className={`coach-readiness-badge status-only ${outlook.readiness.tone}`}>
+                <i aria-hidden="true" />
+                <div>
+                  <span>{outlook.phaseLabel}</span>
+                  <strong>{outlook.readiness.label}</strong>
+                </div>
+              </div>
             </div>
             <p className="coach-readiness-copy coach-readiness-lead">{outlook.readiness.text}</p>
             <div className="coach-readiness-factors">
-              {outlook.factors.map((factor) => <article className={factor.state} key={factor.id}><span>{factor.label}</span><strong>{factor.value}</strong><p>{factor.text}</p></article>)}
+              {outlook.factors.map((factor) => (
+                <article className={factor.state} key={factor.id}>
+                  <div className="coach-readiness-factor-heading">
+                    <span>{factor.label}</span>
+                    <strong>{factor.value}</strong>
+                  </div>
+                  <p>{factor.text}</p>
+                </article>
+              ))}
             </div>
             <div className="coach-loop-preview">
               <div><p className="eyebrow">Nächster konkreter Schritt{outlook.loop.targetName ? ` · ${outlook.loop.targetName} (${outlook.loop.priority})` : ""}</p><h3>{outlook.loop.title}</h3><p>{outlook.loop.text}</p></div>
@@ -690,7 +704,13 @@ export default function Coach() {
                 </div>
                 {goalEngine.preparation?.summary && <p className="mission-goal-engine-preparation"><strong>Vorbereitungslogik:</strong> {goalEngine.preparation.summary}</p>}
                 <div className="mission-goal-engine-abilities"><strong>Dafür trainiert der Coach:</strong><div>{goalEngine.abilities.map((ability) => <span key={ability}>{ability}</span>)}</div></div>
-                {(goalEngine.feasibility.reasons.length > 0 || goalEngine.constraintWarnings.length > 0) && <div className="mission-goal-engine-warnings">{[...goalEngine.feasibility.reasons, ...goalEngine.constraintWarnings].map((reason) => <span key={reason}>! {reason}</span>)}</div>}
+                {(goalEngine.feasibility.reasons.length > 0 || goalEngine.constraintWarnings.length > 0) && (
+                  <div className="mission-goal-engine-warnings">
+                    {[...goalEngine.feasibility.reasons, ...goalEngine.constraintWarnings].map((reason) => (
+                      <span key={reason}><b aria-hidden="true">!</b><span>{reason}</span></span>
+                    ))}
+                  </div>
+                )}
               </div>
             </details>
           )}
