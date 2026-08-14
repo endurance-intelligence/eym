@@ -4,6 +4,7 @@ import {
   findPlannedWorkoutForActivity,
   workoutRoleAssessment,
   workoutRoleDistribution,
+  WORKOUT_ROLE_DEFINITIONS,
 } from "../src/services/workoutRoles.js";
 
 test("planned key workout keeps key and quality roles", () => {
@@ -71,4 +72,13 @@ test("distribution separates intensity roles and key sessions", () => {
   assert.equal(distribution.quality.length, 1);
   assert.equal(distribution.long.length, 1);
   assert.equal(distribution.key.length, 1);
+});
+
+
+test("easy and steady roles have distinct readable icons", () => {
+  assert.equal(WORKOUT_ROLE_DEFINITIONS.easy.label, "Locker");
+  assert.equal(WORKOUT_ROLE_DEFINITIONS.steady.label, "Ruhig");
+  assert.notEqual(WORKOUT_ROLE_DEFINITIONS.easy.icon, WORKOUT_ROLE_DEFINITIONS.steady.icon);
+  assert.notEqual(WORKOUT_ROLE_DEFINITIONS.easy.icon, "●");
+  assert.notEqual(WORKOUT_ROLE_DEFINITIONS.steady.icon, "●");
 });

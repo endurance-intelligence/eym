@@ -8,7 +8,7 @@ export default function WorkoutRoleBadges({ assessment, className = "" }) {
     >
       <summary aria-label={`${assessment.markers.map((marker) => marker.label).join(" und ")}: Erklärung anzeigen`}>
         {assessment.markers.map((marker) => (
-          <span className={marker.tone} key={marker.key}><i aria-hidden="true">{marker.icon}</i>{marker.label}</span>
+          <span className={marker.tone} key={marker.key}><i aria-hidden="true">{marker.icon}</i><b>{marker.label}</b></span>
         ))}
       </summary>
       <div className="workout-role-popover">

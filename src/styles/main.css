@@ -1714,3 +1714,181 @@ button:focus-visible,a:focus-visible,summary:focus-visible{
   .mission-goal-path-details{grid-column:2;grid-row:1;align-self:start;min-height:34px;padding:6px 9px}
   .mission-goal-path-weather{width:auto}
 }
+
+/* v3.9.81 – readable workout-role badges and consistent briefing spacing */
+.briefing-mission-countdown{
+  margin:0 0 12px;
+  color:var(--text-soft);
+  line-height:1.4;
+}
+.briefing-current-focus{
+  display:grid;
+  gap:4px;
+  margin:0 0 12px;
+  padding:10px 0 11px;
+  border-top:1px solid color-mix(in srgb,var(--border) 76%,transparent);
+  border-bottom:1px solid color-mix(in srgb,var(--border) 76%,transparent);
+}
+.briefing-current-focus>span{
+  color:var(--muted);
+  font-size:10px;
+  font-weight:850;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+}
+.briefing-current-focus>strong{
+  color:var(--text);
+  font-size:13px;
+  line-height:1.35;
+}
+.briefing-current-focus>small{
+  color:var(--muted-bright);
+  font-size:11px;
+  line-height:1.45;
+}
+.briefing-week-fact{
+  margin:0 0 8px;
+  line-height:1.4;
+}
+.briefing-corridor{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:baseline;
+  gap:6px;
+  margin:0 0 10px;
+  color:var(--text-soft);
+  line-height:1.35;
+}
+.briefing-corridor>b{color:var(--text)}
+.briefing-corridor>span{color:var(--muted);font-size:11px}
+.briefing-card-footnote{
+  margin:10px 0 0;
+  color:var(--text-soft);
+  font-size:12px;
+  line-height:1.4;
+}
+.briefing-key-date{
+  margin:0 0 11px;
+  color:var(--text-soft);
+  line-height:1.4;
+}
+
+.briefing-role-markers,
+.workout-role-badges>summary{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:7px;
+}
+.briefing-role-markers{
+  margin:0 0 12px;
+}
+.briefing-role-markers>span,
+.workout-role-badges>summary>span{
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  min-height:28px;
+  padding:5px 8px;
+  border:1px solid var(--border-strong);
+  border-radius:999px;
+  background:color-mix(in srgb,var(--bg-sidebar) 88%,transparent);
+  color:var(--muted-bright);
+  font-size:10px;
+  font-weight:850;
+  line-height:1;
+  white-space:nowrap;
+}
+.briefing-role-markers>span>i,
+.workout-role-badges>summary>span>i{
+  display:inline-grid;
+  place-items:center;
+  min-width:15px;
+  font-size:13px;
+  font-style:normal;
+  line-height:1;
+}
+.briefing-role-markers>span>b,
+.workout-role-badges>summary>span>b{
+  font:inherit;
+  font-weight:850;
+}
+.briefing-role-markers>span.key,
+.workout-role-badges>summary>span.key{
+  border-color:color-mix(in srgb,var(--warning,#f2c94c) 48%,var(--border));
+  background:color-mix(in srgb,var(--warning,#f2c94c) 9%,var(--bg-sidebar));
+  color:var(--warning,#f2c94c);
+}
+.briefing-role-markers>span.quality,
+.workout-role-badges>summary>span.quality{
+  border-color:color-mix(in srgb,var(--accent) 48%,var(--border));
+  background:var(--accent-surface);
+  color:var(--accent-bright);
+}
+.briefing-role-markers>span.long,
+.workout-role-badges>summary>span.long{
+  border-color:color-mix(in srgb,var(--accent-secondary) 48%,var(--border));
+  background:color-mix(in srgb,var(--accent-secondary) 9%,var(--bg-sidebar));
+  color:color-mix(in srgb,var(--accent-secondary) 72%,white);
+}
+.briefing-role-markers>span.easy,
+.workout-role-badges>summary>span.easy{
+  border-color:color-mix(in srgb,var(--accent) 34%,var(--border));
+  background:color-mix(in srgb,var(--accent) 7%,var(--bg-sidebar));
+  color:var(--accent-bright);
+}
+.briefing-role-markers>span.steady,
+.workout-role-badges>summary>span.steady{
+  border-color:color-mix(in srgb,var(--muted-bright) 36%,var(--border));
+  background:color-mix(in srgb,var(--muted-bright) 6%,var(--bg-sidebar));
+  color:var(--muted-bright);
+}
+.briefing-role-markers>span.support,
+.workout-role-badges>summary>span.support,
+.briefing-role-markers>span.additional,
+.workout-role-badges>summary>span.additional{
+  border-color:color-mix(in srgb,var(--muted-bright) 32%,var(--border));
+}
+
+.workout-role-badges{
+  position:relative;
+  min-width:0;
+}
+.workout-role-badges>summary{
+  list-style:none;
+  cursor:pointer;
+}
+.workout-role-badges>summary::-webkit-details-marker{display:none}
+.workout-role-badges>summary::marker{content:""}
+.workout-role-popover{
+  position:absolute;
+  top:calc(100% + 8px);
+  right:0;
+  z-index:30;
+  display:grid;
+  gap:6px;
+  width:min(330px,calc(100vw - 36px));
+  padding:13px 14px;
+  border:1px solid var(--border-strong);
+  border-radius:13px;
+  background:var(--bg-card);
+  box-shadow:0 18px 42px rgba(0,0,0,.42);
+  color:var(--text);
+}
+.workout-role-popover>strong{font-size:13px;line-height:1.35}
+.workout-role-popover>p{margin:0;color:var(--text-soft);font-size:11px;line-height:1.5}
+.workout-role-popover>small{color:var(--muted);font-size:10px;line-height:1.4}
+.activity-role-badges{
+  align-self:center;
+  margin:0 4px 0 0;
+}
+.activity-role-badges>summary{justify-content:flex-end}
+.activity-row:has(.workout-role-badges[open]){overflow:visible;z-index:6}
+
+@media(max-width:760px){
+  .briefing-current-focus{padding:9px 0 10px}
+  .briefing-role-markers>span,.workout-role-badges>summary>span{min-height:27px;padding:5px 7px}
+  .activity-role-badges{margin:0 12px 10px}
+  .activity-role-badges>summary{justify-content:flex-start}
+  .activity-role-badges .workout-role-popover{right:auto;left:0}
+}

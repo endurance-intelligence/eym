@@ -418,7 +418,7 @@ export default function Briefing() {
                 <h2>{upcomingKeySession.item.title}</h2>
                 <p className="briefing-key-date">{keySessionDateLabel(upcomingKeySession.item.date, now)}{upcomingKeySession.item.time ? ` · ${upcomingKeySession.item.time} Uhr` : ""}</p>
                 <div className="briefing-role-markers" aria-label="Trainingsrollen">
-                  {upcomingKeySession.assessment.markers.map((marker) => <span className={marker.tone} key={marker.key}><i aria-hidden="true">{marker.icon}</i>{marker.label}</span>)}
+                  {upcomingKeySession.assessment.markers.map((marker) => <span className={marker.tone} key={marker.key}><i aria-hidden="true">{marker.icon}</i><b>{marker.label}</b></span>)}
                 </div>
                 <p className="briefing-compact-text">{upcomingKeySession.assessment.explanation}</p>
               </> : <>
