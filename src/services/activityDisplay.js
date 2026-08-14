@@ -43,12 +43,17 @@ export function activityListMetrics(activity) {
 
   const elevationRelevant = ["running", "walking", "cycling", "roadCycling"].includes(family);
   const secondaryPrimary = elevationRelevant
-    ? `${Math.round(numeric(activity?.elevation))} hm`
+    ? `+${Math.round(numeric(activity?.elevation))} m`
     : pulseLabel(activity);
   const secondaryDetail = elevationRelevant ? pulseLabel(activity) : null;
 
+  const primaryLabel = family === "strength" ? "Dauer" : "Distanz";
+  const secondaryLabel = elevationRelevant ? "Höhenmeter" : "Puls";
+
   return {
     family,
+    primaryLabel,
+    secondaryLabel,
     primary,
     detail,
     secondaryPrimary,

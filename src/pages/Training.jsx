@@ -344,15 +344,27 @@ export default function Training() {
                                 <article className={`activity-row ${kind ? "reviewable" : "no-review"} ${mergeSelection.includes(activity.id) ? "merge-selected" : ""} ${activity.isActivityGroup ? "activity-group-row" : ""} ${mergeMode && !activity.isActivityGroup && isRunningActivity(activity) ? "merge-candidate" : ""}`} key={activity.id}>
                                   {mergeMode && !activity.isActivityGroup && isRunningActivity(activity) && <button type="button" className="activity-merge-check" disabled={Boolean(state.reviews[activity.id])} onClick={() => toggleMergeActivity(activity)} aria-label={`${activity.name} auswählen`}>{mergeSelection.includes(activity.id) ? "✓" : "○"}</button>}
                                   <button className="activity activity-main" onClick={() => mergeMode && !activity.isActivityGroup ? toggleMergeActivity(activity) : kind && setSelected(activity)} disabled={!kind && !mergeMode} title={mergeMode ? "Zum Zusammenfassen auswählen" : kind ? `${reviewKindLabel(activity)} öffnen` : "Für diese Aktivität ist kein Review nötig"}>
-                                    <div><b>{activity.name}</b><span>{fmtDate(activityDate(activity))} · {sourceLabel(activity)} · {sportGroup(activity).label}{activity.isActivityGroup ? ` · ${activity.memberCount} Teile` : ""}{activity.weather?.temperature != null || activity.temperature != null ? ` · ${Math.round(Number(activity.weather?.temperature ?? activity.temperature))} °C` : ""}</span></div>
-                                    <div className="activity-metrics"><strong>{metrics.primary}</strong>{metrics.detail && <span>{metrics.detail}</span>}</div>
-                                    <div className={`activity-secondary ${metrics.secondaryDetail ? "with-detail" : "single-metric"}`}><strong>{metrics.secondaryPrimary}</strong>{metrics.secondaryDetail && <span>{metrics.secondaryDetail}</span>}</div>
-                                    <em>{kind ? (covered ? "✓ Review" : tracked ? "Review öffnen" : "Review optional") : "Kein Review nötig"}</em>
+                                    <div className="activity-copy"><b>{activity.name}</b><span>{fmtDate(activityDate(activity))} · {sourceLabel(activity)} · {sportGroup(activity).label}{activity.isActivityGroup ? ` · ${activity.memberCount} Teile` : ""}{activity.weather?.temperature != null || activity.temperature != null ? ` · ${Math.round(Number(activity.weather?.temperature ?? activity.temperature))} °C` : ""}</span></div>
+                                    <div className="activity-stat-grid">
+                                      <div className="activity-stat">
+                                        <small>{metrics.primaryLabel}</small>
+                                        <strong>{metrics.primary}</strong>
+                                        {metrics.detail && <span>{metrics.detail}</span>}
+                                      </div>
+                                      <div className={`activity-stat activity-stat-secondary ${metrics.secondaryDetail ? "with-detail" : "single-metric"}`}>
+                                        <small>{metrics.secondaryLabel}</small>
+                                        <strong>{metrics.secondaryPrimary}</strong>
+                                        {metrics.secondaryDetail && <span>{metrics.secondaryDetail}</span>}
+                                      </div>
+                                    </div>
+                                    <em className={covered ? "done" : tracked ? "open" : "quiet"}>{kind ? (covered ? "✓ Review" : tracked ? "Review öffnen" : "Review optional") : "Kein Review nötig"}</em>
                                   </button>
-                                  <WorkoutRoleBadges assessment={roleAssessment} className="activity-role-badges" />
-                                  <div className="activity-row-actions">
-                                    <button className="activity-edit-button" onClick={() => setEditingName(activity)} aria-label={`${activity.name} umbenennen`} title="Trainingsname ändern"><span aria-hidden="true">✎</span><b>Name ändern</b></button>
-                                    {activity.isActivityGroup && !state.reviews[activity.id] && <button className="activity-edit-button activity-unmerge-button" onClick={() => dissolveGroup(activity)} aria-label="Zusammenfassung aufheben" title="Zusammenfassung aufheben"><span aria-hidden="true">↩</span><b>Aufheben</b></button>}
+                                  <div className="activity-row-tools">
+                                    <WorkoutRoleBadges assessment={roleAssessment} className="activity-role-badges" />
+                                    <div className="activity-row-actions">
+                                      <button className="activity-edit-button" onClick={() => setEditingName(activity)} aria-label={`${activity.name} umbenennen`} title="Trainingsname ändern"><span aria-hidden="true">✎</span><b>Name ändern</b></button>
+                                      {activity.isActivityGroup && !state.reviews[activity.id] && <button className="activity-edit-button activity-unmerge-button" onClick={() => dissolveGroup(activity)} aria-label="Zusammenfassung aufheben" title="Zusammenfassung aufheben"><span aria-hidden="true">↩</span><b>Aufheben</b></button>}
+                                    </div>
                                   </div>
                                 </article>
                               );
