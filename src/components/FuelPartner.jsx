@@ -136,8 +136,8 @@ export default function FuelPartner() {
       <div className="fuel-partner-heading">
         <div>
           <p className="eyebrow">Fuel Partner</p>
-          <h2>Dein nächster Lauf ist versorgt</h2>
-          <p>Verbrauch, Packliste und Bestand werden gemeinsam gerechnet. Drink-Carbs zählen mit.</p>
+          <h2>Fuel für deinen nächsten Lauf</h2>
+          <p>Nur das, was die Einheit wirklich braucht: Fuel, Drink, Packliste und Bestand in einem Plan.</p>
         </div>
         <label>
           Geplanter Lauf
@@ -156,6 +156,7 @@ export default function FuelPartner() {
           <button
             type="button"
             className={mode === entry.key ? "selected" : ""}
+            aria-pressed={mode === entry.key}
             onClick={() => selectMode(entry.key)}
             key={entry.key}
           >
@@ -183,20 +184,20 @@ export default function FuelPartner() {
       </div>
 
       <div className="fuel-partner-metrics">
-        <span>
-          <small>Carb-Orientierung</small>
+        <span className={recommendation.target.carbsHighPerHour > 0 ? "fuel-metric fuel" : "fuel-metric quiet"}>
+          <small>Carb-Ziel</small>
           <strong>{carbRange}</strong>
         </span>
-        <span>
-          <small>Eingeplant</small>
+        <span className="fuel-metric plan">
+          <small>Geplanter Fuel</small>
           <strong>{Math.round(recommendation.actualPlan.carbsTotal)} g Carbs</strong>
         </span>
-        <span>
-          <small>Trinken</small>
+        <span className="fuel-metric hydration">
+          <small>Trinkorientierung</small>
           <strong>{recommendation.target.fluidTotal ? `${recommendation.target.fluidTotal} ml` : "optional"}</strong>
         </span>
-        <span>
-          <small>Natrium geplant</small>
+        <span className="fuel-metric sodium">
+          <small>Natrium</small>
           <strong>{recommendation.target.sodiumTotal ? `${Math.round(recommendation.target.sodiumTotal)} mg` : "nicht abgedeckt"}</strong>
         </span>
       </div>

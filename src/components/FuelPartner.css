@@ -2558,3 +2558,742 @@
 .race-prep-carb-balance p{margin:0;color:var(--muted);font-size:10px;line-height:1.5}
 @media(max-width:800px){.race-prep-carb-balance-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:520px){.race-prep-carb-balance-grid{grid-template-columns:1fr}}
+
+/* v3.9.84 – Fuel Lab information hierarchy and visual cleanup */
+.fuel-tabs {
+  gap: 4px;
+  margin-bottom: 16px;
+  padding: 4px;
+  border-color: var(--border-strong);
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--bg-sidebar) 92%, transparent);
+}
+
+.fuel-tabs button {
+  min-height: 36px;
+  padding: 8px 15px;
+  border-radius: 10px;
+  font-size: 11px;
+}
+
+.fuel-tabs button.selected {
+  box-shadow: inset 0 1px 0 #ffffff0a, var(--ambient-glow-subtle);
+}
+
+.fuel-partner {
+  gap: 14px;
+  border-color: var(--border-strong);
+  background:
+    radial-gradient(circle at 94% -18%, color-mix(in srgb, var(--accent-soft) 65%, transparent), transparent 26rem),
+    linear-gradient(150deg, var(--bg-card), color-mix(in srgb, var(--bg-card-alt) 94%, var(--bg-sidebar)));
+}
+
+.fuel-partner-heading {
+  gap: 18px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.fuel-partner-heading h2 {
+  margin: 2px 0 5px;
+  font-size: clamp(23px, 2.5vw, 31px);
+  line-height: 1.08;
+}
+
+.fuel-partner-heading p:last-child {
+  max-width: 760px;
+  font-size: 12px;
+}
+
+.fuel-partner-heading label {
+  gap: 6px;
+  font-size: 10px;
+  letter-spacing: .03em;
+}
+
+.fuel-partner-heading select {
+  min-height: 42px;
+  border-radius: 12px;
+  font-weight: 750;
+}
+
+.fuel-partner-mode {
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--bg-sidebar) 86%, transparent);
+}
+
+.fuel-partner-mode button {
+  min-height: 58px;
+  padding: 9px 12px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.fuel-partner-mode button b {
+  font-size: 12px;
+}
+
+.fuel-partner-mode button span {
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.fuel-partner-mode button.selected {
+  border-color: var(--accent-border-strong);
+  background: color-mix(in srgb, var(--accent-surface-strong) 82%, var(--bg-card-alt));
+  box-shadow: inset 0 1px 0 #ffffff0b;
+}
+
+.fuel-partner-hero {
+  grid-template-columns: minmax(0, 1fr) minmax(230px, .32fr);
+  gap: 9px;
+}
+
+.fuel-partner-workout,
+.fuel-partner-pack-summary {
+  min-height: 108px;
+  padding: 14px 16px;
+  border-radius: 14px;
+}
+
+.fuel-partner-workout {
+  background: color-mix(in srgb, var(--bg-sidebar) 78%, transparent);
+}
+
+.fuel-partner-workout h3 {
+  font-size: 21px;
+  line-height: 1.12;
+}
+
+.fuel-partner-workout p {
+  font-size: 12px;
+}
+
+.fuel-partner-pack-summary {
+  position: relative;
+  overflow: hidden;
+  align-content: center;
+  padding-left: 18px;
+}
+
+.fuel-partner-pack-summary::before {
+  position: absolute;
+  inset: 12px auto 12px 0;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--accent);
+  content: "";
+}
+
+.fuel-partner-pack-summary.warn::before {
+  background: var(--warning);
+}
+
+.fuel-partner-pack-summary strong {
+  font-size: clamp(22px, 2.6vw, 28px);
+}
+
+.fuel-partner-metrics {
+  gap: 7px;
+}
+
+.fuel-partner-metrics > .fuel-metric {
+  position: relative;
+  overflow: hidden;
+  gap: 4px;
+  min-height: 72px;
+  padding: 11px 12px 10px;
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--bg-input) 90%, transparent);
+}
+
+.fuel-partner-metrics > .fuel-metric::before {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 2px;
+  background: var(--border-strong);
+  content: "";
+}
+
+.fuel-partner-metrics > .fuel-metric.fuel::before,
+.fuel-partner-metrics > .fuel-metric.plan::before {
+  background: var(--accent);
+}
+
+.fuel-partner-metrics > .fuel-metric.hydration::before {
+  background: var(--info, var(--accent-bright));
+}
+
+.fuel-partner-metrics > .fuel-metric.sodium::before {
+  background: var(--success);
+}
+
+.fuel-partner-metrics > .fuel-metric.quiet strong {
+  color: var(--success-bright);
+}
+
+.fuel-partner-metrics strong {
+  font-size: 15px;
+  line-height: 1.15;
+}
+
+.fuel-partner-plan-grid {
+  gap: 9px;
+  align-items: start;
+}
+
+.fuel-partner-plan-grid > section {
+  gap: 10px;
+  padding: 14px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--bg-sidebar) 82%, transparent);
+}
+
+.fuel-partner-section-heading {
+  align-items: center;
+}
+
+.fuel-partner-section-heading h3 {
+  margin-top: 2px;
+  font-size: 16px;
+}
+
+.fuel-partner-section-heading > small {
+  padding: 4px 7px;
+  font-size: 9px;
+}
+
+.fuel-partner-timeline,
+.fuel-partner-products,
+.fuel-partner-pack-list {
+  gap: 6px;
+}
+
+.fuel-partner-timeline article,
+.fuel-partner-pack-list article {
+  padding: 9px 10px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-input) 92%, transparent);
+}
+
+.fuel-partner-timeline article > b {
+  min-width: 54px;
+  min-height: 32px;
+  border-radius: 9px;
+  font-size: 10px;
+}
+
+.fuel-partner-timeline strong,
+.fuel-partner-pack-list strong {
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.fuel-partner-timeline span,
+.fuel-partner-pack-list span,
+.fuel-partner-products small {
+  font-size: 9px;
+}
+
+.fuel-partner-products > div {
+  padding: 9px 10px;
+  border-radius: 10px;
+}
+
+.fuel-partner-pack-list article > b {
+  font-size: 12px;
+}
+
+.fuel-partner-confidence,
+.fuel-partner-no-fuel {
+  padding: 10px 11px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-input) 72%, transparent);
+}
+
+.fuel-partner-warnings {
+  gap: 10px;
+  padding: 11px 13px;
+  border-radius: 11px;
+}
+
+.fuel-partner-foot {
+  grid-template-columns: minmax(0, 1.2fr) minmax(280px, .8fr);
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-sidebar) 58%, transparent);
+}
+
+.fuel-partner-foot p {
+  font-size: 11px;
+}
+
+.fuel-partner-foot span {
+  font-size: 9px;
+}
+
+.fuel-race-prep-shell {
+  border-color: var(--border-strong);
+  background:
+    radial-gradient(circle at 94% -15%, color-mix(in srgb, var(--accent-soft) 55%, transparent), transparent 27rem),
+    linear-gradient(150deg, var(--bg-card), color-mix(in srgb, var(--bg-card-alt) 95%, var(--bg-sidebar)));
+}
+
+.fuel-race-prep-shell > .race-prep-planner {
+  gap: 14px;
+  padding: 18px;
+}
+
+.race-prep-heading {
+  gap: 18px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.race-prep-heading h2 {
+  margin: 2px 0 5px;
+  font-size: clamp(22px, 2.4vw, 30px);
+  line-height: 1.1;
+}
+
+.race-prep-heading p {
+  max-width: 760px;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.race-prep-heading > label {
+  gap: 6px;
+  font-size: 10px;
+}
+
+.race-prep-heading select {
+  min-height: 42px;
+  border-radius: 12px;
+  font-weight: 750;
+}
+
+.race-prep-presets {
+  gap: 5px;
+  padding: 7px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-sidebar) 72%, transparent);
+}
+
+.race-prep-presets button {
+  min-height: 29px;
+  padding: 5px 9px;
+  border-color: transparent;
+  background: transparent;
+  font-size: 9px;
+}
+
+.race-prep-presets button:hover {
+  border-color: var(--accent-border);
+  background: var(--accent-surface);
+}
+
+.race-prep-editor {
+  gap: 12px;
+  padding: 14px;
+  border-color: var(--border-strong);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--bg-sidebar) 78%, transparent);
+}
+
+.race-prep-editor-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.race-prep-editor-heading > div {
+  display: grid;
+  gap: 2px;
+}
+
+.race-prep-editor-heading span {
+  color: var(--accent-bright);
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+
+.race-prep-editor-heading h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.race-prep-editor-heading small {
+  max-width: 390px;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.4;
+  text-align: right;
+}
+
+.race-prep-editor-grid {
+  gap: 8px;
+}
+
+.race-prep-editor-grid label,
+.race-prep-duration-field > span {
+  font-size: 9px;
+}
+
+.race-prep-editor-grid input,
+.race-prep-editor-grid select,
+.race-prep-duration-inputs input {
+  min-height: 38px;
+  border-radius: 9px;
+}
+
+.race-prep-fuel-decision {
+  position: relative;
+  overflow: hidden;
+  min-height: 82px;
+  padding: 13px 15px 13px 18px;
+  border-color: var(--border-strong);
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--bg-sidebar) 76%, transparent);
+}
+
+.race-prep-fuel-decision::before {
+  position: absolute;
+  inset: 11px auto 11px 0;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--accent);
+  content: "";
+}
+
+.race-prep-fuel-decision.none::before {
+  background: var(--success);
+}
+
+.race-prep-fuel-decision span {
+  font-size: 8px;
+}
+
+.race-prep-fuel-decision h3 {
+  font-size: 16px;
+}
+
+.race-prep-fuel-decision p {
+  max-width: 840px;
+  font-size: 10px;
+}
+
+.race-prep-fuel-decision > strong {
+  min-width: 94px;
+  padding: 10px 12px;
+  border-color: var(--accent-border);
+  border-radius: 10px;
+  background: var(--accent-surface);
+  color: var(--accent-bright);
+  font-size: 16px;
+  text-align: center;
+}
+
+.race-prep-summary-primary {
+  gap: 7px;
+}
+
+.race-prep-summary-primary article {
+  position: relative;
+  overflow: hidden;
+  min-height: 88px;
+  padding: 11px 12px;
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--bg-input) 90%, transparent);
+}
+
+.race-prep-summary-primary article::before {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 2px;
+  background: var(--border-strong);
+  content: "";
+}
+
+.race-prep-summary-primary article.carbs.active::before {
+  background: var(--accent);
+}
+
+.race-prep-summary-primary article.hydration::before {
+  background: var(--info, var(--accent-bright));
+}
+
+.race-prep-summary-primary article.sources.active::before {
+  background: var(--success);
+}
+
+.race-prep-summary-primary span {
+  font-size: 8px;
+  font-weight: 850;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.race-prep-summary-primary strong {
+  font-size: 16px;
+  line-height: 1.15;
+}
+
+.race-prep-summary-primary small {
+  line-height: 1.35;
+}
+
+.race-prep-fuel-builder {
+  gap: 11px;
+  padding: 14px;
+  border-color: var(--border-strong);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--bg-sidebar) 78%, transparent);
+}
+
+.race-prep-section-heading {
+  align-items: center;
+}
+
+.race-prep-section-heading h3 {
+  font-size: 15px;
+}
+
+.race-prep-section-heading > small,
+.race-prep-section-heading small {
+  flex: none;
+  padding: 4px 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-input);
+  color: var(--muted-bright);
+  font-size: 8px;
+}
+
+.race-prep-selection-hint {
+  padding: 9px 11px;
+  border-style: solid;
+  border-color: var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-input) 70%, transparent);
+  font-size: 9px;
+}
+
+.race-prep-evidence-list {
+  gap: 7px;
+}
+
+.race-prep-evidence-product {
+  min-height: 88px;
+  gap: 9px;
+  padding: 10px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-input) 88%, transparent);
+  transition: border-color .16s ease, background .16s ease, transform .16s ease;
+}
+
+.race-prep-evidence-product:hover {
+  transform: translateY(-1px);
+  border-color: var(--accent-border);
+}
+
+.race-prep-evidence-product.selected {
+  border-color: var(--accent-border-strong);
+  background: color-mix(in srgb, var(--accent-surface) 72%, var(--bg-input));
+}
+
+.race-prep-evidence-copy > span {
+  align-items: flex-start;
+}
+
+.race-prep-evidence-copy b {
+  line-height: 1.25;
+}
+
+.race-prep-evidence-copy small {
+  font-size: 9px;
+}
+
+.race-prep-manual-fuel {
+  gap: 9px;
+  padding-top: 10px;
+}
+
+.race-prep-manual-fuel h3 {
+  font-size: 13px;
+}
+
+.race-prep-manual-grid {
+  gap: 6px;
+}
+
+.race-prep-manual-grid input {
+  min-height: 36px;
+}
+
+.race-prep-carb-balance {
+  gap: 9px;
+  padding: 13px 14px;
+  border-color: var(--border-strong);
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--bg-sidebar) 76%, transparent);
+}
+
+.race-prep-carb-balance-grid {
+  gap: 6px;
+}
+
+.race-prep-carb-balance-grid article {
+  min-height: 70px;
+  padding: 9px 10px;
+  border-radius: 9px;
+}
+
+.race-prep-carb-balance-grid article.total {
+  background: color-mix(in srgb, var(--success-soft) 50%, var(--bg-input));
+}
+
+.race-prep-carb-balance p {
+  font-size: 9px;
+}
+
+.race-prep-phases {
+  gap: 7px;
+}
+
+.race-prep-phases article {
+  min-height: 138px;
+  gap: 5px;
+  padding: 12px;
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--bg-input) 88%, transparent);
+}
+
+.race-prep-phases article.during {
+  border-color: var(--accent-border-strong);
+  background: color-mix(in srgb, var(--accent-surface) 60%, var(--bg-input));
+}
+
+.race-prep-phases h3 {
+  font-size: 14px;
+}
+
+.race-prep-phases p {
+  font-size: 10px;
+}
+
+.race-prep-schedule {
+  gap: 9px;
+  padding: 13px;
+  border-color: var(--border-strong);
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--bg-sidebar) 76%, transparent);
+}
+
+.race-prep-schedule .fuel-race-strategy-rows {
+  gap: 5px;
+}
+
+.race-prep-schedule .fuel-race-strategy-rows > article {
+  border-radius: 10px;
+}
+
+.race-prep-warnings,
+.race-prep-error {
+  padding: 11px 12px;
+  border-radius: 10px;
+}
+
+.race-prep-editor-actions {
+  justify-content: flex-end;
+  padding-top: 2px;
+}
+
+@media (max-width: 980px) {
+  .fuel-partner-heading,
+  .race-prep-heading {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .fuel-partner-heading label,
+  .race-prep-heading > label {
+    max-width: 520px;
+  }
+
+  .fuel-partner-foot {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .fuel-tabs {
+    margin-bottom: 12px;
+  }
+
+  .fuel-partner-mode {
+    grid-template-columns: 1fr;
+  }
+
+  .fuel-partner-mode button {
+    min-height: 0;
+  }
+
+  .race-prep-editor-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .race-prep-editor-heading small {
+    max-width: none;
+    text-align: left;
+  }
+
+  .race-prep-section-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .race-prep-section-heading > small,
+  .race-prep-section-heading small {
+    align-self: flex-start;
+  }
+}
+
+@media (max-width: 520px) {
+  .fuel-race-prep-shell > .race-prep-planner {
+    padding: 13px;
+  }
+
+  .fuel-partner-heading h2,
+  .race-prep-heading h2 {
+    font-size: 22px;
+  }
+
+  .fuel-partner-metrics,
+  .race-prep-summary-primary {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .fuel-partner-metrics > .fuel-metric,
+  .race-prep-summary-primary article {
+    min-height: 74px;
+  }
+
+  .race-prep-fuel-decision {
+    align-items: flex-start;
+  }
+}

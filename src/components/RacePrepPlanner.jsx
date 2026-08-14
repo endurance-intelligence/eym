@@ -58,6 +58,7 @@ export default function RacePrepPlanner() {
   const rows = scheduleRows(plan.strategy, scheduleLimit);
   const duration = durationParts(draft.durationMinutes);
   const selectedIds = new Set(plan.effectiveFuelItemIds || []);
+  const selectedSourceCount = selectedIds.size + (Array.isArray(draft.manualFuelItems) ? draft.manualFuelItems.length : 0);
   const carbsDuringNeeded = Number(plan.recommendation?.target?.carbsTotal || 0) > 0;
   const hydrationDuringNeeded = Number(plan.recommendation?.target?.fluidTotal || 0) > 0;
   const relevantProducts = (plan.evidenceCatalog || []).filter((entry) => (
@@ -215,6 +216,10 @@ export default function RacePrepPlanner() {
       </div>
 
       <section className="race-prep-editor">
+        <div className="race-prep-editor-heading">
+          <div><span>Rennbasis</span><h3>Was planst du?</h3></div>
+          <small>Distanz + Dauer steuern die Fuel- und Trinkstrategie.</small>
+        </div>
         <div className="race-prep-editor-grid">
           <label>Rennen / Name<input value={draft.name} onChange={(event) => update("name", event.target.value)} /></label>
           <label>Format<select value={draft.format} onChange={(event) => update("format", event.target.value)}>{RACE_PREP_FORMATS.map((item) => <option value={item.key} key={item.key}>{item.label}</option>)}</select></label>
@@ -244,11 +249,18 @@ export default function RacePrepPlanner() {
         <strong>{carbsDuringNeeded ? `${Math.round(plan.recommendation.target.carbsPerHour)} g KH/h` : "0 g KH/h"}</strong>
       </section>}
 
+      {plan.valid && <div className="race-prep-summary race-prep-summary-primary">
+        <article className="distance"><span>Rennumfang</span><strong>{plan.summary.distanceLabel}</strong><small>{plan.summary.durationLabel}{plan.profile.durationEstimated ? " · geschätzt" : ""}</small></article>
+        <article className={plan.summary.carbsPerHour ? "carbs active" : "carbs"}><span>Carbs DURING</span><strong>{plan.summary.carbsPerHour ? `${plan.summary.carbsPerHour} g/h` : "nicht nötig"}</strong><small>{plan.summary.carbsTotal ? `Ziel ca. ${plan.summary.carbsTotal} g · Plan ${plan.summary.carbsPlannedPerHour} g/h` : "Kurz genug ohne Race-Fuel"}</small></article>
+        <article className="hydration"><span>Trinken DURING</span><strong>{plan.summary.fluidPerHour ? `${Math.round(plan.recommendation.target.fluidLowPerHour)}–${Math.round(plan.recommendation.target.fluidHighPerHour)} ml/h` : "nach Bedarf"}</strong><small>{plan.summary.fluidTotal ? `Planbasis ${plan.summary.fluidPerHour} ml/h · ca. ${numberLabel(plan.summary.fluidTotal, 0)} ml${plan.recommendation.target.personalHydration ? ` · persönlich aus ${plan.recommendation.target.hydrationSamples} Review${plan.recommendation.target.hydrationSamples === 1 ? "" : "s"}` : " · allgemeine Orientierung"}` : "kein fixer Block"}</small></article>
+        <article className={selectedSourceCount > 0 ? "sources active" : "sources"}><span>Deine Auswahl</span><strong>{selectedSourceCount > 0 ? `${selectedSourceCount} gewählt` : "noch offen"}</strong><small>{plan.recommendation.confidence.label}</small></article>
+      </div>}
+
       {plan.valid && (carbsDuringNeeded || hydrationDuringNeeded) && (
         <section className="race-prep-fuel-builder">
           <div className="race-prep-section-heading">
             <div><span>Fuel-Auswahl</span><h3>{carbsDuringNeeded ? "Was willst du im Rennen einsetzen?" : "Welches Getränk willst du einsetzen?"}</h3></div>
-            <small>{carbsDuringNeeded && hydrationDuringNeeded ? "Fuel + Drink" : carbsDuringNeeded ? "Fuel" : "Drink / Elektrolyt"} · du entscheidest selbst</small>
+            <small>{selectedSourceCount} gewählt · {carbsDuringNeeded && hydrationDuringNeeded ? "Fuel + Drink" : carbsDuringNeeded ? "Fuel" : "Drink / Elektrolyt"}</small>
           </div>
           <div className="race-prep-selection-hint">
             <b>Nichts wird vorausgewählt.</b> Bewährt bedeutet nur: im Training positiv belegt. Bestand und Erfahrung helfen bei der Entscheidung, ersetzen sie aber nicht.
@@ -275,13 +287,6 @@ export default function RacePrepPlanner() {
       {!plan.valid ? (
         <div className="race-prep-error"><b>Plan noch nicht berechenbar</b><span>{plan.error}</span></div>
       ) : <>
-        <div className="race-prep-summary">
-          <article><span>Rennumfang</span><strong>{plan.summary.distanceLabel}</strong><small>{plan.summary.durationLabel}{plan.profile.durationEstimated ? " · geschätzt" : ""}</small></article>
-          <article><span>Carbs DURING</span><strong>{plan.summary.carbsPerHour ? `${plan.summary.carbsPerHour} g/h` : "nicht nötig"}</strong><small>{plan.summary.carbsTotal ? `Ziel ca. ${plan.summary.carbsTotal} g · Plan ${plan.summary.carbsPlannedPerHour} g/h` : "Kurz genug ohne Race-Fuel"}</small></article>
-          <article><span>Trinken DURING</span><strong>{plan.summary.fluidPerHour ? `${Math.round(plan.recommendation.target.fluidLowPerHour)}–${Math.round(plan.recommendation.target.fluidHighPerHour)} ml/h` : "nach Bedarf"}</strong><small>{plan.summary.fluidTotal ? `Planbasis ${plan.summary.fluidPerHour} ml/h · ca. ${numberLabel(plan.summary.fluidTotal, 0)} ml${plan.recommendation.target.personalHydration ? ` · persönlich aus ${plan.recommendation.target.hydrationSamples} Review${plan.recommendation.target.hydrationSamples === 1 ? "" : "s"}` : " · allgemeine Orientierung"}` : "kein fixer Block"}</small></article>
-          <article><span>Fuel-Basis</span><strong>{plan.summary.selectedFuelSources ? `${plan.summary.selectedFuelSources} Quellen` : "noch offen"}</strong><small>{plan.recommendation.confidence.label}</small></article>
-        </div>
-
         {plan.summary.carbsTotal > 0 && <section className="race-prep-carb-balance">
           <div className="race-prep-section-heading">
             <div><span>KH-BILANZ DURING</span><h3>Ein Ziel. Drink + Gel + Food zählen zusammen.</h3></div>
