@@ -1,0 +1,7 @@
+v3.9.87 — Garmin cue test alignment
+
+- Updates stale track-workout assertions to the Garmin cue wording introduced in v3.9.85.
+- Run-Walk tests now expect the visible cues "Intervall" and "Trabpause".
+- Consecutive paced work-block tests now expect distance/pace cues such as "2000er @ 4:50/km".
+- No production/runtime logic changed.
+- Package version bumped to 3.9.87.

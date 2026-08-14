@@ -287,8 +287,8 @@ test("run-walk prescriptions export planned recovery instead of synthetic pace",
   });
 
   assert.match(description, /Run-Walk 8x/);
-  assert.match(description, /- 2m Z2 HR intensity=interval/);
-  assert.match(description, /- 2m intensity=recovery/);
+  assert.match(description, /- Intervall 2m Z2 HR intensity=interval/);
+  assert.match(description, /- Trabpause 2m intensity=recovery/);
   assert.doesNotMatch(description, /Pace/);
 });
 
@@ -390,7 +390,7 @@ test("track workouts keep consecutive paced work blocks without inserting recove
     structuredWorkout: workout,
   });
   assert.match(description, /Hauptteil 3x/);
-  assert.match(description, /Belastung 2000mtr 4:45-4:55\/km Pace intensity=interval/);
-  assert.match(description, /Belastung 1000mtr 5:05-5:15\/km Pace intensity=interval/);
+  assert.match(description, /2000er @ 4:50\/km 2000mtr 4:45-4:55\/km Pace intensity=interval/);
+  assert.match(description, /1000er @ 5:10\/km 1000mtr 5:05-5:15\/km Pace intensity=interval/);
   assert.doesNotMatch(description, /Pause/);
 });
