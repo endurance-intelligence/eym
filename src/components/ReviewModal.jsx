@@ -352,9 +352,9 @@ export default function ReviewModal({ activity, onClose }) {
       ["Beweglichkeit", review.mobility],
     ];
   const coachMetrics = [
-    ["Belastung", coachAssessment.load],
-    ["Ausführung", coachAssessment.execution],
-    ["Konsequenz", coachAssessment.recovery],
+    ["Trainingsreiz", coachAssessment.stimulus || coachAssessment.load],
+    ["Dein Signal", coachAssessment.signal || coachAssessment.execution],
+    ["Folgeplan", coachAssessment.followUp || coachAssessment.recovery],
   ];
   const summaryDrinkMl = Math.round(Number(review.drinkMl || nutritionSummary.totalFluidMl || 0));
   const summaryFuelProducts = (review.usedNutrition ? review.nutritionItems : [])
@@ -683,6 +683,7 @@ export default function ReviewModal({ activity, onClose }) {
                   <div className="activity-weather-grid compact">
                   {weather.temperature != null && <span><small>Temperatur</small><strong>{Number(weather.temperature).toFixed(0)} °C</strong></span>}
                   {weather.feelsLike != null && <span><small>Gefühlt</small><strong>{Number(weather.feelsLike).toFixed(0)} °C</strong></span>}
+                  {weather.humidity != null && <span><small>Luftfeuchte</small><strong>{Number(weather.humidity).toFixed(0)} %</strong></span>}
                   {weather.condition && <span><small>Wetter</small><strong>{weather.condition}</strong></span>}
                   {weather.windSpeed != null && <span><small>Wind</small><strong>{Number(weather.windSpeed).toFixed(0)} km/h</strong></span>}
                   {weather.windGusts != null && <span><small>Böen</small><strong>{Number(weather.windGusts).toFixed(0)} km/h</strong></span>}
