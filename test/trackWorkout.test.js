@@ -14,6 +14,7 @@ import {
   trackWorkoutForEditing,
   trackWorkoutSummary,
   trackWorkoutTemplateLabel,
+  trackStepGarminCue,
   updateTrackStepDraft,
   updateTrackWorkoutDraft,
   workoutFromTrackTemplate,
@@ -153,6 +154,13 @@ test("pace targets normalize into Garmin-friendly ranges", () => {
   assert.match(trackWorkoutSummary(workout), /1200 m Belastung @ 4:40\/km \(±5 s\)/);
 });
 
+test("Garmin cues stay human-readable without stealing Intervals duration tokens", () => {
+  assert.equal(trackStepGarminCue({ kind: "work", unit: "distance", value: 600, targetPace: "4:30" }), "600er @ 4:30/km");
+  assert.equal(trackStepGarminCue({ kind: "recovery", unit: "distance", value: 200 }), "200er Trab");
+  assert.equal(trackStepGarminCue({ kind: "work", unit: "time", value: 90, targetPace: "4:10" }), "Belastung @ 4:10/km");
+  assert.equal(trackStepGarminCue({ kind: "recovery", unit: "time", value: 60 }), "Trabpause");
+});
+
 test("new track definitions start provisional while legacy saved workouts remain final", () => {
   assert.equal(trackWorkoutForEditing().planningStatus, "draft");
   assert.equal(trackWorkoutForEditing({ rounds: 4 }).planningStatus, "final");
@@ -205,13 +213,13 @@ test("Intervals description contains an ordered Garmin block and LAP-controlled 
     },
   });
   assert.match(description, /Sprints 2x/);
-  assert.match(description, /Belastung 1200mtr 4:35-4:45\/km Pace intensity=interval/);
-  assert.match(description, /Pause 400mtr intensity=recovery/);
-  assert.match(description, /Belastung 800mtr 4:25-4:35\/km Pace intensity=interval/);
-  assert.match(description, /Pause 90s intensity=recovery/);
+  assert.match(description, /1200er @ 4:40\/km 1200mtr 4:35-4:45\/km Pace intensity=interval/);
+  assert.match(description, /400er Trab 400mtr intensity=recovery/);
+  assert.match(description, /800er @ 4:30\/km 800mtr 4:25-4:35\/km Pace intensity=interval/);
+  assert.match(description, /Trabpause 90s intensity=recovery/);
   assert.match(description, /- Press lap 15m intensity=warmup/);
   assert.match(description, /- Press lap 10m intensity=cooldown/);
-  assert.doesNotMatch(description, /(?:Press lap|Pause)[^\n]*Pace/);
+  assert.doesNotMatch(description, /(?:Press lap|Trabpause|er Trab)[^\n]*Pace/);
   assert.equal(description.match(/press lap/gi)?.length, 2);
   assert.match(description, /intensity=warmup/);
   assert.match(description, /intensity=cooldown/);
@@ -223,8 +231,8 @@ test("generated interval and threshold edges stay free of pace targets", () => {
     title: "6 × 400 Meter",
     duration: 60,
   });
-  assert.match(intervals, /- 400mtr Z5 Pace intensity=interval/);
-  assert.match(intervals, /- 400mtr intensity=recovery/);
+  assert.match(intervals, /- Intervall 400mtr Z5 Pace intensity=interval/);
+  assert.match(intervals, /- Trabpause 400mtr intensity=recovery/);
   assert.doesNotMatch(intervals, /(?:warmup|recovery|cooldown)[^\n]*Pace/);
 
   const threshold = intervalDescription({
@@ -232,7 +240,7 @@ test("generated interval and threshold edges stay free of pace targets", () => {
     title: "Schwelle",
     duration: 60,
   });
-  assert.match(threshold, /- 35m Z4 Pace intensity=interval/);
+  assert.match(threshold, /- Tempo 35m Z4 Pace intensity=interval/);
   assert.doesNotMatch(threshold, /(?:warmup|cooldown)[^\n]*Pace/);
 });
 
@@ -256,8 +264,8 @@ test("Goal Engine workouts keep pace targets inside their work blocks", () => {
   });
 
   assert.match(description, /HM-Arbeits-Pace 3x/);
-  assert.match(description, /- 12m 5:29-5:53\/km Pace intensity=interval/);
-  assert.match(description, /- 3m intensity=recovery/);
+  assert.match(description, /- Intervall 12m 5:29-5:53\/km Pace intensity=interval/);
+  assert.match(description, /- Trabpause 3m intensity=recovery/);
   assert.doesNotMatch(description, /(?:warmup|recovery|cooldown)[^\n]*Pace/);
 });
 

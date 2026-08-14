@@ -313,11 +313,14 @@
 .planner-track-sequence-heading>div{display:grid;gap:3px}
 .planner-track-sequence-heading small{color:var(--muted)}
 .planner-track-sequence-heading>span{color:var(--accent);font-size:12px}
-.planner-track-sequence article{display:grid;grid-template-columns:32px minmax(120px,1fr) minmax(95px,.72fr) minmax(80px,.58fr) minmax(105px,.82fr) minmax(90px,.66fr) auto;gap:9px;align-items:end;padding:11px;border:1px solid var(--border);border-radius:12px;background:var(--bg-input)}
+.planner-track-sequence article{display:grid;grid-template-columns:32px minmax(110px,.9fr) minmax(90px,.66fr) minmax(76px,.52fr) minmax(105px,.82fr) minmax(86px,.62fr) minmax(138px,1fr) auto;gap:9px;align-items:end;padding:11px;border:1px solid var(--border);border-radius:12px;background:var(--bg-input)}
 .planner-track-sequence article.recovery{border-color:color-mix(in srgb,var(--accent) 35%,var(--border));background:color-mix(in srgb,var(--accent-surface) 45%,var(--bg-input))}
 .planner-track-sequence article>b{display:grid;place-items:center;align-self:center;width:30px;height:30px;border-radius:50%;background:var(--accent-surface-strong);color:var(--accent-bright)}
 .planner-track-sequence article label{min-width:0;font-size:12px}
 .planner-track-sequence article select,.planner-track-sequence article input{width:100%;min-width:0}
+.planner-track-garmin-cue{display:grid;align-content:center;gap:3px;min-width:0;min-height:39px;padding:6px 9px;border:1px solid var(--accent-border);border-radius:9px;background:var(--accent-surface)}
+.planner-track-garmin-cue small{color:var(--muted);font-size:9px;font-weight:800;letter-spacing:.06em;text-transform:uppercase}
+.planner-track-garmin-cue strong{overflow:hidden;color:var(--accent-bright);font-size:11px;line-height:1.25;text-overflow:ellipsis;white-space:nowrap}
 .planner-track-step-actions,.planner-track-add-actions{display:flex;gap:6px}
 .planner-track-step-actions button{width:36px;height:39px;padding:0}
 .planner-track-step-actions .danger{color:#ff9a90}
@@ -334,7 +337,7 @@
 @media(max-width:460px){
   .planner-track-builder{padding:14px}
   .planner-track-sequence article{grid-template-columns:32px minmax(0,1fr)}
-  .planner-track-sequence article>b{grid-row:1/6}
+  .planner-track-sequence article>b{grid-row:1/7}
   .planner-track-step-actions{grid-column:2}
   .planner-track-add-actions{display:grid;grid-template-columns:1fr}
 }

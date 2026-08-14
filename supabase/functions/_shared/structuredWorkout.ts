@@ -50,16 +50,29 @@ function structuredSteps(input: Record<string, unknown>) {
     return supplied.map((raw) => {
       const step = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
       const recovery = step.kind === "recovery";
+      const unit = step.unit === "time" ? "time" : "distance";
+      const value = safeInteger(step.value, unit === "time" ? 5 : 20, unit === "time" ? 3600 : 5000, recovery ? 200 : 400);
+      const targetPace = paceSeconds(step.targetPace);
+      const cue = recovery
+        ? (unit === "distance" ? `${value}er Trab` : "Trabpause")
+        : unit === "distance"
+          ? `${value}er${targetPace == null ? " Belastung" : ` @ ${formatPace(targetPace)}/km`}`
+          : targetPace == null ? "Belastung" : `Belastung @ ${formatPace(targetPace)}/km`;
       return {
         kind: recovery ? "recovery" : "work",
-        token: stepToken(step.unit, step.value, recovery ? 200 : 400),
+        token: stepToken(unit, value, recovery ? 200 : 400),
         target: recovery ? "" : paceTarget(step),
+        cue,
       };
     });
   }
+  const workUnit = input.workUnit === "time" ? "time" : "distance";
+  const recoveryUnit = input.recoveryUnit === "time" ? "time" : "distance";
+  const workValue = safeInteger(input.workValue, workUnit === "time" ? 5 : 20, workUnit === "time" ? 3600 : 5000, 400);
+  const recoveryValue = safeInteger(input.recoveryValue, recoveryUnit === "time" ? 5 : 20, recoveryUnit === "time" ? 3600 : 5000, 200);
   return [
-    { kind: "work", token: stepToken(input.workUnit, input.workValue, 400), target: "Z5 Pace" },
-    { kind: "recovery", token: stepToken(input.recoveryUnit, input.recoveryValue, 200), target: "" },
+    { kind: "work", token: stepToken(workUnit, workValue, 400), target: "Z5 Pace", cue: workUnit === "distance" ? `${workValue}er Belastung` : "Belastung" },
+    { kind: "recovery", token: stepToken(recoveryUnit, recoveryValue, 200), target: "", cue: recoveryUnit === "distance" ? `${recoveryValue}er Trab` : "Trabpause" },
   ];
 }
 
@@ -72,8 +85,8 @@ function structuredTrackDescription(input: Record<string, unknown>) {
     "",
     `${input.kind === "sprints" ? "Sprints" : "Hauptteil"} ${rounds}x`,
     ...steps.map((step) => step.kind === "recovery"
-      ? `- Pause ${step.token} intensity=recovery`
-      : `- Belastung ${step.token} ${step.target} intensity=interval`),
+      ? `- ${step.cue} ${step.token} intensity=recovery`
+      : `- ${step.cue} ${step.token} ${step.target} intensity=interval`),
     "",
     "Cool-down",
     "- Press lap 10m intensity=cooldown",
@@ -111,8 +124,8 @@ function goalWorkoutDescription(input: Record<string, unknown>) {
     const target = paceSeconds(block.targetPace) != null ? paceTarget(block) : safeEffort(block.effort);
     const label = safeLabel(block.label, `Hauptteil ${index + 1}`);
     lines.push(repeats > 1 ? `${label} ${repeats}x` : label);
-    lines.push(`- ${workToken} ${target} intensity=interval`);
-    if (recoveryMinutes > 0 && repeats > 1) lines.push(`- ${recoveryMinutes}m intensity=recovery`);
+    lines.push(`- Intervall ${workToken} ${target} intensity=interval`);
+    if (recoveryMinutes > 0 && repeats > 1) lines.push(`- Trabpause ${recoveryMinutes}m intensity=recovery`);
     lines.push("");
   });
   lines.push("Cool-down", `- ${cooldownMinutes}m intensity=cooldown`);
@@ -208,8 +221,8 @@ export function intervalDescription(item: Record<string, unknown>) {
       "- 15m intensity=warmup",
       "",
       `${repeats}x`,
-      `- ${meters}mtr Z5 Pace intensity=interval`,
-      `- ${meters}mtr intensity=recovery`,
+      `- Intervall ${meters}mtr Z5 Pace intensity=interval`,
+      `- Trabpause ${meters}mtr intensity=recovery`,
       "",
       "Cool-down",
       "- 10m intensity=cooldown",
@@ -222,8 +235,8 @@ export function intervalDescription(item: Record<string, unknown>) {
       "- 15m intensity=warmup",
       "",
       "6x",
-      "- 2m Z5 Pace intensity=interval",
-      "- 2m intensity=recovery",
+      "- Intervall 2m Z5 Pace intensity=interval",
+      "- Trabpause 2m intensity=recovery",
       "",
       "Cool-down",
       "- 10m intensity=cooldown",
@@ -237,7 +250,7 @@ export function intervalDescription(item: Record<string, unknown>) {
       "- 15m intensity=warmup",
       "",
       "Schwelle",
-      `- ${main}m Z4 Pace intensity=interval`,
+      `- Tempo ${main}m Z4 Pace intensity=interval`,
       "",
       "Cool-down",
       "- 10m intensity=cooldown",

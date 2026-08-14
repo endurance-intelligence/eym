@@ -64,6 +64,7 @@ import {
   trackWorkoutDistance,
   trackWorkoutForEditing,
   trackWorkoutSummary,
+  trackStepGarminCue,
   trackWorkoutTemplateLabel,
   updateTrackStepDraft,
   updateTrackWorkoutDraft,
@@ -3125,6 +3126,7 @@ export default function Planner() {
                       <label>Wert<input type="number" min={step.unit === "distance" ? "20" : "5"} max={step.unit === "distance" ? "5000" : "3600"} value={step.value} onChange={(event) => updateTrackStep(index, "value", event.target.value)} onBlur={() => commitTrackStep(index)} /></label>
                       <label>Ziel-Pace /km<input type="text" inputMode="numeric" pattern="[0-9]{1,2}[:.,][0-5][0-9]" placeholder="z. B. 4:40 oder 440" title="Pace als 4:40 oder 440 eingeben" value={step.targetPace || ""} onChange={(event) => updateTrackStep(index, "targetPace", formatTrackPaceInput(event.target.value))} onBlur={() => commitTrackStep(index)} /></label>
                       <label>Toleranz<select value={step.paceToleranceSeconds ?? 5} disabled={!step.targetPace} onChange={(event) => updateTrackStep(index, "paceToleranceSeconds", Number(event.target.value))}><option value="5">± 5 Sek.</option><option value="10">± 10 Sek.</option><option value="15">± 15 Sek.</option><option value="20">± 20 Sek.</option><option value="30">± 30 Sek.</option></select></label>
+                      <div className="planner-track-garmin-cue"><small>Auf Garmin</small><strong>{trackStepGarminCue(step)}</strong></div>
                       <div className="planner-track-step-actions">
                         <button type="button" onClick={() => moveTrackStep(index, -1)} disabled={index === 0} aria-label={`Schritt ${index + 1} nach oben`}>↑</button>
                         <button type="button" onClick={() => moveTrackStep(index, 1)} disabled={index === editingTrackWorkout.steps.length - 1} aria-label={`Schritt ${index + 1} nach unten`}>↓</button>
@@ -3155,7 +3157,7 @@ export default function Planner() {
                     <span>{editingTrackDistance.hasTimedSteps ? `plus ${trackDurationLabel(editingTrackDistance.timedSeconds)} zeitgesteuerte Abschnitte` : "inklusive Ein- und Auslaufen"}</span>
                   </div>
                 </div>
-                <small>Nur Belastungen erhalten ein Pace-Ziel: 4:40 mit ±5 Sekunden wird auf Garmin als Bereich 4:35–4:45 min/km geführt. Warm-up, Pausen und Cool-down bleiben ohne Ziel. Intervals.icu benötigt zusätzlich unter Running eine gesetzte Threshold Pace und bei der Garmin-Verbindung „Upload planned workouts“.</small>
+                <small>Nur Belastungen erhalten ein Pace-Ziel: 4:40 mit ±5 Sekunden wird auf Garmin als Bereich 4:35–4:45 min/km geführt. Zusätzlich bekommt jeder Hauptteil-Schritt einen kurzen Garmin-Hinweis wie „600er @ 4:30/km“ oder „200er Trab“. Warm-up, Pausen und Cool-down bleiben ohne Pace-Ziel. Intervals.icu benötigt zusätzlich unter Running eine gesetzte Threshold Pace und bei der Garmin-Verbindung „Upload planned workouts“.</small>
               </section>
             )}
             <label>Notiz<textarea value={editing.notes} onChange={(event) => setEditing({ ...editing, notes: event.target.value })} /></label>

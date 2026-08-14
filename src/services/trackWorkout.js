@@ -76,6 +76,18 @@ export function trackPaceRange(input = {}) {
   };
 }
 
+export function trackStepGarminCue(input = {}) {
+  const step = normalizeTrackStep(input, input?.kind === "recovery" ? "recovery" : "work");
+  if (step.kind === "recovery") {
+    return step.unit === "distance" ? `${step.value}er Trab` : "Trabpause";
+  }
+  const paceRange = trackPaceRange(step);
+  if (step.unit === "distance") {
+    return `${step.value}er${paceRange ? ` @ ${paceRange.targetPace}/km` : " Belastung"}`;
+  }
+  return paceRange ? `Belastung @ ${paceRange.targetPace}/km` : "Belastung";
+}
+
 export function isTrackWorkout(item = {}) {
   return /orc\s*track|intervall|interval|sprint/i.test(`${item.type || ""} ${item.title || ""}`);
 }
