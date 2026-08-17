@@ -20,7 +20,7 @@ export function activityTimestamp(activity) {
 }
 
 function typeText(activity) {
-  return `${activity?.type || ""} ${activity?.sportType || ""} ${activity?.subType || ""} ${activity?.name || ""}`.toLowerCase();
+  return `${activity?.type || ""} ${activity?.sportType || ""} ${activity?.subType || ""} ${activity?.name || ""} ${activity?.title || ""}`.toLowerCase();
 }
 
 export function isRunningActivity(activity) {
@@ -28,8 +28,11 @@ export function isRunningActivity(activity) {
   if (["run", "running", "trailrun", "trail_running", "virtualrun", "treadmill_running"].includes(type)) return true;
   if (activity?.category === "running") return true;
   if (["soccer", "ride", "cycling", "swim", "rowing", "walk", "hike", "weighttraining", "workout"].includes(type)) return false;
-  const name = String(activity?.name || "").toLowerCase();
-  return /(^|\s|[-–])(lauf|laufen|trailrun|treadmill|laufband|running)(\s|$|[-–:])/i.test(name) || name.includes("orc run") || name.includes("orc track");
+
+  const text = typeText(activity);
+  if (/\b(easy run|long run|recovery run|tempo run|orc run|orc track)\b/.test(text)) return true;
+  if (text.includes("loop-training")) return true;
+  return /(^|\s|[-–_/])(run|running|lauf|laufen|trailrun|treadmill|laufband|wettkampf|race|backyard|ultra|marathon|intervall|schwelle)(\s|$|[-–:_/])/i.test(text);
 }
 
 export function isRoadCyclingActivity(activity) {

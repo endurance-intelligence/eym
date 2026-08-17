@@ -2402,10 +2402,30 @@ export default function Planner() {
                 <b>{previousWeekReview.tone === "good" ? "✓ stabil" : previousWeekReview.tone === "mixed" ? "↗ beobachten" : "! steuern"}</b>
               </div>
               <div className="planner-week-review-metrics">
-                <div><span>Laufumfang</span><strong>{previousWeekReview.metrics.actualRunningKm.toFixed(1).replace(".0", "")} km</strong><small>Plan {previousWeekReview.metrics.plannedRunningKm.toFixed(1).replace(".0", "")} km</small></div>
-                <div><span>Schlüsselreize</span><strong>{previousWeekReview.metrics.keyCompleted}/{previousWeekReview.metrics.keyPlanned}</strong><small>absolviert</small></div>
-                <div><span>Zusatzbelastung</span><strong>{previousWeekReview.metrics.extraActivities}</strong><small>ungeplante Aktivitäten</small></div>
-                <div><span>Reviews</span><strong>{previousWeekReview.metrics.reviewCount}</strong><small>Ø RPE {previousWeekReview.metrics.averageRpe?.toFixed(1).replace(".", ",") || "–"}</small></div>
+                <div>
+                  <span>Laufumfang</span>
+                  <strong>{previousWeekReview.metrics.actualRunningKm.toFixed(1).replace(".0", "").replace(".", ",")} km</strong>
+                  <small>{previousWeekReview.metrics.plannedRunningKm > 0
+                    ? `Geplant ${previousWeekReview.metrics.plannedRunningKm.toFixed(1).replace(".0", "").replace(".", ",")} km`
+                    : previousWeekReview.metrics.plannedRunningSessions > 0
+                      ? "Planumfang nicht vollständig gespeichert"
+                      : "Keine Laufkilometer geplant"}</small>
+                </div>
+                <div>
+                  <span>Schlüsselreize</span>
+                  <strong>{previousWeekReview.metrics.keyCompleted} von {previousWeekReview.metrics.keyPlanned}</strong>
+                  <small>{previousWeekReview.metrics.keyPlanned > 0 ? "geplante Reize absolviert" : "kein Schlüsselreiz geplant"}</small>
+                </div>
+                <div>
+                  <span>Zusatzbelastung</span>
+                  <strong>{previousWeekReview.metrics.extraActivities || "Keine"}</strong>
+                  <small>{previousWeekReview.metrics.extraActivities === 1 ? "Aktivität außerhalb des Plans" : previousWeekReview.metrics.extraActivities > 1 ? "Aktivitäten außerhalb des Plans" : "keine ungeplante Belastung"}</small>
+                </div>
+                <div>
+                  <span>Reviews</span>
+                  <strong>{previousWeekReview.metrics.reviewCount}</strong>
+                  <small>Ø RPE {previousWeekReview.metrics.averageRpe?.toFixed(1).replace(".", ",") || "–"}</small>
+                </div>
               </div>
               <div className="planner-week-review-columns">
                 <article className="positive"><span>Was gut war</span>{previousWeekReview.positives.map((item) => <p key={item}>✓ {item}</p>)}</article>

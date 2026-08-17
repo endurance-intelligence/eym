@@ -88,8 +88,8 @@ export function weeklyReviewSummary({
     else unmatchedActivities.push(activity);
   });
 
-  const plannedRunningKm = planEntries
-    .filter(isRunningActivity)
+  const plannedRunningEntries = planEntries.filter(isRunningActivity);
+  const plannedRunningKm = plannedRunningEntries
     .reduce((sum, item) => sum + number(item.distance), 0);
   const actualRunningKm = weekActivities
     .filter(isRunningActivity)
@@ -187,12 +187,13 @@ export function weeklyReviewSummary({
     period: { start: startKey, end: endKey },
     headline,
     tone,
-    summary: `${compactKm(actualRunningKm)} km gelaufen · ${completedEntries.length}/${planEntries.length || 0} Planeinheiten abgedeckt · Ø RPE ${rows.length ? average(rows.map(({ review }) => review.rpe)).toFixed(1).replace(".", ",") : "–"}`,
+    summary: `${compactKm(actualRunningKm)} km gelaufen · ${completedEntries.length} von ${planEntries.length || 0} Planeinheiten abgedeckt · Ø RPE ${rows.length ? average(rows.map(({ review }) => review.rpe)).toFixed(1).replace(".", ",") : "–"}`,
     positives,
     watchouts,
     consequence,
     metrics: {
       plannedRunningKm: Number(plannedRunningKm.toFixed(1)),
+      plannedRunningSessions: plannedRunningEntries.length,
       actualRunningKm: Number(actualRunningKm.toFixed(1)),
       plannedSessions: planEntries.length,
       completedSessions: completedEntries.length,

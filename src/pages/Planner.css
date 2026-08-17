@@ -1840,12 +1840,14 @@
     justify-self:stretch;
     min-height:29px;
     padding-top:0;
+  }
+}
 
 /* v3.9.55 – evidence-based weekly coach review */
 .planner-week-review{
   display:grid;
-  gap:12px;
-  padding:14px;
+  gap:16px;
+  padding:18px;
   border:1px solid var(--accent-border-strong);
   border-radius:14px;
   background:color-mix(in srgb,var(--accent-surface) 32%,var(--bg-card));
@@ -1853,24 +1855,24 @@
 .planner-week-review.mixed{border-color:color-mix(in srgb,var(--warning,#facc15) 48%,var(--border))}
 .planner-week-review.watch{border-color:color-mix(in srgb,#ff8b78 52%,var(--border));background:color-mix(in srgb,#ff8b78 5%,var(--bg-card))}
 .planner-week-review-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}
-.planner-week-review-head>div{display:grid;gap:3px;min-width:0}
+.planner-week-review-head>div{display:grid;gap:5px;min-width:0}
 .planner-week-review-head span,.planner-week-review-columns article>span{color:var(--accent-bright);font-size:9px;font-weight:900;letter-spacing:.09em;text-transform:uppercase}
 .planner-week-review-head strong{font-size:18px;line-height:1.2}
-.planner-week-review-head small{color:var(--muted);line-height:1.4}
+.planner-week-review-head small{max-width:900px;color:var(--muted);font-size:12px;line-height:1.5}
 .planner-week-review-head>b{flex:none;padding:6px 9px;border:1px solid var(--accent-border);border-radius:999px;color:var(--accent-bright);font-size:10px;text-transform:uppercase}
 .planner-week-review.mixed .planner-week-review-head>b{border-color:color-mix(in srgb,var(--warning,#facc15) 48%,var(--border));color:var(--warning,#facc15)}
 .planner-week-review.watch .planner-week-review-head>b{border-color:color-mix(in srgb,#ff8b78 52%,var(--border));color:#ff9a8c}
 .planner-week-review-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
-.planner-week-review-metrics>div{display:grid;gap:2px;padding:10px;border:1px solid var(--border);border-radius:11px;background:var(--bg-input)}
+.planner-week-review-metrics>div{display:grid;align-content:start;gap:5px;padding:13px 14px;border:1px solid var(--border);border-radius:12px;background:var(--bg-input)}
 .planner-week-review-metrics span{color:var(--muted);font-size:9px;text-transform:uppercase;letter-spacing:.07em}
-.planner-week-review-metrics strong{font-size:15px}
-.planner-week-review-metrics small{color:var(--muted);font-size:10px}
-.planner-week-review-columns{display:grid;grid-template-columns:1fr 1fr 1.15fr;gap:9px}
-.planner-week-review-columns article{display:grid;align-content:start;gap:6px;padding:11px;border:1px solid var(--border);border-radius:11px;background:var(--bg-sidebar)}
+.planner-week-review-metrics strong{font-size:18px;line-height:1.2}
+.planner-week-review-metrics small{color:var(--muted);font-size:11px;line-height:1.35}
+.planner-week-review-columns{display:grid;grid-template-columns:1fr 1fr 1.15fr;gap:10px}
+.planner-week-review-columns article{display:grid;align-content:start;gap:9px;padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--bg-sidebar)}
 .planner-week-review-columns article.positive>span{color:var(--success,#5ee494)}
 .planner-week-review-columns article.watch>span{color:var(--warning,#facc15)}
 .planner-week-review-columns article.consequence{border-color:var(--accent-border);background:color-mix(in srgb,var(--accent-surface) 38%,var(--bg-sidebar))}
-.planner-week-review-columns p{margin:0;color:var(--muted-bright);font-size:11px;line-height:1.45}
+.planner-week-review-columns p{margin:0;color:var(--muted-bright);font-size:12px;line-height:1.5}
 .planner-week-review-columns article.consequence p{color:var(--text);font-weight:700}
 @media(max-width:900px){
   .planner-week-review-metrics{grid-template-columns:1fr 1fr}

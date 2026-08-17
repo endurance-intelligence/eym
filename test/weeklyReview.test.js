@@ -66,3 +66,31 @@ test("weekly review highlights GI signals without turning one hard session into 
   assert.match(result.watchouts.join(" "), /Magen-\/GI-Auffälligkeiten/);
   assert.match(result.consequence, /Fueling/);
 });
+
+
+test("weekly review counts planner-native running workout types in planned volume", () => {
+  const plan = [
+    { id: "easy", date: "2026-08-10", title: "10 km locker", type: "Easy Run", distance: 10, completed: true },
+    { id: "track", date: "2026-08-11", title: "ORC Track – 8 × 200", type: "ORC Track", distance: 12.7, completed: true },
+    { id: "race", date: "2026-08-14", title: "UrLand-Lauf", type: "Wettkampf", distance: 9.6, raceEvent: true, completed: true },
+    { id: "football", date: "2026-08-10", title: "Fußball", type: "Fußball", distance: 6.5, completed: true },
+  ];
+  const activities = [
+    { id: "a-easy", date: "2026-08-10", name: "10 km locker", type: "Run", distance: 10 },
+    { id: "a-track", date: "2026-08-11", name: "ORC Track", type: "Run", distance: 12.7 },
+    { id: "a-race", date: "2026-08-14", name: "UrLand-Lauf", type: "Run", distance: 9.6 },
+    { id: "a-football", date: "2026-08-10", name: "Fußball", type: "Soccer", distance: 6.5 },
+  ];
+
+  const result = weeklyReviewSummary({
+    weekStart: new Date("2026-08-10T12:00:00"),
+    plan,
+    activities,
+    allActivities: activities,
+    reviews: {},
+  });
+
+  assert.equal(result.metrics.plannedRunningKm, 32.3);
+  assert.equal(result.metrics.plannedRunningSessions, 3);
+  assert.equal(result.metrics.actualRunningKm, 32.3);
+});
