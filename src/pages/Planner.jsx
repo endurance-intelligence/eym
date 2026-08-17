@@ -348,9 +348,6 @@ function PlannerIconAction({ icon, label, className = "", onClick }) {
   );
 }
 
-function eventProtectionDays(priority) {
-  return { A: 5, B: 4, C: 3 }[priority] || 3;
-}
 
 function replacementWorkoutType(sport) {
   return {
@@ -2408,31 +2405,31 @@ export default function Planner() {
       </PageTitle>
       <TrainingSectionNav />
       <section className="planner-week-dashboard">
-        {goalProfile.target?.name && (
-          <Link
-            className="planner-goal-strip active"
-            to="/mission"
-            aria-label={`${goalProfile.target.name}: Hauptziel öffnen`}
-          >
-            <div className="planner-goal-strip-main">
+        <section className="planner-week-focus-card">
+          <div className="planner-week-focus-copy">
+            <span>Wochenfokus</span>
+            <strong>{weekPrescription?.weekType?.label || (weekPlan.length ? "Trainingswoche" : "Woche vorbereiten")}</strong>
+            <small>{weekPrescription?.focus || "Training passend zur aktuellen Phase und deinem Alltag steuern."}</small>
+          </div>
+          {goalProfile.target?.name && (
+            <Link className="planner-week-focus-goal" to="/mission" aria-label={`${goalProfile.target.name}: Hauptziel öffnen`}>
               <span>Hauptziel</span>
               <strong>{goalProfile.target.name}</strong>
               <small>{goalProfile.disciplineLabel} · {goalProfile.phase?.label || "Phase wird berechnet"}</small>
-            </div>
-            <b>Ziel öffnen →</b>
-          </Link>
-        )}
+            </Link>
+          )}
+        </section>
 
         {!isPastWeek && weekPlan.length > 0 && (
           <section className={`planner-plan-approval ${weekApprovalState}`}>
             <div className="planner-plan-approval-copy">
-              <span>Wochenplan</span>
-              <strong>{weekAccepted ? "Plan angenommen" : weekApprovalState === WEEK_APPROVAL_STATES.CHANGED ? "Änderungen prüfen" : "Plan freigeben"}</strong>
+              <span>Planstatus</span>
+              <strong>{weekAccepted ? "Plan angenommen" : weekApprovalState === WEEK_APPROVAL_STATES.CHANGED ? "Änderungen prüfen" : "Plan prüfen und annehmen"}</strong>
               <small>{weekAccepted
                 ? `Bestätigt am ${acceptedAtLabel} · bereit für Garmin.`
                 : weekApprovalState === WEEK_APPROVAL_STATES.CHANGED
                   ? "Der bestätigte Plan wurde verändert."
-                  : "Einheiten prüfen und anschließend bestätigen."}</small>
+                  : "Erst prüfen, dann freigeben."}</small>
             </div>
             <div className="planner-plan-approval-actions">
               {!weekAccepted && <button type="button" className="primary" onClick={acceptCurrentWeek}>{weekApprovalState === WEEK_APPROVAL_STATES.CHANGED ? "Erneut annehmen" : "Plan annehmen"}</button>}
@@ -2442,24 +2439,22 @@ export default function Planner() {
         )}
 
         {!isPastWeek && !weekAccepted && lastPlanChangeForWeek && lastPlanChangeUndoable && (
-          <section className="planner-undo-banner">
+          <section className="planner-inline-notice planner-inline-notice-undo">
             <div>
               <span>Letzte Coach-Änderung</span>
               <strong>{lastPlanChangeForWeek.reason || "Wochenplan angepasst"}</strong>
-              <small>Der vorherige Wochenstand ist noch verfügbar. Nach weiteren manuellen Änderungen wird Rückgängig aus Sicherheitsgründen deaktiviert.</small>
             </div>
-            <button type="button" onClick={undoLastPlanChange}>Änderung rückgängig</button>
+            <button type="button" onClick={undoLastPlanChange}>Rückgängig</button>
           </section>
         )}
 
         {!isPastWeek && availabilityConflicts.length > 0 && (
-          <section className="planner-availability-conflict">
+          <section className="planner-inline-notice planner-inline-notice-warning">
             <div>
-              <span>Verfügbarkeit geändert</span>
-              <strong>{availabilityConflicts.length} Einheit{availabilityConflicts.length === 1 ? " liegt" : "en liegen"} noch auf einem blockierten Tag</strong>
-              <small>Der Coach verschiebt nichts heimlich. Prüfe zuerst die konkrete Vorher-/Nachher-Vorschau.</small>
+              <span>Wochenangaben geändert</span>
+              <strong>{availabilityConflicts.length} Einheit{availabilityConflicts.length === 1 ? " liegt" : "en liegen"} noch auf einem eingeschränkten Tag.</strong>
             </div>
-            <button type="button" className="primary" onClick={replanCurrentWeek}>Auswirkung prüfen</button>
+            <button type="button" onClick={replanCurrentWeek}>Auswirkung prüfen</button>
           </section>
         )}
 
@@ -2484,7 +2479,7 @@ export default function Planner() {
                   </a>
                 ))}
               </div>
-              <small>Die Empfehlung steht zusätzlich direkt an der betroffenen Einheit. Dort kannst du sie sofort annehmen oder ablehnen.</small>
+              <small>Die Empfehlung findest du zusätzlich direkt an der betroffenen Einheit.</small>
             </div>
           </details>
         )}
@@ -2493,7 +2488,7 @@ export default function Planner() {
           <details className={`planner-week-logic ${scienceAssessment.loadBand?.tone || "neutral"}`}>
             <summary>
               <div className="planner-week-logic-lead">
-                <span>Wochentyp</span>
+                <span>Warum dieser Plan?</span>
                 <strong>{weekPrescription?.weekType?.label || "Trainingswoche"}</strong>
                 <small>{loadComparisonLabel} · {scienceAssessment.loadBand?.label || "Wird eingeordnet"}</small>
               </div>
@@ -2502,7 +2497,7 @@ export default function Planner() {
                 <span><b>{fixedSessionCount}</b> Termine</span>
                 <span><b>{scienceAssessment.hardCount ?? keySessionCount}</b> Reize</span>
               </div>
-              <b className="planner-week-logic-toggle">Details →</b>
+              <b className="planner-week-logic-toggle">Erklärung</b>
             </summary>
             <div className="planner-week-logic-body">
               <article className="planner-week-logic-focus">
@@ -2581,14 +2576,14 @@ export default function Planner() {
 
       {weekEventEntries.length > 0 && (
         <Card className="wide planner-event-week-card">
-          <div>
-            <p className="eyebrow">Eventwoche · Frische geschützt</p>
+          <div className="planner-event-week-main">
+            <p className="eyebrow">Wettkampf diese Woche</p>
             <h2>{weekEventEntries.map((item) => item.title).join(" · ")}</h2>
-            <p>Das Event ersetzt Longrun und harte Qualität. In den {Math.max(...weekEventEntries.map((item) => eventProtectionDays(item.goalPriority)))} Tagen davor werden intensive Zusatzbelastungen entschärft; danach ist Erholung eingeplant.</p>
-            {config.lastPlanningTarget?.name && <small>Strategischer Trainingsfokus bleibt: <strong>{config.lastPlanningTarget.name}</strong>.</small>}
+            <p>Der Coach integriert den Wettkampf als Wochenreiz und schützt die unmittelbare Frische, ohne die Hauptmission aus dem Blick zu verlieren.</p>
+            {config.lastPlanningTarget?.name && <small>Trainingsfokus: <strong>{config.lastPlanningTarget.name}</strong>.</small>}
           </div>
           <div className="planner-event-week-badges">
-            {weekEventEntries.map((item) => <span key={item.id}>Priorität {item.goalPriority || "B"} · {item.distance ? `${item.distance} km` : "Event"}{item.time ? ` · ${item.time} Uhr` : ""}</span>)}
+            {weekEventEntries.map((item) => <span key={item.id}>{item.distance ? `${item.distance} km` : "Event"}{item.time ? ` · ${item.time} Uhr` : ""} · Prio {item.goalPriority || "B"}</span>)}
           </div>
         </Card>
       )}
@@ -2755,7 +2750,16 @@ export default function Planner() {
 
               {availability && (
                 <div className="planner-availability-note">
-                  <div><span>{availability.status === "blocked" ? "Training nicht möglich" : "Diese Woche angepasst"}</span><strong>{availabilityLabel(availability)}</strong>{availability.note && <small>{availability.note}</small>}</div>
+                  <div className="planner-availability-note-main">
+                    <span>{availability.status === "blocked" ? "Training nicht möglich" : "Diese Woche angepasst"}</span>
+                    <strong>{availabilityLabel(availability)}</strong>
+                  </div>
+                  {availability.note && (
+                    <details className="planner-availability-note-details">
+                      <summary>Warum?</summary>
+                      <small>{availability.note}</small>
+                    </details>
+                  )}
                   {availabilityEditable && <button type="button" onClick={() => openAvailability(dateKey)}>Ändern</button>}
                 </div>
               )}
@@ -2904,58 +2908,66 @@ export default function Planner() {
                       {matched && <small>{matched.name || item.actualTitle}</small>}
                       {item.missedReason && <small>Grund: {item.missedReason}{item.missedNote ? ` · ${item.missedNote}` : ""}</small>}
                       {missedSessionDecision?.cancellationId === item.id && (
-                        <div className={`planner-missed-session-inline ${missedSessionDecision.tone}`}>
-                          <div>
-                            <span>Coach-Entscheidung zum Ausfall</span>
+                        <details className={`planner-missed-session-inline ${missedSessionDecision.tone}`} onClick={(event) => event.stopPropagation()}>
+                          <summary>
+                            <span>Coach-Einordnung</span>
                             <strong>{missedSessionDecision.title}</strong>
+                            <b>Details</b>
+                          </summary>
+                          <div className="planner-missed-session-body">
                             <p>{missedSessionDecision.recommendation}</p>
                             <small>{missedSessionDecision.reason}</small>
+                            {missedSessionDecision.canApply && (
+                              <button type="button" onClick={() => applyMissedLongRunExtension()}>
+                                + {missedSessionDecision.extraMinutes} min optional
+                              </button>
+                            )}
                           </div>
-                          {missedSessionDecision.canApply && (
-                            <button type="button" onClick={(event) => { event.stopPropagation(); applyMissedLongRunExtension(); }}>
-                              + {missedSessionDecision.extraMinutes} min optional
-                            </button>
-                          )}
-                        </div>
+                        </details>
                       )}
-                      {item.notes && !isCancelled && <small>{item.notes}</small>}
+                      {item.notes && !isCancelled && (String(item.notes).length > 150
+                        ? <details className="planner-workout-notes" onClick={(event) => event.stopPropagation()}><summary>Coach-Hinweis</summary><small>{item.notes}</small></details>
+                        : <small className="planner-workout-note-brief">{item.notes}</small>)}
                       {item.raceEvent && raceProtocol && !completed && !isCancelled && (
-                        <section className="planner-race-protocol" onClick={(event) => event.stopPropagation()}>
-                          <div className="planner-race-protocol-head">
+                        <details className="planner-race-protocol" onClick={(event) => event.stopPropagation()}>
+                          <summary className="planner-race-protocol-head">
                             <div>
                               <span>Race Protocol</span>
                               <strong>{raceProtocol.enabled || raceProtocol.settings.mode === "auto" ? raceProtocol.recommendation.label : "Nur Wettkampf"}</strong>
-                              <small>{raceProtocol.enabled || raceProtocol.settings.mode === "auto" ? raceProtocol.recommendation.reason : "Kein zusätzlicher Race-Day-Ablauf. Wettkampf und dein persönliches Warm-up bleiben unberührt."}</small>
+                              <small>{raceProtocol.enabled || raceProtocol.settings.mode === "auto" ? raceProtocol.recommendation.reason : "Kein zusätzlicher Race-Day-Ablauf."}</small>
                             </div>
+                            <b>Plan anzeigen</b>
+                          </summary>
+                          <div className="planner-race-protocol-body">
                             <div className="planner-race-protocol-modes" role="group" aria-label="Race Protocol auswählen">
                               <button type="button" className={raceProtocol.settings.mode === "auto" ? "selected" : ""} onClick={() => updateRaceProtocol(item, { mode: "auto" })}>Auto</button>
                               <button type="button" className={raceProtocol.settings.mode === "on" ? "selected" : ""} onClick={() => updateRaceProtocol(item, { mode: "on" })}>Race Protocol</button>
                               <button type="button" className={raceProtocol.settings.mode === "off" ? "selected" : ""} onClick={() => updateRaceProtocol(item, { mode: "off" })}>Nur Wettkampf</button>
                             </div>
-                          </div>
-                          {raceProtocol.enabled && (
-                            <>
-                              <div className="planner-race-protocol-timeline">
-                                {raceProtocol.timeline.filter((step) => step.key !== "start").map((step) => <article key={step.key}><span>{step.time || step.relative || "vor Start"}{step.optional ? " · optional" : ""}</span><b>{step.label}</b><small>{step.detail}</small></article>)}
-                              </div>
-                              <details className="planner-race-protocol-options">
-                                <summary>Bausteine auswählen</summary>
-                                <div>
-                                  {[
-                                    ["fueling", "🥣 Pre-Race Fueling"],
-                                    ["hydration", "💧 Trink-Reminder"],
-                                    ["activation", "⚡ Race-Day Activation"],
-                                    ["warmup", "🏃 Warm-up"],
-                                    ["strides", "↗ Strides"],
-                                    ["calendarReminders", "🔔 Kalender-Erinnerungen"],
-                                  ].map(([key, label]) => <label key={key}><input type="checkbox" checked={Boolean(raceProtocol.settings.components[key])} onChange={(event) => updateRaceProtocol(item, { components: { [key]: event.target.checked } })} /><span>{label}</span></label>)}
+                            {raceProtocol.enabled && (
+                              <>
+                                <div className="planner-race-protocol-timeline">
+                                  {raceProtocol.timeline.filter((step) => step.key !== "start").map((step) => <article key={step.key}><span>{step.time || step.relative || "vor Start"}{step.optional ? " · optional" : ""}</span><b>{step.label}</b><small>{step.detail}</small></article>)}
                                 </div>
-                                {raceProtocol.settings.components.activation && !raceProtocol.activationDecision.recommended && <small>{raceProtocol.activationDecision.reason}</small>}
-                                {raceProtocol.settings.components.calendarReminders && !raceProtocol.startTimeKnown && <small>Kalender-Erinnerungen brauchen eine Startzeit am Event.</small>}
-                              </details>
-                            </>
-                          )}
-                        </section>
+                                <details className="planner-race-protocol-options">
+                                  <summary>Bausteine auswählen</summary>
+                                  <div>
+                                    {[
+                                      ["fueling", "🥣 Pre-Race Fueling"],
+                                      ["hydration", "💧 Trink-Reminder"],
+                                      ["activation", "⚡ Race-Day Activation"],
+                                      ["warmup", "🏃 Warm-up"],
+                                      ["strides", "↗ Strides"],
+                                      ["calendarReminders", "🔔 Kalender-Erinnerungen"],
+                                    ].map(([key, label]) => <label key={key}><input type="checkbox" checked={Boolean(raceProtocol.settings.components[key])} onChange={(event) => updateRaceProtocol(item, { components: { [key]: event.target.checked } })} /><span>{label}</span></label>)}
+                                  </div>
+                                  {raceProtocol.settings.components.activation && !raceProtocol.activationDecision.recommended && <small>{raceProtocol.activationDecision.reason}</small>}
+                                  {raceProtocol.settings.components.calendarReminders && !raceProtocol.startTimeKnown && <small>Kalender-Erinnerungen brauchen eine Startzeit am Event.</small>}
+                                </details>
+                              </>
+                            )}
+                          </div>
+                        </details>
                       )}
                       {trackSyncStatus && !matched && !completed && !isCancelled && !isMissed && (
                         <div className={`planner-track-sync-status ${trackSyncStatus.state}`}>

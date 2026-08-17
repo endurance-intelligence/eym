@@ -24,3 +24,12 @@ test("race cards expose Auto, Race Protocol and Nur Wettkampf instead of forcing
   assert.match(plannerSource, /Race-Day Activation/);
   assert.match(plannerSource, /Kalender-Erinnerungen/);
 });
+
+test("weekly view keeps the default scan calm and moves verbose detail behind disclosures", () => {
+  assert.match(plannerSource, /planner-week-focus-card/);
+  assert.match(plannerSource, /Wochenfokus/);
+  assert.match(plannerSource, /<details className="planner-race-protocol"/);
+  assert.match(plannerSource, /<details className=\{`planner-missed-session-inline/);
+  assert.match(plannerSource, /<details className="planner-workout-notes"/);
+  assert.match(plannerSource, /planner-availability-note-details/);
+});
