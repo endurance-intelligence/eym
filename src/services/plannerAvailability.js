@@ -216,7 +216,7 @@ function travelHours(text = "") {
 }
 
 function travelSignal(text = "") {
-  return /reise|reisestress|reisetag|autofahrt|zugfahrt|bahnreise|flug|fliegen|unterwegs|mehrstündig/i.test(text);
+  return /reise|reisestress|reisetag|autofahrt|zugfahrt|bahnreise|flug|fliegen|unterwegs|mehrstündig|(?:mit\s+(?:dem\s+)?)auto|im\s+auto|auto\s+(?:fahren|fahre|fahrt|unterwegs|sitzen)|lang(?:e|er|en|es)?\s+auto\s+fahr/i.test(text);
 }
 
 function reasonFromText(text = "") {
@@ -272,7 +272,7 @@ export function planningConstraintsFromNote(note = "", weekStart = new Date()) {
   if (Number.isNaN(start.getTime())) return [];
   start.setHours(12, 0, 0, 0);
 
-  return daySegments(note).map((segment) => {
+  const parsed = daySegments(note).map((segment) => {
     const dayIndex = DAY_INDEX[segment.day];
     if (dayIndex == null) return null;
     const date = new Date(start);
@@ -281,14 +281,15 @@ export function planningConstraintsFromNote(note = "", weekStart = new Date()) {
     const maxDurationMinutes = parseMaximumMinutes(text);
     const travel = travelSignal(text);
     const travelStress = /reisestress|anstrengend(?:e|er|en)?\s+(?:reise|fahrt)|reisetag/i.test(text);
-    const longTravel = travel && (travelHours(text) >= 4 || travelStress || /lang(?:e|er|en)?\s+(?:reise|autofahrt|zugfahrt|fahrt)|mehrstündig|ganztägig/i.test(text));
+    const longTravel = travel && (travelHours(text) >= 4 || travelStress || /lang(?:e|er|en|es)?\s+(?:reise|autofahrt|zugfahrt|fahrt)|lang(?:e|er|en|es)?\s+auto\s+fahr|mehrstündig|ganztägig/i.test(text));
     const explicitUnavailable = /(?:training|laufen|lauf|einheit)?\s*(?:zeitlich\s*)?(?:nicht|kaum)\s*möglich|training\s*unmöglich|keine\s+zeit|ganztägig(?:er|e|es)?\s+(?:termin|unterwegs|reise)|komplett\s+verplant/i.test(text);
     const explicitlyRecoveryOnly = /nur\s+(?:sehr\s+)?(?:locker|regenerativ|recovery|aktivierung|mobility)|nur\s+(?:eine\s+)?kurze\s+(?:einheit|aktivierung)|maximal\s+\d{1,3}(?:\s*[-–]\s*\d{1,3})?\s*min/i.test(text);
     const noRunning = /kein(?:e|en)?\s+(?:lauf|laufen|laufeinheit)|nicht\s+laufen/i.test(text);
-    const recoveryOnly = !explicitUnavailable && (explicitlyRecoveryOnly || longTravel || (maxDurationMinutes != null && maxDurationMinutes <= 30));
+    const recoveryOnly = !explicitUnavailable && (explicitlyRecoveryOnly || (maxDurationMinutes != null && maxDurationMinutes <= 30));
     const inferredDuration = maxDurationMinutes || (recoveryOnly && longTravel ? 20 : null);
+    const travelNoRunning = longTravel;
 
-    if (!explicitUnavailable && !recoveryOnly && !noRunning && !inferredDuration && !travel) return null;
+    if (!explicitUnavailable && !recoveryOnly && !noRunning && !travelNoRunning && !inferredDuration && !travel) return null;
     return normalizeAvailabilityException({
       id: `planning-note-${isoDate(date)}`,
       date: isoDate(date),
@@ -297,9 +298,19 @@ export function planningConstraintsFromNote(note = "", weekStart = new Date()) {
       note: text,
       maxDurationMinutes: inferredDuration,
       recoveryOnly,
-      noRunning: noRunning || recoveryOnly,
+      noRunning: noRunning || recoveryOnly || travelNoRunning,
       noDouble: explicitUnavailable || recoveryOnly || travel || Boolean(inferredDuration),
       source: "planning-note",
     });
   }).filter(Boolean);
+
+  // A natural note may mention the same weekday more than once, e.g.
+  // "Dienstag lange Auto fahren. Dienstag Training nicht möglich."
+  // Keep the strictest interpretation instead of letting timestamp order decide.
+  const byDate = new Map();
+  parsed.forEach((constraint) => {
+    const existing = byDate.get(constraint.date);
+    byDate.set(constraint.date, existing ? mergeSameDate(existing, constraint) : constraint);
+  });
+  return [...byDate.values()].sort((left, right) => left.date.localeCompare(right.date));
 }

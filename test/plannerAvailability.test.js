@@ -88,9 +88,9 @@ test("shared weekday wording applies the same travel constraint to every named d
     "2026-08-17",
   );
 
-  assert.deepEqual(constraints.map((entry) => [entry.date, entry.reason, entry.recoveryOnly, entry.maxDurationMinutes]), [
-    ["2026-08-18", "Reise", true, 20],
-    ["2026-08-20", "Reise", true, 20],
+  assert.deepEqual(constraints.map((entry) => [entry.date, entry.reason, entry.noRunning, entry.noDouble]), [
+    ["2026-08-18", "Reise", true, true],
+    ["2026-08-20", "Reise", true, true],
   ]);
 });
 
@@ -101,7 +101,7 @@ test("weekday abbreviations keep a shared long-travel constraint generic", () =>
   );
 
   assert.deepEqual(constraints.map((entry) => entry.date), ["2026-08-18", "2026-08-20"]);
-  assert.ok(constraints.every((entry) => entry.recoveryOnly && entry.noRunning && entry.noDouble));
+  assert.ok(constraints.every((entry) => entry.noRunning && entry.noDouble));
 });
 
 test("replanning keeps the saved note for the same week but does not leak it into a fresh week", () => {
@@ -130,4 +130,32 @@ test("planning preview check-in is upserted per week so a cancelled preview keep
   assert.equal(next[0].id, "new-draft");
   assert.equal(planningNoteForWeek(next, "2026-08-17", "create"), "Dienstag Training nicht möglich. Donnerstag maximal 20 Minuten locker.");
   assert.equal(planningNoteForWeek(next, "2026-08-24", "create"), "");
+});
+
+test("natural Auto fahren wording is treated as long travel for every named weekday", () => {
+  const constraints = planningConstraintsFromNote(
+    "Dienstag und Donnerstag 7–8 Stunden Auto fahren, da ich beruflich in die Schweiz muss.",
+    "2026-08-17",
+  );
+
+  assert.deepEqual(constraints.map((entry) => [entry.date, entry.reason, entry.recoveryOnly, entry.maxDurationMinutes || null, entry.noRunning]), [
+    ["2026-08-18", "Reise", false, null, true],
+    ["2026-08-20", "Reise", false, null, true],
+  ]);
+});
+
+test("multiple clauses for the same weekday merge to the strictest planning constraint", () => {
+  const constraints = planningConstraintsFromNote(
+    "Dienstag lange Auto fahren. Dienstag Training zeitlich nicht möglich. Donnerstag lange Auto fahren. Donnerstag maximal 15–20 Minuten sehr lockere Aktivierung möglich.",
+    "2026-08-17",
+  );
+
+  assert.equal(constraints.length, 2);
+  const tuesday = constraints.find((entry) => entry.date === "2026-08-18");
+  const thursday = constraints.find((entry) => entry.date === "2026-08-20");
+  assert.equal(tuesday?.status, "blocked");
+  assert.equal(tuesday?.noDouble, true);
+  assert.equal(thursday?.recoveryOnly, true);
+  assert.equal(thursday?.noRunning, true);
+  assert.equal(thursday?.maxDurationMinutes, 20);
 });

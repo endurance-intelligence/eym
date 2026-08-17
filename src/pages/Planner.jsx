@@ -119,6 +119,7 @@ import {
   AVAILABILITY_REASONS,
   availabilityForDate,
   availabilityLabel,
+  mergeAvailabilityExceptions,
   normalizeAvailabilityExceptions,
   planningConstraintsFromNote,
   planningNoteForWeek,
@@ -1421,7 +1422,25 @@ export default function Planner() {
     const overridePlanner = { ...(overrideConfig || {}) };
     delete overridePlanner.adjustDates;
     delete overridePlanner.recurringCommitments;
-    const effectiveConfig = { ...config, ...overridePlanner, recurringCommitments: draftCommitments };
+    const noteText = String(overridePlanner.checkin?.notes ?? config.checkin?.notes ?? "");
+    const explicitPlanningConstraints = planningConstraintsFromNote(noteText, weekStart);
+    const effectiveConfig = {
+      ...config,
+      ...overridePlanner,
+      recurringCommitments: draftCommitments,
+      checkin: {
+        ...(config.checkin || {}),
+        ...(overridePlanner.checkin || {}),
+        notes: noteText,
+      },
+      // Push the parsed note into the same availability model the engine already trusts.
+      // The engine still parses the note itself as a second line of defence.
+      availabilityExceptions: mergeAvailabilityExceptions(
+        config.availabilityExceptions,
+        overridePlanner.availabilityExceptions,
+        explicitPlanningConstraints,
+      ),
+    };
     const generated = generateWeekPlan({
       activities: canonicalActivities,
       activityGroups: state.activityGroups,
@@ -1437,6 +1456,12 @@ export default function Planner() {
       completedCrossTrainingKm: crossTrainingSummary.rawEquivalentKm,
       crossTrainingDetails: crossTrainingSummary.details,
     });
+
+    if (generated.planningConstraintViolations?.length) {
+      const first = generated.planningConstraintViolations[0];
+      setStatus(`Plan nicht freigegeben: ${planChangeDateLabel(first.date)} verletzt den erkannten Tagesconstraint (${first.message}). Bitte Vorschau erneut berechnen.`);
+      return;
+    }
 
     const checkinRecord = {
       id: crypto.randomUUID(),

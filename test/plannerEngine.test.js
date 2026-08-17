@@ -549,8 +549,8 @@ test("shared travel shorthand cannot leave Tuesday training or the Thursday shak
   const thursday = result.plan.filter((item) => item.date === "2026-08-20");
   const activation = result.plan.find((item) => item.preRaceActivation);
 
-  assert.equal(tuesday.some((item) => Number(item.distance || 0) > 0 || item.type === "Stabi"), false);
-  assert.ok(tuesday.every((item) => item.type === "Mobility" || item.type === "Ruhetag"));
+  assert.equal(tuesday.some((item) => Number(item.distance || 0) > 0 || /run|lauf|track|intervall|schwelle|tempo/i.test(`${item.type} ${item.title}`)), false);
+  assert.ok(tuesday.length <= 1);
   assert.equal(activation?.date, "2026-08-19");
   assert.equal(thursday.some((item) => Number(item.distance || 0) > 0), false);
   assert.ok(thursday.every((item) => Number(item.duration || 0) <= 20));
@@ -962,4 +962,29 @@ test("planner keeps one-time unavailable dates free without creating kilometer d
   assert.deepEqual(result.availabilityBlockedDates, ["2026-08-01"]);
   assert.equal(result.blockedDates.includes("2026-08-01"), true);
   assert.equal(result.plan.some((item) => item.type === "Long Run" && item.day === "Sonntag"), true);
+});
+
+test("natural long-car-travel wording cannot leave an easy run, strength session or Thursday shake-out", () => {
+  const result = generateWeekPlan(travelEventInput({
+    config: {
+      checkin: {
+        energy: 8,
+        fatigue: "none",
+        illness: "healthy",
+        pain: "none",
+        painLevel: 0,
+        notes: "Dienstag und Donnerstag 7–8 Stunden Auto fahren, da ich beruflich in die Schweiz muss.",
+      },
+    },
+  }));
+  const tuesday = result.plan.filter((item) => item.date === "2026-08-18");
+  const thursday = result.plan.filter((item) => item.date === "2026-08-20");
+  const activation = result.plan.find((item) => item.preRaceActivation);
+
+  assert.equal(tuesday.some((item) => Number(item.distance || 0) > 0 || /run|lauf|track|intervall|schwelle|tempo/i.test(`${item.type} ${item.title}`)), false);
+  assert.ok(tuesday.length <= 1);
+  assert.equal(activation?.date, "2026-08-19");
+  assert.equal(thursday.some((item) => Number(item.distance || 0) > 0), false);
+  assert.ok(thursday.every((item) => Number(item.duration || 0) <= 20));
+  assert.deepEqual(result.planningConstraintViolations, []);
 });

@@ -346,7 +346,7 @@ function applyDailyAvailabilityConstraints(plan = [], availabilityExceptions = [
       return;
     }
     if (constraint.status === "blocked") return;
-    if (constraint.recoveryOnly || constraint.noRunning) {
+    if (constraint.recoveryOnly) {
       if (entry.type === "Ruhetag") {
         constrained.push({
           ...constrainedRecoveryEntry(entry, constraint),
@@ -372,6 +372,12 @@ function applyDailyAvailabilityConstraints(plan = [], availabilityExceptions = [
       } else {
         constrained.push(constrainedRecoveryEntry(entry, constraint));
       }
+      datesWithEntries.add(entry.date);
+      return;
+    }
+    if (constraint.noRunning && isRunningPlanEntry(entry)) {
+      // A pure no-running constraint (for example a long car journey) blocks the run
+      // without silently deleting an otherwise allowed short strength/mobility session.
       datesWithEntries.add(entry.date);
       return;
     }
@@ -442,6 +448,63 @@ function applyDailyAvailabilityConstraints(plan = [], availabilityExceptions = [
     })[0];
     return selected ? [selected] : [];
   });
+}
+
+
+function planningConstraintViolations(plan = [], availabilityExceptions = []) {
+  const constraints = (Array.isArray(availabilityExceptions) ? availabilityExceptions : [])
+    .filter((entry) => entry?.source === "planning-note" && entry?.date);
+  const violations = [];
+
+  constraints.forEach((constraint) => {
+    const entries = (Array.isArray(plan) ? plan : []).filter((entry) => entry.date === constraint.date);
+    if (constraint.status === "blocked") {
+      const invalid = entries.find((entry) => entry.raceEvent
+        || Number(entry.distance || 0) > 0
+        || Number(entry.duration || 0) > 0
+        || !/ruhetag|rest|kein training/i.test(`${entry.type || ""} ${entry.title || ""}`));
+      if (invalid) {
+        violations.push({ date: constraint.date, message: "Training ist an diesem Tag gesperrt", entryId: invalid.id || "" });
+      }
+      return;
+    }
+
+    if (constraint.recoveryOnly) {
+      const maxDuration = Number(constraint.maxDurationMinutes || 20);
+      const invalid = entries.find((entry) => {
+        const text = `${entry.type || ""} ${entry.title || ""}`.toLowerCase();
+        const recoveryLike = /mobility|mobilität|recovery|regeneration|aktivierung|ruhetag|rest/.test(text);
+        return entry.raceEvent
+          || isRunningPlanEntry(entry)
+          || Number(entry.distance || 0) > 0
+          || /stabi|kraft|strength|intervall|threshold|schwelle|tempo|track/.test(text)
+          || !recoveryLike
+          || (maxDuration > 0 && Number(entry.duration || 0) > maxDuration);
+      });
+      if (invalid) {
+        violations.push({ date: constraint.date, message: `nur Recovery/Aktivierung bis maximal ${maxDuration} Minuten erlaubt`, entryId: invalid.id || "" });
+      }
+      return;
+    }
+
+    if (constraint.noRunning) {
+      const invalid = entries.find((entry) => entry.raceEvent || isRunningPlanEntry(entry) || Number(entry.distance || 0) > 0);
+      if (invalid) violations.push({ date: constraint.date, message: "keine Laufeinheit erlaubt", entryId: invalid.id || "" });
+      return;
+    }
+
+    if (constraint.maxDurationMinutes) {
+      const maxDuration = Number(constraint.maxDurationMinutes);
+      const invalid = entries.find((entry) => Number(entry.duration || 0) > maxDuration);
+      if (invalid) violations.push({ date: constraint.date, message: `maximal ${maxDuration} Minuten erlaubt`, entryId: invalid.id || "" });
+    }
+
+    if (constraint.noDouble && entries.filter((entry) => entry.type !== "Ruhetag").length > 1) {
+      violations.push({ date: constraint.date, message: "keine Doppeleinheit erlaubt", entryId: "" });
+    }
+  });
+
+  return violations;
 }
 
 
@@ -2061,8 +2124,12 @@ export function generateWeekPlan({
     } : entry;
   });
   plan = suggestRoadCyclingAlternative(plan, config, { eventWeek, readiness });
+  // Hard safety net: nothing after the first constraint pass may re-introduce a
+  // run, quality session or long session on a day restricted by the planning note.
+  plan = applyDailyAvailabilityConstraints(plan, effectiveAvailabilityExceptions, weekStart);
   plan = applyPlanPaceGuidance(plan);
   plan.sort((a, b) => `${a.date}${a.time || ""}`.localeCompare(`${b.date}${b.time || ""}`));
+  const finalPlanningConstraintViolations = planningConstraintViolations(plan, effectiveAvailabilityExceptions);
   if (eventWeek) {
     const plannedRunningKm = plan
       .filter((entry) => !entry.plannedCancellation && isRunningPlanEntry(entry))
@@ -2129,6 +2196,7 @@ export function generateWeekPlan({
         noDouble: Boolean(entry.noDouble),
         note: entry.note,
       })),
+    planningConstraintViolations: finalPlanningConstraintViolations,
     crossTrainingCredit: {
       recognizedKm: recognizedCrossTrainingKm,
       cappedKm: cappedCrossTrainingKm,
