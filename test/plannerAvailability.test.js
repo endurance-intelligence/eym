@@ -5,6 +5,7 @@ import {
   blockedAvailabilityDates,
   normalizeAvailabilityExceptions,
   planningConstraintsFromNote,
+  planningNoteForWeek,
   removeAvailabilityException,
   runningRestrictedAvailabilityDates,
   upsertAvailabilityException,
@@ -78,4 +79,37 @@ test("generic travel, flight and all-day wording maps into the existing availabi
     ["2026-08-19", "available", 20, true],
     ["2026-08-22", "available", 25, true],
   ]);
+});
+
+test("shared weekday wording applies the same travel constraint to every named day", () => {
+  const constraints = planningConstraintsFromNote(
+    "Dienstag und Donnerstag Reisestress",
+    "2026-08-17",
+  );
+
+  assert.deepEqual(constraints.map((entry) => [entry.date, entry.reason, entry.recoveryOnly, entry.maxDurationMinutes]), [
+    ["2026-08-18", "Reise", true, 20],
+    ["2026-08-20", "Reise", true, 20],
+  ]);
+});
+
+test("weekday abbreviations keep a shared long-travel constraint generic", () => {
+  const constraints = planningConstraintsFromNote(
+    "Di. und Do. lange Autofahrt",
+    "2026-08-17",
+  );
+
+  assert.deepEqual(constraints.map((entry) => entry.date), ["2026-08-18", "2026-08-20"]);
+  assert.ok(constraints.every((entry) => entry.recoveryOnly && entry.noRunning && entry.noDouble));
+});
+
+test("replanning keeps the saved note for the same week but does not leak it into a fresh week", () => {
+  const records = [
+    { weekStart: "2026-08-17", checkin: { notes: "Dienstag Training nicht möglich." } },
+    { weekStart: "2026-08-10", checkin: { notes: "Alte Notiz" } },
+  ];
+
+  assert.equal(planningNoteForWeek(records, new Date("2026-08-17T12:00:00"), "replan"), "Dienstag Training nicht möglich.");
+  assert.equal(planningNoteForWeek(records, "2026-08-24", "replan"), "");
+  assert.equal(planningNoteForWeek(records, "2026-08-17", "create"), "");
 });

@@ -136,7 +136,7 @@ function activityDurationSecondsForPace(activity = {}) {
 function recentPerformancePaceSeconds(activities = [], referenceDate = new Date()) {
   const cutoff = new Date(referenceDate);
   cutoff.setDate(cutoff.getDate() - 120);
-  const paces = (Array.isArray(activities) ? activities : [])
+  const candidates = (Array.isArray(activities) ? activities : [])
     .filter((activity) => isRun(activity))
     .map((activity) => {
       const distance = Number(activity.distance || 0);
@@ -144,21 +144,41 @@ function recentPerformancePaceSeconds(activities = [], referenceDate = new Date(
       const date = new Date(`${activityDate(activity)}T12:00:00`);
       const pace = distance > 0 ? durationSeconds / distance : 0;
       const text = `${activity.name || ""} ${activity.type || ""}`.toLowerCase();
-      const qualityEvidence = Boolean(activity.race || activity.officialEvent || Number(activity.perceivedExertion || 0) >= 7 || /race|wettkampf|benchmark|bestzeit|pb|interval|tempo|schwelle/.test(text));
-      return { pace, distance, date, qualityEvidence };
+      const verifiedPerformance = Boolean(
+        activity.race
+        || activity.officialEvent
+        || /race|wettkampf|benchmark|time trial|bestzeit|personal best|\bpb\b/.test(text)
+      );
+      const structuredSessionSummary = !verifiedPerformance && /track|intervall|interval|schwelle|threshold/.test(text);
+      const easySession = /easy|locker|recovery|regeneration|grundlage|zone[- ]?2|z2/.test(text);
+      const effortEvidence = verifiedPerformance
+        || (!structuredSessionSummary && !easySession && (Number(activity.perceivedExertion || 0) >= 7 || distance <= 12));
+      return { pace, distance, date, verifiedPerformance, structuredSessionSummary, effortEvidence };
     })
-    .filter((entry) => entry.date >= cutoff && entry.date < referenceDate && entry.distance >= 3 && entry.distance <= 21.2 && entry.pace >= 180 && entry.pace <= 720)
-    .sort((left, right) => Number(right.qualityEvidence) - Number(left.qualityEvidence) || left.pace - right.pace);
-  if (!paces.length) return 0;
-  const quality = paces.filter((entry) => entry.qualityEvidence);
-  const pool = quality.length ? quality : paces.slice(0, Math.min(5, paces.length));
-  const index = Math.min(pool.length - 1, Math.floor(pool.length * 0.25));
-  return Math.round(pool.sort((left, right) => left.pace - right.pace)[index].pace);
+    .filter((entry) => entry.date >= cutoff && entry.date < referenceDate && entry.distance >= 3 && entry.distance <= 21.2 && entry.pace >= 180 && entry.pace <= 720);
+  if (!candidates.length) return 0;
+
+  const verified = candidates.filter((entry) => entry.verifiedPerformance);
+  const effort = candidates.filter((entry) => entry.effortEvidence && !entry.structuredSessionSummary);
+  const usable = candidates.filter((entry) => !entry.structuredSessionSummary);
+  const pool = verified.length ? verified : effort.length ? effort : usable.length ? usable : candidates;
+  const sorted = [...pool].sort((left, right) => left.pace - right.pace);
+  const index = Math.min(sorted.length - 1, Math.floor(sorted.length * 0.25));
+  return Math.round(sorted[index].pace);
 }
 
-function stridePrescription({ event = {}, activities = [], goalEngine = {}, weekStart = new Date() } = {}) {
+function raceStrategyTargetSeconds(event = {}, raceCoachSessions = {}) {
+  const eventId = String(event.id || "").trim();
+  if (!eventId) return 0;
+  const minutes = Number(raceCoachSessions?.[`event:${eventId}`]?.setup?.targetDurationMinutes || 0);
+  return Number.isFinite(minutes) && minutes > 0 ? Math.round(minutes * 60) : 0;
+}
+
+function stridePrescription({ event = {}, activities = [], goalEngine = {}, raceCoachSessions = {}, weekStart = new Date() } = {}) {
   const eventDistance = Number(event.targetKm || 0);
-  const eventTimeSeconds = parseGoalTimeSeconds(event.targetTime);
+  const explicitEventTimeSeconds = parseGoalTimeSeconds(event.targetTime);
+  const raceStrategyTimeSeconds = explicitEventTimeSeconds > 0 ? 0 : raceStrategyTargetSeconds(event, raceCoachSessions);
+  const eventTimeSeconds = explicitEventTimeSeconds || raceStrategyTimeSeconds;
   const eventPaceSeconds = eventDistance > 0 && eventTimeSeconds > 0 ? eventTimeSeconds / eventDistance : 0;
   const performancePace = recentPerformancePaceSeconds(activities, weekStart);
   const easyPace = Number(goalEngine?.baseline?.medianPaceSeconds || 0);
@@ -174,7 +194,13 @@ function stridePrescription({ event = {}, activities = [], goalEngine = {}, week
     slower,
     displayToleranceSeconds: displayTolerance,
     garminToleranceSeconds: garminTolerance,
-    source: eventPaceSeconds ? "event-target" : performancePace ? "recent-performance" : "easy-baseline",
+    source: explicitEventTimeSeconds > 0
+      ? "event-target"
+      : raceStrategyTimeSeconds > 0
+        ? "race-strategy-target"
+        : performancePace
+          ? "recent-performance"
+          : "easy-baseline",
   };
 }
 
@@ -225,6 +251,7 @@ function addPreRaceActivation(plan, weekStart, eventWeek, context = {}) {
     event,
     activities: context.activities,
     goalEngine: context.goalEngine,
+    raceCoachSessions: context.raceCoachSessions,
     weekStart,
   });
   const baseDistance = preRaceActivationDistance(context.targetKm, context.goalEngine?.baseline);
@@ -330,10 +357,15 @@ function applyDailyAvailabilityConstraints(plan = [], availabilityExceptions = [
       }
       const alreadyRecovery = /mobility|mobilität|recovery|regeneration|aktivierung/.test(`${entry.type || ""} ${entry.title || ""}`.toLowerCase());
       if (alreadyRecovery) {
+        const strengthLike = /stabi|kraft|strength/.test(`${entry.type || ""} ${entry.title || ""}`.toLowerCase());
         constrained.push({
           ...entry,
+          ...(strengthLike ? { title: "Kurze Mobility & Aktivierung", type: "Mobility", distance: 0 } : {}),
           duration: Math.min(Number(constraint.maxDurationMinutes || entry.duration || 20), Number(entry.duration || constraint.maxDurationMinutes || 20)),
           optional: true,
+          structuredWorkout: null,
+          goalWorkout: null,
+          keySession: false,
           travelConstraint: true,
           notes: `${entry.notes || ""} Tagesconstraint: nur sehr lockere Aktivierung${constraint.maxDurationMinutes ? ` bis maximal ${constraint.maxDurationMinutes} Minuten` : ""}.`.trim(),
         });
@@ -1565,6 +1597,7 @@ export function generateWeekPlan({
   mission,
   profile = {},
   config = {},
+  raceCoachSessions = {},
   forecast = [],
   offsetWeeks = 0,
   completedRunningKm = 0,
@@ -1848,6 +1881,7 @@ export function generateWeekPlan({
   plan = addPreRaceActivation(plan, weekStart, eventWeek, {
     activities,
     goalEngine,
+    raceCoachSessions,
     targetKm: target,
     runRestrictedDates: runningRestrictedDates,
     availabilityExceptions: effectiveAvailabilityExceptions,

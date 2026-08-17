@@ -407,6 +407,7 @@ function travelEventInput(overrides = {}) {
     },
     activities: overrides.activities || [],
     config,
+    raceCoachSessions: overrides.raceCoachSessions || {},
     today: new Date("2026-08-17T12:00:00"),
   };
 }
@@ -527,6 +528,71 @@ test("stride pace is derived from athlete performance when the C event has no ta
   assert.match(fastPace || "", /^\d{1,2}:\d{2}$/);
   assert.match(slowerPace || "", /^\d{1,2}:\d{2}$/);
   assert.notEqual(fastPace, slowerPace);
+});
+
+
+
+test("shared travel shorthand cannot leave Tuesday training or the Thursday shake-out behind", () => {
+  const result = generateWeekPlan(travelEventInput({
+    config: {
+      checkin: {
+        energy: 8,
+        fatigue: "none",
+        illness: "healthy",
+        pain: "none",
+        painLevel: 0,
+        notes: "Dienstag und Donnerstag Reisestress",
+      },
+    },
+  }));
+  const tuesday = result.plan.filter((item) => item.date === "2026-08-18");
+  const thursday = result.plan.filter((item) => item.date === "2026-08-20");
+  const activation = result.plan.find((item) => item.preRaceActivation);
+
+  assert.equal(tuesday.some((item) => Number(item.distance || 0) > 0 || item.type === "Stabi"), false);
+  assert.ok(tuesday.every((item) => item.type === "Mobility" || item.type === "Ruhetag"));
+  assert.equal(activation?.date, "2026-08-19");
+  assert.equal(thursday.some((item) => Number(item.distance || 0) > 0), false);
+  assert.ok(thursday.every((item) => Number(item.duration || 0) <= 20));
+});
+
+test("Race Strategy target time drives the shake-out stride pace when the mission event has no target time", () => {
+  const mission = {
+    ...goalAwareMission,
+    milestones: goalAwareMission.milestones.map((event) => event.id === "urlaender" ? { ...event, targetTime: "" } : { ...event }),
+  };
+  const result = generateWeekPlan(travelEventInput({
+    mission,
+    raceCoachSessions: {
+      "event:urlaender": { setup: { targetDurationMinutes: 45 } },
+    },
+    activities: [
+      { id: "track-summary", date: "2026-08-11", type: "Run", name: "ORC Track 8 x 200", distance: 12.7, duration: 77, perceivedExertion: 8 },
+    ],
+  }));
+  const activation = result.plan.find((item) => item.preRaceActivation);
+  const stride = activation?.structuredWorkout?.steps?.find((step) => step.kind === "work");
+
+  assert.equal(activation?.date, "2026-08-19");
+  assert.equal(stride?.targetPace, "3:57");
+  assert.match(activation?.title || "", /3:49–4:05\/km/);
+});
+
+test("aggregate track pace is not mistaken for a performance pace when deriving strides", () => {
+  const mission = {
+    ...goalAwareMission,
+    milestones: goalAwareMission.milestones.map((event) => event.id === "urlaender" ? { ...event, targetTime: "" } : { ...event }),
+  };
+  const result = generateWeekPlan(travelEventInput({
+    mission,
+    activities: [
+      { id: "track-summary", date: "2026-08-11", type: "Run", name: "ORC Track 8 x 200", distance: 12.7, duration: 77, perceivedExertion: 9 },
+      { id: "five-k-pb", date: "2026-06-18", type: "Run", name: "5 km PB", distance: 5, duration: 22.5833, perceivedExertion: 9 },
+    ],
+  }));
+  const stride = result.plan.find((item) => item.preRaceActivation)?.structuredWorkout?.steps?.find((step) => step.kind === "work");
+
+  assert.equal(stride?.targetPace, "4:13");
 });
 
 test("C event preserves the Backyard mission and a conditional post-event aerobic block", () => {

@@ -23,6 +23,25 @@ const DAY_INDEX = {
   sonntag: 6,
 };
 
+const DAY_ALIASES = {
+  montag: "montag",
+  mo: "montag",
+  dienstag: "dienstag",
+  di: "dienstag",
+  mittwoch: "mittwoch",
+  mi: "mittwoch",
+  donnerstag: "donnerstag",
+  do: "donnerstag",
+  freitag: "freitag",
+  fr: "freitag",
+  samstag: "samstag",
+  sa: "samstag",
+  sonntag: "sonntag",
+  so: "sonntag",
+};
+
+const DAY_TOKEN = /\b(Montag|Dienstag|Mittwoch|Donnerstag|Freitag|Samstag|Sonntag|Mo|Di|Mi|Do|Fr|Sa|So)\.?(?=\s|[-,;:&/+()]|$)/gi;
+
 function validIsoDate(value = "") {
   return /^\d{4}-\d{2}-\d{2}$/.test(String(value || ""));
 }
@@ -166,6 +185,16 @@ export function removeAvailabilityException(exceptions = [], date = "") {
   return normalizeAvailabilityExceptions(exceptions).filter((entry) => entry.date !== date);
 }
 
+export function planningNoteForWeek(records = [], weekStart = new Date(), mode = "replan") {
+  if (mode !== "replan") return "";
+  const weekKey = weekStart instanceof Date
+    ? isoDate(weekStart)
+    : String(weekStart || "").slice(0, 10);
+  if (!validIsoDate(weekKey)) return "";
+  const record = (Array.isArray(records) ? records : []).find((entry) => String(entry?.weekStart || "").slice(0, 10) === weekKey);
+  return String(record?.checkin?.notes || "");
+}
+
 function parseMaximumMinutes(text = "") {
   const match = String(text).match(/(?:max(?:imal)?\.?|höchstens|nur)\s*(?:ca\.?\s*)?(\d{1,3})(?:\s*[-–]\s*(\d{1,3}))?\s*(?:min(?:uten)?|min\b)/i);
   if (!match) return null;
@@ -177,8 +206,12 @@ function travelHours(text = "") {
   return matches.reduce((max, match) => Math.max(max, Number(match[2] || match[1]) || 0), 0);
 }
 
+function travelSignal(text = "") {
+  return /reise|reisestress|reisetag|autofahrt|zugfahrt|bahnreise|flug|fliegen|unterwegs|mehrstündig/i.test(text);
+}
+
 function reasonFromText(text = "") {
-  if (/reise|autofahrt|flug|fliegen|unterwegs/i.test(text)) return "Reise";
+  if (travelSignal(text)) return "Reise";
   if (/arbeit|beruf|meeting|dienst/i.test(text)) return "Arbeit";
   if (/famil/i.test(text)) return "Familie";
   if (/krank|symptom/i.test(text)) return "Krankheit";
@@ -187,15 +220,42 @@ function reasonFromText(text = "") {
   return "Sonstiges";
 }
 
+function normalizedDayToken(token = "") {
+  return DAY_ALIASES[String(token || "").replace(/\.$/, "").toLocaleLowerCase("de-DE")] || "";
+}
+
+function daySegmentPayload(text = "") {
+  return String(text || "")
+    .replace(/^\s*(?:Montag|Dienstag|Mittwoch|Donnerstag|Freitag|Samstag|Sonntag|Mo|Di|Mi|Do|Fr|Sa|So)\.?/i, "")
+    .trim()
+    .replace(/^[,:;\-\s]+|[,:;\-\s]+$/g, "");
+}
+
+function connectorOnlyPayload(payload = "") {
+  return /^(?:(?:und|sowie|oder|bzw\.?|&|\+|\/)[,;:\-\s]*)*$/i.test(String(payload || "").trim());
+}
+
 function daySegments(note = "") {
   const text = String(note || "").trim();
   if (!text) return [];
-  const regex = /\b(Montag|Dienstag|Mittwoch|Donnerstag|Freitag|Samstag|Sonntag)\b/gi;
-  const matches = [...text.matchAll(regex)];
-  return matches.map((match, index) => ({
-    day: match[1].toLocaleLowerCase("de-DE"),
+  const matches = [...text.matchAll(DAY_TOKEN)];
+  const segments = matches.map((match, index) => ({
+    day: normalizedDayToken(match[1]),
     text: text.slice(match.index, matches[index + 1]?.index ?? text.length).trim().replace(/^[,:;\-\s]+|[,:;\-\s]+$/g, ""),
-  }));
+  })).filter((segment) => segment.day);
+
+  let sharedPayload = "";
+  for (let index = segments.length - 1; index >= 0; index -= 1) {
+    const payload = daySegmentPayload(segments[index].text);
+    if (payload && !connectorOnlyPayload(payload)) {
+      sharedPayload = payload;
+      continue;
+    }
+    if (sharedPayload && connectorOnlyPayload(payload)) {
+      segments[index] = { ...segments[index], text: `${segments[index].text} ${sharedPayload}`.trim() };
+    }
+  }
+  return segments;
 }
 
 export function planningConstraintsFromNote(note = "", weekStart = new Date()) {
@@ -210,8 +270,9 @@ export function planningConstraintsFromNote(note = "", weekStart = new Date()) {
     date.setDate(date.getDate() + dayIndex);
     const text = segment.text;
     const maxDurationMinutes = parseMaximumMinutes(text);
-    const travel = /reise|autofahrt|flug|fliegen|unterwegs/i.test(text);
-    const longTravel = travel && (travelHours(text) >= 4 || /lang(?:e|er|en)?\s+(?:reise|autofahrt)|mehrstündig|ganztägig/i.test(text));
+    const travel = travelSignal(text);
+    const travelStress = /reisestress|anstrengend(?:e|er|en)?\s+(?:reise|fahrt)|reisetag/i.test(text);
+    const longTravel = travel && (travelHours(text) >= 4 || travelStress || /lang(?:e|er|en)?\s+(?:reise|autofahrt|zugfahrt|fahrt)|mehrstündig|ganztägig/i.test(text));
     const explicitUnavailable = /(?:training|laufen|lauf|einheit)?\s*(?:zeitlich\s*)?(?:nicht|kaum)\s*möglich|training\s*unmöglich|keine\s+zeit|ganztägig(?:er|e|es)?\s+(?:termin|unterwegs|reise)|komplett\s+verplant/i.test(text);
     const explicitlyRecoveryOnly = /nur\s+(?:sehr\s+)?(?:locker|regenerativ|recovery|aktivierung|mobility)|nur\s+(?:eine\s+)?kurze\s+(?:einheit|aktivierung)|maximal\s+\d{1,3}(?:\s*[-–]\s*\d{1,3})?\s*min/i.test(text);
     const noRunning = /kein(?:e|en)?\s+(?:lauf|laufen|laufeinheit)|nicht\s+laufen/i.test(text);

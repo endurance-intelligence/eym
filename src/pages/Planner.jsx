@@ -120,6 +120,7 @@ import {
   availabilityForDate,
   availabilityLabel,
   normalizeAvailabilityExceptions,
+  planningNoteForWeek,
   removeAvailabilityException,
   upsertAvailabilityException,
 } from "../services/plannerAvailability";
@@ -195,6 +196,14 @@ function planChangeFieldsLabel(fields = []) {
     fixed: "Fixtermin",
   };
   return fields.map((field) => labels[field] || field).join(" · ");
+}
+
+function planningConstraintLabel(constraint = {}) {
+  if (constraint.status === "blocked") return "kein Training";
+  if (constraint.recoveryOnly) return `nur Recovery/Aktivierung${constraint.maxDurationMinutes ? ` · max. ${constraint.maxDurationMinutes} min` : ""}`;
+  if (constraint.noRunning) return `kein Lauf${constraint.maxDurationMinutes ? ` · max. ${constraint.maxDurationMinutes} min` : ""}`;
+  if (constraint.maxDurationMinutes) return `max. ${constraint.maxDurationMinutes} min`;
+  return constraint.noDouble ? "keine Doppeleinheit" : "Constraint erkannt";
 }
 
 function blocksTrainingDayByDefault(reason = "") {
@@ -878,6 +887,7 @@ export default function Planner() {
 
   function openPlanning(mode = "create") {
     const lastCheckin = state.healthCheckins?.[0]?.checkin || config.checkin || {};
+    const savedWeekNote = planningNoteForWeek(state.healthCheckins, weekStart, mode);
     setPlanningMode(mode);
     setPlanningDraft({
       stabiCount: Number(config.stabiCount ?? 2),
@@ -906,7 +916,7 @@ export default function Planner() {
         painLevel: Number(lastCheckin.painLevel || 0),
         painArea: lastCheckin.painArea || "",
         illness: reasonCounts.illness ? "recovering" : (lastCheckin.illness || "healthy"),
-        notes: "",
+        notes: savedWeekNote,
       },
     });
     setPlanningOpen(true);
@@ -1414,6 +1424,7 @@ export default function Planner() {
       mission: state.mission,
       profile: state.profile,
       config: effectiveConfig,
+      raceCoachSessions: state.raceCoachSessions,
       forecast: weather,
       offsetWeeks,
       completedRunningKm: actualRunningKm,
@@ -3210,6 +3221,23 @@ export default function Planner() {
                   <b>{pendingPlanChange.generated.weekPrescription.corridor?.label}</b>
                   <span>automatischer Korridor</span>
                 </div>
+              </section>
+            )}
+
+            {pendingPlanChange.generated.planningConstraints?.length > 0 && (
+              <section className="planner-change-constraints">
+                <div>
+                  <span>Aus Zusatznotiz erkannt</span>
+                  <strong>{pendingPlanChange.generated.planningConstraints.length} Tagesconstraint{pendingPlanChange.generated.planningConstraints.length === 1 ? "" : "s"}</strong>
+                </div>
+                <ul>
+                  {pendingPlanChange.generated.planningConstraints.map((constraint) => (
+                    <li key={`${constraint.date}-${constraint.reason}`}>
+                      <b>{planChangeDateLabel(constraint.date)}</b>
+                      <span>{planningConstraintLabel(constraint)}</span>
+                    </li>
+                  ))}
+                </ul>
               </section>
             )}
 

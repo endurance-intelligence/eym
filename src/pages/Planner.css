@@ -1643,6 +1643,9 @@
 .planner-plan-change-preview{width:min(960px,100%);max-height:min(88vh,900px);overflow:auto}
 .planner-plan-change-preview .modal-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:14px}
 .planner-plan-change-preview .modal-heading h2{margin:4px 0 0}
+.planner-change-constraints{display:grid;grid-template-columns:minmax(180px,.7fr) minmax(0,1.3fr);gap:14px;align-items:center;margin:12px 0 14px;padding:12px 14px;border:1px solid color-mix(in srgb,var(--warning,#facc15) 42%,var(--border));border-radius:14px;background:color-mix(in srgb,var(--warning,#facc15) 5%,var(--bg-card-alt))}
+.planner-change-constraints>div{display:grid;gap:3px}.planner-change-constraints>div span{color:var(--warning,#facc15);font-size:9px;font-weight:900;letter-spacing:.08em;text-transform:uppercase}.planner-change-constraints>div strong{font-size:14px}
+.planner-change-constraints ul{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:7px;margin:0;padding:0;list-style:none}.planner-change-constraints li{display:flex;gap:6px;padding:6px 9px;border:1px solid var(--border);border-radius:999px;background:var(--bg-card);font-size:10px}.planner-change-constraints li span{color:var(--text-soft)}
 .planner-change-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:14px 0 18px}
 .planner-change-summary article{display:grid;gap:4px;padding:13px 14px;border:1px solid var(--border);border-radius:14px;background:var(--bg-card-alt)}
 .planner-change-summary span{color:var(--muted);font-size:9px;font-weight:900;letter-spacing:.08em;text-transform:uppercase}
@@ -1686,6 +1689,8 @@
   .planner-undo-banner button{width:100%}
   .planner-plan-change-preview .modal-heading{display:grid}
   .planner-plan-change-preview .modal-heading button{width:100%}
+  .planner-change-constraints{grid-template-columns:1fr}
+  .planner-change-constraints ul{justify-content:flex-start}
   .planner-change-summary{grid-template-columns:1fr}
   .planner-change-list article{grid-template-columns:1fr;gap:8px}
   .planner-change-list article>b{transform:rotate(90deg);justify-self:center}
