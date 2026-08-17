@@ -120,9 +120,11 @@ import {
   availabilityForDate,
   availabilityLabel,
   normalizeAvailabilityExceptions,
+  planningConstraintsFromNote,
   planningNoteForWeek,
   removeAvailabilityException,
   upsertAvailabilityException,
+  upsertPlanningCheckinRecord,
 } from "../services/plannerAvailability";
 import { workoutRoleAssessment } from "../services/workoutRoles";
 import { weeklyReviewSummary } from "../services/weeklyReview";
@@ -581,6 +583,10 @@ export default function Planner() {
 
   const weekStart = useMemo(() => startOfWeek(new Date(), offsetWeeks), [offsetWeeks]);
   const weekEnd = dateForDay(weekStart, 6);
+  const planningDraftConstraints = useMemo(
+    () => planningConstraintsFromNote(planningDraft?.checkin?.notes || "", weekStart),
+    [planningDraft?.checkin?.notes, weekStart],
+  );
   const canonicalActivities = useMemo(() => preferredActivities(state.activities, { hideStrava: Boolean(state.intervals?.connected) }), [state.activities, state.intervals?.connected]);
   const groupedActivities = useMemo(() => activitiesWithGroups(canonicalActivities, state.activityGroups), [canonicalActivities, state.activityGroups]);
   const activityById = useMemo(() => new Map([...canonicalActivities, ...groupedActivities].map((activity) => [activity.id, activity])), [canonicalActivities, groupedActivities]);
@@ -1438,6 +1444,10 @@ export default function Planner() {
       weekStart: generated.weekStart,
       checkin: effectiveConfig.checkin,
     };
+    setState((current) => ({
+      ...current,
+      healthCheckins: upsertPlanningCheckinRecord(current.healthCheckins, checkinRecord),
+    }));
 
     const loadLabel = generated.weekPrescription?.weekType?.label
       || (generated.eventWeek
@@ -1535,7 +1545,7 @@ export default function Planner() {
       return {
         ...current,
         plan: nextPlan,
-        healthCheckins: [pendingPlanChange.checkinRecord, ...(current.healthCheckins || [])].slice(0, 20),
+        healthCheckins: upsertPlanningCheckinRecord(current.healthCheckins, pendingPlanChange.checkinRecord),
         planner: {
           ...current.planner,
           ...pendingPlanChange.effectiveConfig,
@@ -3437,6 +3447,21 @@ export default function Planner() {
             <div className="planner-day-picker"><strong>Rudern an welchen Tagen?</strong><div>{plannerDays.map((day) => <button type="button" className={planningDraft.rowingDays.includes(day) ? "selected" : ""} onClick={() => toggleDay("rowingDays", day)} key={`row-${day}`}>{day.slice(0, 2)}</button>)}</div></div>
             <div className="planner-day-picker"><strong>An welchen Tagen ist echtes Doppeltraining erlaubt?</strong><div>{plannerDays.map((day) => <button type="button" className={planningDraft.doubleTrainingDays.includes(day) ? "selected" : ""} onClick={() => toggleDay("doubleTrainingDays", day)} key={`double-${day}`}>{day.slice(0, 2)}</button>)}</div><small>Gemeint sind Fußball + Lauf, Rudern + Lauf oder zwei Ausdauereinheiten. Stabi/Mobility + Lauf ist nur ein Kombi-Tag und braucht keine Freigabe.</small></div>
             <label>Zusätzliche Notiz<textarea value={planningDraft.checkin.notes} onChange={(event) => updateCheckin("notes", event.target.value)} placeholder="Reise, wenig Zeit, besondere Termine …" /></label>
+            {String(planningDraft.checkin.notes || "").trim() && (
+              <div className={`planner-live-constraints ${planningDraftConstraints.length ? "recognized" : "unrecognized"}`}>
+                <strong>{planningDraftConstraints.length ? "Als Tagesconstraint erkannt" : "Noch kein Tagesconstraint erkannt"}</strong>
+                {planningDraftConstraints.length ? (
+                  <ul>{planningDraftConstraints.map((constraint) => (
+                    <li key={`${constraint.date}-${constraint.reason}`}>
+                      <b>{planChangeDateLabel(constraint.date)}</b>
+                      <span>{planningConstraintLabel(constraint)}</span>
+                    </li>
+                  ))}</ul>
+                ) : (
+                  <span>Die Notiz bleibt Coach-Kontext. Für harte Tagesgrenzen bitte Tag und Einschränkung nennen, z. B. „Dienstag Training nicht möglich“ oder „Donnerstag maximal 20 Minuten locker“.</span>
+                )}
+              </div>
+            )}
             <button className="primary" type="submit">{planningMode === "replan" ? "Änderungsvorschau berechnen" : "Planvorschau berechnen"}</button>
           </form>
         </div>

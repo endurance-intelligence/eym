@@ -185,14 +185,23 @@ export function removeAvailabilityException(exceptions = [], date = "") {
   return normalizeAvailabilityExceptions(exceptions).filter((entry) => entry.date !== date);
 }
 
-export function planningNoteForWeek(records = [], weekStart = new Date(), mode = "replan") {
-  if (mode !== "replan") return "";
+export function planningNoteForWeek(records = [], weekStart = new Date()) {
   const weekKey = weekStart instanceof Date
     ? isoDate(weekStart)
     : String(weekStart || "").slice(0, 10);
   if (!validIsoDate(weekKey)) return "";
   const record = (Array.isArray(records) ? records : []).find((entry) => String(entry?.weekStart || "").slice(0, 10) === weekKey);
   return String(record?.checkin?.notes || "");
+}
+
+export function upsertPlanningCheckinRecord(records = [], record = {}, limit = 20) {
+  const weekKey = String(record?.weekStart || "").slice(0, 10);
+  if (!validIsoDate(weekKey) || !record?.checkin) return Array.isArray(records) ? records : [];
+  const existing = Array.isArray(records) ? records : [];
+  return [
+    record,
+    ...existing.filter((entry) => String(entry?.weekStart || "").slice(0, 10) !== weekKey),
+  ].slice(0, Math.max(1, Number(limit || 20)));
 }
 
 function parseMaximumMinutes(text = "") {

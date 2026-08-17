@@ -2038,3 +2038,13 @@
   .planner-week-dashboard>.planner-week-logic{grid-column:auto}
   .planner-week-dashboard>.planner-week-logic .planner-week-logic-lead>small{white-space:normal}
 }
+
+.planner-live-constraints{display:grid;gap:8px;padding:12px 14px;border:1px solid var(--border);border-radius:12px;background:rgba(255,255,255,.025)}
+.planner-live-constraints.recognized{border-color:rgba(94,228,148,.35);background:rgba(94,228,148,.05)}
+.planner-live-constraints.unrecognized{border-color:rgba(255,196,96,.28);background:rgba(255,196,96,.04)}
+.planner-live-constraints>strong{font-size:12px;letter-spacing:.03em}
+.planner-live-constraints>span{font-size:12px;color:var(--muted);line-height:1.5}
+.planner-live-constraints ul{display:grid;gap:6px;margin:0;padding:0;list-style:none}
+.planner-live-constraints li{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:6px;border-top:1px solid var(--border)}
+.planner-live-constraints li b{font-size:12px}
+.planner-live-constraints li span{font-size:12px;color:var(--muted);text-align:right}

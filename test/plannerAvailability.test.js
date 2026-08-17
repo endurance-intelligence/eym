@@ -9,6 +9,7 @@ import {
   removeAvailabilityException,
   runningRestrictedAvailabilityDates,
   upsertAvailabilityException,
+  upsertPlanningCheckinRecord,
 } from "../src/services/plannerAvailability.js";
 
 test("availability exceptions keep the newest entry per date", () => {
@@ -111,5 +112,22 @@ test("replanning keeps the saved note for the same week but does not leak it int
 
   assert.equal(planningNoteForWeek(records, new Date("2026-08-17T12:00:00"), "replan"), "Dienstag Training nicht möglich.");
   assert.equal(planningNoteForWeek(records, "2026-08-24", "replan"), "");
-  assert.equal(planningNoteForWeek(records, "2026-08-17", "create"), "");
+  assert.equal(planningNoteForWeek(records, "2026-08-17", "create"), "Dienstag Training nicht möglich.");
+});
+
+test("planning preview check-in is upserted per week so a cancelled preview keeps its note", () => {
+  const original = [
+    { id: "old-week", weekStart: "2026-08-10", checkin: { notes: "Alte Woche" } },
+    { id: "old-draft", weekStart: "2026-08-17", checkin: { notes: "Dienstag Reisestress" } },
+  ];
+  const next = upsertPlanningCheckinRecord(original, {
+    id: "new-draft",
+    weekStart: "2026-08-17",
+    checkin: { notes: "Dienstag Training nicht möglich. Donnerstag maximal 20 Minuten locker." },
+  });
+
+  assert.equal(next.length, 2);
+  assert.equal(next[0].id, "new-draft");
+  assert.equal(planningNoteForWeek(next, "2026-08-17", "create"), "Dienstag Training nicht möglich. Donnerstag maximal 20 Minuten locker.");
+  assert.equal(planningNoteForWeek(next, "2026-08-24", "create"), "");
 });
