@@ -7,9 +7,10 @@ const plannerSource = fs.readFileSync(new URL("../src/pages/Planner.jsx", import
 test("weekly planning separates normal availability from temporary life context in plain language", () => {
   assert.match(plannerSource, /Deine normale Trainingswoche/);
   assert.match(plannerSource, /Diese Woche anders als sonst\?/);
-  assert.match(plannerSource, /Reise, Krankheit oder wenig Zeit überstimmen deine normale Tagesverfügbarkeit/);
+  assert.match(plannerSource, /Diese Angabe überstimmt deine normale Verfügbarkeit/);
   assert.match(plannerSource, /So berücksichtigt der Coach deine Woche/);
   assert.match(plannerSource, /Auswirkung auf den Plan/);
+  assert.match(plannerSource, /Was muss der Coach für diese Woche wissen/);
   assert.doesNotMatch(plannerSource, /Als Tagesconstraint erkannt/);
   assert.doesNotMatch(plannerSource, /Tagesconstraint/);
 });

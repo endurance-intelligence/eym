@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  applyWeeklyPlanningContext,
   availabilityForDate,
   blockedAvailabilityDates,
   normalizeAvailabilityExceptions,
@@ -220,4 +221,35 @@ test("a manual day block remains authoritative when weekly context is added on t
   assert.equal(merged.status, "blocked");
   assert.equal(merged.source, "manual");
   assert.equal(merged.noRunning, true);
+});
+
+
+test("natural multi-day travel note with little time becomes recovery-only on both days", () => {
+  const note = "Dienstag und Donnerstag jeweils mehrere Stunden berufliche Autofahrt in die Schweiz bzw. zurück. An beiden Tagen hohe Reisebelastung und wenig Zeit; Training wenn überhaupt nur sehr kurz und regenerativ. Freitagabend UrLand-Lauf Oerlinghausen 9,6 km als Wettkampf.";
+  const constraints = planningConstraintsFromNote(note, "2026-08-17");
+
+  assert.deepEqual(constraints.map((entry) => [entry.date, entry.reason, entry.recoveryOnly, entry.noRunning, entry.maxDurationMinutes]), [
+    ["2026-08-18", "Reise", true, true, 20],
+    ["2026-08-20", "Reise", true, true, 20],
+  ]);
+});
+
+test("planning draft context is normalized through the same config path used by the Planner UI", () => {
+  const base = {
+    runDays: ["Dienstag", "Mittwoch", "Donnerstag", "Samstag", "Sonntag"],
+    checkin: { energy: 4, notes: "" },
+    availabilityExceptions: [],
+  };
+  const draft = {
+    ...base,
+    checkin: {
+      energy: 4,
+      notes: "Dienstag und Donnerstag jeweils mehrere Stunden berufliche Autofahrt. An beiden Tagen Training wenn überhaupt nur sehr kurz und regenerativ.",
+    },
+  };
+  const effective = applyWeeklyPlanningContext(base, draft, "2026-08-17");
+
+  assert.equal(availabilityForDate(effective.availabilityExceptions, "2026-08-18")?.recoveryOnly, true);
+  assert.equal(availabilityForDate(effective.availabilityExceptions, "2026-08-20")?.recoveryOnly, true);
+  assert.equal(availabilityForDate(effective.availabilityExceptions, "2026-08-18")?.maxDurationMinutes, 20);
 });

@@ -10,6 +10,7 @@ import {
   fetchWeeklyForecast,
   generateWeekPlan,
   isoDate,
+  planningConstraintViolations,
   reviewGuidance,
   startOfWeek,
   workoutTypes,
@@ -130,11 +131,11 @@ import {
   availabilityExceptionsForWeek,
   availabilityForDate,
   availabilityLabel,
+  applyWeeklyPlanningContext,
   mergeAvailabilityExceptions,
   normalizeAvailabilityExceptions,
   planningConstraintsFromNote,
   planningNoteForWeek,
-  replaceAvailabilityExceptionsForWeek,
   removeAvailabilityException,
   upsertAvailabilityException,
   upsertPlanningCheckinRecord,
@@ -1548,36 +1549,13 @@ export default function Planner() {
       ? overrideConfig.recurringCommitments.map(({ activeThisWeek, ...entry }) => ({ ...entry, enabled: activeThisWeek !== false }))
       : config.recurringCommitments;
     const overridePlanner = { ...(overrideConfig || {}) };
-    const weeklyContextExceptions = Array.isArray(overridePlanner.weeklyContextExceptions)
-      ? overridePlanner.weeklyContextExceptions
-      : availabilityExceptionsForWeek(config.availabilityExceptions, weekStart, ["weekly-context"]);
     delete overridePlanner.adjustDates;
     delete overridePlanner.recurringCommitments;
-    delete overridePlanner.weeklyContextExceptions;
-    const noteText = String(overridePlanner.checkin?.notes ?? config.checkin?.notes ?? "");
-    const explicitPlanningConstraints = planningConstraintsFromNote(noteText, weekStart);
-    const weeklyAvailability = replaceAvailabilityExceptionsForWeek(
-      config.availabilityExceptions,
-      [...weeklyContextExceptions, ...explicitPlanningConstraints],
+    const effectiveConfig = applyWeeklyPlanningContext(
+      config,
+      { ...overridePlanner, recurringCommitments: draftCommitments },
       weekStart,
-      ["weekly-context", "planning-note"],
     );
-    const effectiveConfig = {
-      ...config,
-      ...overridePlanner,
-      recurringCommitments: draftCommitments,
-      checkin: {
-        ...(config.checkin || {}),
-        ...(overridePlanner.checkin || {}),
-        notes: noteText,
-      },
-      // Push the parsed note into the same availability model the engine already trusts.
-      // The engine still parses the note itself as a second line of defence.
-      availabilityExceptions: mergeAvailabilityExceptions(
-        weeklyAvailability,
-        overridePlanner.availabilityExceptions,
-      ),
-    };
     let generated = generateWeekPlan({
       activities: canonicalActivities,
       activityGroups: state.activityGroups,
@@ -1655,6 +1633,12 @@ export default function Planner() {
       todayKey,
     });
     const afterEntries = planEntriesForWeek(nextPlan, previewWeekStart, previewWeekEnd);
+    const previewConstraintViolations = planningConstraintViolations(afterEntries, effectiveConfig.availabilityExceptions);
+    if (previewConstraintViolations.length) {
+      const first = previewConstraintViolations[0];
+      setStatus(`Planvorschau gestoppt: ${planChangeDateLabel(first.date)} verletzt deine Wochenangabe (${first.message}). Eine bestehende oder geschützte Einheit muss dort zuerst angepasst werden.`);
+      return;
+    }
 
     setPendingPlanChange({
       mode: planningMode,
@@ -3706,11 +3690,11 @@ export default function Planner() {
 
             <section className="planner-week-context">
               <div className="planner-section-heading">
-                <div><p className="eyebrow">Diese Woche anders als sonst?</p><h3>Lebensrealität zuerst eintragen</h3></div>
-                <small>Reise, Krankheit oder wenig Zeit überstimmen deine normale Tagesverfügbarkeit.</small>
+                <div><p className="eyebrow">Diese Woche anders als sonst?</p><h3>Was muss der Coach für diese Woche wissen?</h3></div>
+                <small>Wähle zuerst die Situation und dann die betroffenen Tage. Diese Angabe überstimmt deine normale Verfügbarkeit.</small>
               </div>
               <div className="planner-context-presets">
-                {WEEKLY_CONTEXT_PRESETS.map((preset) => <button type="button" key={preset.key} onClick={() => openWeeklyContext(preset.key)}><span>{preset.icon}</span><b>{preset.label}</b></button>)}
+                {WEEKLY_CONTEXT_PRESETS.map((preset) => <button type="button" key={preset.key} onClick={() => openWeeklyContext(preset.key)}><span>{preset.icon}</span><div><b>{preset.label}</b><small>{preset.help}</small></div></button>)}
               </div>
 
               {weeklyContextDraft && (

@@ -451,7 +451,7 @@ function applyDailyAvailabilityConstraints(plan = [], availabilityExceptions = [
 }
 
 
-function planningConstraintViolations(plan = [], availabilityExceptions = []) {
+export function planningConstraintViolations(plan = [], availabilityExceptions = []) {
   const constraints = (Array.isArray(availabilityExceptions) ? availabilityExceptions : [])
     .filter((entry) => ["planning-note", "weekly-context"].includes(entry?.source) && entry?.date);
   const violations = [];

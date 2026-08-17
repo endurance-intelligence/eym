@@ -2094,3 +2094,9 @@
 .planner-race-protocol-options{border-top:1px solid var(--border);padding-top:8px}.planner-race-protocol-options summary{cursor:pointer;color:var(--muted-bright);font-size:10px;font-weight:800}.planner-race-protocol-options>div{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin-top:8px}.planner-race-protocol-options label{display:flex;align-items:flex-start;gap:7px;padding:7px 8px;border:1px solid var(--border);border-radius:9px;background:var(--bg-input);font-size:9px}.planner-race-protocol-options input{width:auto;margin-top:2px}
 @media(max-width:760px){.planner-section-heading{display:grid}.planner-section-heading>small{text-align:left}.planner-availability-grid{grid-template-columns:1fr}.planner-context-presets{grid-template-columns:repeat(2,minmax(0,1fr))}.planner-context-restrictions{grid-template-columns:repeat(2,minmax(0,1fr))}.planner-race-protocol-head{display:grid}.planner-race-protocol-options>div{grid-template-columns:1fr}}
 @media(max-width:460px){.planner-context-presets,.planner-context-restrictions{grid-template-columns:1fr}.planner-live-constraints li{align-items:flex-start;flex-direction:column}.planner-live-constraints li span{max-width:none;text-align:left}}
+
+/* v3.9.94 – weekly context cards explain their planning effect before selection */
+.planner-context-presets>button{align-items:flex-start;min-height:70px;padding:11px 12px}
+.planner-context-presets>button>div{display:grid;gap:3px;min-width:0}
+.planner-context-presets>button b{font-size:11px;line-height:1.25}
+.planner-context-presets>button small{color:var(--muted);font-size:9px;line-height:1.35}

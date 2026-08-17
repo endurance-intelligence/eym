@@ -2,10 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   generateWeekPlan,
+  planningConstraintViolations,
   reviewGuidance,
   suggestRoadCyclingAlternative,
 } from "../src/services/plannerEngine.js";
-import { weeklyContextException } from "../src/services/plannerAvailability.js";
+import { applyWeeklyPlanningContext, weeklyContextException } from "../src/services/plannerAvailability.js";
+import { mergeGeneratedWeekPlan, planEntriesForWeek } from "../src/services/plannerChangePreview.js";
 
 test("planner respects a generic stored commitment without personal defaults", () => {
   const future = new Date();
@@ -1046,4 +1048,92 @@ test("natural long-car-travel wording cannot leave an easy run, strength session
   assert.equal(thursday.some((item) => Number(item.distance || 0) > 0), false);
   assert.ok(thursday.every((item) => Number(item.duration || 0) <= 20));
   assert.deepEqual(result.planningConstraintViolations, []);
+});
+
+
+test("Planner UI draft -> effective config -> engine -> preview keeps travel days clear and moves shake-out to Wednesday", () => {
+  const baseConfig = {
+    recurringCommitments: [{
+      id: "football-monday",
+      name: "Fußballtraining",
+      sport: "football",
+      workoutType: "Fußball",
+      weekday: "Montag",
+      time: "19:00",
+      durationMinutes: 90,
+      load: "high",
+      conflictMode: "exclusive",
+      enabled: true,
+    }],
+    fixedAppointments: { football: false, orcRun: false, saturdayMode: "off" },
+    targetRunCount: 5,
+    stabiCount: 1,
+    stabiDays: ["Dienstag"],
+    rowingCount: 0,
+    runDays: ["Dienstag", "Mittwoch", "Donnerstag", "Samstag", "Sonntag"],
+    doubleTrainingDays: ["Dienstag", "Donnerstag"],
+    maxLongRun: 32,
+    checkin: { energy: 4, fatigue: "none", illness: "healthy", pain: "none", painLevel: 0, notes: "" },
+    availabilityExceptions: [],
+  };
+  const plannerDraft = {
+    ...baseConfig,
+    checkin: {
+      ...baseConfig.checkin,
+      notes: "Dienstag und Donnerstag jeweils mehrere Stunden berufliche Autofahrt in die Schweiz bzw. zurück. An beiden Tagen hohe Reisebelastung und wenig Zeit; Training wenn überhaupt nur sehr kurz und regenerativ. Freitagabend UrLand-Lauf Oerlinghausen 9,6 km als Wettkampf.",
+    },
+  };
+  const effectiveConfig = applyWeeklyPlanningContext(baseConfig, plannerDraft, "2026-08-17");
+  const generated = generateWeekPlan({
+    mission: {
+      ...goalAwareMission,
+      milestones: goalAwareMission.milestones.map((event) => event.id === "urlaender" ? { ...event, targetTime: "00:45:00" } : { ...event }),
+    },
+    profile: { selfReportedRunsPerWeek: 5, selfReportedWeeklyKm: 50, selfReportedLongestRunKm: 24 },
+    config: effectiveConfig,
+    today: new Date("2026-08-17T12:00:00"),
+  });
+
+  const oldWrongWeek = [
+    { id: "old-tue-run", date: "2026-08-18", title: "8 km locker", type: "Easy Run", distance: 8, duration: 52, source: "planner-engine", completed: false },
+    { id: "old-tue-strength", date: "2026-08-18", title: "Stabi & Mobilität", type: "Stabi", distance: 0, duration: 25, source: "planner-engine", completed: false },
+    { id: "old-wed-run", date: "2026-08-19", title: "8 km locker", type: "Easy Run", distance: 8, duration: 52, source: "planner-engine", completed: false },
+    { id: "old-thu-shake", date: "2026-08-20", title: "Shake-out / Pre-Race Activation", type: "Easy Run", distance: 7, duration: 43, source: "planner-engine", completed: false },
+  ];
+  const merged = mergeGeneratedWeekPlan(oldWrongWeek, generated.plan, {
+    weekStart: "2026-08-17",
+    weekEnd: "2026-08-23",
+    offsetWeeks: 0,
+    todayKey: "2026-08-17",
+  });
+  const previewWeek = planEntriesForWeek(merged, "2026-08-17", "2026-08-23");
+  const tuesday = previewWeek.filter((entry) => entry.date === "2026-08-18");
+  const wednesday = previewWeek.filter((entry) => entry.date === "2026-08-19");
+  const thursday = previewWeek.filter((entry) => entry.date === "2026-08-20");
+  const friday = previewWeek.filter((entry) => entry.date === "2026-08-21");
+
+  assert.equal(tuesday.some((entry) => Number(entry.distance || 0) > 0 || /\b(?:run|lauf|stabi|kraft)\b/i.test(`${entry.type} ${entry.title}`)), false);
+  assert.ok(tuesday.every((entry) => Number(entry.duration || 0) <= 20));
+  assert.ok(wednesday.some((entry) => entry.preRaceActivation && /Strides/.test(entry.title)));
+  assert.equal(thursday.some((entry) => Number(entry.distance || 0) > 0 || /\b(?:run|lauf|track|intervall|schwelle)\b/i.test(`${entry.type} ${entry.title}`)), false);
+  assert.ok(thursday.every((entry) => Number(entry.duration || 0) <= 20));
+  assert.equal(friday.filter((entry) => entry.raceEvent).length, 1);
+  assert.equal(friday.some((entry) => !entry.raceEvent && Number(entry.duration || 0) > 0), false);
+  assert.deepEqual(planningConstraintViolations(previewWeek, effectiveConfig.availabilityExceptions), []);
+});
+
+test("final preview validation catches a protected stale workout that violates weekly context", () => {
+  const constraints = [weeklyContextException({ date: "2026-08-20", contextKey: "travel", restriction: "recovery", maxDurationMinutes: 20 })];
+  const protectedManualRun = [{ id: "manual", date: "2026-08-20", title: "7 km Shake-out", type: "Easy Run", distance: 7, duration: 43, source: "manual" }];
+  const merged = mergeGeneratedWeekPlan(protectedManualRun, [], {
+    weekStart: "2026-08-17",
+    weekEnd: "2026-08-23",
+    offsetWeeks: 0,
+    todayKey: "2026-08-17",
+  });
+
+  const violations = planningConstraintViolations(merged, constraints);
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0].date, "2026-08-20");
+  assert.match(violations[0].message, /Recovery|Aktivierung/i);
 });

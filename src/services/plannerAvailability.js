@@ -15,14 +15,14 @@ export const AVAILABILITY_REASONS = [
 ];
 
 export const WEEKLY_CONTEXT_PRESETS = Object.freeze([
-  { key: "travel", icon: "🚗", label: "Reise / langer Fahrtag", reason: "Reise", defaultRestriction: "recovery", defaultMinutes: 20 },
-  { key: "illness", icon: "🤒", label: "Krank / angeschlagen", reason: "Krankheit", defaultRestriction: "blocked", defaultMinutes: 20 },
-  { key: "vacation", icon: "🏖️", label: "Urlaub", reason: "Urlaub", defaultRestriction: "light", defaultMinutes: 30 },
-  { key: "work", icon: "💼", label: "Viele Termine / Arbeit", reason: "Arbeit", defaultRestriction: "short", defaultMinutes: 30 },
-  { key: "appointment", icon: "📅", label: "Privater Termin", reason: "Termin", defaultRestriction: "short", defaultMinutes: 30 },
-  { key: "time", icon: "⏱️", label: "Nur wenig Zeit", reason: "Termin", defaultRestriction: "short", defaultMinutes: 30 },
-  { key: "recovery", icon: "🌿", label: "Nur regenerativ", reason: "Erholung", defaultRestriction: "recovery", defaultMinutes: 20 },
-  { key: "blocked", icon: "⛔", label: "Training nicht möglich", reason: "Sonstiges", defaultRestriction: "blocked", defaultMinutes: 20 },
+  { key: "travel", icon: "🚗", label: "Reise / langer Fahrtag", help: "Standard: kein Lauf, höchstens kurze regenerative Aktivierung.", reason: "Reise", defaultRestriction: "recovery", defaultMinutes: 20 },
+  { key: "illness", icon: "🤒", label: "Krank / angeschlagen", help: "Erholung hat Vorrang; Training wird pausiert oder stark reduziert.", reason: "Krankheit", defaultRestriction: "blocked", defaultMinutes: 20 },
+  { key: "vacation", icon: "🏖️", label: "Urlaub", help: "Training bleibt flexibel und wird nicht als Kilometerschuld nachgeholt.", reason: "Urlaub", defaultRestriction: "light", defaultMinutes: 30 },
+  { key: "work", icon: "💼", label: "Viele Termine / Arbeit", help: "Zeitfenster begrenzen und unnötige Doppeleinheiten vermeiden.", reason: "Arbeit", defaultRestriction: "short", defaultMinutes: 30 },
+  { key: "appointment", icon: "📅", label: "Privater Termin", help: "Der Coach plant um den Termin herum statt dagegen.", reason: "Termin", defaultRestriction: "short", defaultMinutes: 30 },
+  { key: "time", icon: "⏱️", label: "Nur wenig Zeit", help: "Einheiten werden auf dein echtes Zeitfenster begrenzt.", reason: "Termin", defaultRestriction: "short", defaultMinutes: 30 },
+  { key: "recovery", icon: "🌿", label: "Nur regenerativ", help: "Keine Qualität und kein regulärer Lauf; nur sehr locker bewegen.", reason: "Erholung", defaultRestriction: "recovery", defaultMinutes: 20 },
+  { key: "blocked", icon: "⛔", label: "Training nicht möglich", help: "Der Tag bleibt komplett frei und wird nicht nachgeholt.", reason: "Sonstiges", defaultRestriction: "blocked", defaultMinutes: 20 },
 ]);
 
 export const WEEKLY_CONTEXT_RESTRICTIONS = Object.freeze([
@@ -273,6 +273,37 @@ export function replaceAvailabilityExceptionsForWeek(existing = [], replacements
   return mergeAvailabilityExceptions(kept, replacements);
 }
 
+export function applyWeeklyPlanningContext(baseConfig = {}, draftConfig = {}, weekStart = new Date()) {
+  const override = { ...(draftConfig || {}) };
+  const weeklyContextExceptions = Array.isArray(override.weeklyContextExceptions)
+    ? override.weeklyContextExceptions
+    : availabilityExceptionsForWeek(baseConfig.availabilityExceptions, weekStart, ["weekly-context"]);
+  delete override.weeklyContextExceptions;
+
+  const noteText = String(override.checkin?.notes ?? baseConfig.checkin?.notes ?? "");
+  const inferredConstraints = planningConstraintsFromNote(noteText, weekStart);
+  const weekAvailability = replaceAvailabilityExceptionsForWeek(
+    baseConfig.availabilityExceptions,
+    [...weeklyContextExceptions, ...inferredConstraints],
+    weekStart,
+    ["weekly-context", "planning-note"],
+  );
+
+  return {
+    ...baseConfig,
+    ...override,
+    checkin: {
+      ...(baseConfig.checkin || {}),
+      ...(override.checkin || {}),
+      notes: noteText,
+    },
+    availabilityExceptions: mergeAvailabilityExceptions(
+      weekAvailability,
+      override.availabilityExceptions,
+    ),
+  };
+}
+
 export function planningNoteForWeek(records = [], weekStart = new Date()) {
   const weekKey = weekStart instanceof Date
     ? isoDate(weekStart)
@@ -304,7 +335,7 @@ function travelHours(text = "") {
 }
 
 function travelSignal(text = "") {
-  return /reise|reisestress|reisetag|autofahrt|zugfahrt|bahnreise|flug|fliegen|unterwegs|mehrstündig|(?:mit\s+(?:dem\s+)?)auto|im\s+auto|auto\s+(?:fahren|fahre|fahrt|unterwegs|sitzen)|lang(?:e|er|en|es)?\s+auto\s+fahr/i.test(text);
+  return /reise|reisestress|reisetag|autofahrt|zugfahrt|bahnreise|flug|fliegen|unterwegs|mehrstündig|mehrere\s+stunden|stundenlang|(?:mit\s+(?:dem\s+)?)auto|im\s+auto|auto\s+(?:fahren|fahre|fahrt|unterwegs|sitzen)|lang(?:e|er|en|es)?\s+auto\s+fahr/i.test(text);
 }
 
 function reasonFromText(text = "") {
@@ -369,9 +400,9 @@ export function planningConstraintsFromNote(note = "", weekStart = new Date()) {
     const maxDurationMinutes = parseMaximumMinutes(text);
     const travel = travelSignal(text);
     const travelStress = /reisestress|anstrengend(?:e|er|en)?\s+(?:reise|fahrt)|reisetag/i.test(text);
-    const longTravel = travel && (travelHours(text) >= 4 || travelStress || /lang(?:e|er|en|es)?\s+(?:reise|autofahrt|zugfahrt|fahrt)|lang(?:e|er|en|es)?\s+auto\s+fahr|mehrstündig|ganztägig/i.test(text));
+    const longTravel = travel && (travelHours(text) >= 4 || travelStress || /lang(?:e|er|en|es)?\s+(?:reise|autofahrt|zugfahrt|fahrt)|lang(?:e|er|en|es)?\s+auto\s+fahr|mehrstündig|mehrere\s+stunden|stundenlang|ganztägig/i.test(text));
     const explicitUnavailable = /(?:training|laufen|lauf|einheit)?\s*(?:zeitlich\s*)?(?:nicht|kaum)\s*möglich|training\s*unmöglich|keine\s+zeit|ganztägig(?:er|e|es)?\s+(?:termin|unterwegs|reise)|komplett\s+verplant/i.test(text);
-    const explicitlyRecoveryOnly = /nur\s+(?:sehr\s+)?(?:locker|regenerativ|recovery|aktivierung|mobility)|nur\s+(?:eine\s+)?kurze\s+(?:einheit|aktivierung)|maximal\s+\d{1,3}(?:\s*[-–]\s*\d{1,3})?\s*min/i.test(text);
+    const explicitlyRecoveryOnly = /nur\s+(?:sehr\s+)?(?:locker|regenerativ|recovery|aktivierung|mobility)|nur\s+(?:eine\s+)?kurze\s+(?:einheit|aktivierung)|(?:wenn\s+überhaupt\s+)?nur\s+(?:sehr\s+)?kurz(?:e|en)?(?:\s+(?:und|oder)\s+(?:sehr\s+)?(?:locker|regenerativ|recovery))?|(?:wenn\s+überhaupt[^.;]{0,60})?(?:kurz|kurze\s+einheit)[^.;]{0,40}(?:regenerativ|locker|recovery)|maximal\s+\d{1,3}(?:\s*[-–]\s*\d{1,3})?\s*min/i.test(text);
     const noRunning = /kein(?:e|en)?\s+(?:lauf|laufen|laufeinheit)|nicht\s+laufen/i.test(text);
     const recoveryOnly = !explicitUnavailable && (explicitlyRecoveryOnly || (maxDurationMinutes != null && maxDurationMinutes <= 30));
     const inferredDuration = maxDurationMinutes || (recoveryOnly && longTravel ? 20 : null);
