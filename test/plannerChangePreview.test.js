@@ -89,3 +89,25 @@ test("undo is only possible while the applied week is unchanged", () => {
   assert.equal(planEntriesForWeek(restored, weekStart, weekEnd)[0].distance, 8);
   assert.ok(restored.some((item) => item.id === "outside"));
 });
+
+
+test("planned race distance counts toward the weekly running volume preview", () => {
+  const before = [workout({ id: "easy", distance: 8 })];
+  const after = [
+    workout({ id: "easy-after", distance: 8 }),
+    workout({
+      id: "race",
+      date: "2026-08-07",
+      title: "UrLand-Lauf Oerlinghausen",
+      type: "Wettkampf",
+      distance: 9.6,
+      raceEvent: true,
+      targetEventId: "urlaender",
+    }),
+  ];
+
+  const preview = buildPlanChangePreview(before, after);
+  assert.equal(preview.beforeRunningKm, 8);
+  assert.equal(preview.afterRunningKm, 17.6);
+  assert.equal(Number(preview.deltaRunningKm.toFixed(1)), 9.6);
+});

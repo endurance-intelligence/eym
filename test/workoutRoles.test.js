@@ -82,3 +82,18 @@ test("easy and steady roles have distinct readable icons", () => {
   assert.notEqual(WORKOUT_ROLE_DEFINITIONS.easy.icon, "●");
   assert.notEqual(WORKOUT_ROLE_DEFINITIONS.steady.icon, "●");
 });
+
+
+test("pre-race activation explains the shake-out purpose through the existing workout role system", () => {
+  const assessment = workoutRoleAssessment({
+    id: "shakeout",
+    title: "Shake-out / Pre-Race Activation · 5 × 20 s Strides",
+    type: "Easy Run",
+    distance: 7,
+    goalSessionRole: "pre_race_activation",
+  });
+
+  assert.equal(assessment.classificationKey, "easy");
+  assert.match(assessment.explanation, /neuromuskuläre Spannung/i);
+  assert.match(assessment.explanation, /keinen zusätzlichen harten Trainingsreiz/i);
+});

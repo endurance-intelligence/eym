@@ -13,8 +13,30 @@ export const AVAILABILITY_REASONS = [
   "Sonstiges",
 ];
 
+const DAY_INDEX = {
+  montag: 0,
+  dienstag: 1,
+  mittwoch: 2,
+  donnerstag: 3,
+  freitag: 4,
+  samstag: 5,
+  sonntag: 6,
+};
+
 function validIsoDate(value = "") {
   return /^\d{4}-\d{2}-\d{2}$/.test(String(value || ""));
+}
+
+function isoDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function constraintMinutes(value) {
+  const parsed = Math.round(Number(value));
+  return Number.isFinite(parsed) && parsed > 0 ? Math.min(24 * 60, parsed) : null;
 }
 
 export function normalizeAvailabilityException(exception = {}) {
@@ -27,6 +49,7 @@ export function normalizeAvailabilityException(exception = {}) {
     : exception.reason
       ? "Sonstiges"
       : "Termin";
+  const maxDurationMinutes = constraintMinutes(exception.maxDurationMinutes);
 
   return {
     id: exception.id || `availability-${date || crypto.randomUUID()}`,
@@ -34,9 +57,47 @@ export function normalizeAvailabilityException(exception = {}) {
     status,
     reason,
     note: String(exception.note || "").trim().slice(0, 240),
+    ...(maxDurationMinutes ? { maxDurationMinutes } : {}),
+    recoveryOnly: Boolean(exception.recoveryOnly),
+    noRunning: Boolean(exception.noRunning),
+    noDouble: Boolean(exception.noDouble),
+    source: exception.source === "planning-note" ? "planning-note" : "manual",
     createdAt: exception.createdAt || new Date().toISOString(),
     updatedAt: exception.updatedAt || new Date().toISOString(),
   };
+}
+
+function restrictionRank(exception = {}) {
+  if (exception.status === AVAILABILITY_STATUS.BLOCKED) return 4;
+  if (exception.recoveryOnly || exception.noRunning) return 3;
+  if (exception.maxDurationMinutes) return 2;
+  if (exception.noDouble) return 1;
+  return 0;
+}
+
+function mergeSameDate(left = {}, right = {}) {
+  const normalizedLeft = normalizeAvailabilityException(left);
+  const normalizedRight = normalizeAvailabilityException(right);
+  const status = normalizedLeft.status === AVAILABILITY_STATUS.BLOCKED || normalizedRight.status === AVAILABILITY_STATUS.BLOCKED
+    ? AVAILABILITY_STATUS.BLOCKED
+    : AVAILABILITY_STATUS.AVAILABLE;
+  const durationValues = [normalizedLeft.maxDurationMinutes, normalizedRight.maxDurationMinutes].filter(Number.isFinite);
+  const preferred = restrictionRank(normalizedRight) >= restrictionRank(normalizedLeft) ? normalizedRight : normalizedLeft;
+  return normalizeAvailabilityException({
+    ...preferred,
+    id: preferred.id || normalizedLeft.id || normalizedRight.id,
+    date: normalizedLeft.date || normalizedRight.date,
+    status,
+    reason: preferred.reason || normalizedLeft.reason || normalizedRight.reason,
+    note: [normalizedLeft.note, normalizedRight.note].filter(Boolean).filter((value, index, values) => values.indexOf(value) === index).join(" · ").slice(0, 240),
+    maxDurationMinutes: durationValues.length ? Math.min(...durationValues) : null,
+    recoveryOnly: normalizedLeft.recoveryOnly || normalizedRight.recoveryOnly,
+    noRunning: normalizedLeft.noRunning || normalizedRight.noRunning,
+    noDouble: normalizedLeft.noDouble || normalizedRight.noDouble,
+    source: normalizedLeft.source === "planning-note" || normalizedRight.source === "planning-note" ? "planning-note" : "manual",
+    createdAt: normalizedLeft.createdAt || normalizedRight.createdAt,
+    updatedAt: [normalizedLeft.updatedAt, normalizedRight.updatedAt].sort().at(-1),
+  });
 }
 
 export function normalizeAvailabilityExceptions(exceptions = []) {
@@ -48,6 +109,17 @@ export function normalizeAvailabilityExceptions(exceptions = []) {
       const existing = byDate.get(entry.date);
       if (!existing || String(entry.updatedAt || "") >= String(existing.updatedAt || "")) byDate.set(entry.date, entry);
     });
+  return [...byDate.values()].sort((left, right) => left.date.localeCompare(right.date));
+}
+
+export function mergeAvailabilityExceptions(...groups) {
+  const byDate = new Map();
+  groups.forEach((group) => {
+    normalizeAvailabilityExceptions(group).forEach((entry) => {
+      const existing = byDate.get(entry.date);
+      byDate.set(entry.date, existing ? mergeSameDate(existing, entry) : entry);
+    });
+  });
   return [...byDate.values()].sort((left, right) => left.date.localeCompare(right.date));
 }
 
@@ -63,9 +135,22 @@ export function blockedAvailabilityDates(exceptions = [], weekStart = "", weekEn
     .map((entry) => entry.date));
 }
 
+export function runningRestrictedAvailabilityDates(exceptions = [], weekStart = "", weekEnd = "") {
+  return new Set(normalizeAvailabilityExceptions(exceptions)
+    .filter((entry) => entry.status === AVAILABILITY_STATUS.BLOCKED
+      || entry.noRunning
+      || entry.recoveryOnly
+      || (Number(entry.maxDurationMinutes || 0) > 0 && Number(entry.maxDurationMinutes) < 30))
+    .filter((entry) => (!weekStart || entry.date >= weekStart) && (!weekEnd || entry.date <= weekEnd))
+    .map((entry) => entry.date));
+}
+
 export function availabilityLabel(exception = {}) {
-  if (!exception?.date || exception.status !== AVAILABILITY_STATUS.BLOCKED) return "Verfügbar";
-  return exception.reason ? `Nicht verfügbar · ${exception.reason}` : "Nicht verfügbar";
+  if (!exception?.date) return "Verfügbar";
+  if (exception.status === AVAILABILITY_STATUS.BLOCKED) return exception.reason ? `Nicht verfügbar · ${exception.reason}` : "Nicht verfügbar";
+  if (exception.recoveryOnly) return `Nur regenerativ${exception.maxDurationMinutes ? ` · max. ${exception.maxDurationMinutes} min` : ""}`;
+  if (exception.maxDurationMinutes) return `Begrenzt · max. ${exception.maxDurationMinutes} min`;
+  return "Verfügbar";
 }
 
 export function upsertAvailabilityException(exceptions = [], input = {}) {
@@ -79,4 +164,72 @@ export function upsertAvailabilityException(exceptions = [], input = {}) {
 
 export function removeAvailabilityException(exceptions = [], date = "") {
   return normalizeAvailabilityExceptions(exceptions).filter((entry) => entry.date !== date);
+}
+
+function parseMaximumMinutes(text = "") {
+  const match = String(text).match(/(?:max(?:imal)?\.?|höchstens|nur)\s*(?:ca\.?\s*)?(\d{1,3})(?:\s*[-–]\s*(\d{1,3}))?\s*(?:min(?:uten)?|min\b)/i);
+  if (!match) return null;
+  return constraintMinutes(match[2] || match[1]);
+}
+
+function travelHours(text = "") {
+  const matches = [...String(text).matchAll(/(\d{1,2})(?:\s*[-–]\s*(\d{1,2}))?\s*(?:h|std\.?|stunden?)\b/gi)];
+  return matches.reduce((max, match) => Math.max(max, Number(match[2] || match[1]) || 0), 0);
+}
+
+function reasonFromText(text = "") {
+  if (/reise|autofahrt|flug|fliegen|unterwegs/i.test(text)) return "Reise";
+  if (/arbeit|beruf|meeting|dienst/i.test(text)) return "Arbeit";
+  if (/famil/i.test(text)) return "Familie";
+  if (/krank|symptom/i.test(text)) return "Krankheit";
+  if (/erhol|regener/i.test(text)) return "Erholung";
+  if (/termin|veranstaltung/i.test(text)) return "Termin";
+  return "Sonstiges";
+}
+
+function daySegments(note = "") {
+  const text = String(note || "").trim();
+  if (!text) return [];
+  const regex = /\b(Montag|Dienstag|Mittwoch|Donnerstag|Freitag|Samstag|Sonntag)\b/gi;
+  const matches = [...text.matchAll(regex)];
+  return matches.map((match, index) => ({
+    day: match[1].toLocaleLowerCase("de-DE"),
+    text: text.slice(match.index, matches[index + 1]?.index ?? text.length).trim().replace(/^[,:;\-\s]+|[,:;\-\s]+$/g, ""),
+  }));
+}
+
+export function planningConstraintsFromNote(note = "", weekStart = new Date()) {
+  const start = weekStart instanceof Date ? new Date(weekStart) : new Date(`${String(weekStart || "").slice(0, 10)}T12:00:00`);
+  if (Number.isNaN(start.getTime())) return [];
+  start.setHours(12, 0, 0, 0);
+
+  return daySegments(note).map((segment) => {
+    const dayIndex = DAY_INDEX[segment.day];
+    if (dayIndex == null) return null;
+    const date = new Date(start);
+    date.setDate(date.getDate() + dayIndex);
+    const text = segment.text;
+    const maxDurationMinutes = parseMaximumMinutes(text);
+    const travel = /reise|autofahrt|flug|fliegen|unterwegs/i.test(text);
+    const longTravel = travel && (travelHours(text) >= 4 || /lang(?:e|er|en)?\s+(?:reise|autofahrt)|mehrstündig|ganztägig/i.test(text));
+    const explicitUnavailable = /(?:training|laufen|lauf|einheit)?\s*(?:zeitlich\s*)?(?:nicht|kaum)\s*möglich|training\s*unmöglich|keine\s+zeit|ganztägig(?:er|e|es)?\s+(?:termin|unterwegs|reise)|komplett\s+verplant/i.test(text);
+    const explicitlyRecoveryOnly = /nur\s+(?:sehr\s+)?(?:locker|regenerativ|recovery|aktivierung|mobility)|nur\s+(?:eine\s+)?kurze\s+(?:einheit|aktivierung)|maximal\s+\d{1,3}(?:\s*[-–]\s*\d{1,3})?\s*min/i.test(text);
+    const noRunning = /kein(?:e|en)?\s+(?:lauf|laufen|laufeinheit)|nicht\s+laufen/i.test(text);
+    const recoveryOnly = !explicitUnavailable && (explicitlyRecoveryOnly || longTravel || (maxDurationMinutes != null && maxDurationMinutes <= 30));
+    const inferredDuration = maxDurationMinutes || (recoveryOnly && longTravel ? 20 : null);
+
+    if (!explicitUnavailable && !recoveryOnly && !noRunning && !inferredDuration && !travel) return null;
+    return normalizeAvailabilityException({
+      id: `planning-note-${isoDate(date)}`,
+      date: isoDate(date),
+      status: explicitUnavailable ? AVAILABILITY_STATUS.BLOCKED : AVAILABILITY_STATUS.AVAILABLE,
+      reason: reasonFromText(text),
+      note: text,
+      maxDurationMinutes: inferredDuration,
+      recoveryOnly,
+      noRunning: noRunning || recoveryOnly,
+      noDouble: explicitUnavailable || recoveryOnly || travel || Boolean(inferredDuration),
+      source: "planning-note",
+    });
+  }).filter(Boolean);
 }

@@ -89,7 +89,7 @@ export function trackStepGarminCue(input = {}) {
 }
 
 export function isTrackWorkout(item = {}) {
-  return /orc\s*track|intervall|interval|sprint/i.test(`${item.type || ""} ${item.title || ""}`);
+  return /orc\s*track|intervall|interval|sprint|stride|steiger/i.test(`${item.type || ""} ${item.title || ""}`);
 }
 
 export function normalizeTrackRounds(value) {
@@ -146,8 +146,10 @@ export function normalizeTrackWorkout(input = {}) {
     kind,
     rounds: normalizeTrackRounds(input.rounds ?? input.repeats),
     steps,
-    warmupMode: "lap",
-    cooldownMode: "lap",
+    warmupMode: input.warmupMode === "time" ? "time" : "lap",
+    cooldownMode: input.cooldownMode === "time" ? "time" : "lap",
+    ...(input.warmupMinutes ? { warmupMinutes: clamp(input.warmupMinutes, 1, 90, 15) } : {}),
+    ...(input.cooldownMinutes ? { cooldownMinutes: clamp(input.cooldownMinutes, 1, 60, 10) } : {}),
     planningStatus: input.planningStatus === "draft" ? "draft" : "final",
     ...(templateId ? { templateId } : {}),
     ...(templateName ? { templateName } : {}),

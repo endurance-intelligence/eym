@@ -26,6 +26,7 @@ const ROLE_REASON_BY_SESSION = {
   run_walk_easy: "Die Einheit baut ruhige Laufverträglichkeit mit kontrollierten Gehanteilen auf.",
   course_specific_long_run: "Die Einheit trainiert zielspezifische Dauer, Ablauf, Verpflegung und Ermüdungsresistenz.",
   long_run: "Der lange Lauf entwickelt aerobe Ausdauer, muskuläre Robustheit und Zeit auf den Beinen.",
+  pre_race_activation: "Der Shake-out hält vor dem Wettkampf den Bewegungsrhythmus und die neuromuskuläre Spannung wach. Die kurzen Strides setzen keinen zusätzlichen harten Trainingsreiz.",
 };
 
 function numeric(value) {
@@ -45,7 +46,7 @@ function normalizedText(item = {}) {
 function sportFamily(item = {}) {
   const text = normalizedText(item);
   if (/fußball|fussball|football|soccer/.test(text)) return "football";
-  if (/rennrad|road bike|cycling|radfahren|rad fahren|ride|gravel|mountainbike|mtb|e-?bike/.test(text)) return "cycling";
+  if (/rennrad|road bike|cycling|radfahren|rad fahren|\bride\b|gravel|mountainbike|mtb|e-?bike/.test(text)) return "cycling";
   if (/rudern|rowing|rowerg|indoor row/.test(text)) return "rowing";
   if (/stabi|mobility|kraft|strength|gym|core|yoga|pilates/.test(text)) return "support";
   if (/schwimm|swim/.test(text)) return "swimming";

@@ -364,6 +364,38 @@ test("automatic distance remains an explicit opt-in for loop workouts", () => {
   assert.match(description, /Boxenstopp 1\n- Press lap 10m intensity=recovery/);
 });
 
+
+test("pre-race strides export duration, broad pace target and recovery to Garmin via Intervals", () => {
+  const shakeout = { type: "Easy Run", title: "Shake-out / Pre-Race Activation · 5 × 20 s Strides" };
+  assert.equal(isTrackWorkout(shakeout), true);
+
+  const workout = normalizeTrackWorkout({
+    kind: "sprints",
+    rounds: 5,
+    steps: [
+      { kind: "work", unit: "time", value: 20, targetPace: "3:57", paceToleranceSeconds: 18 },
+      { kind: "recovery", unit: "time", value: 80 },
+    ],
+    warmupMode: "time",
+    cooldownMode: "time",
+    warmupMinutes: 26,
+    cooldownMinutes: 11,
+    planningStatus: "final",
+  });
+
+  const description = intervalDescription({
+    type: "Easy Run",
+    title: "Shake-out / Pre-Race Activation · 5 × 20 s Strides @ 3:49–4:05/km · 80 s locker",
+    structuredWorkout: workout,
+  });
+
+  assert.match(description, /Warm-up\n- 26m intensity=warmup/);
+  assert.match(description, /Sprints 5x/);
+  assert.match(description, /Belastung @ 3:57\/km 20s 3:39-4:15\/km Pace intensity=interval/);
+  assert.match(description, /Trabpause 80s intensity=recovery/);
+  assert.match(description, /Cool-down\n- 11m intensity=cooldown/);
+});
+
 test("mobile pace input formats raw digits without requiring a colon", () => {
   assert.equal(formatTrackPaceInput("510"), "5:10");
   assert.equal(formatTrackPaceInput("1045"), "10:45");

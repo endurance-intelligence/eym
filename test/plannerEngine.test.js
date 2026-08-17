@@ -359,6 +359,58 @@ const goalAwareConfig = {
   maxLongRun: 32,
 };
 
+function travelEventInput(overrides = {}) {
+  const mission = overrides.mission || {
+    ...goalAwareMission,
+    milestones: goalAwareMission.milestones.map((event) => event.id === "urlaender"
+      ? { ...event, targetTime: "00:45:00" }
+      : { ...event }),
+  };
+  const config = {
+    recurringCommitments: [{
+      id: "football-monday",
+      name: "Fußballtraining",
+      sport: "football",
+      workoutType: "Fußball",
+      weekday: "Montag",
+      time: "19:00",
+      durationMinutes: 90,
+      load: "high",
+      conflictMode: "exclusive",
+      enabled: true,
+    }],
+    fixedAppointments: { football: false, orcRun: false, saturdayMode: "off" },
+    targetRunCount: 5,
+    stabiCount: 1,
+    stabiDays: ["Dienstag"],
+    rowingCount: 0,
+    runDays: ["Dienstag", "Mittwoch", "Donnerstag", "Samstag", "Sonntag"],
+    doubleTrainingDays: ["Dienstag", "Donnerstag"],
+    maxLongRun: 32,
+    checkin: {
+      energy: 8,
+      fatigue: "none",
+      illness: "healthy",
+      pain: "none",
+      painLevel: 0,
+      notes: "Dienstag 7–8 Stunden Autofahrt, Training zeitlich nicht möglich. Donnerstag 7–8 Stunden Autofahrt, maximal 15–20 Minuten sehr lockere Aktivierung möglich.",
+    },
+    ...(overrides.config || {}),
+  };
+  return {
+    mission,
+    profile: {
+      selfReportedRunsPerWeek: 5,
+      selfReportedWeeklyKm: 50,
+      selfReportedLongestRunKm: 24,
+      ...(overrides.profile || {}),
+    },
+    activities: overrides.activities || [],
+    config,
+    today: new Date("2026-08-17T12:00:00"),
+  };
+}
+
 test("a C event is fixed into its week, protects freshness and keeps B as the strategic focus", () => {
   const result = generateWeekPlan({
     mission: goalAwareMission,
@@ -385,7 +437,9 @@ test("a C event is fixed into its week, protects freshness and keeps B as the st
   assert.equal(event.fixed, true);
   assert.equal(event.calendarOnly, true);
 
-  assert.equal(result.plan.some((item) => ["Long Run", "Loop-Training", "Backyard Training"].includes(item.type)), false);
+  assert.notEqual(result.phase.key, "event");
+  assert.equal(result.recoveryWeek, false);
+  assert.ok(result.plan.some((item) => ["Long Run", "Loop-Training", "Backyard Training"].includes(item.type)));
   assert.equal(result.plan.some((item) => ["Schwellenlauf", "Intervalle", "ORC Track"].includes(item.type)), false);
   const protectedTrack = result.plan.find((item) => item.commitmentId === "track");
   assert.equal(protectedTrack.type, "Easy Run");
@@ -396,7 +450,131 @@ test("a C event is fixed into its week, protects freshness and keeps B as the st
   assert.equal(protectedGroupRun.type, "Easy Run");
 
   const dayBefore = result.plan.filter((item) => item.date === "2026-08-20");
-  assert.ok(dayBefore.every((item) => item.type === "Mobility" || item.type === "Ruhetag" || item.optional));
+  assert.ok(dayBefore.every((item) => item.preRaceActivation || item.type === "Mobility" || item.type === "Ruhetag" || item.optional));
+});
+
+test("planning note unavailability overrides an enabled Tuesday run day and double-session setup", () => {
+  const result = generateWeekPlan(travelEventInput());
+  const tuesday = result.plan.filter((item) => item.date === "2026-08-18");
+
+  assert.equal(tuesday.length, 1);
+  assert.equal(tuesday[0].type, "Ruhetag");
+  assert.equal(tuesday[0].distance, 0);
+  assert.equal(tuesday[0].duration, 0);
+  assert.match(tuesday[0].notes, /Training ist an diesem Tag nicht möglich/i);
+  assert.equal(result.planningConstraints.find((entry) => entry.date === "2026-08-18")?.status, "blocked");
+});
+
+test("a maximum twenty minute travel constraint caps Thursday at recovery activation", () => {
+  const result = generateWeekPlan(travelEventInput());
+  const thursday = result.plan.filter((item) => item.date === "2026-08-20");
+
+  assert.equal(thursday.length, 1);
+  assert.equal(thursday[0].type, "Mobility");
+  assert.ok(Number(thursday[0].duration) <= 20);
+  assert.equal(Number(thursday[0].distance || 0), 0);
+  assert.equal(thursday[0].optional, true);
+  assert.doesNotMatch(`${thursday[0].title} ${thursday[0].notes}`, /Intervall|Schwelle|Tempo|ORC Track/i);
+});
+
+test("travel immediately before the Friday event moves the pre-race stimulus to Wednesday", () => {
+  const result = generateWeekPlan(travelEventInput());
+  const activation = result.plan.find((item) => item.preRaceActivation);
+
+  assert.ok(activation);
+  assert.equal(activation.date, "2026-08-19");
+  assert.equal(activation.type, "Easy Run");
+  assert.ok(activation.distance >= 4 && activation.distance <= 8);
+  assert.match(activation.notes, /neuromuskuläre Spannung/i);
+  assert.match(activation.notes, /RPE 7\/10/i);
+  assert.equal(result.plan.some((item) => item.date === "2026-08-20" && /Intervall|Schwelle|Tempo|Track/i.test(`${item.type} ${item.title}`)), false);
+});
+
+test("pre-race shake-out stores strides and recovery inside the same structured workout", () => {
+  const result = generateWeekPlan(travelEventInput());
+  const activation = result.plan.find((item) => item.preRaceActivation);
+
+  assert.ok(activation?.structuredWorkout);
+  assert.equal(activation.structuredWorkout.kind, "sprints");
+  assert.ok([4, 5, 6].includes(activation.structuredWorkout.rounds));
+  assert.deepEqual(activation.structuredWorkout.steps.map((step) => step.kind), ["work", "recovery"]);
+  const [stride, recovery] = activation.structuredWorkout.steps;
+  assert.equal(stride.unit, "time");
+  assert.ok(stride.value >= 15 && stride.value <= 20);
+  assert.match(stride.targetPace, /^\d{1,2}:\d{2}$/);
+  assert.ok(stride.paceToleranceSeconds >= 15);
+  assert.equal(recovery.unit, "time");
+  assert.ok(recovery.value >= 60 && recovery.value <= 90);
+  assert.match(activation.title, /Strides @ .*\/km/i);
+});
+
+test("stride pace is derived from athlete performance when the C event has no target time", () => {
+  const mission = {
+    ...goalAwareMission,
+    milestones: goalAwareMission.milestones.map((event) => ({ ...event, targetTime: "" })),
+  };
+  const fast = generateWeekPlan(travelEventInput({
+    mission,
+    activities: [{ id: "fast-5k", date: "2026-08-10", type: "Run", name: "5 km Benchmark", distance: 5, duration: 20, perceivedExertion: 8 }],
+  }));
+  const slower = generateWeekPlan(travelEventInput({
+    mission,
+    activities: [{ id: "steady-5k", date: "2026-08-10", type: "Run", name: "5 km Benchmark", distance: 5, duration: 30, perceivedExertion: 8 }],
+  }));
+  const fastPace = fast.plan.find((item) => item.preRaceActivation)?.structuredWorkout?.steps?.[0]?.targetPace;
+  const slowerPace = slower.plan.find((item) => item.preRaceActivation)?.structuredWorkout?.steps?.[0]?.targetPace;
+
+  assert.match(fastPace || "", /^\d{1,2}:\d{2}$/);
+  assert.match(slowerPace || "", /^\d{1,2}:\d{2}$/);
+  assert.notEqual(fastPace, slowerPace);
+});
+
+test("C event preserves the Backyard mission and a conditional post-event aerobic block", () => {
+  const result = generateWeekPlan(travelEventInput());
+  const sunday = result.plan.find((item) => item.date === "2026-08-23" && ["Long Run", "Loop-Training", "Backyard Training"].includes(item.type));
+
+  assert.equal(result.planningTarget.id, "backyard");
+  assert.equal(result.eventWeek.priority, "C");
+  assert.notEqual(result.phase.key, "event");
+  assert.ok(sunday);
+  assert.equal(sunday.optional, true);
+  assert.match(sunday.notes, /missionsbezogenen Aufbau|Event-Review|Beinen|Energie/i);
+});
+
+test("the travel-and-C-event acceptance week counts the race and keeps the actual plan transparent", () => {
+  const result = generateWeekPlan(travelEventInput());
+  const runningKm = result.plan
+    .filter((item) => item.raceEvent || /run|lauf|loop|backyard|wettkampf|race/i.test(`${item.type} ${item.title}`))
+    .reduce((sum, item) => sum + Number(item.distance || 0), 0);
+
+  assert.equal(Number(runningKm.toFixed(1)), 30);
+  assert.equal(result.weekPrescription.projectedRunningKm, 30);
+  assert.equal(result.plan.find((item) => item.raceEvent)?.distance, 9.6);
+  assert.match(result.weekPrescription.deliveryNote, /keine Kilometerschuld/i);
+});
+
+test("an irrelevant planning note leaves an otherwise normal week unchanged", () => {
+  const input = {
+    mission: { id: "goal", name: "50 km Lauf", date: "2026-11-21", targetKm: 50, milestones: [] },
+    profile: { selfReportedRunsPerWeek: 4, selfReportedWeeklyKm: 40, selfReportedLongestRunKm: 22 },
+    offsetWeeks: 1,
+    today: new Date("2026-07-24T12:00:00"),
+    config: {
+      recurringCommitments: [],
+      fixedAppointments: { football: false, orcRun: false, saturdayMode: "off" },
+      targetRunCount: 4,
+      stabiCount: 1,
+      rowingCount: 0,
+      runDays: ["Dienstag", "Donnerstag", "Samstag", "Sonntag"],
+      maxLongRun: 30,
+    },
+  };
+  const clean = generateWeekPlan(input);
+  const withNote = generateWeekPlan({ ...input, config: { ...input.config, checkin: { notes: "Diese Woche fühlt sich normal an." } } });
+  const comparable = (plan) => plan.map((item) => { const copy = { ...item }; delete copy.id; return copy; });
+
+  assert.deepEqual(comparable(withNote.plan), comparable(clean.plan));
+  assert.deepEqual(withNote.planningConstraints, []);
 });
 
 test("outside the C event week the planner keeps training toward B without an early C taper", () => {

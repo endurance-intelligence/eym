@@ -79,9 +79,17 @@ function structuredSteps(input: Record<string, unknown>) {
 function structuredTrackDescription(input: Record<string, unknown>) {
   const rounds = safeInteger(input.rounds ?? input.repeats, 1, 30, 8);
   const steps = structuredSteps(input);
+  const warmupMinutes = safeInteger(input.warmupMinutes, 1, 90, 15);
+  const cooldownMinutes = safeInteger(input.cooldownMinutes, 1, 60, 10);
+  const warmupStep = input.warmupMode === "time"
+    ? `- ${warmupMinutes}m intensity=warmup`
+    : `- Press lap ${warmupMinutes}m intensity=warmup`;
+  const cooldownStep = input.cooldownMode === "time"
+    ? `- ${cooldownMinutes}m intensity=cooldown`
+    : `- Press lap ${cooldownMinutes}m intensity=cooldown`;
   const lines = [
     "Warm-up",
-    "- Press lap 15m intensity=warmup",
+    warmupStep,
     "",
     `${input.kind === "sprints" ? "Sprints" : "Hauptteil"} ${rounds}x`,
     ...steps.map((step) => step.kind === "recovery"
@@ -89,7 +97,7 @@ function structuredTrackDescription(input: Record<string, unknown>) {
       : `- ${step.cue} ${step.token} ${step.target} intensity=interval`),
     "",
     "Cool-down",
-    "- Press lap 10m intensity=cooldown",
+    cooldownStep,
   ];
   return lines.join("\n");
 }
@@ -179,7 +187,7 @@ function loopWorkoutDescription(item: Record<string, unknown>) {
 export function isProvisionalTrackPlanItem(item: Record<string, unknown>) {
   const text = `${item.type || ""} ${item.title || ""}`.toLowerCase();
   const structuredWorkout = item.structuredWorkout;
-  return /orc\s*track|intervall|interval|sprint/.test(text)
+  return /orc\s*track|intervall|interval|sprint|stride|steiger/.test(text)
     && Boolean(structuredWorkout && typeof structuredWorkout === "object"
       && (structuredWorkout as Record<string, unknown>).planningStatus === "draft");
 }
@@ -208,7 +216,7 @@ export function intervalDescription(item: Record<string, unknown>) {
     return goalWorkoutDescription(goalWorkout as Record<string, unknown>);
   }
 
-  if (structuredWorkout && typeof structuredWorkout === "object" && /orc\s*track|intervall|interval|sprint/.test(text)) {
+  if (structuredWorkout && typeof structuredWorkout === "object" && /orc\s*track|intervall|interval|sprint|stride|steiger/.test(text)) {
     return structuredTrackDescription(structuredWorkout as Record<string, unknown>);
   }
 

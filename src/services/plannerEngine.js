@@ -1,7 +1,13 @@
 import { reviewKind } from "./activityUtils.js";
 import { crossTrainingTargetShare } from "./crossTrainingLoad.js";
 import { blockedTrainingDates } from "./missedSessionDecision.js";
-import { blockedAvailabilityDates } from "./plannerAvailability.js";
+import {
+  availabilityForDate,
+  blockedAvailabilityDates,
+  mergeAvailabilityExceptions,
+  planningConstraintsFromNote,
+  runningRestrictedAvailabilityDates,
+} from "./plannerAvailability.js";
 import {
   buildEventWeek,
   eventDurationMinutes,
@@ -17,7 +23,7 @@ import {
   longRunGoalGuidance,
   publicGoalSummary,
 } from "./goalEngine.js";
-import { applyPlanPaceGuidance } from "./workoutPace.js";
+import { applyPlanPaceGuidance, formatPaceSeconds } from "./workoutPace.js";
 import { LOOP_CONTROL_MODES, LOOP_PACE_MODES, isLoopWorkout, normalizeLoopWorkoutItem } from "./loopWorkout.js";
 import { buildWeekPrescription } from "./trainingPeriodization.js";
 
@@ -107,8 +113,303 @@ function boundedNumber(value, minimum, maximum, fallback) {
 
 function isRunningPlanEntry(entry) {
   const value = `${entry?.type || ""} ${entry?.title || ""}`.toLowerCase();
-  if (/rudern|rowing|rad|ride|bike|cycling|schwimm|swim|fußball|football|soccer|stabi|mobility|mobilität/.test(value)) return false;
-  return /run|lauf|orc|interval|schwelle|backyard|track|treadmill|wettkampf|race|marathon|ultra/.test(value);
+  if (/rudern|rowing|rad|\bride\b|bike|cycling|schwimm|swim|fußball|football|soccer|stabi|mobility|mobilität|ruhetag|\brest\b/.test(value)) return false;
+  return /run|lauf|orc|interval|schwelle|backyard|loop|track|treadmill|wettkampf|race|marathon|ultra/.test(value);
+}
+
+function parseGoalTimeSeconds(value = "") {
+  const match = String(value || "").trim().match(/^(\d{1,3}):([0-5]\d):([0-5]\d)$/);
+  if (!match) return 0;
+  return Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]);
+}
+
+function activityDurationSecondsForPace(activity = {}) {
+  const values = [
+    Number(activity.movingTime),
+    Number(activity.elapsedTime),
+    Number(activity.durationSeconds),
+    Number(activity.duration) > 600 ? Number(activity.duration) : Number(activity.duration) * 60,
+  ];
+  return values.find((value) => Number.isFinite(value) && value > 0) || 0;
+}
+
+function recentPerformancePaceSeconds(activities = [], referenceDate = new Date()) {
+  const cutoff = new Date(referenceDate);
+  cutoff.setDate(cutoff.getDate() - 120);
+  const paces = (Array.isArray(activities) ? activities : [])
+    .filter((activity) => isRun(activity))
+    .map((activity) => {
+      const distance = Number(activity.distance || 0);
+      const durationSeconds = activityDurationSecondsForPace(activity);
+      const date = new Date(`${activityDate(activity)}T12:00:00`);
+      const pace = distance > 0 ? durationSeconds / distance : 0;
+      const text = `${activity.name || ""} ${activity.type || ""}`.toLowerCase();
+      const qualityEvidence = Boolean(activity.race || activity.officialEvent || Number(activity.perceivedExertion || 0) >= 7 || /race|wettkampf|benchmark|bestzeit|pb|interval|tempo|schwelle/.test(text));
+      return { pace, distance, date, qualityEvidence };
+    })
+    .filter((entry) => entry.date >= cutoff && entry.date < referenceDate && entry.distance >= 3 && entry.distance <= 21.2 && entry.pace >= 180 && entry.pace <= 720)
+    .sort((left, right) => Number(right.qualityEvidence) - Number(left.qualityEvidence) || left.pace - right.pace);
+  if (!paces.length) return 0;
+  const quality = paces.filter((entry) => entry.qualityEvidence);
+  const pool = quality.length ? quality : paces.slice(0, Math.min(5, paces.length));
+  const index = Math.min(pool.length - 1, Math.floor(pool.length * 0.25));
+  return Math.round(pool.sort((left, right) => left.pace - right.pace)[index].pace);
+}
+
+function stridePrescription({ event = {}, activities = [], goalEngine = {}, weekStart = new Date() } = {}) {
+  const eventDistance = Number(event.targetKm || 0);
+  const eventTimeSeconds = parseGoalTimeSeconds(event.targetTime);
+  const eventPaceSeconds = eventDistance > 0 && eventTimeSeconds > 0 ? eventTimeSeconds / eventDistance : 0;
+  const performancePace = recentPerformancePaceSeconds(activities, weekStart);
+  const easyPace = Number(goalEngine?.baseline?.medianPaceSeconds || 0);
+  const anchor = eventPaceSeconds || performancePace || (easyPace > 0 ? Math.max(210, easyPace - 55) : 300);
+  const centerSeconds = Math.max(180, Math.round(anchor - (eventPaceSeconds ? 44 : performancePace ? 18 : 12)));
+  const displayTolerance = Math.max(6, Math.min(10, Math.round(centerSeconds * 0.035)));
+  const garminTolerance = Math.max(15, Math.min(25, displayTolerance + 10));
+  const faster = formatPaceSeconds(Math.max(180, centerSeconds - displayTolerance));
+  const slower = formatPaceSeconds(centerSeconds + displayTolerance);
+  return {
+    targetPace: formatPaceSeconds(centerSeconds),
+    faster,
+    slower,
+    displayToleranceSeconds: displayTolerance,
+    garminToleranceSeconds: garminTolerance,
+    source: eventPaceSeconds ? "event-target" : performancePace ? "recent-performance" : "easy-baseline",
+  };
+}
+
+function preRaceActivationDistance(targetKm = 0, baseline = {}) {
+  const weekly = Math.max(Number(targetKm || 0), Number(baseline?.weeklyKm || 0));
+  if (weekly >= 45) return 7;
+  if (weekly >= 28) return 6;
+  if (weekly >= 18) return 5;
+  return 4;
+}
+
+function preRaceActivationCandidate(plan = [], weekStart, event, runRestrictedDates = new Set(), availabilityExceptions = []) {
+  const eventIndex = weekDayIndex(weekStart, event.date);
+  if (eventIndex < 0 || eventIndex > 6) return null;
+  return [1, 2, 3]
+    .map((daysBefore) => {
+      const index = eventIndex - daysBefore;
+      if (index < 0) return null;
+      const date = isoDate(dateForDay(weekStart, index));
+      if (runRestrictedDates.has(date)) return null;
+      const availability = availabilityForDate(availabilityExceptions, date);
+      if (availability?.recoveryOnly || availability?.noRunning || (Number(availability?.maxDurationMinutes || 0) > 0 && Number(availability.maxDurationMinutes) < 30)) return null;
+      const entries = plan.filter((entry) => entry.date === date && !entry.raceEvent);
+      const highLoad = entries.some((entry) => isHardEventWeekEntry(entry) && !isRunningPlanEntry(entry));
+      if (highLoad) return null;
+      const running = entries.filter((entry) => isRunningPlanEntry(entry));
+      const hardRun = running.some((entry) => isHardEventWeekEntry(entry));
+      const score = daysBefore * 10 + (hardRun ? 5 : 0) + (running.length ? -2 : 0);
+      return { date, index, daysBefore, running, score };
+    })
+    .filter(Boolean)
+    .sort((left, right) => left.score - right.score)[0] || null;
+}
+
+function addPreRaceActivation(plan, weekStart, eventWeek, context = {}) {
+  if (!eventWeek?.primary) return plan;
+  const event = eventWeek.primary;
+  const candidate = preRaceActivationCandidate(
+    plan,
+    weekStart,
+    event,
+    context.runRestrictedDates,
+    context.availabilityExceptions,
+  );
+  if (!candidate) return plan;
+
+  const prescription = stridePrescription({
+    event,
+    activities: context.activities,
+    goalEngine: context.goalEngine,
+    weekStart,
+  });
+  const baseDistance = preRaceActivationDistance(context.targetKm, context.goalEngine?.baseline);
+  const existing = candidate.running.find((entry) => !entry.raceEvent) || null;
+  const distance = Math.max(4, Math.min(8, Number(existing?.distance || baseDistance)));
+  const strideCount = Number(context.goalEngine?.baseline?.runDays || 0) >= 4 || Number(context.targetKm || 0) >= 45 ? 5 : 4;
+  const strideSeconds = Number(context.goalEngine?.baseline?.runDays || 0) < 2 ? 15 : 20;
+  const recoverySeconds = strideSeconds <= 15 ? 75 : 80;
+  const easyPaceSeconds = Number(context.goalEngine?.baseline?.medianPaceSeconds || 0) || 390;
+  const totalMinutes = Math.max(30, Math.round((distance * easyPaceSeconds) / 60));
+  const fastBlockMinutes = Math.ceil((strideCount * (strideSeconds + recoverySeconds)) / 60);
+  const warmupMinutes = Math.max(18, Math.round((totalMinutes - fastBlockMinutes) * 0.7));
+  const cooldownMinutes = Math.max(8, totalMinutes - fastBlockMinutes - warmupMinutes);
+  const templateName = `${strideCount} × ${strideSeconds} s Strides @ ${prescription.faster}–${prescription.slower}/km · ${recoverySeconds} s locker`;
+  const activation = item(weekStart, candidate.index, {
+    ...(existing || {}),
+    id: existing?.id || crypto.randomUUID(),
+    date: candidate.date,
+    day: DAY_NAMES[dateForDay(weekStart, candidate.index).getDay()],
+    title: `Shake-out / Pre-Race Activation · ${templateName}`,
+    type: "Easy Run",
+    distance,
+    duration: totalMinutes,
+    optional: false,
+    fixed: Boolean(existing?.fixed),
+    spontaneous: existing ? existing.spontaneous : true,
+    time: existing?.time || "",
+    eventProtection: true,
+    preRaceActivation: true,
+    goalSessionRole: "pre_race_activation",
+    keySession: false,
+    structuredWorkout: {
+      kind: "sprints",
+      rounds: strideCount,
+      steps: [
+        {
+          kind: "work",
+          unit: "time",
+          value: strideSeconds,
+          targetPace: prescription.targetPace,
+          paceToleranceSeconds: prescription.garminToleranceSeconds,
+        },
+        { kind: "recovery", unit: "time", value: recoverySeconds },
+      ],
+      warmupMode: "time",
+      cooldownMode: "time",
+      warmupMinutes,
+      cooldownMinutes,
+      planningStatus: "final",
+      templateName,
+    },
+    notes: `Shake-out vor ${event.name}: ${distance} km insgesamt locker. ${templateName}. Strides kontrolliert bei etwa RPE 7/10, kein Sprint. Die kurzen Strides erhalten neuromuskuläre Spannung und Laufökonomie, ohne einen zusätzlichen Ermüdungsreiz aufzubauen. Garmin erhält für die kurzen GPS-Schritte bewusst einen breiteren Pace-Korridor um ${prescription.targetPace}/km.`,
+  });
+
+  const ids = new Set(candidate.running.map((entry) => entry.id));
+  const withoutCandidateRuns = plan.filter((entry) => !ids.has(entry.id));
+  withoutCandidateRuns.push(activation);
+  return withoutCandidateRuns;
+}
+
+function constrainedRecoveryEntry(entry, constraint) {
+  const maxDuration = Math.max(5, Number(constraint?.maxDurationMinutes || 20));
+  return {
+    ...entry,
+    title: "Kurze Recovery-Aktivierung",
+    type: "Mobility",
+    distance: 0,
+    duration: Math.min(maxDuration, Math.max(10, Number(entry?.duration || maxDuration))),
+    optional: true,
+    fixed: false,
+    spontaneous: true,
+    time: "",
+    keySession: false,
+    structuredWorkout: null,
+    goalWorkout: null,
+    paceGuidance: null,
+    travelConstraint: true,
+    notes: `${constraint.reason || "Tagesconstraint"}: maximal ${maxDuration} Minuten sehr lockere Recovery/Aktivierung. Keine reguläre Lauf- oder Qualitätseinheit und keine Doppeleinheit.${constraint.note ? ` ${constraint.note}` : ""}`,
+  };
+}
+
+function applyDailyAvailabilityConstraints(plan = [], availabilityExceptions = [], weekStart = new Date()) {
+  const constraints = new Map((Array.isArray(availabilityExceptions) ? availabilityExceptions : []).map((entry) => [entry.date, entry]));
+  const constrained = [];
+  const datesWithEntries = new Set();
+
+  (Array.isArray(plan) ? plan : []).forEach((entry) => {
+    const constraint = constraints.get(entry.date);
+    if (!constraint || entry.raceEvent) {
+      constrained.push(entry);
+      datesWithEntries.add(entry.date);
+      return;
+    }
+    if (constraint.status === "blocked") return;
+    if (constraint.recoveryOnly || constraint.noRunning) {
+      if (entry.type === "Ruhetag") {
+        constrained.push({
+          ...constrainedRecoveryEntry(entry, constraint),
+          title: `${constraint.reason || "Reisetag"} · Recovery-Aktivierung optional`,
+        });
+        datesWithEntries.add(entry.date);
+        return;
+      }
+      const alreadyRecovery = /mobility|mobilität|recovery|regeneration|aktivierung/.test(`${entry.type || ""} ${entry.title || ""}`.toLowerCase());
+      if (alreadyRecovery) {
+        constrained.push({
+          ...entry,
+          duration: Math.min(Number(constraint.maxDurationMinutes || entry.duration || 20), Number(entry.duration || constraint.maxDurationMinutes || 20)),
+          optional: true,
+          travelConstraint: true,
+          notes: `${entry.notes || ""} Tagesconstraint: nur sehr lockere Aktivierung${constraint.maxDurationMinutes ? ` bis maximal ${constraint.maxDurationMinutes} Minuten` : ""}.`.trim(),
+        });
+      } else {
+        constrained.push(constrainedRecoveryEntry(entry, constraint));
+      }
+      datesWithEntries.add(entry.date);
+      return;
+    }
+    if (constraint.maxDurationMinutes && Number(entry.duration || 0) > Number(constraint.maxDurationMinutes)) {
+      const originalDuration = Math.max(1, Number(entry.duration || 0));
+      const cappedDuration = Number(constraint.maxDurationMinutes);
+      const running = isRunningPlanEntry(entry);
+      const adjustedDistance = running && Number(entry.distance || 0) > 0
+        ? Math.max(0.1, Math.round((Number(entry.distance) * cappedDuration / originalDuration) * 10) / 10)
+        : Number(entry.distance || 0);
+      const structured = Boolean(entry.structuredWorkout || entry.goalWorkout);
+      constrained.push({
+        ...entry,
+        duration: cappedDuration,
+        ...(running ? { distance: adjustedDistance } : {}),
+        ...(structured && running ? { type: "Easy Run", structuredWorkout: null, goalWorkout: null, keySession: false } : {}),
+        notes: `${entry.notes || ""} Zeitlimit aus der Wochenplanung: maximal ${constraint.maxDurationMinutes} Minuten.${structured ? " Die strukturierte Qualität wird dafür nicht gekürzt, sondern als lockere verkürzte Einheit behandelt." : ""}`.trim(),
+      });
+      datesWithEntries.add(entry.date);
+      return;
+    }
+    constrained.push(entry);
+    datesWithEntries.add(entry.date);
+  });
+
+  constraints.forEach((constraint, date) => {
+    if (datesWithEntries.has(date)) return;
+    const index = weekDayIndex(weekStart, date);
+    if (index < 0 || index > 6) return;
+    if (constraint.status === "blocked") {
+      if (constraint.source !== "planning-note") return;
+      constrained.push(item(weekStart, index, {
+        title: `${constraint.reason || "Termin"} · kein Training`,
+        type: "Ruhetag",
+        distance: 0,
+        duration: 0,
+        optional: false,
+        travelConstraint: true,
+        notes: `Expliziter Planning Constraint aus deiner Zusatznotiz: Training ist an diesem Tag nicht möglich.${constraint.note ? ` ${constraint.note}` : ""}`,
+      }));
+      return;
+    }
+    if (constraint.recoveryOnly || constraint.maxDurationMinutes) {
+      constrained.push(item(weekStart, index, {
+        title: "Kurze Recovery-Aktivierung optional",
+        type: "Mobility",
+        distance: 0,
+        duration: Math.min(20, Number(constraint.maxDurationMinutes || 20)),
+        optional: true,
+        travelConstraint: true,
+        notes: `${constraint.reason || "Tagesconstraint"}: nur sehr lockere Aktivierung${constraint.maxDurationMinutes ? ` bis maximal ${constraint.maxDurationMinutes} Minuten` : ""}. Keine reguläre Lauf- oder Qualitätseinheit.${constraint.note ? ` ${constraint.note}` : ""}`,
+      }));
+    }
+  });
+
+  if (![...constraints.values()].some((constraint) => constraint.noDouble)) return constrained;
+  const grouped = new Map();
+  constrained.forEach((entry) => grouped.set(entry.date, [...(grouped.get(entry.date) || []), entry]));
+  return [...grouped.entries()].flatMap(([date, entries]) => {
+    const constraint = constraints.get(date);
+    if (!constraint?.noDouble || entries.length <= 1) return entries;
+    const race = entries.find((entry) => entry.raceEvent);
+    if (race) return [race];
+    const selected = [...entries].sort((left, right) => {
+      const leftRecovery = /mobility|ruhetag|recovery|aktivierung/.test(`${left.type || ""} ${left.title || ""}`.toLowerCase());
+      const rightRecovery = /mobility|ruhetag|recovery|aktivierung/.test(`${right.type || ""} ${right.title || ""}`.toLowerCase());
+      return Number(rightRecovery) - Number(leftRecovery) || Number(left.duration || 999) - Number(right.duration || 999);
+    })[0];
+    return selected ? [selected] : [];
+  });
 }
 
 
@@ -672,7 +973,7 @@ function eventProtectedMobility(entry, eventName, afterEvent = false) {
 function applyEventWeekProtection(plan, weekStart, eventWeek) {
   if (!eventWeek) return plan;
   const protectedPlan = plan.flatMap((entry) => {
-    if (entry.raceEvent || entry.type === "Ruhetag") return [entry];
+    if (entry.raceEvent || entry.type === "Ruhetag" || entry.preRaceActivation) return [entry];
     const relation = eventRelation(entry.date, eventWeek);
     if (!relation) return [entry];
     const eventName = relation.event.name || "das Event";
@@ -762,6 +1063,42 @@ function applyEventWeekProtection(plan, weekStart, eventWeek) {
       const daysAfter = Math.abs(relation.days);
       if (strength) return [eventProtectedMobility(entry, eventName, true)];
       if (daysAfter === 1 && !entry.fixed && !entry.commitmentId) return [];
+      if (eventWeek.priority === "C" && daysAfter >= 2 && running) {
+        const eventDistance = Number(relation.event.targetKm || 0);
+        if (isLoopWorkout(entry)) {
+          const normalized = normalizeLoopWorkoutItem(entry);
+          const originalLoops = Number(normalized.loopTraining?.loops || 1);
+          const adjustedLoops = eventDistance >= 7 && originalLoops >= 3 ? Math.max(2, originalLoops - 1) : originalLoops;
+          const adjusted = adjustedLoops === originalLoops
+            ? normalized
+            : normalizeLoopWorkoutItem({
+              ...normalized,
+              loopTraining: { ...normalized.loopTraining, loops: adjustedLoops },
+            });
+          return [{
+            ...adjusted,
+            optional: true,
+            eventProtection: true,
+            notes: `${adjusted.notes || ""} ${eventName} ist ein C-Event und ersetzt den Qualitätsreiz, nicht den missionsbezogenen Aufbau. Der folgende Loop-/Longrun wird deshalb nur moderat reduziert und bleibt abhängig von Event-Review, Beinen und Energie.`.trim(),
+          }];
+        }
+        const longSpecific = /long\s*run|longrun|backyard/.test(`${entry.type || ""} ${entry.title || ""}`.toLowerCase());
+        const reductionFactor = longSpecific ? (eventDistance >= 15 ? 0.72 : eventDistance >= 7 ? 0.82 : 0.9) : 1;
+        const distance = longSpecific ? Math.max(5, Math.round(Number(entry.distance || 0) * reductionFactor)) : Number(entry.distance || 0);
+        return [{
+          ...entry,
+          type: longSpecific ? entry.type : "Easy Run",
+          distance,
+          title: longSpecific && Number(entry.distance || 0) !== distance
+            ? String(entry.title || `${distance} km locker`).replace(/^\d+(?:[.,]\d+)?\s*km/, `${distance} km`)
+            : entry.title,
+          optional: true,
+          eventProtection: true,
+          structuredWorkout: null,
+          goalWorkout: null,
+          notes: `${entry.notes || ""} ${eventName} ist ein C-Event und ersetzt den Qualitätsreiz, nicht automatisch den missionsbezogenen Wochenaufbau. Diese aerobe Einheit bleibt deshalb als Option bestehen, sofern Beine, Energie und Event-Review am Wochenende unauffällig sind.`.trim(),
+        }];
+      }
       if (hard && !running) {
         return [{
           ...entry,
@@ -1239,8 +1576,12 @@ export function generateWeekPlan({
   const weekStart = startOfWeek(today, offsetWeeks);
   const weekEndKey = isoDate(dateForDay(weekStart, 6));
   const missedBlockedDates = blockedTrainingDates(planHistory, isoDate(weekStart), weekEndKey);
-  const configuredAvailabilityBlockedDates = blockedAvailabilityDates(config.availabilityExceptions, isoDate(weekStart), weekEndKey);
+  const noteAvailabilityConstraints = planningConstraintsFromNote(config.checkin?.notes, weekStart);
+  const effectiveAvailabilityExceptions = mergeAvailabilityExceptions(config.availabilityExceptions, noteAvailabilityConstraints);
+  const configuredAvailabilityBlockedDates = blockedAvailabilityDates(effectiveAvailabilityExceptions, isoDate(weekStart), weekEndKey);
+  const runningRestrictedDates = runningRestrictedAvailabilityDates(effectiveAvailabilityExceptions, isoDate(weekStart), weekEndKey);
   const blockedDates = new Set([...missedBlockedDates, ...configuredAvailabilityBlockedDates]);
+  const runBlockedDates = new Set([...blockedDates, ...runningRestrictedDates]);
   const currentWeekStart = startOfWeek(today, 0);
   const historyCutoff = weekStart > currentWeekStart ? currentWeekStart : weekStart;
   const history = runningWeeks(activities, historyCutoff, 8);
@@ -1262,9 +1603,10 @@ export function generateWeekPlan({
   const goal = goalEngine.target || {};
   const daysLeft = goalEngine.daysLeft;
   const eventWeek = buildEventWeek(mission, weekStart);
+  const protectedEventWeek = eventWeek?.priority === "C" ? null : eventWeek;
   const strategicPhase = goalEngine.phase;
-  const phase = eventWeek
-    ? { key: "event", label: eventWeek.phaseLabel, factor: 1, longShare: 0 }
+  const phase = protectedEventWeek
+    ? { key: "event", label: protectedEventWeek.phaseLabel, factor: 1, longShare: 0 }
     : strategicPhase;
   const cycle = cycleWeek(mission, weekStart);
   const previousPrescriptionKey = isoDate(dateForDay(weekStart, -7));
@@ -1272,7 +1614,7 @@ export function generateWeekPlan({
     || (offsetWeeks > 0 && config.lastRecoveryWeek
       ? { weekType: { key: "recovery", label: "Entlastungswoche" } }
       : null);
-  const loadWaveRecovery = loadWaveRecoveryDecision(history, cycle, phase.key, eventWeek, previousPrescription);
+  const loadWaveRecovery = loadWaveRecoveryDecision(history, cycle, phase.key, protectedEventWeek, previousPrescription);
   const scheduledRecoveryWeek = loadWaveRecovery.scheduled;
   const missedSignals = recentMissedSignals(planHistory, historyCutoff);
   const checkinReadiness = readinessDecision(config, missedSignals);
@@ -1281,8 +1623,8 @@ export function generateWeekPlan({
   const readiness = combineReadiness(checkinReadiness, reviewReadiness);
   const earlyRecoveryWeek = readiness.factor < 0.86 || !readiness.longRunAllowed || ["unchanged", "worse"].includes(config.checkin?.pain) || ["recovering", "symptoms"].includes(config.checkin?.illness);
   const recoveryWeek = scheduledRecoveryWeek || earlyRecoveryWeek;
-  const recoveryReason = eventWeek
-    ? `${eventWeek.protectionText}. Das Event ersetzt Longrun und harte Qualität; danach ist Erholung eingeplant.`
+  const recoveryReason = protectedEventWeek
+    ? `${protectedEventWeek.protectionText}. Das Event ersetzt Longrun und harte Qualität; danach ist Erholung eingeplant.`
     : scheduledRecoveryWeek
       ? loadWaveRecovery.reason
       : earlyRecoveryWeek
@@ -1300,7 +1642,7 @@ export function generateWeekPlan({
   const starterFallback = Math.max(6, Math.min(28, startingRunCount * 4));
   const goalFallback = Math.max(25, Math.min(45, Number(goal?.targetKm || mission?.targetKm || 50) * 0.4));
   const fallbackBase = recentAverage || (reportedWeeklyKmAvailable ? (reportedWeeklyKm || starterFallback) : goalFallback);
-  const protectedEventTarget = eventWeekTarget(fallbackBase, readiness, eventWeek);
+  const protectedEventTarget = eventWeekTarget(fallbackBase, readiness, protectedEventWeek);
   const weekPrescription = buildWeekPrescription({
     history,
     fallbackWeeklyKm: fallbackBase,
@@ -1311,7 +1653,7 @@ export function generateWeekPlan({
     earlyRecoveryWeek,
     recoveryReason,
     readiness,
-    eventWeek,
+    eventWeek: protectedEventWeek,
     protectedEventTarget,
     previousWeekKm: lastWeek,
     maxWeeklyKm: config.maxWeeklyKm,
@@ -1319,8 +1661,8 @@ export function generateWeekPlan({
   });
   const base = weekPrescription.capacity.baseKm;
   let target = protectedEventTarget ?? weekPrescription.targetKm;
-  target = eventWeek
-    ? Math.max(Math.round(eventWeek.totalDistanceKm), Math.round(target))
+  target = protectedEventWeek
+    ? Math.max(Math.round(protectedEventWeek.totalDistanceKm), Math.round(target))
     : Math.max(4, Math.round(target));
 
   const crossTrainingMaxShare = crossTrainingTargetShare({
@@ -1345,14 +1687,14 @@ export function generateWeekPlan({
     ? Math.min(10, Math.max(recoveryWeek ? 5 : 6, Math.round(target * 0.13)))
     : 0;
   const goalLongRun = goalLongRunBounds(goalEngine, target);
-  const desiredLong = eventWeek ? 0 : Math.round(target * goalLongRun.share * (recoveryWeek ? 0.82 : 1));
+  const desiredLong = protectedEventWeek ? 0 : Math.round(target * goalLongRun.share * (recoveryWeek ? 0.82 : 1));
   const starterBaseline = !recentAverage && reportedWeeklyKmAvailable && reportedWeeklyKm < 20;
   const progressionCap = longestRecent > 0
     ? Math.max(4, Math.round(longestRecent * 1.15))
     : starterBaseline
       ? Math.max(4, Math.round(base * 0.45))
       : desiredLong;
-  const longRun = !eventWeek && readiness.longRunAllowed
+  const longRun = !protectedEventWeek && readiness.longRunAllowed
     ? Math.max(4, Math.min(
       Math.max(goalLongRun.minimum, desiredLong),
       progressionCap,
@@ -1380,7 +1722,7 @@ export function generateWeekPlan({
     }));
   }
 
-  if (wednesdayKm > 0 && !blockedDates.has(isoDate(dateForDay(weekStart, 2)))) {
+  if (wednesdayKm > 0 && !runBlockedDates.has(isoDate(dateForDay(weekStart, 2)))) {
     plan.push(item(weekStart, 2, {
       time: config.orcTime || "19:00",
       title: "ORC Run",
@@ -1394,7 +1736,7 @@ export function generateWeekPlan({
     }));
   }
 
-  if (saturdayKm > 0 && !blockedDates.has(isoDate(dateForDay(weekStart, 5)))) {
+  if (saturdayKm > 0 && !runBlockedDates.has(isoDate(dateForDay(weekStart, 5)))) {
     if (fixedAppointments.saturdayMode === "orc") {
       plan.push(item(weekStart, 5, {
         time: config.orcTrackTime || "09:00",
@@ -1443,7 +1785,7 @@ export function generateWeekPlan({
     }
   }
 
-  applyRecurringCommitments(plan, weekStart, config, "running", blockedDates);
+  applyRecurringCommitments(plan, weekStart, config, "running", runBlockedDates);
   addMissionEvents(plan, weekStart, eventWeek);
 
   const trueDoubleDays = new Set(config.doubleTrainingDays || []);
@@ -1451,7 +1793,7 @@ export function generateWeekPlan({
     .find((day) => {
       if (!allowedRuns.has(day)) return false;
       const date = isoDate(dateForDay(weekStart, DAY_INDEX[day]));
-      if (blockedDates.has(date)) return false;
+      if (runBlockedDates.has(date)) return false;
       const occupied = plan.some((entry) => entry.date === date && !["Stabi", "Mobility", "Ruhetag"].includes(entry.type));
       return !occupied || trueDoubleDays.has(day);
     });
@@ -1464,7 +1806,7 @@ export function generateWeekPlan({
     weeklyTarget: target,
     targetRunCount: startingRunCount,
   });
-  addGoalSpecificWorkout(plan, weekStart, goalWorkout, config, goalEngine, longRunDay, blockedDates);
+  addGoalSpecificWorkout(plan, weekStart, goalWorkout, config, goalEngine, longRunDay, runBlockedDates);
 
   if (longRun > 0 && longRunDay) {
     const longRunDayIndex = DAY_INDEX[longRunDay];
@@ -1503,11 +1845,19 @@ export function generateWeekPlan({
     }));
   }
 
+  plan = addPreRaceActivation(plan, weekStart, eventWeek, {
+    activities,
+    goalEngine,
+    targetKm: target,
+    runRestrictedDates: runningRestrictedDates,
+    availabilityExceptions: effectiveAvailabilityExceptions,
+  });
+
   const fixedKm = plan.reduce((sum, entry) => sum + Number(entry.distance || 0), 0);
-  distributeEasyKilometers(plan, weekStart, target, fixedKm, config, phase, readiness, cycle, eventWeek, blockedDates);
+  distributeEasyKilometers(plan, weekStart, target, fixedKm, config, phase, readiness, cycle, eventWeek, runBlockedDates);
   plan = applyGoalWeekendSpecificity(plan, goalEngine, { cycle, recoveryWeek });
   plan = applyBeginnerFiveKRunWalk(plan, goalEngine);
-  applyExtraOrcTrack(plan, weekStart, fixedAppointments.extraOrcTrackDay, config, blockedDates);
+  applyExtraOrcTrack(plan, weekStart, fixedAppointments.extraOrcTrackDay, config, runBlockedDates);
   applyRecurringCommitments(plan, weekStart, config, "non-running", blockedDates);
   addStrengthSessions(plan, weekStart, config, readiness, blockedDates);
   plan = applyEventWeekProtection(plan, weekStart, eventWeek);
@@ -1607,6 +1957,7 @@ export function generateWeekPlan({
   if (blockedDates.size) {
     plan = plan.filter((entry) => entry.raceEvent || !blockedDates.has(entry.date));
   }
+  plan = applyDailyAvailabilityConstraints(plan, effectiveAvailabilityExceptions, weekStart);
 
   const todayKey = isoDate(today);
   if (offsetWeeks === 0) {
@@ -1732,6 +2083,18 @@ export function generateWeekPlan({
     remainingTarget: Math.max(0, target - Number(completedRunningKm || 0) - appliedCrossTrainingKm),
     blockedDates: [...blockedDates],
     availabilityBlockedDates: [...configuredAvailabilityBlockedDates],
+    planningConstraints: effectiveAvailabilityExceptions
+      .filter((entry) => entry.source === "planning-note")
+      .map((entry) => ({
+        date: entry.date,
+        status: entry.status,
+        reason: entry.reason,
+        maxDurationMinutes: entry.maxDurationMinutes || null,
+        recoveryOnly: Boolean(entry.recoveryOnly),
+        noRunning: Boolean(entry.noRunning),
+        noDouble: Boolean(entry.noDouble),
+        note: entry.note,
+      })),
     crossTrainingCredit: {
       recognizedKm: recognizedCrossTrainingKm,
       cappedKm: cappedCrossTrainingKm,

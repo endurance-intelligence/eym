@@ -78,7 +78,9 @@ function comparableFields(before = {}, after = {}) {
 
 function isRunningEntry(item = {}) {
   const role = planRole(item);
-  return ["easy", "recovery", "quality", "track", "long"].includes(role)
+  return Boolean(item.raceEvent)
+    || role.startsWith("race:")
+    || ["easy", "recovery", "quality", "track", "long"].includes(role)
     || normalizeText(item.type) === "running";
 }
 
