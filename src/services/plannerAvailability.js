@@ -6,12 +6,31 @@ export const AVAILABILITY_STATUS = Object.freeze({
 export const AVAILABILITY_REASONS = [
   "Familie",
   "Reise",
+  "Urlaub",
   "Arbeit",
   "Termin",
   "Erholung",
   "Krankheit",
   "Sonstiges",
 ];
+
+export const WEEKLY_CONTEXT_PRESETS = Object.freeze([
+  { key: "travel", icon: "🚗", label: "Reise / langer Fahrtag", reason: "Reise", defaultRestriction: "recovery", defaultMinutes: 20 },
+  { key: "illness", icon: "🤒", label: "Krank / angeschlagen", reason: "Krankheit", defaultRestriction: "blocked", defaultMinutes: 20 },
+  { key: "vacation", icon: "🏖️", label: "Urlaub", reason: "Urlaub", defaultRestriction: "light", defaultMinutes: 30 },
+  { key: "work", icon: "💼", label: "Viele Termine / Arbeit", reason: "Arbeit", defaultRestriction: "short", defaultMinutes: 30 },
+  { key: "appointment", icon: "📅", label: "Privater Termin", reason: "Termin", defaultRestriction: "short", defaultMinutes: 30 },
+  { key: "time", icon: "⏱️", label: "Nur wenig Zeit", reason: "Termin", defaultRestriction: "short", defaultMinutes: 30 },
+  { key: "recovery", icon: "🌿", label: "Nur regenerativ", reason: "Erholung", defaultRestriction: "recovery", defaultMinutes: 20 },
+  { key: "blocked", icon: "⛔", label: "Training nicht möglich", reason: "Sonstiges", defaultRestriction: "blocked", defaultMinutes: 20 },
+]);
+
+export const WEEKLY_CONTEXT_RESTRICTIONS = Object.freeze([
+  { key: "light", label: "Leicht eingeschränkt", help: "Training ist möglich, aber keine Doppeleinheit." },
+  { key: "short", label: "Nur kurz", help: "Der Coach hält jede Einheit unter deinem Zeitlimit." },
+  { key: "recovery", label: "Nur regenerativ", help: "Kein Lauf und keine Qualität; höchstens kurze Mobility/Aktivierung." },
+  { key: "blocked", label: "Gar nicht", help: "Der Tag bleibt komplett trainingsfrei." },
+]);
 
 const DAY_INDEX = {
   montag: 0,
@@ -80,7 +99,8 @@ export function normalizeAvailabilityException(exception = {}) {
     recoveryOnly: Boolean(exception.recoveryOnly),
     noRunning: Boolean(exception.noRunning),
     noDouble: Boolean(exception.noDouble),
-    source: exception.source === "planning-note" ? "planning-note" : "manual",
+    source: ["planning-note", "weekly-context"].includes(exception.source) ? exception.source : "manual",
+    contextKey: String(exception.contextKey || "").trim().slice(0, 40),
     createdAt: exception.createdAt || new Date().toISOString(),
     updatedAt: exception.updatedAt || new Date().toISOString(),
   };
@@ -113,7 +133,14 @@ function mergeSameDate(left = {}, right = {}) {
     recoveryOnly: normalizedLeft.recoveryOnly || normalizedRight.recoveryOnly,
     noRunning: normalizedLeft.noRunning || normalizedRight.noRunning,
     noDouble: normalizedLeft.noDouble || normalizedRight.noDouble,
-    source: normalizedLeft.source === "planning-note" || normalizedRight.source === "planning-note" ? "planning-note" : "manual",
+    // Explicit day blocks remain authoritative. Structured weekly context wins
+    // over inferred free-text notes, but must never erase a manually blocked day.
+    source: normalizedLeft.source === "manual" || normalizedRight.source === "manual"
+      ? "manual"
+      : normalizedLeft.source === "weekly-context" || normalizedRight.source === "weekly-context"
+        ? "weekly-context"
+        : "planning-note",
+    contextKey: preferred.contextKey || normalizedLeft.contextKey || normalizedRight.contextKey || "",
     createdAt: normalizedLeft.createdAt || normalizedRight.createdAt,
     updatedAt: [normalizedLeft.updatedAt, normalizedRight.updatedAt].sort().at(-1),
   });
@@ -183,6 +210,67 @@ export function upsertAvailabilityException(exceptions = [], input = {}) {
 
 export function removeAvailabilityException(exceptions = [], date = "") {
   return normalizeAvailabilityExceptions(exceptions).filter((entry) => entry.date !== date);
+}
+
+
+export function weeklyContextPreset(key = "") {
+  return WEEKLY_CONTEXT_PRESETS.find((entry) => entry.key === key) || WEEKLY_CONTEXT_PRESETS.at(-1);
+}
+
+export function weeklyContextLabel(exception = {}) {
+  const preset = WEEKLY_CONTEXT_PRESETS.find((entry) => entry.key === exception.contextKey);
+  if (preset) return `${preset.icon} ${preset.label}`;
+  const fallback = {
+    Reise: "🚗 Reise / Fahrtag",
+    Urlaub: "🏖️ Urlaub",
+    Krankheit: "🤒 Krank / angeschlagen",
+    Arbeit: "💼 Arbeit / Termine",
+    Termin: "📅 Termin / wenig Zeit",
+    Erholung: "🌿 Recovery",
+  }[exception.reason];
+  return fallback || "⚙️ Wochenbesonderheit";
+}
+
+export function weeklyContextException({ date = "", contextKey = "", restriction = "light", maxDurationMinutes = null, note = "" } = {}) {
+  const preset = weeklyContextPreset(contextKey);
+  const minutes = constraintMinutes(maxDurationMinutes) || preset.defaultMinutes || 20;
+  const blocked = restriction === "blocked";
+  const recoveryOnly = restriction === "recovery";
+  const short = restriction === "short";
+  return normalizeAvailabilityException({
+    id: `weekly-context-${date || crypto.randomUUID()}`,
+    date,
+    status: blocked ? AVAILABILITY_STATUS.BLOCKED : AVAILABILITY_STATUS.AVAILABLE,
+    reason: preset.reason,
+    note: String(note || preset.label || "").trim(),
+    maxDurationMinutes: short || recoveryOnly ? minutes : null,
+    recoveryOnly,
+    noRunning: blocked || recoveryOnly,
+    noDouble: true,
+    source: "weekly-context",
+    contextKey: preset.key,
+  });
+}
+
+export function availabilityExceptionsForWeek(exceptions = [], weekStart = new Date(), sources = null) {
+  const start = weekStart instanceof Date ? new Date(weekStart) : new Date(`${String(weekStart || "").slice(0, 10)}T12:00:00`);
+  if (Number.isNaN(start.getTime())) return [];
+  const startKey = isoDate(start);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 6);
+  const endKey = isoDate(end);
+  const sourceSet = Array.isArray(sources) ? new Set(sources) : null;
+  return normalizeAvailabilityExceptions(exceptions).filter((entry) => (
+    entry.date >= startKey
+    && entry.date <= endKey
+    && (!sourceSet || sourceSet.has(entry.source))
+  ));
+}
+
+export function replaceAvailabilityExceptionsForWeek(existing = [], replacements = [], weekStart = new Date(), sources = ["weekly-context", "planning-note"]) {
+  const remove = new Set(availabilityExceptionsForWeek(existing, weekStart, sources).map((entry) => entry.id));
+  const kept = normalizeAvailabilityExceptions(existing).filter((entry) => !remove.has(entry.id));
+  return mergeAvailabilityExceptions(kept, replacements);
 }
 
 export function planningNoteForWeek(records = [], weekStart = new Date()) {

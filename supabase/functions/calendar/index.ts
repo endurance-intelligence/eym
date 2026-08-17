@@ -23,6 +23,37 @@ function nextDateValue(raw: unknown) {
   return `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`;
 }
 
+
+function timedDateValue(date: unknown, time: unknown) {
+  const rawDate = String(date || "");
+  const rawTime = String(time || "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(rawDate) || !/^\d{2}:\d{2}$/.test(rawTime)) return "";
+  return `${dateValue(rawDate)}T${rawTime.replace(":", "")}00`;
+}
+
+function raceProtocolCalendarEvents(item: Record<string, unknown>, stamp: string) {
+  const protocol = item.raceProtocol && typeof item.raceProtocol === "object"
+    ? item.raceProtocol as Record<string, unknown>
+    : null;
+  const reminders = Array.isArray(protocol?.calendarItems) ? protocol?.calendarItems as Record<string, unknown>[] : [];
+  if (!item.raceEvent || !protocol?.calendarReminders || !reminders.length) return [];
+  return reminders.flatMap((reminder) => {
+    const start = timedDateValue(item.date, reminder.time);
+    if (!start) return [];
+    return [[
+      "BEGIN:VEVENT",
+      `UID:${escapeIcs(`${item.id || "race"}-${reminder.key || "reminder"}`)}@endurance-intelligence`,
+      `DTSTAMP:${stamp}`,
+      `DTSTART:${start}`,
+      "DURATION:PT15M",
+      `SUMMARY:${escapeIcs(reminder.title || "Race Protocol")}`,
+      `DESCRIPTION:${escapeIcs(`${item.title || "Wettkampf"} · ${reminder.detail || "Race Protocol"}`)}`,
+      "TRANSP:TRANSPARENT",
+      "END:VEVENT",
+    ].join("\r\n")];
+  });
+}
+
 function containsDistance(title: unknown, distance: number) {
   if (!distance) return true;
   const normalized = String(title || "").replace(",", ".").toLowerCase();
@@ -74,14 +105,14 @@ function buildCalendar(plan: Record<string, unknown>[]) {
   const stamp = utcStamp();
   const events = plan
     .filter((item) => isCalendarItemVisible(item) && /^\d{4}-\d{2}-\d{2}$/.test(String(item.date || "")))
-    .map((item) => {
+    .flatMap((item) => {
       const description = [
         item.type,
         item.distance ? `${item.distance} km` : "",
         item.optional ? "Optional" : "Pflicht",
         item.notes || "",
       ].filter(Boolean).join(" · ");
-      return [
+      const mainEvent = [
         "BEGIN:VEVENT",
         `UID:${escapeIcs(item.id || crypto.randomUUID())}@endurance-intelligence`,
         `DTSTAMP:${stamp}`,
@@ -92,6 +123,7 @@ function buildCalendar(plan: Record<string, unknown>[]) {
         "TRANSP:TRANSPARENT",
         "END:VEVENT",
       ].join("\r\n");
+      return [mainEvent, ...raceProtocolCalendarEvents(item, stamp)];
     });
 
   return [

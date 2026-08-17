@@ -70,6 +70,18 @@ function plannedMetrics(item) {
   ].filter(Boolean).join(" · ");
 }
 
+function raceProtocolTodayNote(protocol, now = new Date()) {
+  if (!protocol?.enabled || !Array.isArray(protocol.timeline)) return "";
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const next = protocol.timeline.find((step) => {
+    const match = String(step.time || "").match(/^(\d{1,2}):(\d{2})$/);
+    if (!match) return false;
+    return Number(match[1]) * 60 + Number(match[2]) >= currentMinutes;
+  });
+  if (!next) return "Race Protocol aktiv · Ablauf im Wochenplan öffnen.";
+  return `Race Protocol · als Nächstes ${next.time} ${next.label}${next.optional ? " · optional" : ""}`;
+}
+
 function todayOverview(plan, activities) {
   const dateKey = isoDate(new Date());
   const actuals = activities.filter((activity) => activityDate(activity) === dateKey);
@@ -86,7 +98,7 @@ function todayOverview(plan, activities) {
       activityId: matched && reviewKind(matched) ? matched.id : null,
       title: matched?.name || item.actualTitle || item.title,
       detail: matched ? activityMetrics(matched) : plannedMetrics(item),
-      note: missed ? `Ausgefallen: ${item.missedReason}` : item.notes || "",
+      note: missed ? `Ausgefallen: ${item.missedReason}` : raceProtocolTodayNote(item.raceProtocol) || item.notes || "",
       tone: missed ? "missed" : done ? "done" : item.optional ? "optional" : "planned",
       status: missed ? "Ausgefallen" : done ? "Erledigt" : item.optional ? "Optional" : "Geplant",
     };

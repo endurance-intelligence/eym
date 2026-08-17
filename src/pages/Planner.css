@@ -1730,6 +1730,11 @@
   background:var(--accent-surface);
   color:var(--accent-bright);
 }
+.planner-day.availability-limited{
+  border-color:color-mix(in srgb,var(--accent) 34%,var(--border));
+  background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 5%,transparent),transparent 40%);
+}
+
 .planner-day.availability-blocked{
   border-color:color-mix(in srgb,var(--accent) 34%,var(--border));
   background:linear-gradient(145deg,color-mix(in srgb,var(--accent) 4%,var(--bg-card)),var(--bg-card-alt));
@@ -1748,6 +1753,16 @@
 .planner-availability-note strong{font-size:12px;line-height:1.35}
 .planner-availability-note small{color:var(--muted);font-size:10px;line-height:1.4}
 .planner-availability-note button{padding:6px 9px;background:transparent;font-size:9px}
+.planner-empty-limited{
+  display:grid;
+  gap:3px;
+  cursor:default;
+  border-style:solid;
+  border-color:color-mix(in srgb,var(--accent) 24%,var(--border));
+}
+.planner-empty-limited strong{color:var(--text-soft);font-size:12px}
+.planner-empty-limited span{color:var(--muted);font-size:10px;line-height:1.4}
+
 .planner-empty-blocked{display:grid;gap:3px;cursor:default}
 .planner-empty-blocked strong{color:var(--text-soft);font-size:12px}
 .planner-empty-blocked span{color:var(--muted);font-size:10px}
@@ -2048,3 +2063,34 @@
 .planner-live-constraints li{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:6px;border-top:1px solid var(--border)}
 .planner-live-constraints li b{font-size:12px}
 .planner-live-constraints li span{font-size:12px;color:var(--muted);text-align:right}
+
+/* v3.9.93 – structured weekly context and race protocol */
+.planner-setup{max-width:900px}
+.planner-section-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:14px}
+.planner-section-heading h3{margin:2px 0 0;font-size:18px}
+.planner-section-heading>small{max-width:360px;color:var(--muted);font-size:11px;line-height:1.45;text-align:right}
+.planner-normal-week,.planner-week-context{display:grid;gap:14px;margin:18px 0;padding:17px;border:1px solid var(--border);border-radius:17px;background:linear-gradient(145deg,var(--surface),var(--bg-card-alt))}
+.planner-availability-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.planner-availability-grid .planner-day-picker{margin:0;padding:12px;border:1px solid var(--border);border-radius:13px;background:var(--bg-sidebar)}
+.planner-availability-grid .planner-day-picker>strong{font-size:12px}
+.planner-availability-grid .planner-day-picker button,.planner-day-picker.compact button{min-width:40px;padding:8px 9px}
+.planner-context-presets{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.planner-context-presets>button{display:flex;align-items:center;gap:8px;min-height:48px;padding:9px 11px;border:1px solid var(--border);border-radius:12px;background:var(--bg-sidebar);color:var(--text);text-align:left}
+.planner-context-presets>button:hover{border-color:var(--accent-border-strong);background:var(--accent-surface)}
+.planner-context-presets>button span{font-size:18px}.planner-context-presets>button b{font-size:11px;line-height:1.25}
+.planner-context-editor{display:grid;gap:13px;padding:14px;border:1px solid var(--accent-border-strong);border-radius:14px;background:color-mix(in srgb,var(--accent-surface) 35%,var(--bg-sidebar))}
+.planner-context-editor-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.planner-context-editor-head>div{display:flex;align-items:center;gap:9px}.planner-context-editor-head span{font-size:22px}.planner-context-editor-head button{padding:6px 9px;background:transparent;color:var(--muted)}
+.planner-day-picker.compact{margin:0}.planner-day-picker.compact>strong{font-size:11px}
+.planner-context-restrictions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.planner-context-restrictions button{display:grid;gap:3px;padding:10px;border:1px solid var(--border);border-radius:11px;background:var(--bg-input);text-align:left}
+.planner-context-restrictions button b{font-size:11px}.planner-context-restrictions button small{color:var(--muted);font-size:9px;line-height:1.35}.planner-context-restrictions button.selected{border-color:var(--accent);background:var(--accent-surface);color:var(--accent-bright)}
+.planner-context-selected{display:grid;gap:7px}.planner-context-selected article{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:10px 12px;border:1px solid var(--border);border-radius:11px;background:var(--bg-sidebar)}.planner-context-selected article>div{display:grid;gap:2px}.planner-context-selected article span{color:var(--accent-bright);font-size:10px;font-weight:800}.planner-context-selected article strong{font-size:12px}.planner-context-selected article small{color:var(--muted);font-size:10px}.planner-context-selected article button{padding:6px 8px;background:transparent;color:var(--muted);font-size:10px}
+.planner-coach-note{display:grid;gap:7px;margin:18px 0}.planner-coach-note>span{font-weight:800}.planner-coach-note>small{color:var(--muted);font-size:10px;line-height:1.45}
+.planner-live-constraints{gap:10px;padding:14px 15px;border-radius:14px}.planner-live-constraints>strong{font-size:13px}.planner-live-constraints li{padding:8px 0 0}.planner-live-constraints li>div{display:grid;gap:2px}.planner-live-constraints li small{color:var(--muted);font-size:9px}.planner-live-constraints li span{max-width:50%}
+.planner-context-impact{display:grid;gap:5px;margin-top:3px;padding:10px 11px;border:1px solid var(--border);border-radius:10px;background:var(--bg-sidebar)}.planner-context-impact b{font-size:10px;text-transform:uppercase;letter-spacing:.07em}.planner-context-impact span{color:var(--muted-bright);font-size:10px;line-height:1.45}
+.planner-race-protocol{display:grid;gap:10px;margin-top:12px;padding:12px;border:1px solid var(--accent-border);border-radius:13px;background:linear-gradient(145deg,var(--accent-surface),var(--bg-sidebar))}
+.planner-race-protocol-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.planner-race-protocol-head>div{display:grid;gap:2px}.planner-race-protocol-head span{color:var(--accent-bright);font-size:9px;font-weight:900;letter-spacing:.08em;text-transform:uppercase}.planner-race-protocol-head strong{font-size:13px}.planner-race-protocol-head small{color:var(--muted);font-size:10px;line-height:1.4}.planner-race-protocol-modes{display:flex;gap:5px;flex-wrap:wrap}.planner-race-protocol-modes button{padding:6px 8px;border:1px solid var(--border);background:var(--bg-input);font-size:9px}.planner-race-protocol-modes button.selected{border-color:var(--accent);background:var(--accent);color:var(--accent-text)}
+.planner-race-protocol-timeline{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:6px}.planner-race-protocol-timeline article{display:grid;gap:2px;padding:8px 9px;border:1px solid var(--border);border-radius:9px;background:var(--bg-input)}.planner-race-protocol-timeline span{color:var(--accent-bright);font-size:9px;font-weight:800}.planner-race-protocol-timeline b{font-size:11px}.planner-race-protocol-timeline small{color:var(--muted);font-size:9px;line-height:1.35}
+.planner-race-protocol-options{border-top:1px solid var(--border);padding-top:8px}.planner-race-protocol-options summary{cursor:pointer;color:var(--muted-bright);font-size:10px;font-weight:800}.planner-race-protocol-options>div{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin-top:8px}.planner-race-protocol-options label{display:flex;align-items:flex-start;gap:7px;padding:7px 8px;border:1px solid var(--border);border-radius:9px;background:var(--bg-input);font-size:9px}.planner-race-protocol-options input{width:auto;margin-top:2px}
+@media(max-width:760px){.planner-section-heading{display:grid}.planner-section-heading>small{text-align:left}.planner-availability-grid{grid-template-columns:1fr}.planner-context-presets{grid-template-columns:repeat(2,minmax(0,1fr))}.planner-context-restrictions{grid-template-columns:repeat(2,minmax(0,1fr))}.planner-race-protocol-head{display:grid}.planner-race-protocol-options>div{grid-template-columns:1fr}}
+@media(max-width:460px){.planner-context-presets,.planner-context-restrictions{grid-template-columns:1fr}.planner-live-constraints li{align-items:flex-start;flex-direction:column}.planner-live-constraints li span{max-width:none;text-align:left}}

@@ -26,6 +26,14 @@ import { completedActivityDestination } from "../services/briefingNavigation";
 import { publishIntervalsWeek } from "../services/intervals";
 import { DEFAULT_REPLACEMENT_SPORTS, SPORT_OPTIONS, sortCommitments, sportLabel } from "../services/configuration";
 import { goalRequirements } from "../services/scienceCoach";
+import { missionEvents } from "../services/goalPlanning";
+import { buildRacePrepPlan, racePrepProfileFromEvent } from "../services/racePrepPlanner";
+import {
+  buildRaceProtocol,
+  normalizeRaceProtocolSettings,
+  raceProtocolSessionKey,
+  raceProtocolSettingsFromSessions,
+} from "../services/raceProtocol";
 import { buildCoachState } from "../services/coachState";
 import {
   clearCoachSuggestionDecision,
@@ -117,15 +125,22 @@ import {
 } from "../services/plannerChangePreview";
 import {
   AVAILABILITY_REASONS,
+  WEEKLY_CONTEXT_PRESETS,
+  WEEKLY_CONTEXT_RESTRICTIONS,
+  availabilityExceptionsForWeek,
   availabilityForDate,
   availabilityLabel,
   mergeAvailabilityExceptions,
   normalizeAvailabilityExceptions,
   planningConstraintsFromNote,
   planningNoteForWeek,
+  replaceAvailabilityExceptionsForWeek,
   removeAvailabilityException,
   upsertAvailabilityException,
   upsertPlanningCheckinRecord,
+  weeklyContextException,
+  weeklyContextLabel,
+  weeklyContextPreset,
 } from "../services/plannerAvailability";
 import { workoutRoleAssessment } from "../services/workoutRoles";
 import { weeklyReviewSummary } from "../services/weeklyReview";
@@ -206,7 +221,47 @@ function planningConstraintLabel(constraint = {}) {
   if (constraint.recoveryOnly) return `nur Recovery/Aktivierung${constraint.maxDurationMinutes ? ` · max. ${constraint.maxDurationMinutes} min` : ""}`;
   if (constraint.noRunning) return `kein Lauf${constraint.maxDurationMinutes ? ` · max. ${constraint.maxDurationMinutes} min` : ""}`;
   if (constraint.maxDurationMinutes) return `max. ${constraint.maxDurationMinutes} min`;
-  return constraint.noDouble ? "keine Doppeleinheit" : "Constraint erkannt";
+  return constraint.noDouble ? "keine Doppeleinheit" : "Woche angepasst";
+}
+
+
+function raceEventFromPlanItem(item = {}, events = []) {
+  return (Array.isArray(events) ? events : []).find((event) => String(event.id || "") === String(item.targetEventId || "")) || {
+    id: item.targetEventId || item.id,
+    name: item.title,
+    date: item.date,
+    time: item.time,
+    targetKm: item.distance,
+    priority: item.goalPriority,
+    goalType: item.goalType,
+  };
+}
+
+function racePrepProfileForEventState(state = {}, event = {}) {
+  const saved = (Array.isArray(state.racePrepPlans) ? state.racePrepPlans : [])
+    .find((profile) => String(profile.originEventId || "") === String(event.id || ""));
+  const profile = saved || racePrepProfileFromEvent(event);
+  const setup = state.raceCoachSessions?.[raceProtocolSessionKey(event)]?.setup || {};
+  return Number(setup.targetDurationMinutes || 0) > 0
+    ? { ...profile, durationMinutes: Number(setup.targetDurationMinutes), durationEstimated: false }
+    : profile;
+}
+
+function buildRaceProtocolForState(state = {}, event = {}, settings = null, availabilityExceptions = null) {
+  const profile = racePrepProfileForEventState(state, event);
+  const racePrepPlan = buildRacePrepPlan({ profile, state });
+  const effectiveSettings = settings || raceProtocolSettingsFromSessions(state.raceCoachSessions, event);
+  const dayContext = availabilityForDate(
+    availabilityExceptions || state.planner?.availabilityExceptions || [],
+    event.date || "",
+  );
+  return buildRaceProtocol({
+    event,
+    settings: effectiveSettings,
+    athleteProfile: state.profile,
+    racePrepPlan: racePrepPlan?.valid ? racePrepPlan : null,
+    dayContext,
+  });
 }
 
 function blocksTrainingDayByDefault(reason = "") {
@@ -581,6 +636,7 @@ export default function Planner() {
   const [publishBusy, setPublishBusy] = useState(false);
   const [plannerNow, setPlannerNow] = useState(() => new Date());
   const [availabilityEditing, setAvailabilityEditing] = useState(null);
+  const [weeklyContextDraft, setWeeklyContextDraft] = useState(null);
 
   const weekStart = useMemo(() => startOfWeek(new Date(), offsetWeeks), [offsetWeeks]);
   const weekEnd = dateForDay(weekStart, 6);
@@ -588,6 +644,28 @@ export default function Planner() {
     () => planningConstraintsFromNote(planningDraft?.checkin?.notes || "", weekStart),
     [planningDraft?.checkin?.notes, weekStart],
   );
+  const planningDraftStructuredConstraints = useMemo(
+    () => mergeAvailabilityExceptions(planningDraft?.weeklyContextExceptions, planningDraftConstraints),
+    [planningDraft?.weeklyContextExceptions, planningDraftConstraints],
+  );
+  const weekMissionEvents = useMemo(() => missionEvents(state.mission).filter((event) => (
+    event.date >= isoDate(weekStart) && event.date <= isoDate(weekEnd)
+  )), [state.mission, weekStart, weekEnd]);
+  const planningImpactLines = useMemo(() => {
+    const lines = [];
+    weekMissionEvents.forEach((event) => {
+      const eventDate = new Date(`${event.date}T12:00:00`);
+      if (Number.isNaN(eventDate.getTime())) return;
+      const dayBefore = new Date(eventDate);
+      dayBefore.setDate(dayBefore.getDate() - 1);
+      const dayBeforeKey = isoDate(dayBefore);
+      const blockedPreRace = planningDraftStructuredConstraints.find((entry) => entry.date === dayBeforeKey && (entry.status === "blocked" || entry.recoveryOnly || entry.noRunning || (Number(entry.maxDurationMinutes || 0) > 0 && Number(entry.maxDurationMinutes) < 30)));
+      if (blockedPreRace) lines.push(`Der Tag direkt vor ${event.name || "dem Wettkampf"} ist eingeschränkt. Der Coach sucht den nächsten geeigneten Pre-Race-/Shake-out-Slot davor.`);
+    });
+    if (planningDraftStructuredConstraints.some((entry) => entry.status === "blocked")) lines.push("Komplett gesperrte Tage bleiben trainingsfrei; ausgefallene Kilometer werden nicht als Schuld auf andere Tage verschoben.");
+    if (planningDraftStructuredConstraints.some((entry) => entry.recoveryOnly)) lines.push("Recovery-only-Tage bekommen höchstens eine kurze optionale Aktivierung – keine Qualität und keinen regulären Lauf.");
+    return [...new Set(lines)];
+  }, [planningDraftStructuredConstraints, weekMissionEvents]);
   const canonicalActivities = useMemo(() => preferredActivities(state.activities, { hideStrava: Boolean(state.intervals?.connected) }), [state.activities, state.intervals?.connected]);
   const groupedActivities = useMemo(() => activitiesWithGroups(canonicalActivities, state.activityGroups), [canonicalActivities, state.activityGroups]);
   const activityById = useMemo(() => new Map([...canonicalActivities, ...groupedActivities].map((activity) => [activity.id, activity])), [canonicalActivities, groupedActivities]);
@@ -896,6 +974,7 @@ export default function Planner() {
     const lastCheckin = state.healthCheckins?.[0]?.checkin || config.checkin || {};
     const savedWeekNote = planningNoteForWeek(state.healthCheckins, weekStart, mode);
     setPlanningMode(mode);
+    setWeeklyContextDraft(null);
     setPlanningDraft({
       stabiCount: Number(config.stabiCount ?? 2),
       stabiDays: Array.isArray(config.stabiDays) ? config.stabiDays : [],
@@ -908,6 +987,7 @@ export default function Planner() {
       rowingSpmMax: Number(config.rowingSpmMax ?? 26),
       runDays: Array.isArray(config.runDays) ? config.runDays : [],
       doubleTrainingDays: Array.isArray(config.doubleTrainingDays) ? config.doubleTrainingDays : [],
+      weeklyContextExceptions: availabilityExceptionsForWeek(config.availabilityExceptions, weekStart, ["weekly-context"]),
       recurringCommitments: (config.recurringCommitments || []).map((entry) => ({ ...entry, activeThisWeek: entry.enabled !== false })),
       fixedAppointments: {
         football: config.fixedAppointments?.football !== false,
@@ -1154,6 +1234,54 @@ export default function Planner() {
   function updateCheckin(field, value) {
     setPlanningDraft((current) => ({ ...current, checkin: { ...current.checkin, [field]: value } }));
   }
+
+  function openWeeklyContext(contextKey) {
+    const preset = weeklyContextPreset(contextKey);
+    setWeeklyContextDraft({
+      contextKey: preset.key,
+      days: [],
+      restriction: preset.defaultRestriction,
+      maxDurationMinutes: preset.defaultMinutes || 20,
+      note: "",
+    });
+  }
+
+  function toggleWeeklyContextDay(day) {
+    setWeeklyContextDraft((current) => current ? {
+      ...current,
+      days: current.days.includes(day)
+        ? current.days.filter((value) => value !== day)
+        : [...current.days, day],
+    } : current);
+  }
+
+  function saveWeeklyContext() {
+    if (!weeklyContextDraft?.days?.length) return;
+    const additions = weeklyContextDraft.days.map((day) => {
+      const index = plannerDays.indexOf(day);
+      const date = isoDate(dateForDay(weekStart, index));
+      return weeklyContextException({
+        date,
+        contextKey: weeklyContextDraft.contextKey,
+        restriction: weeklyContextDraft.restriction,
+        maxDurationMinutes: weeklyContextDraft.maxDurationMinutes,
+        note: weeklyContextDraft.note,
+      });
+    });
+    setPlanningDraft((current) => ({
+      ...current,
+      weeklyContextExceptions: mergeAvailabilityExceptions(current.weeklyContextExceptions, additions),
+    }));
+    setWeeklyContextDraft(null);
+  }
+
+  function removeWeeklyContext(date) {
+    setPlanningDraft((current) => ({
+      ...current,
+      weeklyContextExceptions: (current.weeklyContextExceptions || []).filter((entry) => entry.date !== date),
+    }));
+  }
+
 
   function commitPlanningNumber(field, minimum, maximum, fallback) {
     setPlanningDraft((current) => {
@@ -1420,10 +1548,20 @@ export default function Planner() {
       ? overrideConfig.recurringCommitments.map(({ activeThisWeek, ...entry }) => ({ ...entry, enabled: activeThisWeek !== false }))
       : config.recurringCommitments;
     const overridePlanner = { ...(overrideConfig || {}) };
+    const weeklyContextExceptions = Array.isArray(overridePlanner.weeklyContextExceptions)
+      ? overridePlanner.weeklyContextExceptions
+      : availabilityExceptionsForWeek(config.availabilityExceptions, weekStart, ["weekly-context"]);
     delete overridePlanner.adjustDates;
     delete overridePlanner.recurringCommitments;
+    delete overridePlanner.weeklyContextExceptions;
     const noteText = String(overridePlanner.checkin?.notes ?? config.checkin?.notes ?? "");
     const explicitPlanningConstraints = planningConstraintsFromNote(noteText, weekStart);
+    const weeklyAvailability = replaceAvailabilityExceptionsForWeek(
+      config.availabilityExceptions,
+      [...weeklyContextExceptions, ...explicitPlanningConstraints],
+      weekStart,
+      ["weekly-context", "planning-note"],
+    );
     const effectiveConfig = {
       ...config,
       ...overridePlanner,
@@ -1436,12 +1574,11 @@ export default function Planner() {
       // Push the parsed note into the same availability model the engine already trusts.
       // The engine still parses the note itself as a second line of defence.
       availabilityExceptions: mergeAvailabilityExceptions(
-        config.availabilityExceptions,
+        weeklyAvailability,
         overridePlanner.availabilityExceptions,
-        explicitPlanningConstraints,
       ),
     };
-    const generated = generateWeekPlan({
+    let generated = generateWeekPlan({
       activities: canonicalActivities,
       activityGroups: state.activityGroups,
       reviews: state.reviews,
@@ -1456,10 +1593,19 @@ export default function Planner() {
       completedCrossTrainingKm: crossTrainingSummary.rawEquivalentKm,
       crossTrainingDetails: crossTrainingSummary.details,
     });
+    const generatedMissionEvents = missionEvents(state.mission);
+    generated = {
+      ...generated,
+      plan: generated.plan.map((entry) => {
+        if (!entry.raceEvent) return entry;
+        const event = raceEventFromPlanItem(entry, generatedMissionEvents);
+        return { ...entry, raceProtocol: buildRaceProtocolForState(state, event, null, effectiveConfig.availabilityExceptions) };
+      }),
+    };
 
     if (generated.planningConstraintViolations?.length) {
       const first = generated.planningConstraintViolations[0];
-      setStatus(`Plan nicht freigegeben: ${planChangeDateLabel(first.date)} verletzt den erkannten Tagesconstraint (${first.message}). Bitte Vorschau erneut berechnen.`);
+      setStatus(`Plan nicht freigegeben: ${planChangeDateLabel(first.date)} verletzt deine Wochenangabe (${first.message}). Bitte Vorschau erneut berechnen.`);
       return;
     }
 
@@ -1749,6 +1895,40 @@ export default function Planner() {
 
   function updateWorkout(id, patch) {
     setState((current) => ({ ...current, plan: current.plan.map((item) => item.id === id ? { ...item, ...patch } : item) }));
+  }
+
+  function updateRaceProtocol(item, patch) {
+    if (!item?.raceEvent) return;
+    setState((current) => {
+      const event = raceEventFromPlanItem(item, missionEvents(current.mission));
+      const sessionKey = raceProtocolSessionKey(event);
+      if (!sessionKey) return current;
+      const currentSettings = raceProtocolSettingsFromSessions(current.raceCoachSessions, event);
+      const nextSettings = normalizeRaceProtocolSettings({
+        ...currentSettings,
+        ...patch,
+        components: {
+          ...currentSettings.components,
+          ...(patch.components || {}),
+        },
+      });
+      const protocol = buildRaceProtocolForState(current, event, nextSettings);
+      return {
+        ...current,
+        raceCoachSessions: {
+          ...(current.raceCoachSessions || {}),
+          [sessionKey]: {
+            ...(current.raceCoachSessions?.[sessionKey] || {}),
+            setup: {
+              ...(current.raceCoachSessions?.[sessionKey]?.setup || {}),
+              raceProtocol: nextSettings,
+            },
+            updatedAt: new Date().toISOString(),
+          },
+        },
+        plan: current.plan.map((entry) => entry.id === item.id ? { ...entry, raceProtocol: protocol } : entry),
+      };
+    });
   }
 
   function removeManualWorkout(item) {
@@ -2580,18 +2760,18 @@ export default function Planner() {
           const availability = weekAvailability.get(dateKey) || null;
           const availabilityEditable = !isPastWeek && dateKey >= todayKey;
           return (
-            <article className={`planner-day ${availability ? "availability-blocked" : ""}`.trim()} key={dateKey}>
+            <article className={`planner-day ${availability?.status === "blocked" ? "availability-blocked" : availability ? "availability-limited" : ""}`.trim()} key={dateKey}>
               <header>
                 <div><span>{dayFormatter.format(date)}</span><strong>{new Intl.DateTimeFormat("de-DE", { weekday: "long" }).format(date)}</strong></div>
                 <div className="planner-day-header-actions">
                   {dayWeather && <small>{dayWeather.maxTemp}° · Böen {dayWeather.maxGust} · Regen {dayWeather.rainChance}%</small>}
-                  {availabilityEditable && <button type="button" className={availability ? "blocked" : ""} onClick={() => openAvailability(dateKey)}>{availability ? "Nicht verfügbar" : "Verfügbarkeit"}</button>}
+                  {availabilityEditable && <button type="button" className={availability ? "blocked" : ""} onClick={() => openAvailability(dateKey)}>{availability ? (availability.status === "blocked" ? "Nicht verfügbar" : "Eingeschränkt") : "Verfügbarkeit"}</button>}
                 </div>
               </header>
 
               {availability && (
                 <div className="planner-availability-note">
-                  <div><span>Tag blockiert</span><strong>{availabilityLabel(availability)}</strong>{availability.note && <small>{availability.note}</small>}</div>
+                  <div><span>{availability.status === "blocked" ? "Training nicht möglich" : "Diese Woche angepasst"}</span><strong>{availabilityLabel(availability)}</strong>{availability.note && <small>{availability.note}</small>}</div>
                   {availabilityEditable && <button type="button" onClick={() => openAvailability(dateKey)}>Ändern</button>}
                 </div>
               )}
@@ -2630,7 +2810,9 @@ export default function Planner() {
 
               {entries.length === 0 && actuals.length === 0 ? (
                 availability
-                  ? <div className="planner-empty planner-empty-blocked"><strong>Training frei gehalten</strong><span>Der Coach plant an diesem Tag keine Einheit.</span></div>
+                  ? availability.status === "blocked"
+                    ? <div className="planner-empty planner-empty-blocked"><strong>Training frei gehalten</strong><span>Der Coach plant an diesem Tag keine Einheit.</span></div>
+                    : <div className="planner-empty planner-empty-limited"><strong>Heute bewusst eingeschränkt</strong><span>{availabilityLabel(availability)}. Der Coach nutzt den Tag nur innerhalb dieser Grenze.</span></div>
                   : <button className="planner-empty" onClick={() => setEditing({ ...createBlank(weekStart), date: dateKey })}>+ frei</button>
               ) : entries.map((item) => {
                 const matched = matches.get(item.id) || (item.matchedActivityId ? activityById.get(item.matchedActivityId) : null);
@@ -2666,6 +2848,10 @@ export default function Planner() {
                   ? coachSuggestionDecision(coachSuggestionDecisions, coachDecisionKey(coachCandidate))
                   : null;
                 const canRemoveFromPlan = item.source === "manual" && !item.raceEvent;
+                const raceEventDetails = item.raceEvent ? raceEventFromPlanItem(item, weekMissionEvents) : null;
+                const raceProtocol = item.raceEvent
+                  ? item.raceProtocol || buildRaceProtocolForState(state, raceEventDetails)
+                  : null;
                 const className = `planner-workout ${completed ? "completed" : ""} ${isMissed ? "missed" : ""} ${isCancelled ? "cancelled" : ""} ${hasStateMarker ? "" : "no-marker"}`;
                 return (
                   <div
@@ -2749,6 +2935,44 @@ export default function Planner() {
                         </div>
                       )}
                       {item.notes && !isCancelled && <small>{item.notes}</small>}
+                      {item.raceEvent && raceProtocol && !completed && !isCancelled && (
+                        <section className="planner-race-protocol" onClick={(event) => event.stopPropagation()}>
+                          <div className="planner-race-protocol-head">
+                            <div>
+                              <span>Race Protocol</span>
+                              <strong>{raceProtocol.enabled || raceProtocol.settings.mode === "auto" ? raceProtocol.recommendation.label : "Nur Wettkampf"}</strong>
+                              <small>{raceProtocol.enabled || raceProtocol.settings.mode === "auto" ? raceProtocol.recommendation.reason : "Kein zusätzlicher Race-Day-Ablauf. Wettkampf und dein persönliches Warm-up bleiben unberührt."}</small>
+                            </div>
+                            <div className="planner-race-protocol-modes" role="group" aria-label="Race Protocol auswählen">
+                              <button type="button" className={raceProtocol.settings.mode === "auto" ? "selected" : ""} onClick={() => updateRaceProtocol(item, { mode: "auto" })}>Auto</button>
+                              <button type="button" className={raceProtocol.settings.mode === "on" ? "selected" : ""} onClick={() => updateRaceProtocol(item, { mode: "on" })}>Race Protocol</button>
+                              <button type="button" className={raceProtocol.settings.mode === "off" ? "selected" : ""} onClick={() => updateRaceProtocol(item, { mode: "off" })}>Nur Wettkampf</button>
+                            </div>
+                          </div>
+                          {raceProtocol.enabled && (
+                            <>
+                              <div className="planner-race-protocol-timeline">
+                                {raceProtocol.timeline.filter((step) => step.key !== "start").map((step) => <article key={step.key}><span>{step.time || step.relative || "vor Start"}{step.optional ? " · optional" : ""}</span><b>{step.label}</b><small>{step.detail}</small></article>)}
+                              </div>
+                              <details className="planner-race-protocol-options">
+                                <summary>Bausteine auswählen</summary>
+                                <div>
+                                  {[
+                                    ["fueling", "🥣 Pre-Race Fueling"],
+                                    ["hydration", "💧 Trink-Reminder"],
+                                    ["activation", "⚡ Race-Day Activation"],
+                                    ["warmup", "🏃 Warm-up"],
+                                    ["strides", "↗ Strides"],
+                                    ["calendarReminders", "🔔 Kalender-Erinnerungen"],
+                                  ].map(([key, label]) => <label key={key}><input type="checkbox" checked={Boolean(raceProtocol.settings.components[key])} onChange={(event) => updateRaceProtocol(item, { components: { [key]: event.target.checked } })} /><span>{label}</span></label>)}
+                                </div>
+                                {raceProtocol.settings.components.activation && !raceProtocol.activationDecision.recommended && <small>{raceProtocol.activationDecision.reason}</small>}
+                                {raceProtocol.settings.components.calendarReminders && !raceProtocol.startTimeKnown && <small>Kalender-Erinnerungen brauchen eine Startzeit am Event.</small>}
+                              </details>
+                            </>
+                          )}
+                        </section>
+                      )}
                       {trackSyncStatus && !matched && !completed && !isCancelled && !isMissed && (
                         <div className={`planner-track-sync-status ${trackSyncStatus.state}`}>
                           <div>
@@ -3262,8 +3486,8 @@ export default function Planner() {
             {pendingPlanChange.generated.planningConstraints?.length > 0 && (
               <section className="planner-change-constraints">
                 <div>
-                  <span>Aus Zusatznotiz erkannt</span>
-                  <strong>{pendingPlanChange.generated.planningConstraints.length} Tagesconstraint{pendingPlanChange.generated.planningConstraints.length === 1 ? "" : "s"}</strong>
+                  <span>So berücksichtigt der Coach die Woche</span>
+                  <strong>{pendingPlanChange.generated.planningConstraints.length} angepasste{pendingPlanChange.generated.planningConstraints.length === 1 ? "r Tag" : " Tage"}</strong>
                 </div>
                 <ul>
                   {pendingPlanChange.generated.planningConstraints.map((constraint) => (
@@ -3467,23 +3691,71 @@ export default function Planner() {
               </section>
             )}
 
-            <div className="planner-day-picker"><strong>An welchen Tagen kannst du laufen?</strong><div>{plannerDays.map((day) => <button type="button" className={planningDraft.runDays.includes(day) ? "selected" : ""} onClick={() => toggleDay("runDays", day)} key={`run-${day}`}>{day.slice(0, 2)}</button>)}</div></div>
-            <div className="planner-day-picker"><strong>Stabi an welchen Tagen?</strong><div>{plannerDays.map((day) => <button type="button" className={planningDraft.stabiDays.includes(day) ? "selected" : ""} onClick={() => toggleDay("stabiDays", day)} key={`stabi-${day}`}>{day.slice(0, 2)}</button>)}</div></div>
-            <div className="planner-day-picker"><strong>Rudern an welchen Tagen?</strong><div>{plannerDays.map((day) => <button type="button" className={planningDraft.rowingDays.includes(day) ? "selected" : ""} onClick={() => toggleDay("rowingDays", day)} key={`row-${day}`}>{day.slice(0, 2)}</button>)}</div></div>
-            <div className="planner-day-picker"><strong>An welchen Tagen ist echtes Doppeltraining erlaubt?</strong><div>{plannerDays.map((day) => <button type="button" className={planningDraft.doubleTrainingDays.includes(day) ? "selected" : ""} onClick={() => toggleDay("doubleTrainingDays", day)} key={`double-${day}`}>{day.slice(0, 2)}</button>)}</div><small>Gemeint sind Fußball + Lauf, Rudern + Lauf oder zwei Ausdauereinheiten. Stabi/Mobility + Lauf ist nur ein Kombi-Tag und braucht keine Freigabe.</small></div>
-            <label>Zusätzliche Notiz<textarea value={planningDraft.checkin.notes} onChange={(event) => updateCheckin("notes", event.target.value)} placeholder="Reise, wenig Zeit, besondere Termine …" /></label>
-            {String(planningDraft.checkin.notes || "").trim() && (
-              <div className={`planner-live-constraints ${planningDraftConstraints.length ? "recognized" : "unrecognized"}`}>
-                <strong>{planningDraftConstraints.length ? "Als Tagesconstraint erkannt" : "Noch kein Tagesconstraint erkannt"}</strong>
-                {planningDraftConstraints.length ? (
-                  <ul>{planningDraftConstraints.map((constraint) => (
-                    <li key={`${constraint.date}-${constraint.reason}`}>
-                      <b>{planChangeDateLabel(constraint.date)}</b>
-                      <span>{planningConstraintLabel(constraint)}</span>
-                    </li>
-                  ))}</ul>
+            <section className="planner-normal-week">
+              <div className="planner-section-heading">
+                <div><p className="eyebrow">Deine normale Trainingswoche</p><h3>Wann kannst du grundsätzlich trainieren?</h3></div>
+                <small>Das ist deine normale Routine. Besonderheiten für genau diese Woche kommen darunter.</small>
+              </div>
+              <div className="planner-availability-grid">
+                <div className="planner-day-picker"><strong>Laufen</strong><div>{plannerDays.map((day) => <button type="button" className={planningDraft.runDays.includes(day) ? "selected" : ""} onClick={() => toggleDay("runDays", day)} key={`run-${day}`}>{day.slice(0, 2)}</button>)}</div></div>
+                <div className="planner-day-picker"><strong>Stabi / Mobility</strong><div>{plannerDays.map((day) => <button type="button" className={planningDraft.stabiDays.includes(day) ? "selected" : ""} onClick={() => toggleDay("stabiDays", day)} key={`stabi-${day}`}>{day.slice(0, 2)}</button>)}</div></div>
+                <div className="planner-day-picker"><strong>Rudern</strong><div>{plannerDays.map((day) => <button type="button" className={planningDraft.rowingDays.includes(day) ? "selected" : ""} onClick={() => toggleDay("rowingDays", day)} key={`row-${day}`}>{day.slice(0, 2)}</button>)}</div></div>
+                <div className="planner-day-picker"><strong>Echtes Doppeltraining erlaubt</strong><div>{plannerDays.map((day) => <button type="button" className={planningDraft.doubleTrainingDays.includes(day) ? "selected" : ""} onClick={() => toggleDay("doubleTrainingDays", day)} key={`double-${day}`}>{day.slice(0, 2)}</button>)}</div><small>Fußball + Lauf, Rudern + Lauf oder zwei Ausdauereinheiten. Stabi/Mobility + Lauf zählt nur als Kombi-Tag.</small></div>
+              </div>
+            </section>
+
+            <section className="planner-week-context">
+              <div className="planner-section-heading">
+                <div><p className="eyebrow">Diese Woche anders als sonst?</p><h3>Lebensrealität zuerst eintragen</h3></div>
+                <small>Reise, Krankheit oder wenig Zeit überstimmen deine normale Tagesverfügbarkeit.</small>
+              </div>
+              <div className="planner-context-presets">
+                {WEEKLY_CONTEXT_PRESETS.map((preset) => <button type="button" key={preset.key} onClick={() => openWeeklyContext(preset.key)}><span>{preset.icon}</span><b>{preset.label}</b></button>)}
+              </div>
+
+              {weeklyContextDraft && (
+                <div className="planner-context-editor">
+                  <div className="planner-context-editor-head"><div><span>{weeklyContextPreset(weeklyContextDraft.contextKey).icon}</span><strong>{weeklyContextPreset(weeklyContextDraft.contextKey).label}</strong></div><button type="button" onClick={() => setWeeklyContextDraft(null)}>Abbrechen</button></div>
+                  <div className="planner-day-picker compact"><strong>Welche Tage?</strong><div>{plannerDays.map((day) => <button type="button" className={weeklyContextDraft.days.includes(day) ? "selected" : ""} onClick={() => toggleWeeklyContextDay(day)} key={`context-${day}`}>{day.slice(0, 2)}</button>)}</div></div>
+                  <div className="planner-context-restrictions" role="group" aria-label="Wie stark bist du eingeschränkt?">
+                    {WEEKLY_CONTEXT_RESTRICTIONS
+                      .filter((option) => weeklyContextDraft.contextKey === "blocked"
+                        ? option.key === "blocked"
+                        : ["illness", "recovery"].includes(weeklyContextDraft.contextKey)
+                          ? ["recovery", "blocked"].includes(option.key)
+                          : true)
+                      .map((option) => <button type="button" className={weeklyContextDraft.restriction === option.key ? "selected" : ""} onClick={() => setWeeklyContextDraft({ ...weeklyContextDraft, restriction: option.key })} key={option.key}><b>{option.label}</b><small>{option.help}</small></button>)}
+                  </div>
+                  {["short", "recovery"].includes(weeklyContextDraft.restriction) && <label>Maximale Zeit<input type="number" min="5" max="180" step="5" value={weeklyContextDraft.maxDurationMinutes} onChange={(event) => setWeeklyContextDraft({ ...weeklyContextDraft, maxDurationMinutes: Number(event.target.value) })} /><small>Minuten pro ausgewähltem Tag.</small></label>}
+                  <label>Optionaler Hinweis<input value={weeklyContextDraft.note} onChange={(event) => setWeeklyContextDraft({ ...weeklyContextDraft, note: event.target.value })} placeholder="z. B. 7–8 h Autofahrt, danach wahrscheinlich müde" /></label>
+                  <button type="button" className="primary" disabled={!weeklyContextDraft.days.length} onClick={saveWeeklyContext}>Für diese Woche übernehmen</button>
+                </div>
+              )}
+
+              {(planningDraft.weeklyContextExceptions || []).length > 0 && (
+                <div className="planner-context-selected">
+                  {(planningDraft.weeklyContextExceptions || []).map((constraint) => <article key={`weekly-${constraint.date}`}><div><span>{weeklyContextLabel(constraint)}</span><strong>{planChangeDateLabel(constraint.date)}</strong><small>{planningConstraintLabel(constraint)}{constraint.note ? ` · ${constraint.note}` : ""}</small></div><button type="button" onClick={() => removeWeeklyContext(constraint.date)}>Entfernen</button></article>)}
+                </div>
+              )}
+            </section>
+
+            <label className="planner-coach-note"><span>Zusätzliche Hinweise für den Coach</span><textarea value={planningDraft.checkin.notes} onChange={(event) => updateCheckin("notes", event.target.value)} placeholder="z. B. Nach langen Fahrten bin ich oft platt; Freitag will ich den Wettkampf kontrolliert hart laufen …" /><small>Freitext ergänzt den Kontext. Harte Grenzen stellst du am sichersten oben über „Diese Woche anders als sonst?“ ein.</small></label>
+
+            {(planningDraftStructuredConstraints.length > 0 || String(planningDraft.checkin.notes || "").trim()) && (
+              <div className={`planner-live-constraints ${planningDraftStructuredConstraints.length ? "recognized" : "unrecognized"}`}>
+                <strong>{planningDraftStructuredConstraints.length ? "So berücksichtigt der Coach deine Woche" : "Zusatzhinweis gespeichert"}</strong>
+                {planningDraftStructuredConstraints.length ? (
+                  <>
+                    <ul>{planningDraftStructuredConstraints.map((constraint) => (
+                      <li key={`${constraint.date}-${constraint.reason}`}>
+                        <div><b>{planChangeDateLabel(constraint.date)}</b><small>{weeklyContextLabel(constraint)}</small></div>
+                        <span>{planningConstraintLabel(constraint)}</span>
+                      </li>
+                    ))}</ul>
+                    {planningImpactLines.length > 0 && <div className="planner-context-impact"><b>Auswirkung auf den Plan</b>{planningImpactLines.map((line) => <span key={line}>→ {line}</span>)}</div>}
+                  </>
                 ) : (
-                  <span>Die Notiz bleibt Coach-Kontext. Für harte Tagesgrenzen bitte Tag und Einschränkung nennen, z. B. „Dienstag Training nicht möglich“ oder „Donnerstag maximal 20 Minuten locker“.</span>
+                  <span>Der Hinweis bleibt als Coach-Kontext erhalten. Es wurde daraus keine feste Tagesgrenze abgeleitet – das ist okay, wenn du nur zusätzliche Hintergrundinfo geben wolltest.</span>
                 )}
               </div>
             )}

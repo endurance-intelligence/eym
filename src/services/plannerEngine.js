@@ -329,7 +329,7 @@ function constrainedRecoveryEntry(entry, constraint) {
     goalWorkout: null,
     paceGuidance: null,
     travelConstraint: true,
-    notes: `${constraint.reason || "Tagesconstraint"}: maximal ${maxDuration} Minuten sehr lockere Recovery/Aktivierung. Keine reguläre Lauf- oder Qualitätseinheit und keine Doppeleinheit.${constraint.note ? ` ${constraint.note}` : ""}`,
+    notes: `${constraint.reason || "Wochenbesonderheit"}: maximal ${maxDuration} Minuten sehr lockere Recovery/Aktivierung. Keine reguläre Lauf- oder Qualitätseinheit und keine Doppeleinheit.${constraint.note ? ` ${constraint.note}` : ""}`,
   };
 }
 
@@ -367,7 +367,7 @@ function applyDailyAvailabilityConstraints(plan = [], availabilityExceptions = [
           goalWorkout: null,
           keySession: false,
           travelConstraint: true,
-          notes: `${entry.notes || ""} Tagesconstraint: nur sehr lockere Aktivierung${constraint.maxDurationMinutes ? ` bis maximal ${constraint.maxDurationMinutes} Minuten` : ""}.`.trim(),
+          notes: `${entry.notes || ""} Wochenbesonderheit: nur sehr lockere Aktivierung${constraint.maxDurationMinutes ? ` bis maximal ${constraint.maxDurationMinutes} Minuten` : ""}.`.trim(),
         });
       } else {
         constrained.push(constrainedRecoveryEntry(entry, constraint));
@@ -394,7 +394,7 @@ function applyDailyAvailabilityConstraints(plan = [], availabilityExceptions = [
         duration: cappedDuration,
         ...(running ? { distance: adjustedDistance } : {}),
         ...(structured && running ? { type: "Easy Run", structuredWorkout: null, goalWorkout: null, keySession: false } : {}),
-        notes: `${entry.notes || ""} Zeitlimit aus der Wochenplanung: maximal ${constraint.maxDurationMinutes} Minuten.${structured ? " Die strukturierte Qualität wird dafür nicht gekürzt, sondern als lockere verkürzte Einheit behandelt." : ""}`.trim(),
+        notes: `${entry.notes || ""} Zeitlimit für diese Woche: maximal ${constraint.maxDurationMinutes} Minuten.${structured ? " Die strukturierte Qualität wird dafür nicht gekürzt, sondern als lockere verkürzte Einheit behandelt." : ""}`.trim(),
       });
       datesWithEntries.add(entry.date);
       return;
@@ -408,7 +408,7 @@ function applyDailyAvailabilityConstraints(plan = [], availabilityExceptions = [
     const index = weekDayIndex(weekStart, date);
     if (index < 0 || index > 6) return;
     if (constraint.status === "blocked") {
-      if (constraint.source !== "planning-note") return;
+      if (!["planning-note", "weekly-context"].includes(constraint.source)) return;
       constrained.push(item(weekStart, index, {
         title: `${constraint.reason || "Termin"} · kein Training`,
         type: "Ruhetag",
@@ -416,7 +416,7 @@ function applyDailyAvailabilityConstraints(plan = [], availabilityExceptions = [
         duration: 0,
         optional: false,
         travelConstraint: true,
-        notes: `Expliziter Planning Constraint aus deiner Zusatznotiz: Training ist an diesem Tag nicht möglich.${constraint.note ? ` ${constraint.note}` : ""}`,
+        notes: `Diese Woche anders als sonst: Training ist an diesem Tag nicht möglich.${constraint.note ? ` ${constraint.note}` : ""}`,
       }));
       return;
     }
@@ -428,7 +428,7 @@ function applyDailyAvailabilityConstraints(plan = [], availabilityExceptions = [
         duration: Math.min(20, Number(constraint.maxDurationMinutes || 20)),
         optional: true,
         travelConstraint: true,
-        notes: `${constraint.reason || "Tagesconstraint"}: nur sehr lockere Aktivierung${constraint.maxDurationMinutes ? ` bis maximal ${constraint.maxDurationMinutes} Minuten` : ""}. Keine reguläre Lauf- oder Qualitätseinheit.${constraint.note ? ` ${constraint.note}` : ""}`,
+        notes: `${constraint.reason || "Wochenbesonderheit"}: nur sehr lockere Aktivierung${constraint.maxDurationMinutes ? ` bis maximal ${constraint.maxDurationMinutes} Minuten` : ""}. Keine reguläre Lauf- oder Qualitätseinheit.${constraint.note ? ` ${constraint.note}` : ""}`,
       }));
     }
   });
@@ -453,7 +453,7 @@ function applyDailyAvailabilityConstraints(plan = [], availabilityExceptions = [
 
 function planningConstraintViolations(plan = [], availabilityExceptions = []) {
   const constraints = (Array.isArray(availabilityExceptions) ? availabilityExceptions : [])
-    .filter((entry) => entry?.source === "planning-note" && entry?.date);
+    .filter((entry) => ["planning-note", "weekly-context"].includes(entry?.source) && entry?.date);
   const violations = [];
 
   constraints.forEach((constraint) => {
@@ -471,11 +471,10 @@ function planningConstraintViolations(plan = [], availabilityExceptions = []) {
 
     if (constraint.recoveryOnly) {
       const maxDuration = Number(constraint.maxDurationMinutes || 20);
-      const invalid = entries.find((entry) => {
+      const invalid = entries.filter((entry) => !entry.raceEvent).find((entry) => {
         const text = `${entry.type || ""} ${entry.title || ""}`.toLowerCase();
         const recoveryLike = /mobility|mobilität|recovery|regeneration|aktivierung|ruhetag|rest/.test(text);
-        return entry.raceEvent
-          || isRunningPlanEntry(entry)
+        return isRunningPlanEntry(entry)
           || Number(entry.distance || 0) > 0
           || /stabi|kraft|strength|intervall|threshold|schwelle|tempo|track/.test(text)
           || !recoveryLike
@@ -488,14 +487,14 @@ function planningConstraintViolations(plan = [], availabilityExceptions = []) {
     }
 
     if (constraint.noRunning) {
-      const invalid = entries.find((entry) => entry.raceEvent || isRunningPlanEntry(entry) || Number(entry.distance || 0) > 0);
+      const invalid = entries.filter((entry) => !entry.raceEvent).find((entry) => isRunningPlanEntry(entry) || Number(entry.distance || 0) > 0);
       if (invalid) violations.push({ date: constraint.date, message: "keine Laufeinheit erlaubt", entryId: invalid.id || "" });
       return;
     }
 
     if (constraint.maxDurationMinutes) {
       const maxDuration = Number(constraint.maxDurationMinutes);
-      const invalid = entries.find((entry) => Number(entry.duration || 0) > maxDuration);
+      const invalid = entries.filter((entry) => !entry.raceEvent).find((entry) => Number(entry.duration || 0) > maxDuration);
       if (invalid) violations.push({ date: constraint.date, message: `maximal ${maxDuration} Minuten erlaubt`, entryId: invalid.id || "" });
     }
 
@@ -1077,7 +1076,7 @@ function applyEventWeekProtection(plan, weekStart, eventWeek) {
     const strength = isStrengthEntry(entry);
 
     if (relation.days === 0) {
-      if (strength) return [eventProtectedMobility(entry, eventName)];
+      if (strength) return [];
       if (!entry.fixed && !entry.commitmentId) return [];
       return [{
         ...entry,
@@ -2185,7 +2184,7 @@ export function generateWeekPlan({
     blockedDates: [...blockedDates],
     availabilityBlockedDates: [...configuredAvailabilityBlockedDates],
     planningConstraints: effectiveAvailabilityExceptions
-      .filter((entry) => entry.source === "planning-note")
+      .filter((entry) => ["planning-note", "weekly-context"].includes(entry.source))
       .map((entry) => ({
         date: entry.date,
         status: entry.status,

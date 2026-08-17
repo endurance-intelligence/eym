@@ -10,6 +10,10 @@ import {
   runningRestrictedAvailabilityDates,
   upsertAvailabilityException,
   upsertPlanningCheckinRecord,
+  weeklyContextException,
+  availabilityExceptionsForWeek,
+  replaceAvailabilityExceptionsForWeek,
+  mergeAvailabilityExceptions,
 } from "../src/services/plannerAvailability.js";
 
 test("availability exceptions keep the newest entry per date", () => {
@@ -158,4 +162,62 @@ test("multiple clauses for the same weekday merge to the strictest planning cons
   assert.equal(thursday?.recoveryOnly, true);
   assert.equal(thursday?.noRunning, true);
   assert.equal(thursday?.maxDurationMinutes, 20);
+});
+
+
+test("structured weekly travel context uses the existing availability model and overrides normal run availability", () => {
+  const exception = weeklyContextException({
+    date: "2026-08-18",
+    contextKey: "travel",
+    restriction: "recovery",
+    maxDurationMinutes: 20,
+    note: "7–8 h Autofahrt",
+  });
+
+  assert.equal(exception.source, "weekly-context");
+  assert.equal(exception.reason, "Reise");
+  assert.equal(exception.status, "available");
+  assert.equal(exception.recoveryOnly, true);
+  assert.equal(exception.noRunning, true);
+  assert.equal(exception.noDouble, true);
+  assert.equal(exception.maxDurationMinutes, 20);
+  assert.deepEqual([...runningRestrictedAvailabilityDates([exception], "2026-08-17", "2026-08-23")], ["2026-08-18"]);
+});
+
+test("weekly context replacement clears stale inferred constraints for only the selected week", () => {
+  const existing = [
+    { id: "manual-18", date: "2026-08-18", status: "blocked", reason: "Familie", source: "manual" },
+    { id: "note-20", date: "2026-08-20", status: "available", reason: "Reise", noRunning: true, source: "planning-note" },
+    { id: "weekly-22", date: "2026-08-22", status: "available", reason: "Arbeit", maxDurationMinutes: 30, source: "weekly-context", contextKey: "work" },
+    { id: "next-week", date: "2026-08-25", status: "available", reason: "Reise", noRunning: true, source: "weekly-context", contextKey: "travel" },
+  ];
+  const replacement = weeklyContextException({ date: "2026-08-20", contextKey: "travel", restriction: "recovery", maxDurationMinutes: 15 });
+  const next = replaceAvailabilityExceptionsForWeek(existing, [replacement], "2026-08-17", ["weekly-context", "planning-note"]);
+
+  assert.equal(availabilityExceptionsForWeek(next, "2026-08-17", ["planning-note"]).length, 0);
+  assert.equal(availabilityExceptionsForWeek(next, "2026-08-17", ["weekly-context"]).length, 1);
+  assert.equal(availabilityForDate(next, "2026-08-18")?.source, "manual");
+  assert.equal(availabilityForDate(next, "2026-08-20")?.maxDurationMinutes, 15);
+  assert.equal(availabilityForDate(next, "2026-08-25")?.contextKey, "travel");
+});
+
+test("explicit weekly context wins source ownership while keeping stricter free-text restrictions", () => {
+  const structured = weeklyContextException({ date: "2026-08-18", contextKey: "travel", restriction: "recovery", maxDurationMinutes: 20 });
+  const inferred = planningConstraintsFromNote("Dienstag Training zeitlich nicht möglich.", "2026-08-17")[0];
+  const [merged] = mergeAvailabilityExceptions([structured], [inferred]);
+
+  assert.equal(merged.source, "weekly-context");
+  assert.equal(merged.contextKey, "travel");
+  assert.equal(merged.status, "blocked");
+  assert.equal(merged.noRunning, true);
+});
+
+test("a manual day block remains authoritative when weekly context is added on the same date", () => {
+  const manual = { id: "manual", date: "2026-08-18", status: "blocked", reason: "Familie", source: "manual" };
+  const weekly = weeklyContextException({ date: "2026-08-18", contextKey: "travel", restriction: "recovery", maxDurationMinutes: 20 });
+  const [merged] = mergeAvailabilityExceptions([manual], [weekly]);
+
+  assert.equal(merged.status, "blocked");
+  assert.equal(merged.source, "manual");
+  assert.equal(merged.noRunning, true);
 });

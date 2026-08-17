@@ -29,3 +29,57 @@ test("calendar subscription applies the same cancellation filter and disables re
   assert.match(source, /!item\.cancelledAt/);
   assert.match(source, /Cache-Control.*no-store, max-age=0/);
 });
+
+test("race protocol calendar reminders are opt-in, timed and limited to the prepared checkpoints", () => {
+  const race = {
+    id: "race-1",
+    date: "2026-08-21",
+    title: "UrLand-Lauf",
+    type: "Wettkampf",
+    raceEvent: true,
+    distance: 9.6,
+    raceProtocol: {
+      calendarReminders: true,
+      calendarItems: [
+        { key: "fueling", time: "14:30", title: "🥣 Pre-Race Fueling starten", detail: "Mahlzeit und Trink-Check" },
+        { key: "prep", time: "17:20", title: "🏁 Race Prep starten", detail: "Warm-up und Strides" },
+      ],
+    },
+  };
+  const content = buildCalendar([race]);
+
+  assert.match(content, /UID:race-1-fueling@endurance-intelligence/);
+  assert.match(content, /DTSTART:20260821T143000/);
+  assert.match(content, /UID:race-1-prep@endurance-intelligence/);
+  assert.match(content, /DTSTART:20260821T172000/);
+  assert.match(content, /SUMMARY:🥣 Pre-Race Fueling starten/);
+  assert.match(content, /SUMMARY:🏁 Race Prep starten/);
+  assert.equal((content.match(/UID:race-1-(?:fueling|prep)@endurance-intelligence/g) || []).length, 2);
+});
+
+test("race protocol does not create calendar noise when reminders are disabled", () => {
+  const race = {
+    id: "race-2",
+    date: "2026-08-21",
+    title: "5 km Race",
+    type: "Wettkampf",
+    raceEvent: true,
+    distance: 5,
+    raceProtocol: {
+      calendarReminders: false,
+      calendarItems: [{ key: "prep", time: "07:20", title: "Race Prep", detail: "Warm-up" }],
+    },
+  };
+  const content = buildCalendar([race]);
+
+  assert.match(content, /UID:race-2@endurance-intelligence/);
+  assert.doesNotMatch(content, /UID:race-2-prep@endurance-intelligence/);
+});
+
+test("calendar subscription includes the same race protocol reminder expansion", () => {
+  const source = fs.readFileSync(new URL("../supabase/functions/calendar/index.ts", import.meta.url), "utf8");
+  assert.match(source, /raceProtocolCalendarEvents\(item, stamp\)/);
+  assert.match(source, /protocol\?\.calendarReminders/);
+  assert.match(source, /DURATION:PT15M/);
+  assert.match(source, /DTSTART:\$\{start\}/);
+});

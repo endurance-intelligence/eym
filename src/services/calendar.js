@@ -32,6 +32,32 @@ function nextDateValue(raw) {
   return dateValue(isoDateLocal(date));
 }
 
+
+function timedDateValue(date = "", time = "") {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date)) || !/^\d{2}:\d{2}$/.test(String(time))) return "";
+  return `${dateValue(date)}T${String(time).replace(":", "")}00`;
+}
+
+function raceProtocolCalendarEvents(item, stamp) {
+  const protocol = item?.raceProtocol;
+  if (!item?.raceEvent || !protocol?.calendarReminders || !Array.isArray(protocol.calendarItems)) return [];
+  return protocol.calendarItems.flatMap((reminder) => {
+    const start = timedDateValue(item.date, reminder.time);
+    if (!start) return [];
+    return [[
+      "BEGIN:VEVENT",
+      `UID:${escapeIcs(`${item.id || "race"}-${reminder.key}`)}@endurance-intelligence`,
+      `DTSTAMP:${stamp}`,
+      `DTSTART:${start}`,
+      `DURATION:PT15M`,
+      `SUMMARY:${escapeIcs(reminder.title)}`,
+      `DESCRIPTION:${escapeIcs(`${item.title || "Wettkampf"} · ${reminder.detail || "Race Protocol"}`)}`,
+      "TRANSP:TRANSPARENT",
+      "END:VEVENT",
+    ].join("\r\n")];
+  });
+}
+
 function formatUtcStamp(date) {
   return date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
 }
@@ -86,9 +112,9 @@ export function buildCalendar(plan) {
   const stamp = formatUtcStamp(new Date());
   const events = (Array.isArray(plan) ? plan : [])
     .filter((item) => isCalendarItemVisible(item))
-    .map((item) => {
+    .flatMap((item) => {
       const rawDate = item.date || dateForWeekday(item.day);
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(rawDate))) return "";
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(rawDate))) return [];
       const description = [
         item.type,
         item.distance ? `${item.distance} km` : "",
@@ -96,7 +122,7 @@ export function buildCalendar(plan) {
         item.notes || "",
       ].filter(Boolean).join(" · ");
 
-      return [
+      const mainEvent = [
         "BEGIN:VEVENT",
         `UID:${escapeIcs(item.id || crypto.randomUUID())}@endurance-intelligence`,
         `DTSTAMP:${stamp}`,
@@ -107,6 +133,7 @@ export function buildCalendar(plan) {
         "TRANSP:TRANSPARENT",
         "END:VEVENT",
       ].join("\r\n");
+      return [mainEvent, ...raceProtocolCalendarEvents({ ...item, date: rawDate }, stamp)];
     })
     .filter(Boolean);
 

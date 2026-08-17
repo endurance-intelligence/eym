@@ -5,6 +5,7 @@ import {
   reviewGuidance,
   suggestRoadCyclingAlternative,
 } from "../src/services/plannerEngine.js";
+import { weeklyContextException } from "../src/services/plannerAvailability.js";
 
 test("planner respects a generic stored commitment without personal defaults", () => {
   const future = new Date();
@@ -466,6 +467,28 @@ test("planning note unavailability overrides an enabled Tuesday run day and doub
   assert.equal(result.planningConstraints.find((entry) => entry.date === "2026-08-18")?.status, "blocked");
 });
 
+test("structured weekly context constrains the planner without relying on free-text parsing", () => {
+  const result = generateWeekPlan(travelEventInput({
+    config: {
+      checkin: { energy: 8, fatigue: "none", illness: "healthy", pain: "none", painLevel: 0, notes: "" },
+      availabilityExceptions: [
+        weeklyContextException({ date: "2026-08-18", contextKey: "travel", restriction: "blocked" }),
+        weeklyContextException({ date: "2026-08-20", contextKey: "travel", restriction: "recovery", maxDurationMinutes: 20 }),
+      ],
+    },
+  }));
+  const tuesday = result.plan.filter((item) => item.date === "2026-08-18");
+  const thursday = result.plan.filter((item) => item.date === "2026-08-20");
+
+  assert.equal(tuesday.some((item) => Number(item.distance || 0) > 0), false);
+  assert.ok(tuesday.every((item) => item.type === "Ruhetag"));
+  assert.equal(thursday.some((item) => Number(item.distance || 0) > 0), false);
+  assert.ok(thursday.every((item) => Number(item.duration || 0) <= 20));
+  assert.equal(result.plan.find((item) => item.preRaceActivation)?.date, "2026-08-19");
+  assert.ok(result.planningConstraints.some((entry) => entry.date === "2026-08-20" && entry.recoveryOnly));
+  assert.deepEqual(result.planningConstraintViolations, []);
+});
+
 test("a maximum twenty minute travel constraint caps Thursday at recovery activation", () => {
   const result = generateWeekPlan(travelEventInput());
   const thursday = result.plan.filter((item) => item.date === "2026-08-20");
@@ -593,6 +616,42 @@ test("aggregate track pace is not mistaken for a performance pace when deriving 
   const stride = result.plan.find((item) => item.preRaceActivation)?.structuredWorkout?.steps?.find((step) => step.kind === "work");
 
   assert.equal(stride?.targetPace, "4:13");
+});
+
+test("race day protocol replaces a separate strength or mobility plan item on the race day", () => {
+  const result = generateWeekPlan(travelEventInput({
+    config: {
+      stabiCount: 1,
+      stabiDays: ["Freitag"],
+    },
+  }));
+  const friday = result.plan.filter((item) => item.date === "2026-08-21");
+
+  assert.ok(friday.some((item) => item.raceEvent));
+  assert.equal(friday.some((item) => /stabi|mobility|mobilität|aktivierung/i.test(`${item.type} ${item.title}`) && !item.raceEvent), false);
+});
+
+test("a recovery-only weekly context on race day keeps the fixed race but blocks extra training", () => {
+  const result = generateWeekPlan(travelEventInput({
+    config: {
+      checkin: { energy: 8, fatigue: "none", illness: "healthy", pain: "none", painLevel: 0, notes: "" },
+      availabilityExceptions: [
+        weeklyContextException({
+          date: "2026-08-21",
+          contextKey: "travel",
+          restriction: "recovery",
+          maxDurationMinutes: 20,
+        }),
+      ],
+      stabiCount: 1,
+      stabiDays: ["Freitag"],
+    },
+  }));
+  const friday = result.plan.filter((item) => item.date === "2026-08-21");
+
+  assert.equal(friday.filter((item) => item.raceEvent).length, 1);
+  assert.equal(friday.some((item) => !item.raceEvent && item.type !== "Ruhetag"), false);
+  assert.deepEqual(result.planningConstraintViolations, []);
 });
 
 test("C event preserves the Backyard mission and a conditional post-event aerobic block", () => {
