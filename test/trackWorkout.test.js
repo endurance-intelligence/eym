@@ -15,6 +15,7 @@ import {
   trackWorkoutSummary,
   trackWorkoutTemplateLabel,
   trackStepGarminCue,
+  TRACK_MAIN_CONTROL_MODES,
   updateTrackStepDraft,
   updateTrackWorkoutDraft,
   workoutFromTrackTemplate,
@@ -36,6 +37,7 @@ test("ORC Track receives a safe structured workout default", () => {
     ],
     warmupMode: "lap",
     cooldownMode: "lap",
+    mainControlMode: "automatic",
     planningStatus: "final",
   });
 });
@@ -50,7 +52,14 @@ test("track summary supports an ordered mixed block", () => {
       { kind: "recovery", unit: "distance", value: 400 },
     ],
   });
-  assert.equal(summary, "Warm-up bis LAP · 3 Durchgänge: 1200 m Belastung → 400 m Pause → 800 m Belastung → 400 m Pause · Cool-down bis LAP");
+  assert.equal(summary, "Warm-up bis LAP · 3 Durchgänge: 1200 m Belastung → 400 m Pause → 800 m Belastung → 400 m Pause · Hauptteil automatisch · Cool-down bis LAP");
+});
+
+test("track main control supports automatic and manual LAP modes without changing old workouts", () => {
+  assert.equal(normalizeTrackWorkout({}).mainControlMode, TRACK_MAIN_CONTROL_MODES.AUTOMATIC);
+  const lap = normalizeTrackWorkout({ mainControlMode: TRACK_MAIN_CONTROL_MODES.MANUAL_LAP });
+  assert.equal(lap.mainControlMode, TRACK_MAIN_CONTROL_MODES.MANUAL_LAP);
+  assert.match(trackWorkoutSummary(lap), /Bahn-LAP: Distanzschritte per LAP, Zeitabschnitte automatisch/);
 });
 
 test("saved track template names get a compact readable planner label", () => {
@@ -112,6 +121,7 @@ test("old v3.5.2 track settings migrate into the new step model", () => {
     ],
     warmupMode: "lap",
     cooldownMode: "lap",
+    mainControlMode: "automatic",
     planningStatus: "final",
   });
 });
@@ -223,6 +233,30 @@ test("Intervals description contains an ordered Garmin block and LAP-controlled 
   assert.equal(description.match(/press lap/gi)?.length, 2);
   assert.match(description, /intensity=warmup/);
   assert.match(description, /intensity=cooldown/);
+});
+
+test("manual track mode leaves distance steps open for LAP but keeps timed strides automatic", () => {
+  const description = intervalDescription({
+    type: "ORC Track",
+    title: "Bahntraining LAP",
+    structuredWorkout: normalizeTrackWorkout({
+      mainControlMode: TRACK_MAIN_CONTROL_MODES.MANUAL_LAP,
+      rounds: 2,
+      steps: [
+        { kind: "work", unit: "distance", value: 600, targetPace: "4:30", paceToleranceSeconds: 5 },
+        { kind: "recovery", unit: "distance", value: 200 },
+        { kind: "work", unit: "time", value: 20, targetPace: "3:57", paceToleranceSeconds: 18 },
+        { kind: "recovery", unit: "time", value: 80 },
+      ],
+    }),
+  });
+
+  assert.match(description, /600er @ 4:30\/km Press lap 162s 4:25-4:35\/km Pace intensity=interval/);
+  assert.match(description, /200er Trab Press lap 90s intensity=recovery/);
+  assert.match(description, /Belastung @ 3:57\/km 20s 3:39-4:15\/km Pace intensity=interval/);
+  assert.match(description, /Trabpause 80s intensity=recovery/);
+  assert.doesNotMatch(description, /600mtr/);
+  assert.doesNotMatch(description, /200mtr/);
 });
 
 test("generated interval and threshold edges stay free of pace targets", () => {

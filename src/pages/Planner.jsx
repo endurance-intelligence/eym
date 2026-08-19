@@ -72,6 +72,7 @@ import {
   normalizeTrackWorkoutTemplates,
   trackWorkoutDistance,
   trackWorkoutForEditing,
+  TRACK_MAIN_CONTROL_MODES,
   trackWorkoutSummary,
   trackStepGarminCue,
   trackWorkoutTemplateLabel,
@@ -857,6 +858,12 @@ export default function Planner() {
     : "";
   const publishedWeek = config.intervalSync?.[weekKey] || null;
   const planChangedAfterPublish = Boolean(publishedWeek && publishedWeek.fingerprint !== currentPlanFingerprint);
+  const garminChecksOpen = weekPlan.filter((item) => {
+    if (!isTrackWorkout(item) || isProvisionalTrackWorkout(item) || item.completed || item.missedReason) return false;
+    const fingerprint = workoutPublicationFingerprint(item);
+    return String(item.intervalsPublishedFingerprint || "") === fingerprint
+      && String(item.garminConfirmedFingerprint || "") !== fingerprint;
+  });
   const lastPlanChange = config.lastPlanChange || null;
   const lastPlanChangeForWeek = lastPlanChange?.weekStart === weekKey ? lastPlanChange : null;
   const lastPlanChangeUndoable = Boolean(lastPlanChangeForWeek && canUndoPlanChange(weekPlan, lastPlanChangeForWeek));
@@ -1802,7 +1809,7 @@ export default function Planner() {
           },
         },
       }));
-      setStatus(`${Number(result.uploaded || publishablePlan.length)} Einheiten an Intervals.icu gesendet · ${Number(result.guided || 0)} geführte Garmin-Workouts · ${Number(result.notes || 0)} Kalendereinträge.${provisionalTrackPlan.length ? ` ${provisionalTrackPlan.length} vorläufige Track-Einheit${provisionalTrackPlan.length === 1 ? "" : "en"} blieb${provisionalTrackPlan.length === 1 ? "" : "en"} nur im Wochenplan.` : ""}`);
+      setStatus(`${Number(result.uploaded || publishablePlan.length)} Einheiten von Intervals.icu übernommen · ${Number(result.guided || 0)} strukturierte Workouts. Wichtig: EI kann nicht prüfen, ob Garmin Connect sie schon auf die Uhr übertragen hat. Bitte Garmin synchronisieren und die wichtigen Workouts einmal auf der Uhr öffnen.${provisionalTrackPlan.length ? ` ${provisionalTrackPlan.length} vorläufige Track-Einheit${provisionalTrackPlan.length === 1 ? "" : "en"} blieb${provisionalTrackPlan.length === 1 ? "" : "en"} nur im Wochenplan.` : ""}`);
       setPublishConfirmOpen(false);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
@@ -1821,6 +1828,19 @@ export default function Planner() {
       return;
     }
     setPublishConfirmOpen(true);
+  }
+
+  function confirmTrackOnGarmin(item) {
+    const fingerprint = workoutPublicationFingerprint(item);
+    setState((current) => ({
+      ...current,
+      plan: current.plan.map((entry) => entry.id === item.id ? {
+        ...entry,
+        garminConfirmedAt: new Date().toISOString(),
+        garminConfirmedFingerprint: fingerprint,
+      } : entry),
+    }));
+    setStatus(`${item.title}: auf der Garmin-Uhr bestätigt.`);
   }
 
   function saveWorkout(event) {
@@ -2389,16 +2409,16 @@ export default function Planner() {
             ✦ {isPastWeek ? "Woche abgeschlossen" : weekPlan.length ? "Woche anpassen" : planningWeekLocked ? "Noch nicht planbar" : offsetWeeks === 1 ? "Nächste Woche planen" : "Woche planen"}
           </button>
           <button className={`planner-publish-button ${publishedWeek && !planChangedAfterPublish ? "intervals-published-button" : ""}`} onClick={requestPublish} disabled={publishBusy || !weekAccepted || (!publishedWeek && publishablePlan.length === 0)}>
-            {publishBusy ? "Senden …" : !weekAccepted && weekPlan.length ? "Plan erst annehmen" : publishedWeek ? (planChangedAfterPublish ? "Garmin aktualisieren" : "✓ Garmin") : "An Garmin senden"}
+            {publishBusy ? "Senden …" : !weekAccepted && weekPlan.length ? "Plan erst annehmen" : publishedWeek ? (planChangedAfterPublish ? "Für Garmin aktualisieren" : "✓ Intervals") : "Für Garmin senden"}
           </button>
           <details className="action-menu planner-action-menu">
             <summary aria-label="Weitere Aktionen" title="Weitere Aktionen">•••</summary>
             <div className="action-menu-panel">
               {calendarToken && <span className="action-menu-status">✓ Kalenderabo aktiv</span>}
-              {publishedWeek && <span className="action-menu-status">{planChangedAfterPublish ? "! Garmin-Stand veraltet" : `✓ ${publishedWeek.guided || 0} Workouts und ${publishedWeek.notes || 0} Termine gesendet`}</span>}
+              {publishedWeek && <span className="action-menu-status">{planChangedAfterPublish ? "! Intervals-Stand veraltet" : garminChecksOpen.length ? `! ${garminChecksOpen.length} Garmin-Check${garminChecksOpen.length === 1 ? "" : "s"} offen` : `✓ ${publishedWeek.guided || 0} Workouts in Intervals bestätigt`}</span>}
               <button type="button" onClick={(event) => { setPlanningInfoOpen(true); event.currentTarget.closest("details")?.removeAttribute("open"); }}>Wie plant dein Coach?</button>
               <button type="button" onClick={(event) => { downloadCalendar(weekPlan); event.currentTarget.closest("details")?.removeAttribute("open"); }} disabled={!weekPlan.length}>ICS-Datei laden</button>
-              <button type="button" onClick={(event) => { requestPublish(); event.currentTarget.closest("details")?.removeAttribute("open"); }} disabled={publishBusy || !weekAccepted || (!publishedWeek && publishablePlan.length === 0)}>{!weekAccepted && weekPlan.length ? "Plan zuerst annehmen" : publishedWeek ? "Garmin erneut senden" : "Plan an Garmin senden"}</button>
+              <button type="button" onClick={(event) => { requestPublish(); event.currentTarget.closest("details")?.removeAttribute("open"); }} disabled={publishBusy || !weekAccepted || (!publishedWeek && publishablePlan.length === 0)}>{!weekAccepted && weekPlan.length ? "Plan zuerst annehmen" : publishedWeek ? "Sync erneut anstoßen" : "Für Garmin veröffentlichen"}</button>
             </div>
           </details>
         </div>
@@ -2426,7 +2446,7 @@ export default function Planner() {
               <span>Planstatus</span>
               <strong>{weekAccepted ? "Plan angenommen" : weekApprovalState === WEEK_APPROVAL_STATES.CHANGED ? "Änderungen prüfen" : "Plan prüfen und annehmen"}</strong>
               <small>{weekAccepted
-                ? `Bestätigt am ${acceptedAtLabel} · bereit für Garmin.`
+                ? `Bestätigt am ${acceptedAtLabel} · bereit zur Veröffentlichung über Intervals.icu.`
                 : weekApprovalState === WEEK_APPROVAL_STATES.CHANGED
                   ? "Der bestätigte Plan wurde verändert."
                   : "Erst prüfen, dann freigeben."}</small>
@@ -2434,6 +2454,16 @@ export default function Planner() {
             <div className="planner-plan-approval-actions">
               {!weekAccepted && <button type="button" className="primary" onClick={acceptCurrentWeek}>{weekApprovalState === WEEK_APPROVAL_STATES.CHANGED ? "Erneut annehmen" : "Plan annehmen"}</button>}
               <button type="button" onClick={replanCurrentWeek}>Neu planen</button>
+            </div>
+          </section>
+        )}
+
+        {!isPastWeek && publishedWeek && !planChangedAfterPublish && garminChecksOpen.length > 0 && (
+          <section className="planner-inline-notice planner-garmin-preflight">
+            <div>
+              <span>Garmin-Check offen</span>
+              <strong>{garminChecksOpen.length} Track-Workout{garminChecksOpen.length === 1 ? "" : "s"} noch nicht auf der Uhr bestätigt</strong>
+              <small>Intervals.icu hat die Fassung erhalten. Synchronisiere Garmin Connect und öffne das Workout vor dem Training einmal auf der Uhr – so gibt es am Start keine Überraschung.</small>
             </div>
           </section>
         )}
@@ -2976,9 +3006,13 @@ export default function Planner() {
                             <strong>{trackSyncStatus.label}</strong>
                             <small>{trackSyncStatus.detail}</small>
                           </div>
-                          {trackSyncStatus.action === "edit" && <button type="button" onClick={() => openWorkoutEditor(item)}>Finalisieren</button>}
-                          {trackSyncStatus.action === "accept" && <button type="button" className="primary" onClick={acceptCurrentWeek}>{trackSyncStatus.actionLabel}</button>}
-                          {trackSyncStatus.action === "publish" && <button type="button" className="primary" onClick={requestPublish}>{trackSyncStatus.actionLabel}</button>}
+                          <div className="planner-track-sync-actions">
+                            {trackSyncStatus.action === "edit" && <button type="button" onClick={() => openWorkoutEditor(item)}>Finalisieren</button>}
+                            {trackSyncStatus.action === "accept" && <button type="button" className="primary" onClick={acceptCurrentWeek}>{trackSyncStatus.actionLabel}</button>}
+                            {trackSyncStatus.action === "publish" && <button type="button" className="primary" onClick={requestPublish}>{trackSyncStatus.actionLabel}</button>}
+                            {trackSyncStatus.action === "confirm-device" && <button type="button" className="primary" onClick={() => confirmTrackOnGarmin(item)}>{trackSyncStatus.actionLabel}</button>}
+                            {trackSyncStatus.secondaryAction === "publish" && <button type="button" onClick={requestPublish}>{trackSyncStatus.secondaryActionLabel}</button>}
+                          </div>
                         </div>
                       )}
                       {coachCandidate && !matched && !completed && !isCancelled && !isMissed && !coachCandidateDecision && (
@@ -3121,7 +3155,7 @@ export default function Planner() {
           <div className="modal planner-publish-modal">
             <button type="button" className="close" onClick={() => setPublishConfirmOpen(false)}>×</button>
             <p className="eyebrow">Woche bestätigen</p>
-            <h2>Plan an Intervals.icu senden?</h2>
+            <h2>Für Garmin über Intervals.icu veröffentlichen?</h2>
             <p><strong>{publishablePlan.length}</strong> zukünftige Einheit{publishablePlan.length === 1 ? "" : "en"} werden für {dayFormatter.format(weekStart)} bis {dayFormatter.format(weekEnd)} veröffentlicht.</p>
             {provisionalTrackPlan.length > 0 && <p className="planner-publish-draft-note"><strong>{provisionalTrackPlan.length} vorläufige Track-Einheit{provisionalTrackPlan.length === 1 ? "" : "en"}</strong> bleibt{provisionalTrackPlan.length === 1 ? "" : "en"} im Wochenplan und wird{provisionalTrackPlan.length === 1 ? "" : "werden"} nicht an Garmin gesendet. Eine früher gesendete Fassung wird beim Aktualisieren entfernt.</p>}
             <div className="planner-protection-list">
@@ -3133,7 +3167,7 @@ export default function Planner() {
               <span>✓ Entfernte Einheiten werden auch aus dieser Intervals-Woche entfernt</span>
               <span>✓ EYM bleibt die führende Fassung; direkte Änderungen in Intervals.icu können beim nächsten Update überschrieben werden</span>
             </div>
-            <p className="muted">In Intervals.icu muss unter Garmin „Upload planned workouts“ aktiviert sein.</p>
+            <p className="muted"><strong>Wichtig:</strong> EI kann die Übergabe an Intervals.icu bestätigen, aber nicht sehen, ob Garmin Connect das Workout bereits auf deine Uhr synchronisiert hat. Nach dem Senden Garmin synchronisieren und wichtige Workouts einmal auf der Uhr öffnen. In Intervals.icu muss „Upload planned workouts“ aktiviert sein.</p>
             <div className="modal-actions">
               <button type="button" onClick={() => setPublishConfirmOpen(false)}>Abbrechen</button>
               <button type="button" className="primary" disabled={publishBusy} onClick={publishWeek}>{publishBusy ? "Wird gesendet …" : "Bestätigen und senden"}</button>
@@ -3348,10 +3382,23 @@ export default function Planner() {
             )}
             {editingTrackWorkout && (
               <section className="planner-track-builder">
-                <div>
-                  <p className="eyebrow">Geführtes Garmin-Workout</p>
-                  <h3>Track-Abfolge festlegen</h3>
-                  <p>Warm-up und Cool-down bleiben offen. Auf Garmin wechselst du jeweils mit der LAP-Taste zum nächsten Abschnitt. Beide sowie alle Pausen bleiben ohne Pace-Ziel.</p>
+                <div className="planner-track-builder-head">
+                  <div>
+                    <p className="eyebrow">Track Workout</p>
+                    <h3>Abfolge festlegen</h3>
+                    <p>Warm-up und Cool-down bleiben offen. Für den Hauptteil entscheidest du, ob Garmin automatisch weiterschaltet oder du auf der Bahn selbst mit LAP steuerst.</p>
+                  </div>
+                  <span>{editingTrackWorkout.mainControlMode === TRACK_MAIN_CONTROL_MODES.MANUAL_LAP ? "LAP auf Bahn" : "Automatisch"}</span>
+                </div>
+                <div className="planner-track-control-mode" role="group" aria-label="Steuerung des Hauptteils">
+                  <button type="button" className={editingTrackWorkout.mainControlMode !== TRACK_MAIN_CONTROL_MODES.MANUAL_LAP ? "selected" : ""} onClick={() => updateTrackWorkout("mainControlMode", TRACK_MAIN_CONTROL_MODES.AUTOMATIC)}>
+                    <strong>Automatisch</strong>
+                    <small>Distanz oder Zeit beendet jeden Schritt selbst.</small>
+                  </button>
+                  <button type="button" className={editingTrackWorkout.mainControlMode === TRACK_MAIN_CONTROL_MODES.MANUAL_LAP ? "selected" : ""} onClick={() => updateTrackWorkout("mainControlMode", TRACK_MAIN_CONTROL_MODES.MANUAL_LAP)}>
+                    <strong>LAP auf Bahn</strong>
+                    <small>Distanzschritte enden erst mit LAP. Zeitintervalle wie 20-s-Strides laufen weiter automatisch.</small>
+                  </button>
                 </div>
                 <div className={`planner-track-planning-status ${editingTrackWorkout.planningStatus === "draft" ? "draft" : "final"}`}>
                   <div>
@@ -3365,11 +3412,12 @@ export default function Planner() {
                     <button type="button" className={editingTrackWorkout.planningStatus === "final" ? "selected" : ""} onClick={() => updateTrackWorkout("planningStatus", "final")}>Final freigeben</button>
                   </div>
                 </div>
-                <section className="planner-track-archive">
-                  <div className="planner-track-archive-heading">
-                    <div><p className="eyebrow">Vorlagenarchiv</p><h4>Bewährte Einheiten wiederverwenden</h4></div>
+                <details className="planner-track-archive planner-track-archive-details">
+                  <summary className="planner-track-archive-heading">
+                    <div><p className="eyebrow">Vorlagen</p><h4>Bewährte Einheit laden oder speichern</h4></div>
                     <span>{trackWorkoutTemplates.length} gespeichert</span>
-                  </div>
+                  </summary>
+                  <div className="planner-track-archive-body">
                   <div className="form-grid">
                     <label>Vorlage auswählen
                       <select value={editingTrackWorkout.templateId || ""} onChange={(event) => selectTrackTemplate(event.target.value)}>
@@ -3387,32 +3435,33 @@ export default function Planner() {
                       : <button type="button" onClick={() => saveTrackTemplate(true)} disabled={!editingTrackWorkout.templateName?.trim()}>Im Archiv speichern</button>}
                   </div>
                   <small>Auswählen kopiert die Vorlage in diesen Termin. Änderungen am Termin bleiben lokal, bis du ausdrücklich „Vorlage aktualisieren“ wählst.</small>
-                </section>
-                <div className="planner-track-lap-flow" aria-label="LAP-gesteuerter Ablauf">
-                  <span><b>1 · Warm-up</b><small>locker laufen · dann LAP drücken</small></span>
+                  </div>
+                </details>
+                <div className="planner-track-lap-flow" aria-label="Workout-Ablauf">
+                  <span><b>Warm-up</b><small>bis LAP</small></span>
                   <strong>→</strong>
-                  <span><b>2 · Hauptteil</b><small>Schritte laufen automatisch ab</small></span>
+                  <span><b>{editingTrackWorkout.rounds}× Hauptteil</b><small>{editingTrackWorkout.mainControlMode === TRACK_MAIN_CONTROL_MODES.MANUAL_LAP ? "Distanz per LAP · Zeit automatisch" : "automatisch"}</small></span>
                   <strong>→</strong>
-                  <span><b>3 · Cool-down</b><small>offen · zum Beenden LAP drücken</small></span>
+                  <span><b>Cool-down</b><small>bis LAP</small></span>
                 </div>
-                <div className="form-grid planner-track-settings">
-                  <label>Art<select value={editingTrackWorkout.kind} onChange={(event) => updateTrackWorkout("kind", event.target.value)}><option value="intervals">Intervalle</option><option value="sprints">Sprints</option></select></label>
-                  <label>Durchgänge<input type="number" min="1" max="30" value={editingTrackWorkout.rounds} onChange={(event) => updateTrackWorkout("rounds", event.target.value)} onBlur={commitTrackRounds} /><small>Ein Durchgang enthält die komplette Reihenfolge unten.</small></label>
+                <div className="planner-track-settings planner-track-compact-settings">
+                  <label><span>Art</span><select value={editingTrackWorkout.kind} onChange={(event) => updateTrackWorkout("kind", event.target.value)}><option value="intervals">Intervalle</option><option value="sprints">Sprints / Strides</option></select></label>
+                  <label><span>Durchgänge</span><input type="number" min="1" max="30" value={editingTrackWorkout.rounds} onChange={(event) => updateTrackWorkout("rounds", event.target.value)} onBlur={commitTrackRounds} /></label>
                 </div>
                 <div className="planner-track-sequence">
                   <div className="planner-track-sequence-heading">
-                    <div><strong>Schritte je Durchgang</strong><small>Die Reihenfolge wird genauso an Garmin übergeben. Zwei Belastungsblöcke dürfen direkt aufeinanderfolgen; „510“ wird automatisch zu „5:10“.</small></div>
+                    <div><strong>Schritte je Durchgang</strong><small>{editingTrackWorkout.mainControlMode === TRACK_MAIN_CONTROL_MODES.MANUAL_LAP ? "Auf der Bahn zeigen die Hinweise Distanz und Zielpace; du drückst am echten Runden-/Abschnittsende LAP." : "Garmin beendet die Schritte automatisch nach Distanz oder Zeit."} „510“ wird automatisch zu „5:10“.</small></div>
                     <span>{editingTrackWorkout.steps.length}/16</span>
                   </div>
                   {editingTrackWorkout.steps.map((step, index) => (
                     <article className={step.kind} key={`${index}-${step.kind}`}>
                       <b>{index + 1}</b>
-                      <label>Abschnitt<select value={step.kind} onChange={(event) => updateTrackStep(index, "kind", event.target.value)}><option value="work">Belastung</option><option value="recovery">Pause</option></select></label>
-                      <label>Einheit<select value={step.unit} onChange={(event) => updateTrackStep(index, "unit", event.target.value)}><option value="distance">Meter</option><option value="time">Sekunden</option></select></label>
-                      <label>Wert<input type="number" min={step.unit === "distance" ? "20" : "5"} max={step.unit === "distance" ? "5000" : "3600"} value={step.value} onChange={(event) => updateTrackStep(index, "value", event.target.value)} onBlur={() => commitTrackStep(index)} /></label>
-                      <label>Ziel-Pace /km<input type="text" inputMode="numeric" pattern="[0-9]{1,2}[:.,][0-5][0-9]" placeholder="z. B. 4:40 oder 440" title="Pace als 4:40 oder 440 eingeben" value={step.targetPace || ""} onChange={(event) => updateTrackStep(index, "targetPace", formatTrackPaceInput(event.target.value))} onBlur={() => commitTrackStep(index)} /></label>
-                      <label>Toleranz<select value={step.paceToleranceSeconds ?? 5} disabled={!step.targetPace} onChange={(event) => updateTrackStep(index, "paceToleranceSeconds", Number(event.target.value))}><option value="5">± 5 Sek.</option><option value="10">± 10 Sek.</option><option value="15">± 15 Sek.</option><option value="20">± 20 Sek.</option><option value="30">± 30 Sek.</option></select></label>
-                      <div className="planner-track-garmin-cue"><small>Auf Garmin</small><strong>{trackStepGarminCue(step)}</strong></div>
+                      <label><span>Abschnitt</span><select value={step.kind} onChange={(event) => updateTrackStep(index, "kind", event.target.value)}><option value="work">Belastung</option><option value="recovery">Pause</option></select></label>
+                      <label><span>Einheit</span><select value={step.unit} onChange={(event) => updateTrackStep(index, "unit", event.target.value)}><option value="distance">Meter</option><option value="time">Sekunden</option></select></label>
+                      <label><span>Wert</span><input type="number" min={step.unit === "distance" ? "20" : "5"} max={step.unit === "distance" ? "5000" : "3600"} value={step.value} onChange={(event) => updateTrackStep(index, "value", event.target.value)} onBlur={() => commitTrackStep(index)} /></label>
+                      <label><span>Ziel-Pace /km</span><input type="text" inputMode="numeric" pattern="[0-9]{1,2}[:.,][0-5][0-9]" placeholder="z. B. 4:40 oder 440" title="Pace als 4:40 oder 440 eingeben" value={step.targetPace || ""} onChange={(event) => updateTrackStep(index, "targetPace", formatTrackPaceInput(event.target.value))} onBlur={() => commitTrackStep(index)} /></label>
+                      <label><span>Toleranz</span><select value={step.paceToleranceSeconds ?? 5} disabled={!step.targetPace} onChange={(event) => updateTrackStep(index, "paceToleranceSeconds", Number(event.target.value))}><option value="5">± 5 Sek.</option><option value="10">± 10 Sek.</option><option value="15">± 15 Sek.</option><option value="20">± 20 Sek.</option><option value="30">± 30 Sek.</option></select></label>
+                      <div className="planner-track-garmin-cue"><small>Auf Garmin</small><strong>{editingTrackWorkout.mainControlMode === TRACK_MAIN_CONTROL_MODES.MANUAL_LAP && step.unit === "distance" ? "LAP · " : ""}{trackStepGarminCue(step)}</strong></div>
                       <div className="planner-track-step-actions">
                         <button type="button" onClick={() => moveTrackStep(index, -1)} disabled={index === 0} aria-label={`Schritt ${index + 1} nach oben`}>↑</button>
                         <button type="button" onClick={() => moveTrackStep(index, 1)} disabled={index === editingTrackWorkout.steps.length - 1} aria-label={`Schritt ${index + 1} nach unten`}>↓</button>
@@ -3443,7 +3492,7 @@ export default function Planner() {
                     <span>{editingTrackDistance.hasTimedSteps ? `plus ${trackDurationLabel(editingTrackDistance.timedSeconds)} zeitgesteuerte Abschnitte` : "inklusive Ein- und Auslaufen"}</span>
                   </div>
                 </div>
-                <small>Nur Belastungen erhalten ein Pace-Ziel: 4:40 mit ±5 Sekunden wird auf Garmin als Bereich 4:35–4:45 min/km geführt. Zusätzlich bekommt jeder Hauptteil-Schritt einen kurzen Garmin-Hinweis wie „600er @ 4:30/km“ oder „200er Trab“. Warm-up, Pausen und Cool-down bleiben ohne Pace-Ziel. Intervals.icu benötigt zusätzlich unter Running eine gesetzte Threshold Pace und bei der Garmin-Verbindung „Upload planned workouts“.</small>
+                <small>{editingTrackWorkout.mainControlMode === TRACK_MAIN_CONTROL_MODES.MANUAL_LAP ? "LAP auf Bahn: Distanzschritte bleiben auf Garmin offen, bis du LAP drückst. Die angegebene Distanz steht im Hinweis; dadurch beendet GPS den Abschnitt nicht vor deiner echten Bahnmarkierung. Zeitbasierte Schritte bleiben automatisch." : "Automatisch: Distanz- und Zeitvorgaben schalten Garmin selbstständig zum nächsten Schritt."} Belastungen können zusätzlich einen Pace-Korridor und einen Hinweis wie „600er @ 4:30/km“ erhalten. Intervals.icu benötigt bei der Garmin-Verbindung „Upload planned workouts“.</small>
               </section>
             )}
             <label>Notiz<textarea value={editing.notes} onChange={(event) => setEditing({ ...editing, notes: event.target.value })} /></label>

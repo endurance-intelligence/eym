@@ -64,7 +64,7 @@ test("final track workout requires plan approval before publication", () => {
 test("accepted final workout is marked not published until first sync", () => {
   const status = trackPublicationStatus({ item: trackItem(), approvalState: "accepted" });
   assert.equal(status.state, TRACK_PUBLICATION_STATES.NOT_PUBLISHED);
-  assert.equal(status.actionLabel, "An Garmin senden");
+  assert.equal(status.actionLabel, "Für Garmin senden");
 });
 
 
@@ -75,7 +75,7 @@ test("new final track in an already published week requests a Garmin update", ()
     weekWasPublished: true,
   });
   assert.equal(status.state, TRACK_PUBLICATION_STATES.NOT_PUBLISHED);
-  assert.equal(status.actionLabel, "Garmin aktualisieren");
+  assert.equal(status.actionLabel, "Für Garmin aktualisieren");
 });
 
 test("changed published workout shows update open", () => {
@@ -87,14 +87,31 @@ test("changed published workout shows update open", () => {
   });
   const status = trackPublicationStatus({ item: changed, approvalState: "accepted" });
   assert.equal(status.state, TRACK_PUBLICATION_STATES.UPDATE_OPEN);
-  assert.equal(status.actionLabel, "Garmin aktualisieren");
+  assert.equal(status.actionLabel, "Für Garmin aktualisieren");
 });
 
-test("matching published fingerprint is current", () => {
+test("matching Intervals fingerprint still requires an explicit watch check", () => {
   const item = trackItem();
   item.intervalsPublishedAt = "2026-08-05T08:00:00.000Z";
   item.intervalsPublishedFingerprint = workoutPublicationFingerprint(item);
   const status = trackPublicationStatus({ item, approvalState: "accepted" });
-  assert.equal(status.state, TRACK_PUBLICATION_STATES.CURRENT);
-  assert.equal(status.action, null);
+  assert.equal(status.state, TRACK_PUBLICATION_STATES.INTERVALS_CONFIRMED);
+  assert.equal(status.action, "confirm-device");
+  assert.equal(status.secondaryAction, "publish");
+});
+
+test("watch confirmation is tied to the exact workout fingerprint", () => {
+  const item = trackItem();
+  const fingerprint = workoutPublicationFingerprint(item);
+  item.intervalsPublishedAt = "2026-08-05T08:00:00.000Z";
+  item.intervalsPublishedFingerprint = fingerprint;
+  item.garminConfirmedAt = "2026-08-05T08:05:00.000Z";
+  item.garminConfirmedFingerprint = fingerprint;
+  const current = trackPublicationStatus({ item, approvalState: "accepted" });
+  assert.equal(current.state, TRACK_PUBLICATION_STATES.CURRENT);
+  assert.equal(current.action, null);
+
+  const changed = { ...item, structuredWorkout: { ...item.structuredWorkout, rounds: 4 } };
+  const changedStatus = trackPublicationStatus({ item: changed, approvalState: "accepted" });
+  assert.equal(changedStatus.state, TRACK_PUBLICATION_STATES.UPDATE_OPEN);
 });

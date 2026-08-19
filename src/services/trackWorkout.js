@@ -1,3 +1,8 @@
+export const TRACK_MAIN_CONTROL_MODES = Object.freeze({
+  AUTOMATIC: "automatic",
+  MANUAL_LAP: "manual_lap",
+});
+
 export const DEFAULT_TRACK_WORKOUT = Object.freeze({
   kind: "intervals",
   rounds: 8,
@@ -7,6 +12,7 @@ export const DEFAULT_TRACK_WORKOUT = Object.freeze({
   ]),
   warmupMode: "lap",
   cooldownMode: "lap",
+  mainControlMode: TRACK_MAIN_CONTROL_MODES.AUTOMATIC,
   planningStatus: "final",
 });
 
@@ -148,6 +154,9 @@ export function normalizeTrackWorkout(input = {}) {
     steps,
     warmupMode: input.warmupMode === "time" ? "time" : "lap",
     cooldownMode: input.cooldownMode === "time" ? "time" : "lap",
+    mainControlMode: input.mainControlMode === TRACK_MAIN_CONTROL_MODES.MANUAL_LAP
+      ? TRACK_MAIN_CONTROL_MODES.MANUAL_LAP
+      : TRACK_MAIN_CONTROL_MODES.AUTOMATIC,
     ...(input.warmupMinutes ? { warmupMinutes: clamp(input.warmupMinutes, 1, 90, 15) } : {}),
     ...(input.cooldownMinutes ? { cooldownMinutes: clamp(input.cooldownMinutes, 1, 60, 10) } : {}),
     planningStatus: input.planningStatus === "draft" ? "draft" : "final",
@@ -194,6 +203,7 @@ export function buildTrackWorkoutTemplate({ id, name, workout, createdAt, update
     steps: normalized.steps,
     warmupMode: "lap",
     cooldownMode: "lap",
+    mainControlMode: normalized.mainControlMode,
     createdAt: String(createdAt || updatedAt || ""),
     updatedAt: String(updatedAt || createdAt || ""),
   };
@@ -237,6 +247,7 @@ function unitLabel(unit, value) {
 
 export function trackWorkoutSummary(input = {}) {
   const workout = normalizeTrackWorkout(input);
+  const lapControlled = workout.mainControlMode === TRACK_MAIN_CONTROL_MODES.MANUAL_LAP;
   const sequence = workout.steps
     .map((step) => {
       const paceRange = trackPaceRange(step);
@@ -244,7 +255,10 @@ export function trackWorkoutSummary(input = {}) {
       return `${unitLabel(step.unit, step.value)} ${step.kind === "recovery" ? "Pause" : "Belastung"}${pace}`;
     })
     .join(" → ");
-  return `Warm-up bis LAP · ${workout.rounds} ${workout.rounds === 1 ? "Durchgang" : "Durchgänge"}: ${sequence} · Cool-down bis LAP`;
+  const mainControl = lapControlled
+    ? "Bahn-LAP: Distanzschritte per LAP, Zeitabschnitte automatisch"
+    : "Hauptteil automatisch";
+  return `Warm-up bis LAP · ${workout.rounds} ${workout.rounds === 1 ? "Durchgang" : "Durchgänge"}: ${sequence} · ${mainControl} · Cool-down bis LAP`;
 }
 
 function roundedKm(meters) {

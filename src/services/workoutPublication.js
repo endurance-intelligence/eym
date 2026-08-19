@@ -5,6 +5,7 @@ export const TRACK_PUBLICATION_STATES = Object.freeze({
   NEEDS_APPROVAL: "needs-approval",
   NOT_PUBLISHED: "not-published",
   UPDATE_OPEN: "update-open",
+  INTERVALS_CONFIRMED: "intervals-confirmed",
   CURRENT: "current",
 });
 
@@ -61,11 +62,23 @@ export function trackPublicationStatus({
   const isCurrent = legacyCurrent || storedFingerprint === currentFingerprint;
 
   if (isCurrent) {
+    const deviceConfirmed = String(item?.garminConfirmedFingerprint || "") === currentFingerprint;
+    if (deviceConfirmed) {
+      return {
+        state: TRACK_PUBLICATION_STATES.CURRENT,
+        label: "✓ AUF UHR BESTÄTIGT",
+        detail: "Diese Fassung wurde über Intervals.icu veröffentlicht und von dir auf der Garmin-Uhr geprüft.",
+        action: null,
+      };
+    }
     return {
-      state: TRACK_PUBLICATION_STATES.CURRENT,
-      label: "✓ INTERVALS AKTUELL",
-      detail: "Diese Fassung wurde an Intervals.icu übertragen. Danach Garmin Connect bzw. die Uhr synchronisieren.",
-      action: null,
+      state: TRACK_PUBLICATION_STATES.INTERVALS_CONFIRMED,
+      label: "INTERVALS ✓ · GARMIN PRÜFEN",
+      detail: "Intervals.icu hat diese Fassung erhalten. EI kann technisch nicht sehen, ob Garmin Connect sie schon auf die Uhr übertragen hat. Bitte synchronisieren und das Workout einmal auf der Uhr öffnen.",
+      action: "confirm-device",
+      actionLabel: "Auf Uhr bestätigt",
+      secondaryAction: "publish",
+      secondaryActionLabel: "Sync erneut anstoßen",
     };
   }
 
@@ -86,17 +99,17 @@ export function trackPublicationStatus({
     return {
       state: TRACK_PUBLICATION_STATES.UPDATE_OPEN,
       label: "FINAL · UPDATE OFFEN",
-      detail: "Intervals.icu enthält noch die ältere Fassung. Jetzt Garmin aktualisieren.",
+      detail: "Intervals.icu enthält noch die ältere Fassung. Jetzt erneut für Garmin veröffentlichen.",
       action: "publish",
-      actionLabel: "Garmin aktualisieren",
+      actionLabel: "Für Garmin aktualisieren",
     };
   }
 
   return {
     state: TRACK_PUBLICATION_STATES.NOT_PUBLISHED,
     label: "FINAL · NICHT ÜBERTRAGEN",
-    detail: "Die Einheit ist freigegeben, wurde aber noch nicht an Intervals.icu gesendet.",
+    detail: "Die Einheit ist freigegeben, wurde aber noch nicht an Intervals.icu veröffentlicht.",
     action: "publish",
-    actionLabel: weekWasPublished ? "Garmin aktualisieren" : "An Garmin senden",
+    actionLabel: weekWasPublished ? "Für Garmin aktualisieren" : "Für Garmin senden",
   };
 }

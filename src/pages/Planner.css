@@ -2437,3 +2437,114 @@
   .planner-missed-session-inline>summary span{grid-column:1/-1}
   .planner-race-protocol-head{align-items:flex-start}
 }
+
+/* v3.9.96 – calmer Track builder + honest Garmin delivery state */
+.planner-track-builder{
+  gap:12px;
+  padding:16px;
+  border-color:var(--border);
+  background:color-mix(in srgb,var(--bg-sidebar) 82%,transparent);
+  box-shadow:none;
+}
+.planner-track-builder-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}
+.planner-track-builder-head>div{display:grid;gap:3px;min-width:0}
+.planner-track-builder-head h3{margin:0;font-size:20px}
+.planner-track-builder-head p{max-width:760px;font-size:11px;line-height:1.5}
+.planner-track-builder-head>span{flex:none;padding:6px 9px;border:1px solid var(--border);border-radius:999px;color:var(--muted-bright);font-size:9px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;background:var(--bg-input)}
+
+.planner-track-control-mode{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.planner-track-control-mode button{display:grid;gap:3px;text-align:left;padding:11px 12px;border:1px solid var(--border);border-radius:11px;background:transparent;color:inherit;min-height:0}
+.planner-track-control-mode button strong{font-size:12px}
+.planner-track-control-mode button small{font-size:9px;line-height:1.4;color:var(--muted)}
+.planner-track-control-mode button.selected{border-color:var(--accent-border-strong);background:var(--accent-surface)}
+.planner-track-control-mode button.selected strong{color:var(--accent-bright)}
+
+.planner-track-planning-status{padding:10px 11px;border-radius:10px;background:transparent!important;gap:12px}
+.planner-track-planning-status>div:first-child{gap:2px}
+.planner-track-planning-status>div:first-child strong{font-size:11px}
+.planner-track-planning-status small{font-size:9px;line-height:1.4}
+.planner-track-planning-status button{min-width:88px;min-height:32px;padding:6px 10px;font-size:9px}
+
+.planner-track-archive-details{padding:0;background:transparent}
+.planner-track-archive-details>summary{cursor:pointer;padding:10px 11px;list-style:none;align-items:center}
+.planner-track-archive-details>summary::-webkit-details-marker{display:none}
+.planner-track-archive-details>summary:after{content:"⌄";color:var(--muted);font-size:14px;margin-left:4px}
+.planner-track-archive-details[open]>summary:after{transform:rotate(180deg)}
+.planner-track-archive-details .planner-track-archive-heading h4{font-size:12px}
+.planner-track-archive-details .planner-track-archive-heading .eyebrow{font-size:8px}
+.planner-track-archive-details .planner-track-archive-heading>span{padding:4px 7px;font-size:8px}
+.planner-track-archive-body{display:grid;gap:10px;padding:0 11px 11px;border-top:1px solid var(--border)}
+.planner-track-archive-body>.form-grid{margin-top:10px}
+.planner-track-archive-body>small{font-size:9px;color:var(--muted)}
+
+.planner-track-lap-flow{display:flex;align-items:center;gap:7px;padding:8px 10px;border:1px solid var(--border);border-radius:10px;background:transparent;overflow:auto}
+.planner-track-lap-flow span{display:flex;align-items:baseline;gap:6px;padding:0;border:0;background:transparent;white-space:nowrap}
+.planner-track-lap-flow span b{font-size:10px}
+.planner-track-lap-flow span small{font-size:8px}
+.planner-track-lap-flow>strong{font-size:9px;color:var(--muted)}
+
+.planner-track-compact-settings{display:grid;grid-template-columns:minmax(160px,1fr) 120px;gap:8px;margin:0}
+.planner-track-compact-settings label{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:10px;background:var(--bg-input)}
+.planner-track-compact-settings label>span{font-size:9px;color:var(--muted);font-weight:800;text-transform:uppercase;letter-spacing:.05em}
+.planner-track-compact-settings select,.planner-track-compact-settings input{min-height:30px;padding:4px 7px;border:0;background:transparent}
+
+.planner-track-sequence{gap:7px}
+.planner-track-sequence-heading{align-items:center;padding:0 2px}
+.planner-track-sequence-heading>div{gap:2px}
+.planner-track-sequence-heading>div>strong{font-size:11px}
+.planner-track-sequence-heading small{font-size:8.5px;line-height:1.45}
+.planner-track-sequence-heading>span{font-size:9px}
+.planner-track-sequence article{
+  grid-template-columns:26px minmax(92px,.8fr) minmax(80px,.6fr) minmax(70px,.5fr) minmax(100px,.8fr) minmax(80px,.6fr) minmax(128px,.9fr) auto;
+  gap:7px;
+  padding:9px;
+  border-radius:10px;
+  background:color-mix(in srgb,var(--bg-input) 72%,transparent);
+}
+.planner-track-sequence article.recovery{background:color-mix(in srgb,var(--bg-input) 86%,transparent);border-color:var(--border)}
+.planner-track-sequence article>b{width:24px;height:24px;font-size:9px;background:var(--accent-surface);color:var(--accent-bright)}
+.planner-track-sequence article label{display:grid;gap:3px;font-size:inherit}
+.planner-track-sequence article label>span{font-size:7px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;font-weight:800}
+.planner-track-sequence article select,.planner-track-sequence article input{min-height:31px;padding:5px 7px;font-size:10px}
+.planner-track-garmin-cue{padding:6px 8px;border-left:2px solid var(--accent-border-strong);background:transparent;border-radius:0}
+.planner-track-garmin-cue small{font-size:7px}
+.planner-track-garmin-cue strong{font-size:9px;line-height:1.35}
+.planner-track-step-actions{gap:4px}
+.planner-track-step-actions button{width:28px;height:31px;padding:0;font-size:10px}
+.planner-track-add-actions{gap:7px}
+.planner-track-add-actions button{min-height:34px;padding:7px 10px;font-size:9px}
+.planner-track-summary{padding:9px 10px;border-radius:9px;font-size:9px;line-height:1.45;background:var(--bg-input);font-weight:700}
+.planner-track-distance{gap:7px}
+.planner-track-distance>div{padding:9px 10px;border-radius:9px;background:transparent}
+.planner-track-distance small{font-size:7px}
+.planner-track-distance strong{font-size:11px}
+.planner-track-distance span{font-size:8px}
+.planner-track-builder>small{font-size:8.5px}
+
+.planner-garmin-preflight{border-color:color-mix(in srgb,var(--warning,#facc15) 45%,var(--border));background:color-mix(in srgb,var(--warning,#facc15) 5%,transparent)}
+.planner-garmin-preflight span{color:var(--warning,#facc15)}
+.planner-track-sync-status.intervals-confirmed{border-color:color-mix(in srgb,var(--warning,#facc15) 40%,var(--border));background:color-mix(in srgb,var(--warning,#facc15) 5%,transparent)}
+.planner-track-sync-status.intervals-confirmed span,.planner-track-sync-status.intervals-confirmed strong{color:var(--warning,#facc15)}
+.planner-track-sync-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.planner-track-sync-actions button{flex:none!important;width:auto!important}
+
+@media(max-width:900px){
+  .planner-track-control-mode{grid-template-columns:1fr}
+  .planner-track-compact-settings{grid-template-columns:1fr}
+  .planner-track-sequence article{grid-template-columns:26px repeat(2,minmax(0,1fr))}
+  .planner-track-sequence article>b{grid-row:1/4}
+  .planner-track-garmin-cue{grid-column:2/4}
+  .planner-track-step-actions{grid-column:2/4;justify-content:flex-end}
+}
+@media(max-width:620px){
+  .planner-track-builder{padding:12px}
+  .planner-track-builder-head{display:grid}
+  .planner-track-builder-head>span{justify-self:start}
+  .planner-track-lap-flow{flex-wrap:wrap;overflow:visible}
+  .planner-track-sequence article{grid-template-columns:24px minmax(0,1fr)}
+  .planner-track-sequence article>b{grid-row:1/8}
+  .planner-track-garmin-cue,.planner-track-step-actions{grid-column:2}
+  .planner-track-sync-actions{display:grid;grid-template-columns:1fr;width:100%}
+  .planner-track-sync-actions button{width:100%!important}
+}
+@media(max-width:900px){.planner-track-lap-flow>strong{transform:none}}

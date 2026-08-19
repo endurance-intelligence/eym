@@ -33,3 +33,14 @@ test("weekly view keeps the default scan calm and moves verbose detail behind di
   assert.match(plannerSource, /<details className="planner-workout-notes"/);
   assert.match(plannerSource, /planner-availability-note-details/);
 });
+
+test("track builder offers automatic and LAP-on-track control with an explicit Garmin preflight", () => {
+  assert.match(plannerSource, /Steuerung des Hauptteils/);
+  assert.match(plannerSource, />Automatisch</);
+  assert.match(plannerSource, />LAP auf Bahn</);
+  assert.match(plannerSource, /Distanzschritte enden erst mit LAP/);
+  assert.match(plannerSource, /Garmin-Check offen/);
+  assert.match(plannerSource, /confirmTrackOnGarmin/);
+  assert.match(plannerSource, /Sync erneut anstoßen/);
+  assert.match(plannerSource, /EI kann die Übergabe an Intervals\.icu bestätigen, aber nicht sehen, ob Garmin Connect/);
+});

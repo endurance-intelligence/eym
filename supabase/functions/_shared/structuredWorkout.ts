@@ -35,6 +35,15 @@ function formatPace(value: number) {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
+
+function lapPlaceholderToken(step: Record<string, unknown>) {
+  const meters = safeInteger(step.value, 20, 5000, step.kind === "recovery" ? 200 : 400);
+  const target = paceSeconds(step.targetPace);
+  const pacePerKm = target ?? (step.kind === "recovery" ? 450 : 330);
+  const seconds = Math.max(10, Math.min(3600, Math.round((meters / 1000) * pacePerKm)));
+  return `${seconds}s`;
+}
+
 function paceTarget(step: Record<string, unknown>) {
   const targetSeconds = paceSeconds(step.targetPace);
   if (targetSeconds == null) return "Z5 Pace";
@@ -60,6 +69,10 @@ function structuredSteps(input: Record<string, unknown>) {
           : targetPace == null ? "Belastung" : `Belastung @ ${formatPace(targetPace)}/km`;
       return {
         kind: recovery ? "recovery" : "work",
+        unit,
+        value,
+        targetPace: step.targetPace,
+        paceToleranceSeconds: step.paceToleranceSeconds ?? step.toleranceSeconds,
         token: stepToken(unit, value, recovery ? 200 : 400),
         target: recovery ? "" : paceTarget(step),
         cue,
@@ -71,8 +84,8 @@ function structuredSteps(input: Record<string, unknown>) {
   const workValue = safeInteger(input.workValue, workUnit === "time" ? 5 : 20, workUnit === "time" ? 3600 : 5000, 400);
   const recoveryValue = safeInteger(input.recoveryValue, recoveryUnit === "time" ? 5 : 20, recoveryUnit === "time" ? 3600 : 5000, 200);
   return [
-    { kind: "work", token: stepToken(workUnit, workValue, 400), target: "Z5 Pace", cue: workUnit === "distance" ? `${workValue}er Belastung` : "Belastung" },
-    { kind: "recovery", token: stepToken(recoveryUnit, recoveryValue, 200), target: "", cue: recoveryUnit === "distance" ? `${recoveryValue}er Trab` : "Trabpause" },
+    { kind: "work", unit: workUnit, value: workValue, token: stepToken(workUnit, workValue, 400), target: "Z5 Pace", cue: workUnit === "distance" ? `${workValue}er Belastung` : "Belastung" },
+    { kind: "recovery", unit: recoveryUnit, value: recoveryValue, token: stepToken(recoveryUnit, recoveryValue, 200), target: "", cue: recoveryUnit === "distance" ? `${recoveryValue}er Trab` : "Trabpause" },
   ];
 }
 
@@ -92,9 +105,15 @@ function structuredTrackDescription(input: Record<string, unknown>) {
     warmupStep,
     "",
     `${input.kind === "sprints" ? "Sprints" : "Hauptteil"} ${rounds}x`,
-    ...steps.map((step) => step.kind === "recovery"
-      ? `- ${step.cue} ${step.token} intensity=recovery`
-      : `- ${step.cue} ${step.token} ${step.target} intensity=interval`),
+    ...steps.map((step) => {
+      const manualDistance = input.mainControlMode === "manual_lap" && step.unit === "distance";
+      const token = manualDistance
+        ? `Press lap ${lapPlaceholderToken(step as Record<string, unknown>)}`
+        : step.token;
+      return step.kind === "recovery"
+        ? `- ${step.cue} ${token} intensity=recovery`
+        : `- ${step.cue} ${token} ${step.target} intensity=interval`;
+    }),
     "",
     "Cool-down",
     cooldownStep,
