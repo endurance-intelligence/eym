@@ -1,0 +1,32 @@
+Endurance Intelligence v3.9.97 – Modern Visual Foundation
+Base: v3.9.96 (685ee16)
+
+Scope
+- Presentation only. No planner, coach, race, fuel, Garmin, calendar, storage, API or data-model logic changed.
+- Adds one dedicated visual layer: src/styles/visualRefresh.css.
+- Imports that layer after the existing main stylesheet so the current feature CSS remains intact and the refresh is easy to iterate or roll back.
+
+Visual changes
+- Calmer app shell and sidebar/navigation.
+- More consistent typography and larger readable meta/body sizes.
+- Unified spacing, radii, panel surfaces and shadows.
+- Flatter, quieter cards; gradients/glow reserved for hero/active states.
+- Clear Primary / Secondary / Ghost-like button hierarchy.
+- Lighter tab navigation and more modern form controls/modals.
+- Briefing/Hub gets calmer panels and stronger Today/Next hierarchy.
+- Planner gets larger readable day/workout typography, quieter status blocks and clearer week hierarchy.
+- Training history gets cleaner rows/metrics and less card-in-card weight.
+- Analytics is styled more like a performance report and less like a dense mini-dashboard.
+- Coach/Mission, Fuel/Race Strategy and Settings inherit the same surface, spacing and typography system.
+- Tablet/mobile navigation and spacing are tightened without changing routes or actions.
+
+Checks in this environment
+- git diff --check: PASS
+- CSS brace balance: PASS (211/211)
+- node --experimental-strip-types --test: PASS (421/421)
+- eslint via node node_modules/eslint/bin/eslint.js .: PASS
+- npm test: 382/388 because this Linux runtime cannot directly load the six existing Supabase .ts imports without type stripping.
+- npm run lint / npm run build scripts cannot execute the Windows-installed node_modules binaries here (permission/native-binding mismatch).
+- direct Vite build reaches the known missing @rolldown/binding-linux-x64-gnu binding from the uploaded Windows node_modules.
+
+No Supabase deploy required.

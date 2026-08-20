@@ -1,0 +1,594 @@
+/* v3.9.97 – visual foundation refresh
+   Pure presentation layer: no planner, coach, fuel, race or Garmin behaviour changes. */
+
+:root{
+  --ui-space-1:4px;
+  --ui-space-2:8px;
+  --ui-space-3:12px;
+  --ui-space-4:16px;
+  --ui-space-5:24px;
+  --ui-space-6:32px;
+  --ui-space-7:48px;
+  --ui-radius-sm:10px;
+  --ui-radius-md:14px;
+  --ui-radius-lg:18px;
+  --ui-radius-xl:24px;
+  --ui-shadow-card:0 12px 34px rgba(0,0,0,.18);
+  --ui-shadow-float:0 22px 60px rgba(0,0,0,.38);
+  --ui-border-subtle:color-mix(in srgb,var(--border) 74%,transparent);
+  --ui-border-quiet:color-mix(in srgb,var(--border) 52%,transparent);
+  --ui-panel:color-mix(in srgb,var(--bg-card) 94%,var(--bg-body));
+  --ui-panel-soft:color-mix(in srgb,var(--bg-card-alt) 86%,var(--bg-body));
+  --ui-panel-raised:color-mix(in srgb,var(--bg-card) 97%,var(--accent) 3%);
+  --ui-accent-wash:color-mix(in srgb,var(--accent) 7%,transparent);
+  --ui-accent-wash-strong:color-mix(in srgb,var(--accent) 12%,transparent);
+}
+
+html{background:var(--bg-body);scroll-behavior:smooth}
+body{
+  min-width:320px;
+  background:
+    radial-gradient(circle at 78% -12%,rgba(var(--accent-rgb),.075),transparent 34rem),
+    radial-gradient(circle at 18% 110%,rgba(var(--accent-secondary-rgb),.035),transparent 32rem),
+    var(--bg-body);
+  font-size:15px;
+  line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+}
+::selection{background:rgba(var(--accent-rgb),.26);color:var(--text)}
+:focus-visible{outline:2px solid color-mix(in srgb,var(--accent) 78%,white);outline-offset:2px}
+
+/* App shell + navigation */
+.shell{grid-template-columns:264px minmax(0,1fr)}
+.shell>aside{
+  padding:28px 18px 24px;
+  border-right:1px solid var(--ui-border-subtle);
+  background:color-mix(in srgb,var(--bg-sidebar) 94%,transparent);
+  backdrop-filter:blur(20px);
+}
+.brand{padding:2px 12px 28px}
+.brand b{display:block;font-size:22px;line-height:1.08;letter-spacing:-.035em}
+.brand span{margin-top:7px;font-size:12px;font-weight:650;letter-spacing:.01em}
+.brand small{margin-top:9px;font-size:10px;letter-spacing:.1em;opacity:.72}
+.shell nav{gap:5px}
+.shell nav a{
+  display:flex;
+  align-items:center;
+  min-height:44px;
+  padding:10px 12px;
+  border:1px solid transparent;
+  border-radius:var(--ui-radius-md);
+  color:var(--muted-bright);
+  font-size:14px;
+  font-weight:720;
+  transition:background .16s ease,border-color .16s ease,color .16s ease,transform .16s ease;
+}
+.shell nav a i{
+  display:grid;
+  place-items:center;
+  width:30px;
+  height:30px;
+  margin-right:8px;
+  border-radius:9px;
+  background:color-mix(in srgb,var(--accent) 6%,transparent);
+  color:var(--accent-bright);
+  font-size:15px;
+}
+.shell nav a:hover{background:var(--ui-panel-soft);border-color:var(--ui-border-subtle);transform:translateX(1px)}
+.shell nav a.active{
+  background:linear-gradient(110deg,var(--ui-accent-wash-strong),color-mix(in srgb,var(--accent-secondary) 5%,transparent));
+  border-color:color-mix(in srgb,var(--accent) 18%,var(--ui-border-subtle));
+  box-shadow:none;
+  color:var(--text);
+}
+.shell nav a.active i{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent-bright)}
+.aside-foot{left:30px;right:20px;bottom:24px;font-size:11px;letter-spacing:.04em}
+.aside-foot strong{font-size:17px;letter-spacing:-.025em}
+.aside-cloud-status{font-size:11px}
+
+.content{max-width:1320px;padding:42px clamp(24px,3.3vw,52px) 64px}
+.route-loading{padding:56px 0;color:var(--muted);font-size:14px}
+
+/* Typography */
+.page-title{align-items:flex-start;gap:24px;margin-bottom:28px}
+.page-title>div:first-child{min-width:0}
+.page-title h1{
+  max-width:900px;
+  font-size:clamp(36px,4.35vw,54px);
+  line-height:.98;
+  letter-spacing:-.052em;
+}
+.page-title p,.eyebrow{
+  margin-bottom:8px;
+  color:var(--muted-bright);
+  font-size:12px;
+  font-weight:800;
+  letter-spacing:.11em;
+}
+.tagline{max-width:70ch;color:var(--muted-bright);font-size:14px;line-height:1.55}
+.card h2{font-size:clamp(20px,2vw,25px);letter-spacing:-.02em}
+.card h3{letter-spacing:-.012em}
+.muted{color:var(--muted);line-height:1.5}
+
+/* Surfaces */
+.grid{gap:18px}
+.card{
+  padding:24px;
+  border:1px solid var(--ui-border-subtle);
+  border-radius:var(--ui-radius-lg);
+  background:var(--ui-panel);
+  box-shadow:var(--ui-shadow-card);
+}
+.card:hover{border-color:color-mix(in srgb,var(--border-strong) 65%,var(--ui-border-subtle));box-shadow:0 14px 36px rgba(0,0,0,.20)}
+.card.hero,.hero{
+  border-color:color-mix(in srgb,var(--accent) 18%,var(--ui-border-subtle));
+  background:
+    radial-gradient(circle at 92% 0,rgba(var(--accent-rgb),.12),transparent 32rem),
+    var(--ui-panel-raised);
+  box-shadow:var(--ui-shadow-card);
+}
+.insight{border-color:color-mix(in srgb,var(--accent) 24%,var(--ui-border-subtle))}
+.card-heading-row{gap:18px}
+.card-heading-row h2{margin-bottom:4px}
+
+/* Buttons and links */
+button,.button-link,.page-title button{
+  min-height:40px;
+  border:1px solid var(--ui-border-subtle);
+  border-radius:var(--ui-radius-sm);
+  background:color-mix(in srgb,var(--bg-card) 76%,var(--accent) 6%);
+  color:var(--text);
+  font-size:13px;
+  font-weight:720;
+  line-height:1.2;
+  box-shadow:none;
+}
+button:hover,.button-link:hover,.page-title button:hover{
+  border-color:color-mix(in srgb,var(--accent) 28%,var(--border));
+  background:var(--ui-accent-wash-strong);
+  box-shadow:none;
+}
+.primary,
+button.primary,
+.button-link.primary{
+  border-color:color-mix(in srgb,var(--accent) 76%,white 8%);
+  background:var(--accent);
+  color:var(--accent-text);
+  font-weight:850;
+  box-shadow:0 8px 22px rgba(var(--accent-rgb),.13);
+}
+.primary:hover,button.primary:hover,.button-link.primary:hover{
+  border-color:var(--accent-bright);
+  background:color-mix(in srgb,var(--accent) 88%,white 12%);
+  transform:translateY(-1px);
+}
+.secondary,.button-row .secondary{background:transparent;border-color:var(--ui-border-subtle);color:var(--muted-bright)}
+.danger-button,.danger{border-color:color-mix(in srgb,#ff7777 22%,var(--border));background:color-mix(in srgb,#ff7777 6%,transparent)}
+.page-actions{gap:8px}
+.action-menu>summary{min-width:40px;min-height:40px;border-color:var(--ui-border-subtle);border-radius:var(--ui-radius-sm);background:var(--ui-panel-soft)}
+.action-menu-panel{padding:7px;border-color:var(--ui-border-subtle);border-radius:var(--ui-radius-md);background:var(--ui-panel-raised);box-shadow:var(--ui-shadow-float)}
+
+/* Form controls */
+input,select,textarea,
+.modal input,.modal select,.modal textarea,
+.editor-form input,.editor-form select,.calendar-url-label input{
+  min-height:42px;
+  border:1px solid var(--ui-border-subtle);
+  border-radius:var(--ui-radius-sm);
+  background:color-mix(in srgb,var(--bg-input) 88%,var(--bg-card));
+  color:var(--text);
+  font-size:14px;
+  transition:border-color .16s ease,background .16s ease,box-shadow .16s ease;
+}
+textarea,.modal textarea{line-height:1.5}
+input:hover,select:hover,textarea:hover{border-color:var(--border-strong)}
+input:focus,select:focus,textarea:focus{
+  border-color:color-mix(in srgb,var(--accent) 55%,var(--border));
+  background:var(--bg-input);
+  box-shadow:0 0 0 3px rgba(var(--accent-rgb),.08);
+  outline:0;
+}
+label{font-size:13px}
+.form-grid,.editor-form{gap:14px}
+
+/* Tabs: lighter and less boxed-in */
+.section-tabs{
+  gap:4px;
+  margin:0 0 24px;
+  padding:3px;
+  border:0;
+  border-bottom:1px solid var(--ui-border-subtle);
+  border-radius:0;
+  background:transparent;
+}
+.section-tabs button,.section-tabs a{
+  min-height:38px;
+  padding:8px 12px;
+  border:0;
+  border-radius:9px 9px 4px 4px;
+  color:var(--muted);
+  font-size:13px;
+}
+.section-tabs button.selected,.section-tabs a.selected{
+  border:0;
+  background:var(--ui-accent-wash-strong);
+  color:var(--text);
+  box-shadow:inset 0 -2px 0 var(--accent);
+}
+
+/* Modals and disclosures */
+.modal-backdrop{background:rgba(2,5,8,.76);backdrop-filter:blur(7px)}
+.modal{border-color:var(--ui-border-subtle);border-radius:var(--ui-radius-xl);background:var(--ui-panel-raised);box-shadow:var(--ui-shadow-float)}
+details>summary{outline:none}
+.briefing-disclosure,
+.card details,
+details.card{box-shadow:none}
+
+/* Briefing / Hub */
+.today-card.premium-briefing-card,
+.briefing-hub-card,
+.briefing-disclosure{
+  border-color:var(--ui-border-subtle);
+  background:var(--ui-panel);
+  box-shadow:var(--ui-shadow-card);
+}
+.today-card.premium-briefing-card{
+  background:
+    radial-gradient(circle at 92% 2%,rgba(var(--accent-rgb),.13),transparent 28rem),
+    var(--ui-panel-raised);
+}
+.today-card.premium-briefing-card .today-card-heading h2{font-size:clamp(24px,3vw,32px)}
+.today-card.premium-briefing-card .today-workout-list,
+.today-card.premium-briefing-card .today-upcoming-preview,
+.today-card.premium-briefing-card .today-side-panel{
+  border-color:var(--ui-border-subtle);
+  background:color-mix(in srgb,var(--bg-input) 58%,transparent);
+  box-shadow:none;
+}
+.briefing-summary-grid .briefing-compact-card{min-height:0;padding:20px}
+.briefing-compact-text,.briefing-card-footnote{font-size:13px;line-height:1.5}
+.briefing-current-focus>span,.briefing-corridor>span,.briefing-role-markers>span{font-size:12px}
+.briefing-week-row{padding:15px 4px}
+
+/* Planner: preserve all functionality, improve hierarchy and legibility */
+.shell main .planner-week-dashboard{gap:12px;margin-bottom:18px}
+.shell main .planner-week-focus-card,
+.shell main .planner-week-dashboard>.planner-plan-approval{
+  border-color:var(--ui-border-subtle);
+  border-radius:var(--ui-radius-lg);
+  background:var(--ui-panel);
+  box-shadow:none;
+}
+.shell main .planner-week-focus-card{padding:18px 20px}
+.shell main .planner-week-focus-copy>span,
+.shell main .planner-week-focus-goal>span,
+.shell main .planner-week-dashboard>.planner-plan-approval .planner-plan-approval-copy>span{
+  font-size:11px;
+  letter-spacing:.07em;
+}
+.shell main .planner-week-focus-copy>strong{font-size:22px}
+.shell main .planner-week-focus-copy>small{font-size:13px;line-height:1.5}
+.shell main .planner-week-focus-goal{border-left-color:var(--ui-border-subtle)}
+.shell main .planner-week-focus-goal>strong{font-size:15px}
+.shell main .planner-week-focus-goal>small{font-size:12px}
+.shell main .planner-week-dashboard>.planner-plan-approval .planner-plan-approval-copy>strong{font-size:15px}
+.shell main .planner-week-dashboard>.planner-plan-approval .planner-plan-approval-copy>small{font-size:12px;line-height:1.4}
+.shell main .planner-week-dashboard>.planner-plan-approval .planner-plan-approval-actions button{font-size:12px}
+
+.shell main .planner-inline-notice{
+  padding:10px 13px;
+  border-color:var(--ui-border-subtle);
+  border-radius:var(--ui-radius-sm);
+  background:color-mix(in srgb,var(--bg-card-alt) 58%,transparent);
+}
+.shell main .planner-inline-notice span{font-size:10px}
+.shell main .planner-inline-notice strong{font-size:12px}
+.shell main .planner-inline-notice button{font-size:11px}
+
+.shell main .planner-week-nav{margin:14px 0 10px}
+.shell main .planner-week-nav strong{font-size:15px}
+.shell main .planner-week-nav span{font-size:11px}
+.shell main .planner-week-nav button{width:38px;height:38px}
+.shell main .planner-overview-strip{
+  margin-bottom:14px;
+  border-color:var(--ui-border-subtle);
+  border-radius:var(--ui-radius-md);
+  background:color-mix(in srgb,var(--bg-card-alt) 44%,transparent);
+}
+.shell main .planner-overview-strip>div,.shell main .planner-overview-strip>button{min-height:58px;padding:10px 14px}
+.shell main .planner-overview-strip span{font-size:10px}
+.shell main .planner-overview-strip strong{font-size:15px}
+.shell main .planner-overview-state strong,.shell main .planner-overview-strip>button{font-size:12px}
+
+.shell main .planner-event-week-card{
+  margin-bottom:14px;
+  padding:16px 18px;
+  border-color:color-mix(in srgb,var(--accent) 16%,var(--ui-border-subtle));
+  border-radius:var(--ui-radius-md);
+  background:linear-gradient(110deg,var(--ui-accent-wash),transparent 64%),var(--ui-panel-soft);
+}
+.shell main .planner-event-week-card .eyebrow{font-size:10px}
+.shell main .planner-event-week-card h2{font-size:20px}
+.shell main .planner-event-week-card p:not(.eyebrow){font-size:13px;line-height:1.5}
+.shell main .planner-event-week-card small{font-size:11px}
+.shell main .planner-event-week-badges span{padding:5px 8px;font-size:11px}
+
+.shell main .planner-days{gap:12px}
+.shell main .planner-day{
+  border-color:var(--ui-border-subtle);
+  border-radius:var(--ui-radius-md);
+  background:var(--ui-panel);
+  box-shadow:0 5px 18px rgba(0,0,0,.10);
+}
+.shell main .planner-day.availability-limited,
+.shell main .planner-day.availability-blocked{
+  border-color:color-mix(in srgb,var(--accent) 14%,var(--ui-border-subtle));
+  background:var(--ui-panel);
+}
+.shell main .planner-day>header{
+  min-height:58px;
+  padding:12px 16px;
+  border-bottom-color:var(--ui-border-subtle);
+  background:color-mix(in srgb,var(--bg-card-alt) 35%,transparent);
+}
+.shell main .planner-day header span{font-size:10px;letter-spacing:.04em}
+.shell main .planner-day header strong{font-size:16px}
+.shell main .planner-day header small{font-size:11px}
+.shell main .planner-day-header-actions button{font-size:11px}
+
+.shell main .planner-availability-note{
+  gap:12px;
+  padding:9px 16px;
+  border-bottom-color:var(--ui-border-subtle);
+  background:color-mix(in srgb,var(--accent) 3%,transparent);
+}
+.shell main .planner-availability-note span{font-size:10px}
+.shell main .planner-availability-note strong{font-size:12px}
+.shell main .planner-availability-note-details>summary{font-size:11px}
+.shell main .planner-availability-note-details small{font-size:11px;line-height:1.45}
+.shell main .planner-availability-note>button{font-size:11px}
+
+.shell main .planner-workout{gap:12px;padding:14px 16px}
+.shell main .planner-workout-main span{font-size:10px}
+.shell main .planner-workout-main em{padding:3px 6px;border-radius:6px;font-size:10px}
+.shell main .planner-workout-main h3{margin:4px 0;font-size:16px;line-height:1.3}
+.shell main .planner-workout-main p,
+.shell main .planner-workout-main small{font-size:12px;line-height:1.5}
+.shell main .planner-workout-notes>summary{font-size:11px}
+.shell main .planner-workout-roles{opacity:.9}
+.shell main .planner-missed-session-inline,
+.shell main .planner-race-protocol,
+.shell main .planner-track-sync-status{
+  border-color:var(--ui-border-subtle);
+  border-radius:var(--ui-radius-sm);
+  background:color-mix(in srgb,var(--bg-input) 42%,transparent);
+}
+.shell main .planner-missed-session-inline>summary span,
+.shell main .planner-race-protocol-head span,
+.shell main .planner-track-sync-status span{font-size:10px}
+.shell main .planner-missed-session-inline>summary strong,
+.shell main .planner-race-protocol-head strong,
+.shell main .planner-track-sync-status strong{font-size:12px}
+.shell main .planner-race-protocol-head small,
+.shell main .planner-track-sync-status small{font-size:11px}
+.shell main .planner-missed-session-body p{font-size:12px}
+.shell main .planner-missed-session-body small{font-size:11px}
+
+/* Planner setup / context / Track builder */
+.shell main .planner-normal-week,
+.shell main .planner-week-context,
+.shell main .planner-context-editor,
+.shell main .planner-track-builder{
+  border-color:var(--ui-border-subtle);
+  border-radius:var(--ui-radius-lg);
+  background:var(--ui-panel-soft);
+  box-shadow:none;
+}
+.shell main .planner-context-presets>button,
+.shell main .planner-context-restrictions>button,
+.shell main .planner-availability-grid .planner-day-picker{
+  border-color:var(--ui-border-subtle);
+  background:color-mix(in srgb,var(--bg-card) 78%,transparent);
+  border-radius:var(--ui-radius-md);
+}
+.shell main .planner-context-presets>button b{font-size:13px}
+.shell main .planner-context-presets>button small{font-size:11px;line-height:1.45}
+.shell main .planner-track-builder :is(label,small,.muted){font-size:max(12px,1em)}
+
+/* Training history */
+.training-month-overview,
+.training-history-card{border-color:var(--ui-border-subtle);background:var(--ui-panel)}
+.training-sport-summary{gap:10px}
+.training-sport-summary>div{
+  padding:14px 15px;
+  border-color:var(--ui-border-subtle);
+  border-radius:var(--ui-radius-md);
+  background:var(--ui-panel-soft);
+}
+.training-sport-summary span{font-size:11px;letter-spacing:.06em}
+.training-sport-summary strong{font-size:26px;letter-spacing:-.035em}
+.training-history{gap:18px}
+.training-month{border-color:var(--ui-border-subtle);border-radius:var(--ui-radius-lg);background:transparent}
+.training-month-header{padding:17px 18px;border-bottom-color:var(--ui-border-subtle);background:var(--ui-panel-soft)}
+.training-month-header span{font-size:11px;letter-spacing:.06em}
+.training-month-chips span{padding:5px 8px;border-color:var(--ui-border-subtle);background:transparent;font-size:11px}
+.training-week>h3{color:var(--muted-bright);font-size:12px;letter-spacing:.07em}
+.training-week .activity-list{border-color:var(--ui-border-subtle);border-radius:var(--ui-radius-md)}
+.activity-row .activity-main{padding:14px 15px}
+.activity-copy>b{font-size:15px}
+.activity-copy>span{font-size:12px}
+.activity-stat{min-height:58px;border-color:var(--ui-border-subtle);border-radius:var(--ui-radius-sm);background:color-mix(in srgb,var(--bg-input) 52%,transparent)}
+.activity-stat>small{font-size:10px;letter-spacing:.07em}
+.activity-stat>strong{font-size:15px!important}
+.activity-stat>span{font-size:11px!important}
+.activity-row-tools{border-left-color:var(--ui-border-subtle)}
+
+/* Analytics: report-like instead of mini-dashboard density */
+.analytics-intelligence-hero,
+.analytics-readiness-card,
+.analytics-longrun-card,
+.analytics-efficiency-card,
+.analytics-cross-card,
+.analytics-quality-card,
+.analytics-learning-card,
+.analytics-review-card,
+.analytics-volume-card{
+  border-color:var(--ui-border-subtle);
+  background:var(--ui-panel);
+  box-shadow:var(--ui-shadow-card);
+}
+.analytics-intelligence-item,
+.analytics-readiness-factor{
+  border-color:var(--ui-border-subtle);
+  border-radius:var(--ui-radius-md);
+  background:var(--ui-panel-soft);
+}
+.analytics-intelligence-item small,
+.analytics-readiness-factor>div>span,
+.analytics-longrun-bars span,
+.analytics-longrun-bars small,
+.analytics-efficiency-facts small{font-size:11px}
+.analytics-intelligence-item h3{font-size:17px}
+.analytics-intelligence-item p,
+.analytics-readiness-factor>p{font-size:12px;line-height:1.5}
+.analytics-readiness-factor>div>b{font-size:14px}
+.analytics-efficiency-facts>span{border-color:var(--ui-border-subtle);border-radius:var(--ui-radius-sm);background:var(--ui-panel-soft)}
+.analytics-efficiency-facts strong{font-size:17px}
+.analytics-method-note{font-size:12px;line-height:1.5}
+
+/* Coach + Mission: keep strong insight cards, reduce ornamental weight */
+.coach-mission-outlook,
+.coach-signal-card,
+.coach-today-data,
+.coach-athlete-model,
+.mission-main-hero,
+.mission-goal-path,
+.achievement-card{
+  border-color:var(--ui-border-subtle);
+  background:var(--ui-panel);
+  box-shadow:var(--ui-shadow-card);
+}
+.coach-outlook-metrics>div,
+.coach-roadmap article,
+.coach-loop-preview>div,
+.coach-readiness-copy,
+.coach-readiness-factor{
+  border-color:var(--ui-border-subtle);
+  background:var(--ui-panel-soft);
+}
+.coach-outlook-metrics span,.coach-roadmap span{font-size:11px;letter-spacing:.06em}
+.coach-readiness-copy,.coach-roadmap p{font-size:12px;line-height:1.5}
+.achievement-card{background:var(--ui-panel-soft)}
+.achievement-card>span{font-size:11px;letter-spacing:.06em}
+
+/* Fuel Lab + Race Strategy */
+.shell main .fuel-partner,
+.shell main .fuel-race-prep-shell,
+.shell main .race-coach{
+  border-color:var(--ui-border-subtle);
+}
+.shell main .fuel-partner-hero,
+.shell main .fuel-metric,
+.shell main .fuel-partner-workout,
+.shell main .fuel-partner-pack-list,
+.shell main .fuel-race-strategy,
+.shell main .race-coach-setup,
+.shell main .race-coach-route-card,
+.shell main .race-coach-garmin-card{
+  border-color:var(--ui-border-subtle);
+  border-radius:var(--ui-radius-md);
+  background:var(--ui-panel-soft);
+  box-shadow:none;
+}
+.fuel-product-card-compact{
+  border-color:var(--ui-border-subtle);
+  border-radius:var(--ui-radius-lg);
+  background:var(--ui-panel);
+  box-shadow:0 8px 24px rgba(0,0,0,.12);
+}
+.fuel-product-card-compact:hover{border-color:color-mix(in srgb,var(--accent) 20%,var(--border));transform:translateY(-1px)}
+.race-coach-section-heading,.fuel-partner-section-heading{margin-top:24px}
+
+/* Settings: calm forms and flatter grouping */
+.settings-overview-card,
+.settings-profile-card,
+.settings-commitments-card,
+.settings-replacements-card,
+.planner-principles-card,
+.intervals-setup-card,
+.appearance-live-card{
+  border-color:var(--ui-border-subtle);
+  background:var(--ui-panel);
+  box-shadow:var(--ui-shadow-card);
+}
+.settings-overview-card{min-height:190px}
+.settings-section-heading{margin-bottom:16px}
+.theme-preset-visual,
+.appearance-custom-card,
+.appearance-glow-card,
+.intervals-setup-step{
+  border-color:var(--ui-border-subtle);
+  border-radius:var(--ui-radius-md);
+  background:var(--ui-panel-soft);
+}
+
+/* Status chips / role badges: quieter by default */
+.workout-role-badges>summary,
+.today-status-pill,
+.main-target-badge,
+.cloud-status{
+  box-shadow:none;
+}
+.workout-role-badges>summary{font-size:11px}
+
+/* Mobile / tablet */
+@media(max-width:900px){
+  .content{padding:28px 18px 52px}
+  .page-title{flex-direction:column;gap:16px;margin-bottom:22px}
+  .page-title h1{font-size:clamp(34px,8vw,46px)}
+  .page-actions{width:100%;justify-content:flex-start}
+  .card{padding:20px}
+}
+
+@media(max-width:800px){
+  .shell{display:block}
+  .shell>aside{
+    position:sticky;
+    top:0;
+    z-index:100;
+    height:auto;
+    padding:10px 12px;
+    border-right:0;
+    border-bottom:1px solid var(--ui-border-subtle);
+    background:color-mix(in srgb,var(--bg-sidebar) 92%,transparent);
+  }
+  .brand{display:flex;align-items:center;gap:8px;padding:2px 4px 9px}
+  .brand b{font-size:17px}
+  .brand span,.brand small,.aside-foot{display:none}
+  .shell nav{display:flex;gap:4px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
+  .shell nav::-webkit-scrollbar{display:none}
+  .shell nav a{flex:0 0 auto;min-height:38px;padding:6px 10px;border-radius:10px;font-size:12px;white-space:nowrap}
+  .shell nav a i{width:24px;height:24px;margin-right:5px;border-radius:7px;font-size:13px}
+  .content{padding:26px 14px 48px}
+  .grid{gap:14px}
+  .card{border-radius:var(--ui-radius-md);padding:18px}
+  .section-tabs{margin-bottom:18px}
+  .section-tabs button,.section-tabs a{font-size:12px}
+  .shell main .planner-day{border-radius:var(--ui-radius-md)}
+  .shell main .planner-day>header{padding:11px 13px}
+  .shell main .planner-workout{padding:13px}
+  .activity-row-tools{border-left:0;border-top-color:var(--ui-border-subtle)}
+}
+
+@media(max-width:520px){
+  body{font-size:14px}
+  .content{padding:22px 12px 42px}
+  .page-title h1{font-size:34px}
+  .page-title p,.eyebrow{font-size:11px}
+  .card{padding:16px}
+  button,.button-link,.page-title button{min-height:39px;font-size:12px}
+  .shell main .planner-overview-strip{gap:0}
+  .shell main .planner-overview-strip>div,.shell main .planner-overview-strip>button{padding:9px 10px}
+  .training-sport-summary>div{flex-basis:155px}
+}

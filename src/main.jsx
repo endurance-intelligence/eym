@@ -4,6 +4,7 @@ import App from "./App";
 import { AppProvider } from "./context/AppContext";
 import { removeRecoveryMarker } from "./services/appRecovery";
 import "./styles/main.css";
+import "./styles/visualRefresh.css";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
