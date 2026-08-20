@@ -31,7 +31,7 @@ test("weekly review explains execution, extra load, recovery and next consequenc
   assert.equal(result.metrics.extraActivities, 1);
   assert.match(result.positives.join(" "), /Schlüsselreiz/);
   assert.match(result.watchouts.join(" "), /zusätzliche Aktivität/);
-  assert.match(result.consequence, /Easy-Anteilen|nachgeholt/);
+  assert.match(result.consequence, /keine automatische Kürzung|keine automatische Kilometerverrechnung|nachgeholt/);
 });
 
 test("weekly review highlights GI signals without turning one hard session into a recovery alarm", () => {
@@ -93,4 +93,30 @@ test("weekly review counts planner-native running workout types in planned volum
   assert.equal(result.metrics.plannedRunningKm, 32.3);
   assert.equal(result.metrics.plannedRunningSessions, 3);
   assert.equal(result.metrics.actualRunningKm, 32.3);
+});
+
+
+test("unplanned endurance load only changes the consequence when its review is strained", () => {
+  const plan = [
+    { id: "easy", date: "2026-08-15", title: "8 km locker", type: "Easy Run", distance: 8 },
+  ];
+  const ride = { id: "ride", date: "2026-08-14", name: "100 km Rennrad", type: "RoadRide", distance: 100, duration: 240 };
+  const stable = weeklyReviewSummary({
+    weekStart: new Date("2026-08-10T12:00:00"),
+    plan,
+    activities: [ride],
+    allActivities: [ride],
+    reviews: { ride: { legs: 7, energy: 8, overallFeeling: 8, rpe: 6 } },
+  });
+  assert.match(stable.consequence, /nicht automatisch reduziert/);
+
+  const strained = weeklyReviewSummary({
+    weekStart: new Date("2026-08-10T12:00:00"),
+    plan,
+    activities: [ride],
+    allActivities: [ride],
+    reviews: { ride: { legs: 4, energy: 5, overallFeeling: 5, rpe: 8 } },
+  });
+  assert.match(strained.consequence, /auffälligen Review-Signale/);
+  assert.match(strained.consequence, /keine automatische Kilometerverrechnung/);
 });

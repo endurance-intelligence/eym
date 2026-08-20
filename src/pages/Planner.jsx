@@ -17,7 +17,7 @@ import {
 } from "../services/plannerEngine";
 import { downloadCalendar } from "../services/calendar";
 import { preferredActivities, reviewKind } from "../services/activityUtils";
-import { formatCrossTrainingCredit, summarizeCrossTrainingCredits } from "../services/crossTrainingLoad";
+import { formatCrossTrainingContext, formatCrossTrainingCredit, summarizeCrossTrainingCredits } from "../services/crossTrainingLoad";
 import {
   applyOptionalLongRunExtension,
   buildMissedSessionDecision,
@@ -572,7 +572,7 @@ function findMatches(plan, activities) {
 }
 
 
-function crossTrainingReplanPreview(plan = [], creditKm = 0, todayKey = "", includeCurrentWeek = true) {
+function crossTrainingReplanPreview(plan = [], summary = {}, todayKey = "", includeCurrentWeek = true) {
   const future = plan.filter((item) => !item.completed && !item.missedReason && !item.plannedCancellation)
     .filter((item) => !todayKey || String(item.date || "") >= todayKey);
   const eligible = future.filter((item) => {
@@ -589,7 +589,8 @@ function crossTrainingReplanPreview(plan = [], creditKm = 0, todayKey = "", incl
         || /longrun|long run|backyard|loop|track|intervall|interval|schwelle|threshold|tempo|wettkampf|race/.test(label));
   });
   return {
-    creditKm: Math.max(0, Number(creditKm || 0)),
+    impactLevel: summary?.impactLevel || "none",
+    actionable: Array.isArray(summary?.actionable) ? summary.actionable : [],
     eligible,
     protectedEntries,
     hasEligible: eligible.length > 0,
@@ -742,6 +743,10 @@ export default function Planner() {
       .filter((entry) => entry.date >= isoDate(weekStart) && entry.date <= isoDate(weekEnd))
       .map((entry) => [entry.date, entry]),
   ), [availabilityExceptions, weekStart, weekEnd]);
+  const plannedCrossTrainingActivityIds = useMemo(
+    () => new Set([...matches.values()].map((activity) => String(activity?.id || "")).filter(Boolean)),
+    [matches],
+  );
   const crossTrainingSummary = useMemo(
     () => summarizeCrossTrainingCredits(weekActivities, {
       targetKm: Number(config.lastTarget || 0),
@@ -749,10 +754,12 @@ export default function Planner() {
       phaseLabel: config.lastPhase || "",
       recoveryWeek: Boolean(config.lastRecoveryWeek),
       reviews: state.reviews,
+      plannedActivityIds: plannedCrossTrainingActivityIds,
     }),
-    [weekActivities, canonicalActivities, config.lastTarget, config.lastPhase, config.lastRecoveryWeek, state.reviews],
+    [weekActivities, canonicalActivities, config.lastTarget, config.lastPhase, config.lastRecoveryWeek, state.reviews, plannedCrossTrainingActivityIds],
   );
   const crossTrainingLabel = formatCrossTrainingCredit(crossTrainingSummary);
+  const crossTrainingContextLabel = formatCrossTrainingContext(crossTrainingSummary);
   const missedSessionDecision = useMemo(
     () => buildMissedSessionDecision({
       plan: weekPlan,
@@ -765,13 +772,13 @@ export default function Planner() {
   const lastGeneratedTimestamp = Date.parse(config.lastGeneratedAt || "") || 0;
   const crossTrainingNeedsReplan = offsetWeeks === 0
     && weekPlan.length > 0
-    && crossTrainingSummary.latestActivityAt > lastGeneratedTimestamp;
+    && crossTrainingSummary.latestActionableActivityAt > lastGeneratedTimestamp;
   const crossTrainingPreview = useMemo(() => crossTrainingReplanPreview(
     weekPlan,
-    crossTrainingSummary.creditedEquivalentKm,
+    crossTrainingSummary,
     todayKey,
     offsetWeeks === 0,
-  ), [weekPlan, crossTrainingSummary.creditedEquivalentKm, todayKey, offsetWeeks]);
+  ), [weekPlan, crossTrainingSummary, todayKey, offsetWeeks]);
   const trackWorkoutTemplates = useMemo(
     () => normalizeTrackWorkoutTemplates(config.trackWorkoutTemplates),
     [config.trackWorkoutTemplates],
@@ -1572,7 +1579,7 @@ export default function Planner() {
       forecast: weather,
       offsetWeeks,
       completedRunningKm: actualRunningKm,
-      completedCrossTrainingKm: crossTrainingSummary.rawEquivalentKm,
+      completedCrossTrainingKm: 0,
       crossTrainingDetails: crossTrainingSummary.details,
     });
     const generatedMissionEvents = missionEvents(state.mission);
@@ -1614,16 +1621,17 @@ export default function Planner() {
       : "";
     const loopLabel = generated.loopStrategy ? ` · Loop-Block ${generated.loopStrategy.loops} × ${String(generated.loopStrategy.loopKm).replace(".", ",")} km` : "";
     const scopeLabel = requestedDates.length ? `Ausgewählte Tage (${requestedDates.length}) neu geplant. ` : "";
-    const appliedFootballKm = Number(generated.crossTrainingCredit?.appliedFootballKm || 0);
-    const appliedCyclingMinutes = Math.round(Number(generated.crossTrainingCredit?.appliedRoadCyclingAerobicMinutes || 0));
-    const crossTrainingParts = [];
-    if (appliedFootballKm > 0) crossTrainingParts.push(`${appliedFootballKm.toFixed(1).replace(".0", "")} km Fußball`);
-    if (appliedCyclingMinutes > 0) crossTrainingParts.push(`${appliedCyclingMinutes} aerobe Laufminuten aus Rennrad`);
-    const crossTrainingStatus = generated.crossTrainingCredit?.appliedKm > 0
-      ? ` Zusätzlich angerechnet: ${crossTrainingParts.join(" · ") || `${generated.crossTrainingCredit.appliedKm.toFixed(1).replace(".0", "")} km Cross-Training`}.`
-      : generated.crossTrainingCredit?.recognizedKm > 0
-        ? " Fußball oder Rennrad wurden als Belastung erkannt; Schlüsselreize bleiben geschützt, deshalb war kein zusätzlicher Easy-Umfang reduzierbar."
-        : "";
+    const crossTrainingImpact = generated.crossTrainingCredit?.impactLevel || "none";
+    const crossTrainingDetailCount = generated.crossTrainingCredit?.details?.length || 0;
+    const crossTrainingStatus = crossTrainingImpact === "adjust"
+      ? " Dein Review zur Zusatzbelastung hat eine konservative Anpassung einer flexiblen Folgeeinheit ausgelöst; es wurden keine Fremdsport-Kilometer verrechnet."
+      : crossTrainingImpact === "review"
+        ? " Eine ungewöhnliche Zusatzbelastung ist erkannt. Vor einer Planänderung wartet der Coach auf dein Review."
+        : crossTrainingImpact === "watch"
+          ? " Die Zusatzbelastung war auffällig, wird laut Review aber aktuell stabil verarbeitet; der Laufumfang bleibt bestehen."
+          : crossTrainingDetailCount > 0
+            ? " Zusatzsport wird als Gesamtbelastung berücksichtigt und bleibt getrennt von echten Laufkilometern."
+            : "";
     const corridorLabel = generated.weekPrescription?.corridor?.label || `${generated.target} km`;
     const statusText = `${scopeLabel}${loadLabel}${targetLabel} · automatisch berechneter Laufkorridor ${corridorLabel} · konkreter Planwert ${generated.target} km${loopLabel}. Bereits gelaufen: ${actualRunningKm.toFixed(1)} km.${crossTrainingStatus} ${generated.weekPrescription?.focus || generated.recoveryReason}${readinessNotes} Der neue Wochenplan ist noch nicht angenommen.`;
     const previewWeekStart = isoDate(weekStart);
@@ -2554,8 +2562,8 @@ export default function Planner() {
               </article>
               <article>
                 <span>Sportübergreifende Belastung</span>
-                <strong>{crossTrainingSummary.creditedEquivalentKm > 0 ? `${crossTrainingSummary.creditedEquivalentKm.toFixed(1).replace(".0", "")} km planerischer Ersatz` : "Aktuell kein anrechenbarer Fußball- oder Rennradreiz"}</strong>
-                <p>{crossTrainingLabel || "Fußballkilometer und echtes Rennradtraining werden zusätzlich zur internen Belastung ausgewertet."} Rennrad wird über Dauer und Intensität bewertet, nicht über eine feste Distanzformel. Der Coach rechnet höchstens {Math.round(crossTrainingSummary.maxShare * 100)} % des Laufrahmens an und reduziert ausschließlich flexible Easy-Kilometer; Track, Longrun, Loop und Wettkampf bleiben erhalten.</p>
+                <strong>{crossTrainingContextLabel}</strong>
+                <p>{crossTrainingLabel || "Fußball und Rennrad werden als eigene Belastung betrachtet."} Sie werden nicht in Laufkilometer umgerechnet. Erst eine ungewöhnliche Belastung zusammen mit deinem Review kann eine flexible Folgeeinheit verändern; Schlüsselreize bleiben geschützt.</p>
               </article>
               <article>
                 <span>Fixtermine & Doppeltraining</span>
@@ -2578,13 +2586,17 @@ export default function Planner() {
       </section>
 
       {crossTrainingNeedsReplan && (
-        <section className="planner-cross-training-alert">
+        <section className={`planner-cross-training-alert ${crossTrainingSummary.impactLevel || "none"}`}>
           <div>
-            <span>Neue Zusatzbelastung erkannt</span>
-            <strong>{crossTrainingLabel || "Fußball oder Rennrad"} fließt noch nicht in den bestehenden Wochenentwurf ein.</strong>
-            <small>Bei der Neuplanung reduziert der Coach zuerst flexible Easy-Kilometer. Rennrad zählt über Dauer und Intensität; Track, Longrun, Loop und Wettkampf bleiben geschützt.</small>
+            <span>{crossTrainingSummary.impactLevel === "review" ? "Review zur Zusatzbelastung offen" : "Zusatzbelastung prüfen"}</span>
+            <strong>{crossTrainingSummary.impactLevel === "review"
+              ? `${crossTrainingLabel || "Die Einheit"} war deutlich außerhalb deines persönlichen Erwartungsbereichs.`
+              : "Dein Review zeigt, dass die zusätzliche Belastung die weitere Woche beeinflussen kann."}</strong>
+            <small>{crossTrainingSummary.impactLevel === "review"
+              ? "EI kürzt deshalb noch keinen Lauf. Erst dein Review entscheidet, ob der Coach überhaupt eingreifen soll."
+              : "Keine 1:1-Kilometerverrechnung: angepasst werden darf nur eine flexible Folgeeinheit, wenn deine tatsächliche Erholung dafür spricht."}</small>
           </div>
-          <button type="button" onClick={() => setCrossTrainingPreviewOpen(true)}>Auswirkung prüfen</button>
+          <button type="button" onClick={() => setCrossTrainingPreviewOpen(true)}>Details prüfen</button>
         </section>
       )}
 
@@ -2598,7 +2610,7 @@ export default function Planner() {
       <section className="planner-overview-strip">
         <div><span>Noch geplant</span><strong>{plannedKm.toFixed(1).replace(".0", "")} km</strong></div>
         <div><span>Gelaufen</span><strong>{completedKm.toFixed(1)} km</strong></div>
-        <div title={crossTrainingLabel || "Kein planerischer Cross-Training-Ersatz erkannt"}><span>Planersatz</span><strong>{crossTrainingSummary.creditedEquivalentKm.toFixed(1)} km</strong></div>
+        <div title={crossTrainingLabel || "Keine zusätzliche sportübergreifende Belastung erkannt"}><span>Zusatzlast</span><strong>{crossTrainingSummary.details.length ? (crossTrainingSummary.impactLevel === "adjust" ? "Prüfen" : crossTrainingSummary.impactLevel === "review" ? "Review offen" : "Im Rahmen") : "–"}</strong></div>
         <div><span>Erledigt</span><strong>{weekActivities.length} Einheiten</strong></div>
         <div className="planner-overview-state"><span>Status</span><strong>{isPastWeek ? "Abgeschlossen" : weekPlan.length ? (weekAccepted ? "Angenommen · Änderungen gezielt" : weekApprovalState === WEEK_APPROVAL_STATES.CHANGED ? "Geändert · erneut annehmen" : "Entwurf · noch annehmen") : planningWeekLocked ? "Wochenabschluss fehlt" : "Bereit zur Planung"}</strong></div>
         <button onClick={() => setEditing(createBlank(weekStart))} disabled={isPastWeek || planningWeekPending}>+ Einheit</button>
@@ -3634,26 +3646,26 @@ export default function Planner() {
         <div className="modal-backdrop">
           <section className="modal planner-cross-training-preview" role="dialog" aria-modal="true" aria-labelledby="cross-training-preview-title">
             <div className="modal-heading">
-              <div><p className="eyebrow">Zusatzbelastung einrechnen</p><h2 id="cross-training-preview-title">Was der Coach verändern darf</h2></div>
+              <div><p className="eyebrow">Zusatzbelastung einordnen</p><h2 id="cross-training-preview-title">Erst Reaktion verstehen, dann planen</h2></div>
               <button type="button" onClick={() => setCrossTrainingPreviewOpen(false)}>Schließen</button>
             </div>
-            <p>{crossTrainingLabel || "Die erkannte Zusatzbelastung"} kann bei der Neuplanung bis zu <strong>{crossTrainingPreview.creditKm.toFixed(1).replace(".0", "")} km</strong> flexiblen Laufumfang ersetzen. Noch wird nichts geändert.</p>
+            <p>{crossTrainingLabel || "Die erkannte Zusatzbelastung"} bleibt von deinem Laufumfang getrennt. EI rechnet keine Fußball- oder Rennradkilometer gegen geplante Laufkilometer.</p>
             <div className="planner-cross-training-preview-grid">
               <article>
-                <span>Kann angepasst werden</span>
-                <strong>{crossTrainingPreview.hasEligible ? `${crossTrainingPreview.eligible.length} flexible Einheit${crossTrainingPreview.eligible.length === 1 ? "" : "en"}` : "Keine passende flexible Einheit"}</strong>
-                {crossTrainingPreview.hasEligible ? <ul>{crossTrainingPreview.eligible.map((item) => <li key={item.id}>{item.date} · {item.title}{Number(item.distance || 0) ? ` · ${Number(item.distance).toFixed(1).replace(".0", "")} km` : ""}</li>)}</ul> : <p>Die Zusatzbelastung wird dokumentiert, aber nicht zwanghaft auf Track, Longrun oder Fixtermine verteilt.</p>}
+                <span>Persönlicher Vergleich</span>
+                <strong>{crossTrainingContextLabel}</strong>
+                {crossTrainingPreview.actionable.length ? <ul>{crossTrainingPreview.actionable.map((detail) => <li key={detail.activityId || detail.activityAt}><b>{detail.label}</b> · {detail.comparison} {detail.reviewLabel}.</li>)}</ul> : <p>Die Belastung liegt aktuell im erwarteten persönlichen Rahmen.</p>}
               </article>
               <article className="protected">
-                <span>Bleibt geschützt</span>
-                <strong>Schlüsselreize und feste Termine</strong>
-                {crossTrainingPreview.protectedEntries.length ? <ul>{crossTrainingPreview.protectedEntries.map((item) => <li key={item.id}>{item.date} · {item.title}</li>)}</ul> : <p>Aktuell wurde keine geschützte Lauf-Schlüsseleinheit im Rest der Woche erkannt.</p>}
+                <span>Was darf sich ändern?</span>
+                <strong>{crossTrainingSummary.impactLevel === "adjust" ? "Nur flexible Folgeeinheiten" : "Noch nichts"}</strong>
+                {crossTrainingSummary.impactLevel === "adjust" && crossTrainingPreview.hasEligible ? <ul>{crossTrainingPreview.eligible.map((item) => <li key={item.id}>{item.date} · {item.title}{Number(item.distance || 0) ? ` · ${Number(item.distance).toFixed(1).replace(".0", "")} km` : ""}</li>)}</ul> : <p>{crossTrainingSummary.impactLevel === "review" ? "Der Coach wartet auf dein Review und ändert vorher keinen Lauf." : "Schlüsselreize, Longrun und feste Termine bleiben geschützt."}</p>}
               </article>
             </div>
-            <p className="planner-cross-training-preview-note">Die endgültige Neuplanung berücksichtigt zusätzlich Reviews, Erholung, freie Tage und den aktuellen Zielblock. Deshalb ist dies eine Wirkungs-Vorschau und kein bereits festgeschriebener neuer Plan.</p>
+            <p className="planner-cross-training-preview-note">{crossTrainingSummary.impactLevel === "review" ? "Nach dem Review wird neu bewertet, ob überhaupt eine Anpassung nötig ist." : "Eine Anpassung entsteht aus deiner tatsächlichen Reaktion auf die Belastung – nicht aus einer Kilometer-Umrechnung der anderen Sportart."}</p>
             <div className="modal-actions">
-              <button type="button" onClick={() => setCrossTrainingPreviewOpen(false)}>Abbrechen</button>
-              <button type="button" className="primary" onClick={() => { setCrossTrainingPreviewOpen(false); replanCurrentWeek(); }}>Neuplanung öffnen</button>
+              <button type="button" onClick={() => setCrossTrainingPreviewOpen(false)}>Schließen</button>
+              {crossTrainingSummary.impactLevel === "adjust" && <button type="button" className="primary" onClick={() => { setCrossTrainingPreviewOpen(false); replanCurrentWeek(); }}>Neuplanung öffnen</button>}
             </div>
           </section>
         </div>

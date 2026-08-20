@@ -102,6 +102,19 @@ export function weeklyReviewSummary({
   const keyMissed = keyEntries.filter((item) => item.missedReason && !item.completed && !matchedPlanIds.has(item.id));
 
   const rows = reviewRows(weekActivities, reviews, allActivities);
+  const unmatchedReviewRows = reviewRows(unmatchedActivities, reviews, allActivities);
+  const strainedUnmatchedRows = unmatchedReviewRows.filter(({ review }) => (
+    number(review.legs || 10) <= 5
+    || number(review.energy || 10) <= 5
+    || number(review.overallFeeling || 10) <= 5
+    || number(review.rpe) >= 8
+  ));
+  const stableUnmatchedRows = unmatchedReviewRows.filter(({ review }) => (
+    number(review.legs) >= 6
+    && number(review.energy) >= 6
+    && number(review.overallFeeling || 7) >= 6
+    && (!number(review.rpe) || number(review.rpe) <= 7)
+  ));
   const lowRecoveryRows = rows.filter(({ review }) => (
     number(review.legs || 10) <= 4
     || number(review.energy || 10) <= 4
@@ -142,7 +155,12 @@ export function weeklyReviewSummary({
   }
   if (unmatchedActivities.length > 0) {
     const labels = uniqueActivityLabels(unmatchedActivities).slice(0, 3).join(" · ");
-    watchouts.push(`${unmatchedActivities.length} zusätzliche Aktivität${unmatchedActivities.length === 1 ? "" : "en"} außerhalb des Plans${labels ? ` (${labels})` : ""} erhöht${unmatchedActivities.length === 1 ? "" : "en"} die reale Wochenbelastung.`);
+    const reviewSuffix = strainedUnmatchedRows.length
+      ? ` ${strainedUnmatchedRows.length} zugehörige${strainedUnmatchedRows.length === 1 ? "s Review zeigt" : " Reviews zeigen"} erhöhte Ermüdung.`
+      : stableUnmatchedRows.length
+        ? " Die vorhandenen Reviews zeigen aktuell eine stabile Verarbeitung."
+        : " Vor einer Trainingsanpassung bewertet der Coach vorhandene Reviews statt die Aktivität in Laufkilometer umzuwandeln.";
+    watchouts.push(`${unmatchedActivities.length} zusätzliche Aktivität${unmatchedActivities.length === 1 ? "" : "en"} außerhalb des Plans${labels ? ` (${labels})` : ""} erhöht${unmatchedActivities.length === 1 ? "" : "en"} die reale Wochenbelastung.${reviewSuffix}`);
   }
   if (lowRecoveryRows.length > 0) {
     watchouts.push(`${lowRecoveryRows.length} Review${lowRecoveryRows.length === 1 ? "" : "s"} zeigen niedrige Beine, Energie oder ein schwaches Gesamtgefühl.`);
@@ -167,8 +185,14 @@ export function weeklyReviewSummary({
     consequence = "Die nächste Woche sollte nur dann normal gesteigert werden, wenn Beine und Energie wieder stabil sind; zusätzliche Intensität bleibt bis dahin begrenzt.";
   } else if (giRows.length > 0) {
     consequence = "Die Trainingsbelastung kann grundsätzlich weiterlaufen, aber auffälliges Fueling wird beim nächsten langen oder spezifischen Reiz gezielt und einzeln getestet statt gleichzeitig erhöht.";
-  } else if (unmatchedActivities.length > 0 || (volumeRatio != null && volumeRatio > 1.2)) {
-    consequence = "Die Zusatzbelastung wird in der nächsten Woche bei flexiblen Easy-Anteilen berücksichtigt; Schlüsselreiz und Longrun werden nicht künstlich verdichtet.";
+  } else if (strainedUnmatchedRows.length > 0) {
+    consequence = "Die Zusatzbelastung wird wegen der auffälligen Review-Signale bei flexiblen Folgeeinheiten berücksichtigt. Es gibt keine automatische Kilometerverrechnung; Schlüsselreiz und Longrun bleiben geschützt.";
+  } else if (unmatchedActivities.length > 0) {
+    consequence = stableUnmatchedRows.length > 0
+      ? "Die zusätzliche Aktivität ist dokumentiert und laut Review stabil verarbeitet. Der Laufumfang wird deshalb nicht automatisch reduziert."
+      : "Die zusätzliche Aktivität bleibt als Gesamtbelastung sichtbar. Ohne auffälliges Review entsteht daraus keine automatische Kürzung von Laufkilometern.";
+  } else if (volumeRatio != null && volumeRatio > 1.2) {
+    consequence = "Der tatsächliche Laufumfang lag deutlich über Plan. Flexible Folgeeinheiten werden deshalb anhand von Erholung und Reviews geprüft; es gibt keine Kilometerschuld.";
   }
 
   const tone = keyMissed.length > 0 || lowRecoveryRows.length >= 2 || giRows.length >= 2 || (volumeRatio != null && volumeRatio > 1.25)

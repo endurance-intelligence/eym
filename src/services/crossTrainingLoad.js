@@ -18,6 +18,8 @@ const CYCLING_INTENSITY = {
   threshold: { key: "threshold", label: "Schwelle / Intervalle", factor: 0.67, loadFactor: 1 },
 };
 
+const IMPACT_RANK = { none: 0, watch: 1, review: 2, adjust: 3 };
+
 function numeric(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -68,6 +70,124 @@ function activityRpe(activity = {}) {
   const raw = numeric(activity.perceivedExertion || activity.rpe || activity.reviewRpe);
   if (raw <= 0) return 0;
   return raw > 10 ? raw / 10 : raw;
+}
+
+function reviewSignal(review = {}) {
+  const rpe = numeric(review.rpe);
+  const legs = numeric(review.legs);
+  const energy = numeric(review.energy);
+  const overall = numeric(review.overallFeeling);
+  const hasReview = rpe > 0 || legs > 0 || energy > 0 || overall > 0;
+  if (!hasReview) return { key: "missing", label: "Review offen" };
+  const strained = (legs > 0 && legs <= 5)
+    || (energy > 0 && energy <= 5)
+    || (overall > 0 && overall <= 5)
+    || rpe >= 8;
+  if (strained) return { key: "strained", label: "Erholung auffällig" };
+  const stable = (!legs || legs >= 6)
+    && (!energy || energy >= 6)
+    && (!overall || overall >= 6)
+    && (!rpe || rpe <= 7);
+  return stable
+    ? { key: "stable", label: "Review stabil" }
+    : { key: "neutral", label: "Review unauffällig" };
+}
+
+function plannedActivitySet(value) {
+  if (value instanceof Set) return value;
+  return new Set(Array.isArray(value) ? value.map(String) : []);
+}
+
+function historicalPeers(activity = {}, allActivities = []) {
+  const family = sportFamily(activity);
+  const currentAt = activityTimestamp(activity);
+  const currentTime = currentAt.getTime();
+  const currentWeekday = currentAt.getDay();
+  const currentId = String(activity.id || "");
+  const recent = (allActivities || [])
+    .filter((candidate) => sportFamily(candidate) === family)
+    .filter((candidate) => String(candidate.id || "") !== currentId)
+    .filter((candidate) => {
+      const timestamp = activityTimestamp(candidate).getTime();
+      return timestamp > 0 && timestamp < currentTime && currentTime - timestamp <= 180 * 86400000;
+    });
+  if (family !== "soccer") return recent;
+  const sameWeekday = recent.filter((candidate) => activityTimestamp(candidate).getDay() === currentWeekday);
+  return sameWeekday.length >= 3 ? sameWeekday : recent;
+}
+
+function baselineForActivity(activity = {}, allActivities = []) {
+  const peers = historicalPeers(activity, allActivities);
+  const family = sportFamily(activity);
+  const peerLoads = peers.map((candidate) => crossTrainingCreditForActivity(candidate)).filter(Boolean);
+  return {
+    sampleSize: peerLoads.length,
+    distanceKm: round(median(peerLoads.map((detail) => detail.sourceDistanceKm).filter((value) => value > 0)), 1),
+    durationMinutes: round(median(peerLoads.map((detail) => detail.durationMinutes).filter((value) => value > 0)), 0),
+    coachLoad: round(median(peerLoads.map((detail) => detail.coachLoad).filter((value) => value > 0)), 0),
+    family,
+  };
+}
+
+function ratio(actual, baseline) {
+  const reference = numeric(baseline);
+  return reference > 0 ? numeric(actual) / reference : 0;
+}
+
+function impactForDetail(detail = {}, activity = {}, options = {}) {
+  const review = options.reviews?.[activity.id] || {};
+  const reviewState = reviewSignal(review);
+  const baseline = baselineForActivity(activity, options.allActivities || []);
+  const plannedIds = plannedActivitySet(options.plannedActivityIds);
+  const planned = plannedIds.has(String(activity.id || ""));
+  const durationRatio = ratio(detail.durationMinutes, baseline.durationMinutes);
+  const loadRatio = ratio(detail.coachLoad, baseline.coachLoad);
+  const distanceRatio = detail.kind === "football" ? ratio(detail.sourceDistanceKm, baseline.distanceKm) : 0;
+  const deviationRatio = Math.max(durationRatio, loadRatio, distanceRatio);
+  const baselineReliable = baseline.sampleSize >= 3;
+  const highByHistory = baselineReliable && deviationRatio >= 1.35;
+  const veryHighByHistory = baselineReliable && deviationRatio >= 1.7;
+  const highWithoutHistory = !baselineReliable && (
+    (detail.kind === "roadCycling" && detail.durationMinutes >= 150)
+    || (detail.kind === "football" && detail.durationMinutes >= 120)
+    || detail.coachLoad >= 150
+  );
+  const unusual = highByHistory || highWithoutHistory;
+  const veryUnusual = veryHighByHistory || (!baselineReliable && detail.durationMinutes >= 240);
+
+  let impact = "none";
+  if (reviewState.key === "strained") impact = "adjust";
+  else if (unusual && reviewState.key === "missing") impact = "review";
+  else if (unusual) impact = "watch";
+
+  const comparison = baselineReliable
+    ? `${baseline.sampleSize} ähnliche ${detail.label}-Einheiten: typisch ca. ${baseline.durationMinutes || "–"} min${baseline.distanceKm ? ` · ${String(baseline.distanceKm).replace(".", ",")} km` : ""}.`
+    : `Noch keine belastbare persönliche ${detail.label}-Baseline (${baseline.sampleSize} Vergleichseinheiten).`;
+  const explanation = planned && !unusual && reviewState.key !== "strained"
+    ? `${detail.label} war im Wochenplan vorgesehen und liegt im persönlichen Erwartungsbereich. Keine Laufkilometer werden automatisch gekürzt.`
+    : impact === "review"
+      ? `${detail.label} war deutlich umfangreicher als dein persönlicher Vergleich. Vor einer Planänderung wartet der Coach auf dein Review.`
+      : impact === "adjust"
+        ? `${detail.label} plus Review zeigen eine steuerungsrelevante Belastung. Nur flexible Folgeeinheiten dürfen angepasst werden; es gibt keine 1:1-Kilometerverrechnung.`
+        : unusual
+          ? `${detail.label} war auffällig umfangreich, dein Review ist aber unauffällig. Der Laufumfang bleibt zunächst bestehen.`
+          : planned
+            ? `${detail.label} war wie geplant und wird als Gesamtbelastung berücksichtigt, nicht als Laufkilometer.`
+            : `${detail.label} wird als zusätzliche Gesamtbelastung dokumentiert. Ohne auffällige Reaktion entsteht daraus keine automatische Laufkürzung.`;
+
+  return {
+    planned,
+    baseline,
+    baselineReliable,
+    deviationRatio: round(deviationRatio, 2),
+    unusual,
+    veryUnusual,
+    reviewState: reviewState.key,
+    reviewLabel: reviewState.label,
+    impact,
+    comparison,
+    impactExplanation: explanation,
+  };
 }
 
 export function isEBikeActivity(activity = {}) {
@@ -166,7 +286,7 @@ export function crossTrainingCreditForActivity(activity = {}, options = {}) {
       equivalentKm: distanceKm,
       aerobicMinutes: 0,
       coachLoad: round(numeric(activity.trainingLoad) || minutes * 0.8, 0),
-      explanation: "Tatsächlich aufgezeichnete Fußballkilometer zählen als zusätzliche Lauf- und Beinbelastung, ersetzen aber keinen Longrun oder Temporeiz.",
+      explanation: "Fußball zählt als zusätzliche Bein- und Gesamtbelastung, bleibt aber getrennt von echten Laufkilometern.",
     };
   }
 
@@ -191,7 +311,7 @@ export function crossTrainingCreditForActivity(activity = {}, options = {}) {
       aerobicMinutes: round(aerobicMinutes, 1),
       equivalentKm: round(aerobicMinutes / (easyPaceSeconds / 60), 2),
       coachLoad: round(numeric(activity.trainingLoad) || minutes * intensity.loadFactor, 0),
-      explanation: `${round(minutes, 0)} Minuten Rennrad werden über ${intensity.label} (${intensity.source}) bewertet. Die Strecke selbst bestimmt den Laufersatz nicht.`,
+      explanation: `${round(minutes, 0)} Minuten Rennrad werden als Gesamtbelastung über ${intensity.label} (${intensity.source}) eingeordnet. Die Strecke wird nicht in Laufkilometer umgerechnet.`,
     };
   }
 
@@ -207,10 +327,15 @@ export function summarizeCrossTrainingCredits(activities = [], options = {}) {
   const details = activities
     .map((activity) => {
       const review = options.reviews?.[activity.id] || {};
-      return crossTrainingCreditForActivity({
+      const base = crossTrainingCreditForActivity({
         ...activity,
         reviewRpe: activity.reviewRpe ?? review.rpe,
       }, { easyPaceSeconds });
+      if (!base) return null;
+      return {
+        ...base,
+        ...impactForDetail(base, activity, options),
+      };
     })
     .filter(Boolean);
   const rawEquivalentKm = details.reduce((sum, detail) => sum + detail.equivalentKm, 0);
@@ -227,6 +352,14 @@ export function summarizeCrossTrainingCredits(activities = [], options = {}) {
     const timestamp = Date.parse(detail.activityAt || "");
     return Number.isFinite(timestamp) ? Math.max(latest, timestamp) : latest;
   }, 0);
+  const actionable = details.filter((detail) => ["review", "adjust"].includes(detail.impact));
+  const latestActionableActivityAt = actionable.reduce((latest, detail) => {
+    const timestamp = Date.parse(detail.activityAt || "");
+    return Number.isFinite(timestamp) ? Math.max(latest, timestamp) : latest;
+  }, 0);
+  const impactLevel = details.reduce((current, detail) => (
+    IMPACT_RANK[detail.impact] > IMPACT_RANK[current] ? detail.impact : current
+  ), "none");
   const rawFootballEquivalentKm = details
     .filter((detail) => detail.kind === "football")
     .reduce((sum, detail) => sum + detail.equivalentKm, 0);
@@ -255,6 +388,12 @@ export function summarizeCrossTrainingCredits(activities = [], options = {}) {
     creditedRoadCyclingAerobicMinutes,
     coachLoad,
     latestActivityAt,
+    latestActionableActivityAt,
+    impactLevel,
+    actionable,
+    plannedNormalCount: details.filter((detail) => detail.planned && detail.impact === "none").length,
+    reviewRequiredCount: details.filter((detail) => detail.impact === "review").length,
+    adjustmentRequiredCount: details.filter((detail) => detail.impact === "adjust").length,
     capKm,
     maxShare,
     capped: creditedEquivalentKm + 1e-9 < rawEquivalentKm,
@@ -267,12 +406,21 @@ function compact(value) {
 
 export function formatCrossTrainingCredit(summary = {}) {
   const parts = [];
-  if (numeric(summary.footballEquivalentKm) > 0) {
-    parts.push(`${compact(summary.footballEquivalentKm)} km Fußball`);
+  if (numeric(summary.rawFootballEquivalentKm) > 0) {
+    parts.push(`${compact(summary.rawFootballEquivalentKm)} km Fußball`);
   }
-  if (numeric(summary.roadCyclingEquivalentKm) > 0) {
-    const minutes = Math.round(numeric(summary.creditedRoadCyclingAerobicMinutes));
-    parts.push(`${minutes} Laufmin Rennrad (ca. ${compact(summary.roadCyclingEquivalentKm)} km)`);
+  if (numeric(summary.rawRoadCyclingEquivalentKm) > 0) {
+    const minutes = Math.round(numeric(summary.rawAerobicMinutes));
+    parts.push(`${minutes} aerobe Rennrad-Minuten`);
   }
   return parts.join(" · ");
+}
+
+export function formatCrossTrainingContext(summary = {}) {
+  if (!summary?.details?.length) return "Keine zusätzliche sportübergreifende Belastung erkannt";
+  if (summary.impactLevel === "adjust") return "Review zeigt steuerungsrelevante Zusatzbelastung";
+  if (summary.impactLevel === "review") return "Ungewöhnliche Zusatzbelastung · Review abwarten";
+  if (summary.impactLevel === "watch") return "Zusatzbelastung auffällig, aktuell aber stabil verarbeitet";
+  if (summary.plannedNormalCount > 0) return "Geplante Zusatzbelastung im persönlichen Bereich";
+  return "Zusatzbelastung dokumentiert · keine automatische Laufkürzung";
 }

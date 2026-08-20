@@ -44,3 +44,12 @@ test("track builder offers automatic and LAP-on-track control with an explicit G
   assert.match(plannerSource, /Sync erneut anstoßen/);
   assert.match(plannerSource, /EI kann die Übergabe an Intervals\.icu bestätigen, aber nicht sehen, ob Garmin Connect/);
 });
+
+test("cross-training UI separates total load from running kilometres and waits for reviews", () => {
+  assert.match(plannerSource, /Zusatzlast/);
+  assert.match(plannerSource, /nicht in Laufkilometer umgerechnet/);
+  assert.match(plannerSource, /Erst Reaktion verstehen, dann planen/);
+  assert.match(plannerSource, /EI kürzt deshalb noch keinen Lauf/);
+  assert.doesNotMatch(plannerSource, /Planersatz/);
+  assert.doesNotMatch(plannerSource, /bis zu <strong>\{crossTrainingPreview\.creditKm/);
+});

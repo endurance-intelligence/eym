@@ -1,5 +1,4 @@
 import { reviewKind } from "./activityUtils.js";
-import { crossTrainingTargetShare } from "./crossTrainingLoad.js";
 import { blockedTrainingDates } from "./missedSessionDecision.js";
 import {
   availabilityForDate,
@@ -555,6 +554,60 @@ export function applyCrossTrainingCreditToPlan(plan = [], requestedCreditKm = 0)
 
   const appliedCreditKm = Math.max(0, Number(requestedCreditKm || 0) - remainingCredit);
   return { plan: adjustedPlan, appliedCreditKm, unusedCreditKm: remainingCredit };
+}
+
+export function applyCrossTrainingRecoverySignalToPlan(plan = [], details = []) {
+  const signals = (Array.isArray(details) ? details : [])
+    .filter((detail) => detail?.impact === "adjust")
+    .sort((left, right) => String(left.activityAt || "").localeCompare(String(right.activityAt || "")));
+  if (!signals.length) return { plan, adjustedEntryIds: [], signalCount: 0 };
+
+  const adjustedEntryIds = [];
+  let nextPlan = [...plan];
+  signals.forEach((signal) => {
+    const signalDate = String(signal.activityAt || "").slice(0, 10);
+    const candidates = nextPlan
+      .filter((entry) => !entry.completed && !entry.missedReason && !entry.plannedCancellation)
+      .filter((entry) => !signalDate || String(entry.date || "") >= signalDate)
+      .filter((entry) => {
+        if (!isRunningPlanEntry(entry) || entry.raceEvent || entry.fixed || entry.commitmentId || entry.keySession || isLoopWorkout(entry)) return false;
+        const text = `${entry.title || ""} ${entry.type || ""}`.toLowerCase();
+        if (/track|intervall|schwelle|tempo|long\s*run|longrun|wettkampf|race|marathon|ultra/.test(text)) return false;
+        return entry.optional || /easy|locker|recovery|regeneration|grundlage|laufband/.test(text);
+      })
+      .sort((left, right) => `${left.date}${left.time || ""}`.localeCompare(`${right.date}${right.time || ""}`));
+    const candidate = candidates[0];
+    if (!candidate) return;
+
+    nextPlan = nextPlan.map((entry) => {
+      if (entry.id !== candidate.id) return entry;
+      const distance = Math.max(0, Number(entry.distance || 0));
+      const severe = Boolean(signal.veryUnusual) || signal.reviewState === "strained";
+      if (entry.optional && severe) {
+        adjustedEntryIds.push(entry.id);
+        return {
+          ...entry,
+          plannedCancellation: true,
+          crossTrainingAdjusted: true,
+          notes: `${entry.notes || ""} Wegen auffälliger Zusatzbelastung plus Review bleibt diese flexible Einheit optional ausgesetzt. Es werden keine Kilometer aus der anderen Sportart 1:1 verrechnet.`.trim(),
+        };
+      }
+      if (distance <= 0) return entry;
+      const reductionShare = severe ? 0.35 : 0.2;
+      const adjustedDistance = Math.max(3, Math.round(distance * (1 - reductionShare) * 10) / 10);
+      if (adjustedDistance >= distance) return entry;
+      adjustedEntryIds.push(entry.id);
+      return {
+        ...entry,
+        distance: adjustedDistance,
+        title: String(entry.title || "").replace(/^\d+(?:[.,]\d+)?\s*km/, `${String(adjustedDistance).replace(".", ",")} km`),
+        notes: `${entry.notes || ""} Der Coach reduziert diese flexible Easy-Einheit wegen deiner tatsächlichen Reaktion auf die Zusatzbelastung. Die andere Sportart wird nicht in Laufkilometer umgerechnet.`.trim(),
+        crossTrainingAdjusted: true,
+      };
+    });
+  });
+
+  return { plan: nextPlan, adjustedEntryIds: [...new Set(adjustedEntryIds)], signalCount: signals.length };
 }
 
 function recentLongestRun(activities, weekStart) {
@@ -1760,16 +1813,15 @@ export function generateWeekPlan({
     ? Math.max(Math.round(protectedEventWeek.totalDistanceKm), Math.round(target))
     : Math.max(4, Math.round(target));
 
-  const crossTrainingMaxShare = crossTrainingTargetShare({
-    phaseKey: phase.key,
-    phaseLabel: phase.label,
-    recoveryWeek,
-  });
-  const crossTrainingCreditCapKm = Math.max(0, target * crossTrainingMaxShare);
+  // Cross-training is tracked as load context, never as a kilometre exchange rate.
+  // Only an athlete review that marks the additional load as problematic may
+  // trigger a conservative change to a flexible follow-up run.
   const recognizedCrossTrainingKm = Math.max(0, Number(completedCrossTrainingKm || 0));
-  const cappedCrossTrainingKm = Math.min(recognizedCrossTrainingKm, crossTrainingCreditCapKm);
-  let appliedCrossTrainingKm = 0;
-  let unusedCrossTrainingKm = cappedCrossTrainingKm;
+  const crossTrainingImpactLevel = (crossTrainingDetails || []).reduce((level, detail) => {
+    const rank = { none: 0, watch: 1, review: 2, adjust: 3 };
+    return (rank[detail?.impact] || 0) > (rank[level] || 0) ? detail.impact : level;
+  }, "none");
+  let crossTrainingAdjustedEntryIds = [];
 
   const allowedRuns = new Set(Array.isArray(config.runDays) ? config.runDays : []);
   (config.recurringCommitments || [])
@@ -2101,11 +2153,10 @@ export function generateWeekPlan({
     }
   }
 
-  if (offsetWeeks === 0 && cappedCrossTrainingKm > 0) {
-    const crossTrainingAdjustment = applyCrossTrainingCreditToPlan(plan, cappedCrossTrainingKm);
+  if (offsetWeeks === 0 && crossTrainingImpactLevel === "adjust") {
+    const crossTrainingAdjustment = applyCrossTrainingRecoverySignalToPlan(plan, crossTrainingDetails);
     plan = crossTrainingAdjustment.plan;
-    appliedCrossTrainingKm = crossTrainingAdjustment.appliedCreditKm;
-    unusedCrossTrainingKm = crossTrainingAdjustment.unusedCreditKm;
+    crossTrainingAdjustedEntryIds = crossTrainingAdjustment.adjustedEntryIds;
   }
 
   plan = plan.map((entry) => {
@@ -2138,49 +2189,39 @@ export function generateWeekPlan({
 
   const rawFootballCreditKm = crossTrainingDetails
     .filter((detail) => detail.kind === "football")
-    .reduce((sum, detail) => sum + Number(detail.equivalentKm || 0), 0);
-  const rawRoadCyclingCreditKm = crossTrainingDetails
-    .filter((detail) => detail.kind === "roadCycling")
-    .reduce((sum, detail) => sum + Number(detail.equivalentKm || 0), 0);
+    .reduce((sum, detail) => sum + Number(detail.sourceDistanceKm || 0), 0);
   const rawRoadCyclingAerobicMinutes = crossTrainingDetails
     .filter((detail) => detail.kind === "roadCycling")
     .reduce((sum, detail) => sum + Number(detail.aerobicMinutes || 0), 0);
-  const appliedFootballCreditKm = Math.min(rawFootballCreditKm, appliedCrossTrainingKm);
-  const appliedRoadCyclingCreditKm = Math.min(
-    rawRoadCyclingCreditKm,
-    Math.max(0, appliedCrossTrainingKm - appliedFootballCreditKm),
-  );
-  const appliedRoadCyclingAerobicMinutes = rawRoadCyclingCreditKm > 0
-    ? rawRoadCyclingAerobicMinutes * (appliedRoadCyclingCreditKm / rawRoadCyclingCreditKm)
-    : 0;
   const plannedFutureRunningKm = plan
     .filter((entry) => !entry.plannedCancellation && isRunningPlanEntry(entry))
     .reduce((sum, entry) => sum + Number(entry.distance || 0), 0);
   const projectedRunningKm = Number(completedRunningKm || 0) + plannedFutureRunningKm;
-  const projectedLoadEquivalentKm = projectedRunningKm + appliedCrossTrainingKm;
   const corridorLowKm = Number(weekPrescription.corridor?.lowKm || target);
   const corridorHighKm = Number(weekPrescription.corridor?.highKm || target);
-  const withinCorridor = projectedLoadEquivalentKm >= corridorLowKm - 1
-    && projectedLoadEquivalentKm <= corridorHighKm + 1;
+  const withinCorridor = projectedRunningKm >= corridorLowKm - 1
+    && projectedRunningKm <= corridorHighKm + 1;
   const finalWeekPrescription = {
     ...weekPrescription,
     targetKm: target,
     plannedFutureRunningKm: Math.round(plannedFutureRunningKm * 10) / 10,
     completedRunningKm: Math.round(Number(completedRunningKm || 0) * 10) / 10,
     projectedRunningKm: Math.round(projectedRunningKm * 10) / 10,
-    projectedLoadEquivalentKm: Math.round(projectedLoadEquivalentKm * 10) / 10,
+    projectedLoadEquivalentKm: Math.round(projectedRunningKm * 10) / 10,
     withinCorridor,
     deliveryNote: withinCorridor
-      ? "Der konkrete Plan liegt im automatisch berechneten Wochenkorridor."
-      : projectedLoadEquivalentKm < corridorLowKm
-        ? "Verfügbarkeit, absolvierte Einheiten oder geschützte Schlüsselreize begrenzen die Woche unterhalb des Korridors. Der Coach erzeugt daraus keine Kilometerschuld."
-        : "Fixtermine oder bereits absolvierte Belastung liegen über dem Korridor. Der Coach schützt deshalb zusätzliche flexible Einheiten und Intensität.",
+      ? crossTrainingImpactLevel === "adjust" && crossTrainingAdjustedEntryIds.length
+        ? "Der Laufumfang bleibt im Wochenkorridor; eine flexible Folgeeinheit wurde wegen deines Reviews zur Zusatzbelastung angepasst."
+        : "Der konkrete Laufplan liegt im automatisch berechneten Wochenkorridor. Zusatzsport wird separat als Belastung geführt."
+      : projectedRunningKm < corridorLowKm
+        ? "Verfügbarkeit, absolvierte Einheiten oder geschützte Schlüsselreize begrenzen die Laufwoche unterhalb des Korridors. Der Coach erzeugt daraus keine Kilometerschuld."
+        : "Fixtermine oder bereits absolvierte Laufbelastung liegen über dem Korridor. Der Coach schützt deshalb zusätzliche flexible Einheiten und Intensität.",
   };
 
   return {
     plan,
     target,
-    remainingTarget: Math.max(0, target - Number(completedRunningKm || 0) - appliedCrossTrainingKm),
+    remainingTarget: Math.max(0, target - Number(completedRunningKm || 0)),
     blockedDates: [...blockedDates],
     availabilityBlockedDates: [...configuredAvailabilityBlockedDates],
     planningConstraints: effectiveAvailabilityExceptions
@@ -2197,15 +2238,21 @@ export function generateWeekPlan({
       })),
     planningConstraintViolations: finalPlanningConstraintViolations,
     crossTrainingCredit: {
+      // Legacy kilometre fields remain for stored-state compatibility but are no
+      // longer used to subtract running volume.
       recognizedKm: recognizedCrossTrainingKm,
-      cappedKm: cappedCrossTrainingKm,
-      appliedKm: appliedCrossTrainingKm,
-      unusedKm: unusedCrossTrainingKm,
-      capKm: crossTrainingCreditCapKm,
-      maxShare: crossTrainingMaxShare,
-      appliedFootballKm: appliedFootballCreditKm,
-      appliedRoadCyclingKm: appliedRoadCyclingCreditKm,
-      appliedRoadCyclingAerobicMinutes,
+      cappedKm: 0,
+      appliedKm: 0,
+      unusedKm: 0,
+      capKm: 0,
+      maxShare: 0,
+      appliedFootballKm: 0,
+      appliedRoadCyclingKm: 0,
+      appliedRoadCyclingAerobicMinutes: 0,
+      footballDistanceKm: Math.round(rawFootballCreditKm * 10) / 10,
+      roadCyclingAerobicMinutes: Math.round(rawRoadCyclingAerobicMinutes),
+      impactLevel: crossTrainingImpactLevel,
+      adjustedEntryIds: crossTrainingAdjustedEntryIds,
       details: crossTrainingDetails,
     },
     recentAverage: Math.round(recentAverage),
