@@ -637,6 +637,7 @@ export default function Planner() {
   const [plannerNow, setPlannerNow] = useState(() => new Date());
   const [availabilityEditing, setAvailabilityEditing] = useState(null);
   const [weeklyContextDraft, setWeeklyContextDraft] = useState(null);
+  const [availabilityFocusId, setAvailabilityFocusId] = useState("");
 
   const weekStart = useMemo(() => startOfWeek(new Date(), offsetWeeks), [offsetWeeks]);
   const weekEnd = dateForDay(weekStart, 6);
@@ -728,6 +729,7 @@ export default function Planner() {
   const completedKm = actualRunningKm || weekPlan
     .filter((item) => item.completed && normalizedType(`${item.type || ""} ${item.title || ""}`) === "running")
     .reduce((sum, item) => sum + Number(item.distance || 0), 0);
+  const weekRunningKm = completedKm + plannedKm;
   const previousWeekHasPlan = useMemo(() => {
     const previousStart = startOfWeek(new Date(), offsetWeeks - 1);
     const previousEnd = dateForDay(previousStart, 6);
@@ -810,9 +812,21 @@ export default function Planner() {
     () => weekPlan.filter((item) => !item.completed && !item.missedReason && (offsetWeeks > 0 || item.date >= todayKey)),
     [weekPlan, offsetWeeks, todayKey],
   );
-  const availabilityConflicts = useMemo(() => futurePlan.filter((item) => (
-    !item.raceEvent && weekAvailability.has(item.date)
-  )), [futurePlan, weekAvailability]);
+  const availabilityConflicts = useMemo(() => futurePlan
+    .filter((item) => !item.raceEvent && weekAvailability.has(item.date))
+    .map((item) => {
+      const availability = weekAvailability.get(item.date) || {};
+      const restriction = availability.status === "blocked"
+        ? `Nicht verfügbar${availability.reason ? `: ${availability.reason}` : ""}`
+        : availability.recoveryOnly
+          ? `${availability.reason || "Eingeschränkt"} · nur Recovery${availability.maxDurationMinutes ? ` bis ${availability.maxDurationMinutes} min` : ""}`
+          : availability.noRunning
+            ? `${availability.reason || "Eingeschränkt"} · kein Lauf`
+            : availability.maxDurationMinutes
+              ? `${availability.reason || "Eingeschränkt"} · max. ${availability.maxDurationMinutes} min`
+              : availability.reason || "Eingeschränkter Tag";
+      return { item, availability, restriction };
+    }), [futurePlan, weekAvailability]);
   const provisionalTrackPlan = useMemo(
     () => futurePlan.filter(isProvisionalTrackWorkout),
     [futurePlan],
@@ -2389,7 +2403,7 @@ export default function Planner() {
     }));
     setAvailabilityEditing(null);
     setStatus(hasPlanConflict
-      ? `${planChangeDateLabel(blockedDate)} ist jetzt für Training blockiert. Öffne „Auswirkung prüfen“, damit der Coach die bestehenden Einheiten sicher neu verteilt.`
+      ? `${planChangeDateLabel(blockedDate)} ist jetzt für Training blockiert. Die betroffene Einheit wird oben genannt; du kannst sie direkt ansehen oder den Plan gezielt anpassen.`
       : `${planChangeDateLabel(blockedDate)} ist für Training blockiert. Der Coach hält den Tag bei der nächsten Planung frei.`);
   }
 
@@ -2408,6 +2422,17 @@ export default function Planner() {
     setAvailabilityEditing(null);
     setStatus(`${planChangeDateLabel(date)} ist wieder für Training verfügbar. Bestehende Einheiten bleiben unverändert, bis du die Woche neu planst.`);
   }
+
+  const focusAvailabilityConflict = (entryId) => {
+    if (!entryId) return;
+    setAvailabilityFocusId(entryId);
+    requestAnimationFrame(() => {
+      document.getElementById(`planner-workout-${entryId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    window.setTimeout(() => {
+      setAvailabilityFocusId((current) => current === entryId ? "" : current);
+    }, 2200);
+  };
 
   return (
     <>
@@ -2487,12 +2512,27 @@ export default function Planner() {
         )}
 
         {!isPastWeek && availabilityConflicts.length > 0 && (
-          <section className="planner-inline-notice planner-inline-notice-warning">
-            <div>
-              <span>Wochenangaben geändert</span>
-              <strong>{availabilityConflicts.length} Einheit{availabilityConflicts.length === 1 ? " liegt" : "en liegen"} noch auf einem eingeschränkten Tag.</strong>
+          <section className="planner-inline-notice planner-inline-notice-warning planner-availability-conflicts">
+            <div className="planner-availability-conflict-copy">
+              <span>{availabilityConflicts.length === 1 ? "Wochenangabe betrifft eine Einheit" : `${availabilityConflicts.length} Einheiten prüfen`}</span>
+              <div className="planner-availability-conflict-list">
+                {availabilityConflicts.slice(0, 3).map(({ item, restriction }) => (
+                  <div className="planner-availability-conflict-row" key={item.id}>
+                    <strong>{dayFormatter.format(new Date(`${item.date}T12:00:00`))} · {item.title}</strong>
+                    <small>{[
+                      item.distance ? `${item.distance} km` : "",
+                      item.duration ? `${item.duration} min` : "",
+                      restriction,
+                    ].filter(Boolean).join(" · ")}</small>
+                  </div>
+                ))}
+                {availabilityConflicts.length > 3 && <small>+ {availabilityConflicts.length - 3} weitere Einheit{availabilityConflicts.length - 3 === 1 ? "" : "en"}</small>}
+              </div>
             </div>
-            <button type="button" onClick={replanCurrentWeek}>Auswirkung prüfen</button>
+            <div className="planner-availability-conflict-actions">
+              <button type="button" onClick={() => focusAvailabilityConflict(availabilityConflicts[0]?.item?.id)}>Einheit ansehen</button>
+              <button type="button" className="ghost" onClick={replanCurrentWeek}>Plan anpassen</button>
+            </div>
           </section>
         )}
 
@@ -2531,7 +2571,7 @@ export default function Planner() {
                 <small>{loadComparisonLabel} · {scienceAssessment.loadBand?.label || "Wird eingeordnet"}</small>
               </div>
               <div className="planner-week-logic-metrics">
-                <span><b>{weekPrescription?.corridor?.label || (config.lastTarget ? `${config.lastTarget} km` : "–")}</b></span>
+                <span><b>{weekRunningKm.toFixed(1).replace(".0", "")} km</b> diese Woche</span>
                 <span><b>{fixedSessionCount}</b> Termine</span>
                 <span><b>{scienceAssessment.hardCount ?? keySessionCount}</b> Reize</span>
               </div>
@@ -2543,6 +2583,13 @@ export default function Planner() {
                 <strong>{weekPrescription?.focus || "Training passend zur aktuellen Phase steuern."}</strong>
                 {weekPrescription?.weekType?.summary && <p>{weekPrescription.weekType.summary}</p>}
                 {weekPrescription?.deliveryNote && <p>{weekPrescription.deliveryNote}</p>}
+              </article>
+              <article>
+                <span>Wochenumfang</span>
+                <strong>{weekRunningKm.toFixed(1).replace(".0", "")} km aktuell · {completedKm.toFixed(1).replace(".0", "")} km erledigt · {plannedKm.toFixed(1).replace(".0", "")} km offen</strong>
+                <p>{weekPrescription?.corridor?.label
+                  ? `Der normale Coach-Rahmen liegt aktuell bei ${weekPrescription.corridor.label}. Er ist kein Wochen-Soll, sondern ein Belastungskorridor aus deiner Entwicklung. Die konkrete Woche darf durch Wettkampf, Verfügbarkeit und Erholung darunter liegen; die Differenz ist keine Kilometerschuld.`
+                  : "Die konkrete Wochenplanung zählt erledigte und noch offene Laufeinheiten. Nicht gelaufene Differenzen werden nicht als Kilometerschuld nachgeholt."}</p>
               </article>
               <article>
                 <span>Warum dieser Wochentyp?</span>
@@ -2608,8 +2655,11 @@ export default function Planner() {
       </div>
 
       <section className="planner-overview-strip">
-        <div><span>Noch geplant</span><strong>{plannedKm.toFixed(1).replace(".0", "")} km</strong></div>
-        <div><span>Gelaufen</span><strong>{completedKm.toFixed(1)} km</strong></div>
+        <div className="planner-overview-volume">
+          <span>Wochenumfang</span>
+          <strong>{weekRunningKm.toFixed(1).replace(".0", "")} km</strong>
+          <small>{completedKm.toFixed(1).replace(".0", "")} km erledigt · {plannedKm.toFixed(1).replace(".0", "")} km offen</small>
+        </div>
         <div title={crossTrainingLabel || "Keine zusätzliche sportübergreifende Belastung erkannt"}><span>Zusatzlast</span><strong>{crossTrainingSummary.details.length ? (crossTrainingSummary.impactLevel === "adjust" ? "Prüfen" : crossTrainingSummary.impactLevel === "review" ? "Review offen" : "Im Rahmen") : "–"}</strong></div>
         <div><span>Erledigt</span><strong>{weekActivities.length} Einheiten</strong></div>
         <div className="planner-overview-state"><span>Status</span><strong>{isPastWeek ? "Abgeschlossen" : weekPlan.length ? (weekAccepted ? "Angenommen · Änderungen gezielt" : weekApprovalState === WEEK_APPROVAL_STATES.CHANGED ? "Geändert · erneut annehmen" : "Entwurf · noch annehmen") : planningWeekLocked ? "Wochenabschluss fehlt" : "Bereit zur Planung"}</strong></div>
@@ -2882,7 +2932,7 @@ export default function Planner() {
                 const raceProtocol = item.raceEvent
                   ? item.raceProtocol || buildRaceProtocolForState(state, raceEventDetails)
                   : null;
-                const className = `planner-workout ${completed ? "completed" : ""} ${isMissed ? "missed" : ""} ${isCancelled ? "cancelled" : ""} ${hasStateMarker ? "" : "no-marker"}`;
+                const className = `planner-workout ${completed ? "completed" : ""} ${isMissed ? "missed" : ""} ${isCancelled ? "cancelled" : ""} ${hasStateMarker ? "" : "no-marker"} ${availabilityFocusId === item.id ? "planner-workout-highlighted" : ""}`;
                 return (
                   <div
                     className={`${className} ${reviewDestination ? "planner-workout-review-open" : ""}`}

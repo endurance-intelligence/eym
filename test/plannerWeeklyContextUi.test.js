@@ -34,6 +34,19 @@ test("weekly view keeps the default scan calm and moves verbose detail behind di
   assert.match(plannerSource, /planner-availability-note-details/);
 });
 
+
+test("weekly overview names the affected unit and separates concrete volume from the coach corridor", () => {
+  assert.match(plannerSource, /Wochenangabe betrifft eine Einheit/);
+  assert.match(plannerSource, /Einheit ansehen/);
+  assert.match(plannerSource, /Plan anpassen/);
+  assert.doesNotMatch(plannerSource, />Auswirkung prüfen<\/button>/);
+  assert.match(plannerSource, /<span>Wochenumfang<\/span>/);
+  assert.match(plannerSource, /km erledigt · \{plannedKm/);
+  assert.match(plannerSource, /Der normale Coach-Rahmen liegt aktuell bei/);
+  assert.match(plannerSource, /kein Wochen-Soll/);
+  assert.doesNotMatch(plannerSource, /<span><b>\{weekPrescription\?\.corridor\?\.label \|\| \(config\.lastTarget/);
+});
+
 test("track builder offers automatic and LAP-on-track control with an explicit Garmin preflight", () => {
   assert.match(plannerSource, /Steuerung des Hauptteils/);
   assert.match(plannerSource, />Automatisch</);

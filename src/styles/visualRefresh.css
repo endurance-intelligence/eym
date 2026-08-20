@@ -592,3 +592,30 @@ details.card{box-shadow:none}
   .shell main .planner-overview-strip>div,.shell main .planner-overview-strip>button{padding:9px 10px}
   .training-sport-summary>div{flex-basis:155px}
 }
+
+/* v3.9.99 – planner status controls stay compact inside the global button system */
+.shell main .planner-check{
+  width:30px;
+  min-width:30px!important;
+  height:30px;
+  min-height:30px!important;
+  padding:0!important;
+  border-radius:9px!important;
+  display:grid;
+  place-items:center;
+  flex:none;
+}
+.shell main button.planner-check.ready::before{
+  content:"✓";
+  color:var(--muted-bright);
+  font-size:13px;
+  font-weight:900;
+  opacity:.38;
+  transition:opacity .16s ease,color .16s ease;
+}
+.shell main button.planner-check.ready:hover::before,
+.shell main button.planner-check.ready:focus-visible::before{
+  color:var(--accent-bright);
+  opacity:1;
+}
+.shell main .planner-overview-volume small{font-size:11px}

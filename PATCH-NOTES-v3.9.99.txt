@@ -1,0 +1,9 @@
+v3.9.99 – Clear weekly volume and availability conflicts
+
+- Replaces the ambiguous normal 60–64 km corridor chip in the collapsed weekly explanation with the concrete current-week running volume.
+- Combines completed and remaining running kilometres into one clear Wochenumfang KPI.
+- Keeps the normal coach corridor inside the explanation and explicitly labels it as a capacity corridor, not a weekly target or kilometre debt.
+- Availability warnings now name the affected workout and restriction instead of sending the athlete straight into replanning without context.
+- Adds “Einheit ansehen” to scroll to and briefly highlight the affected workout, plus a separate “Plan anpassen” action.
+- Makes planner completion controls compact rounded squares so the empty ready state no longer stretches into an odd oval under the global button system.
+- No planning, coach, race, fuel, Garmin or workout logic changed.
