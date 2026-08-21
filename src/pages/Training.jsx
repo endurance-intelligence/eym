@@ -150,7 +150,7 @@ export default function Training() {
     });
   }
 
-  function saveActivityName(nextName) {
+  function saveActivityName({ name: nextName, sportTypeOverride = "" }) {
     if (!editingName) return;
     if (editingName.isActivityGroup) {
       setState((current) => ({
@@ -166,8 +166,9 @@ export default function Training() {
       sourceName,
       customName: nextName === sourceName ? null : nextName,
       nameOverride: nextName !== sourceName,
+      sportTypeOverride: sportTypeOverride || null,
     });
-    if (selected?.id === editingName.id) setSelected((current) => ({ ...current, name: nextName, sourceName }));
+    if (selected?.id === editingName.id) setSelected((current) => ({ ...current, name: nextName, sourceName, sportTypeOverride: sportTypeOverride || null }));
     setEditingName(null);
   }
 
@@ -362,7 +363,7 @@ export default function Training() {
                                   <div className="activity-row-tools">
                                     <WorkoutRoleBadges assessment={roleAssessment} className="activity-role-badges" />
                                     <div className="activity-row-actions">
-                                      <button className="activity-edit-button" onClick={() => setEditingName(activity)} aria-label={`${activity.name} umbenennen`} title="Trainingsname ändern"><span aria-hidden="true">✎</span><b>Name ändern</b></button>
+                                      <button className="activity-edit-button" onClick={() => setEditingName(activity)} aria-label={`${activity.name} bearbeiten`} title="Name oder Sportart korrigieren"><span aria-hidden="true">✎</span><b>Bearbeiten</b></button>
                                       {activity.isActivityGroup && !state.reviews[activity.id] && <button className="activity-edit-button activity-unmerge-button" onClick={() => dissolveGroup(activity)} aria-label="Zusammenfassung aufheben" title="Zusammenfassung aufheben"><span aria-hidden="true">↩</span><b>Aufheben</b></button>}
                                     </div>
                                   </div>

@@ -208,6 +208,10 @@ function validDate(value: unknown) {
   return /^\d{4}-\d{2}-\d{2}$/.test(String(value || ""));
 }
 
+function validTime(value: unknown) {
+  return /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(value || ""));
+}
+
 function safeMinutes(value: unknown, fallback = 60) {
   const parsed = Math.round(Number(value || fallback));
   return Math.max(1, Math.min(24 * 60, Number.isFinite(parsed) ? parsed : fallback));
@@ -278,6 +282,7 @@ function normalizedRaceWorkout(input: unknown) {
     raceKey: safeRaceKey(workout.raceKey),
     raceName: safeRaceText(workout.raceName, "EI Race Strategy"),
     publishDate,
+    publishTime: validTime(workout.publishTime) ? String(workout.publishTime) : "12:00",
     targetDurationMinutes: Number.isFinite(targetDuration) ? Math.max(0.1, Math.min(24 * 60 * 7, targetDuration)) : 0.1,
     paceToleranceSeconds: tolerance,
     steps,
@@ -294,6 +299,47 @@ function raceWorkoutDescription(workout: ReturnType<typeof normalizedRaceWorkout
     lines.push("", label, `- ${raceDistanceToken(step.distanceM)} ${racePaceText(fast)}-${racePaceText(slow)}/km Pace intensity=active`);
   });
   return lines.join("\n");
+}
+
+function wait(milliseconds: number) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+async function verifyPublishedRaceWorkout({
+  athleteId,
+  apiKey,
+  workout,
+  externalId,
+}: {
+  athleteId: string;
+  apiKey: string;
+  workout: ReturnType<typeof normalizedRaceWorkout>;
+  externalId: string;
+}) {
+  const query = new URLSearchParams({ oldest: workout.publishDate, newest: workout.publishDate });
+  let candidate: Record<string, unknown> | null = null;
+
+  for (const delay of [0, 250, 700]) {
+    if (delay) await wait(delay);
+    const response = await intervalsGet(`/athlete/${athleteId}/events?${query.toString()}`, apiKey);
+    const events = Array.isArray(response) ? response : [];
+    candidate = events.find((event) => String(event?.external_id || "") === externalId) || null;
+    if (candidate) break;
+  }
+
+  if (!candidate) {
+    throw new Error("Intervals.icu hat die Race Strategy nach dem Speichern nicht zurückgeliefert. Der Garmin-Sync wurde deshalb nicht als erfolgreich markiert.");
+  }
+
+  const category = String(candidate.category || "").toUpperCase();
+  const type = String(candidate.type || "");
+  const description = String(candidate.description || "");
+  const stepCount = (description.match(/intensity=active/g) || []).length;
+  if (category !== "WORKOUT" || type.toLowerCase() !== "run" || stepCount < workout.steps.length) {
+    throw new Error(`Race Strategy wurde in Intervals.icu nicht als vollständiges Run-Workout erkannt (${category || "ohne Kategorie"} · ${type || "ohne Sportart"} · ${stepCount}/${workout.steps.length} Schritte).`);
+  }
+
+  return candidate;
 }
 
 function planEvent(item: Record<string, unknown>, existingId?: unknown) {
@@ -491,7 +537,7 @@ Deno.serve(async (request) => {
       )));
       const event = {
         category: "WORKOUT",
-        start_date_local: `${workout.publishDate}T00:00:00`,
+        start_date_local: `${workout.publishDate}T${workout.publishTime}:00`,
         name: workout.raceName,
         type: "Run",
         target: "PACE",
@@ -523,15 +569,19 @@ Deno.serve(async (request) => {
         body: JSON.stringify([event]),
       });
       const uploaded = Array.isArray(result) ? result[0] : null;
+      const verified = await verifyPublishedRaceWorkout({ athleteId, apiKey, workout, externalId });
       return json({
         connected: true,
+        verified: true,
         publishedAt: new Date().toISOString(),
         publishDate: workout.publishDate,
+        startDateLocal: verified.start_date_local || event.start_date_local,
         stepCount: workout.steps.length,
         targetDurationMinutes: workout.targetDurationMinutes,
         externalId,
-        eventId: uploaded?.id || null,
-        category: uploaded?.category || "WORKOUT",
+        eventId: verified.id || uploaded?.id || null,
+        category: verified.category || uploaded?.category || "WORKOUT",
+        type: verified.type || "Run",
         refreshed,
       });
     }

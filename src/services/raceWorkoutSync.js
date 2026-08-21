@@ -2,6 +2,31 @@ function validDate(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(String(value || ""));
 }
 
+function validTime(value) {
+  return /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(value || ""));
+}
+
+function localDateKey(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+export function raceWorkoutSyncTime(publishDate, preferredTime = "", now = new Date()) {
+  const today = localDateKey(now);
+  if (publishDate !== today) return validTime(preferredTime) ? preferredTime : "12:00";
+
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  if (validTime(preferredTime)) {
+    const [hours, minutes] = preferredTime.split(":").map(Number);
+    if (hours * 60 + minutes >= nowMinutes + 5) return preferredTime;
+  }
+
+  const syncMinutes = Math.min(23 * 60 + 59, nowMinutes + 10);
+  return `${String(Math.floor(syncMinutes / 60)).padStart(2, "0")}:${String(syncMinutes % 60).padStart(2, "0")}`;
+}
+
 function cleanText(value, fallback = "") {
   const text = String(value || "").replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim();
   return text || fallback;
@@ -71,6 +96,7 @@ export function buildIntervalsRaceWorkoutPublication({
   raceKey,
   raceName,
   publishDate,
+  publishTime = "",
 } = {}) {
   if (!workout?.compatible || !Array.isArray(workout?.steps) || workout.steps.length === 0) {
     throw new Error(workout?.compatibilityMessage || "Die Rennstrategie ist noch nicht Garmin-kompatibel.");
@@ -91,6 +117,7 @@ export function buildIntervalsRaceWorkoutPublication({
     raceKey: safeRaceKey(raceKey),
     raceName: cleanText(raceName, "EI Race Strategy").slice(0, 120),
     publishDate,
+    publishTime: validTime(publishTime) ? String(publishTime) : "12:00",
     targetDurationMinutes: Math.max(0.1, Number(workout.targetDurationMinutes || 0)),
     paceToleranceSeconds: clampInteger(workout.paceToleranceSeconds, 1, 30, 10),
     steps,

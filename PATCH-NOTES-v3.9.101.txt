@@ -1,0 +1,9 @@
+v3.9.101 - Race sync, calendar feed and activity matching
+
+- Race Strategy no longer creates same-day Garmin workouts at midnight. For a same-day sync it uses a future local time so Garmin can still receive the planned workout.
+- Race Strategy publication is verified by reading the event back from Intervals.icu before Endurance Intelligence reports success.
+- The Apple subscription calendar now uses the same weekday/date fallback as the downloaded ICS file, preventing plan entries without an explicit date field from disappearing.
+- Calendar feeds expose stable LAST-MODIFIED/SEQUENCE metadata plus refresh hints and a diagnostic "Abo-Feed prüfen" action in Settings.
+- Planner activity matching now trusts the primary imported activity type. A Run with conflicting cycling metadata remains a run and can be matched to the planned run.
+- Training → activity edit now also offers a persistent manual sport correction (for example, force an incorrectly tagged activity to “Laufen”).
+- Added regression coverage for same-day race publishing, calendar feed metadata/date fallback and conflicting activity sport metadata.

@@ -23,6 +23,33 @@ function nextDateValue(raw: unknown) {
   return `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`;
 }
 
+function isoDateLocal(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function dateForWeekday(dayName: unknown, now = new Date()) {
+  const names = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"];
+  const target = names.indexOf(String(dayName || ""));
+  if (target < 0) return "";
+  const monday = new Date(now);
+  const day = monday.getDay() || 7;
+  monday.setHours(12, 0, 0, 0);
+  monday.setDate(monday.getDate() - day + 1 + (target === 0 ? 6 : Math.max(0, target - 1)));
+  return isoDateLocal(monday);
+}
+
+function eventDate(item: Record<string, unknown>) {
+  const direct = String(item.date || "");
+  if (/^\d{4}-\d{2}-\d{2}$/.test(direct)) return direct;
+  return dateForWeekday(item.day);
+}
+
+function calendarSequence(updatedAt: unknown) {
+  const value = new Date(String(updatedAt || ""));
+  if (Number.isNaN(value.getTime())) return 0;
+  const epoch = Date.UTC(2020, 0, 1);
+  return Math.max(0, Math.floor((value.getTime() - epoch) / 60000));
+}
 
 function timedDateValue(date: unknown, time: unknown) {
   const rawDate = String(date || "");
@@ -101,11 +128,15 @@ function calendarSummary(item: Record<string, unknown>) {
   return `${calendarIcon(item)} ${title}`;
 }
 
-function buildCalendar(plan: Record<string, unknown>[]) {
-  const stamp = utcStamp();
+function buildCalendar(plan: Record<string, unknown>[], updatedAt: unknown = null) {
+  const modified = new Date(String(updatedAt || ""));
+  const stamp = utcStamp(Number.isNaN(modified.getTime()) ? new Date() : modified);
+  const sequence = calendarSequence(updatedAt);
   const events = plan
-    .filter((item) => isCalendarItemVisible(item) && /^\d{4}-\d{2}-\d{2}$/.test(String(item.date || "")))
+    .filter((item) => isCalendarItemVisible(item))
     .flatMap((item) => {
+      const rawDate = eventDate(item);
+      if (!rawDate) return [];
       const description = [
         item.type,
         item.distance ? `${item.distance} km` : "",
@@ -116,14 +147,16 @@ function buildCalendar(plan: Record<string, unknown>[]) {
         "BEGIN:VEVENT",
         `UID:${escapeIcs(item.id || crypto.randomUUID())}@endurance-intelligence`,
         `DTSTAMP:${stamp}`,
-        `DTSTART;VALUE=DATE:${dateValue(item.date)}`,
-        `DTEND;VALUE=DATE:${nextDateValue(item.date)}`,
+        `LAST-MODIFIED:${stamp}`,
+        `SEQUENCE:${sequence}`,
+        `DTSTART;VALUE=DATE:${dateValue(rawDate)}`,
+        `DTEND;VALUE=DATE:${nextDateValue(rawDate)}`,
         `SUMMARY:${escapeIcs(calendarSummary(item))}`,
         `DESCRIPTION:${escapeIcs(description)}`,
         "TRANSP:TRANSPARENT",
         "END:VEVENT",
       ].join("\r\n");
-      return [mainEvent, ...raceProtocolCalendarEvents(item, stamp)];
+      return [mainEvent, ...raceProtocolCalendarEvents({ ...item, date: rawDate }, stamp)];
     });
 
   return [
@@ -133,6 +166,9 @@ function buildCalendar(plan: Record<string, unknown>[]) {
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
     "X-WR-CALNAME:Endurance Intelligence",
+    "X-PUBLISHED-TTL:PT15M",
+    "REFRESH-INTERVAL;VALUE=DURATION:PT15M",
+    "X-WR-REFRESH-INTERVAL;VALUE=DURATION:PT15M",
     ...events,
     "END:VCALENDAR",
     "",
@@ -149,19 +185,38 @@ Deno.serve(async (request) => {
   const client = createClient(url, serviceRole, { auth: { persistSession: false } });
   const { data, error } = await client
     .from("athlete_data")
-    .select("app_data")
+    .select("app_data, updated_at")
     .eq("calendar_token", token)
     .maybeSingle();
 
   if (error || !data) return new Response("Kalender nicht gefunden.", { status: 404, headers });
 
   const plan = Array.isArray(data.app_data?.plan) ? data.app_data.plan : [];
-  return new Response(buildCalendar(plan), {
+  const content = buildCalendar(plan, data.updated_at);
+  const eventCount = (content.match(/BEGIN:VEVENT/g) || []).length;
+  const generatedAt = new Date().toISOString();
+
+  if (new URL(request.url).searchParams.get("status") === "1") {
+    return new Response(JSON.stringify({
+      ok: true,
+      planCount: plan.length,
+      eventCount,
+      updatedAt: data.updated_at || null,
+      generatedAt,
+    }), {
+      headers: { ...headers, "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store, max-age=0" },
+    });
+  }
+
+  const lastModified = data.updated_at ? new Date(data.updated_at).toUTCString() : new Date().toUTCString();
+  return new Response(content, {
     headers: {
       ...headers,
       "Content-Type": "text/calendar; charset=utf-8",
       "Content-Disposition": 'inline; filename="endurance-intelligence.ics"',
       "Cache-Control": "no-store, max-age=0",
+      "Last-Modified": lastModified,
+      "ETag": `W/"ei-${String(data.updated_at || generatedAt).replace(/[^0-9A-Za-z]/g, "")}"`,
     },
   });
 });

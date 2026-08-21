@@ -28,6 +28,11 @@ test("calendar subscription applies the same cancellation filter and disables re
   assert.match(source, /!item\.plannedCancellation/);
   assert.match(source, /!item\.cancelledAt/);
   assert.match(source, /Cache-Control.*no-store, max-age=0/);
+  assert.match(source, /eventDate\(item\)/);
+  assert.match(source, /dateForWeekday\(item\.day\)/);
+  assert.match(source, /X-WR-REFRESH-INTERVAL;VALUE=DURATION:PT15M/);
+  assert.match(source, /LAST-MODIFIED/);
+  assert.match(source, /searchParams\.get\("status"\) === "1"/);
 });
 
 test("race protocol calendar reminders are opt-in, timed and limited to the prepared checkpoints", () => {
@@ -78,8 +83,15 @@ test("race protocol does not create calendar noise when reminders are disabled",
 
 test("calendar subscription includes the same race protocol reminder expansion", () => {
   const source = fs.readFileSync(new URL("../supabase/functions/calendar/index.ts", import.meta.url), "utf8");
-  assert.match(source, /raceProtocolCalendarEvents\(item, stamp\)/);
+  assert.match(source, /raceProtocolCalendarEvents\(\{ \.\.\.item, date: rawDate \}, stamp\)/);
   assert.match(source, /protocol\?\.calendarReminders/);
   assert.match(source, /DURATION:PT15M/);
   assert.match(source, /DTSTART:\$\{start\}/);
+});
+
+test("downloaded ICS advertises refresh metadata for calendar clients", () => {
+  const content = buildCalendar([normal]);
+  assert.match(content, /X-PUBLISHED-TTL:PT15M/);
+  assert.match(content, /REFRESH-INTERVAL;VALUE=DURATION:PT15M/);
+  assert.match(content, /LAST-MODIFIED:/);
 });

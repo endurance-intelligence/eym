@@ -7,7 +7,7 @@ import { downloadCalendar } from "../services/calendar";
 import { downloadStateBackup, readStateBackup, resetState } from "../services/storage";
 import { defaultState } from "../data/defaults";
 import { mergeGarminActivities, readGarminExport } from "../services/garminImport";
-import { calendarSubscriptionUrl } from "../services/supabase";
+import { calendarSubscriptionUrl, fetchCalendarSubscriptionStatus } from "../services/supabase";
 import {
   connectIntervalsApiKey,
   disconnectIntervals,
@@ -42,6 +42,7 @@ export default function Settings() {
   const [searchParams, setSearchParams] = useSearchParams();
   const section = resolveSettingsSection(searchParams.get("section"));
   const [calendarMessage, setCalendarMessage] = useState("");
+  const [calendarBusy, setCalendarBusy] = useState(false);
   const [garminBusy, setGarminBusy] = useState(false);
   const [garminPreview, setGarminPreview] = useState(null);
   const [garminMessage, setGarminMessage] = useState("");
@@ -291,6 +292,30 @@ export default function Settings() {
     }
   }
 
+  async function checkCalendarFeed() {
+    if (!calendarToken) {
+      setCalendarMessage("Kalender-Abo ist noch nicht verfügbar.");
+      return;
+    }
+    setCalendarBusy(true);
+    setCalendarMessage("Aktueller Plan wird gespeichert und der Kalenderfeed geprüft …");
+    try {
+      const cloudSave = await uploadLocalState();
+      if (cloudSave?.cancelled) {
+        setCalendarMessage("Feed-Prüfung abgebrochen; der neuere Cloud-Stand wurde nicht überschrieben.");
+        return;
+      }
+      if (cloudSave?.ok === false) throw cloudSave.error || new Error("Aktueller Plan konnte nicht in der Cloud gespeichert werden.");
+      const status = await fetchCalendarSubscriptionStatus(calendarToken);
+      const updated = status.updatedAt ? new Date(status.updatedAt).toLocaleString("de-DE") : "unbekannt";
+      setCalendarMessage(`Abo-Feed erreichbar ✓ · ${Number(status.eventCount || 0)} Kalendertermine · Cloud-Stand ${updated}`);
+    } catch (error) {
+      setCalendarMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setCalendarBusy(false);
+    }
+  }
+
   const calendarUrl = calendarToken ? calendarSubscriptionUrl(calendarToken) : "";
   const cloudStatusLabel = { local: "Nur lokal", loading: "Cloud wird geladen …", saving: "Wird gespeichert …", synced: "Synchronisiert", conflict: "Neuerer Stand auf einem anderen Gerät", error: "Synchronisierung fehlgeschlagen" }[cloudStatus] || cloudStatus;
 
@@ -520,7 +545,7 @@ export default function Settings() {
       <Card className="wide"><p className="eyebrow">Datensicherung</p><h2>Sicherung exportieren oder wiederherstellen</h2><p className="muted">Erstellt eine lesbare JSON-Sicherung deiner Pläne, Aktivitäten, Reviews und Einstellungen. Bilder bleiben über ihre privaten Speicherpfade zugeordnet.</p><input ref={backupInput} type="file" accept=".json,application/json" hidden onChange={restoreBackup} /><div className="button-row"><button onClick={() => { downloadStateBackup(state); setBackupMessage("Sicherung heruntergeladen."); }}>Sicherung herunterladen</button><button className="secondary" onClick={() => backupInput.current?.click()}>Sicherung wiederherstellen</button></div>{backupMessage && <p className="connection-message">{backupMessage}</p>}</Card>
       <Card className="wide"><p className="eyebrow">Supabase · Privater Bildspeicher</p><h2>{imageStorageStatus === "migrating" ? "Bilder werden optimiert" : imageStorageStatus === "error" ? "Bildspeicher prüfen" : "Bilder platzsparend gespeichert"}</h2><span className={`cloud-status ${imageStorageStatus === "error" ? "error" : imageStorageStatus === "ready" ? "synced" : "saving"}`}>{imageStorageStatus === "migrating" ? "Migration läuft" : imageStorageStatus === "error" ? "Migration ausstehend" : "Bereit"}</span><p className="muted">{imageStorageMessage || "Produkt- und Equipmentbilder werden getrennt vom großen App-Datensatz gespeichert. Ersetzen überschreibt die vorhandene Datei; Löschen entfernt sie."}</p>{imageStorageStatus === "error" && <button type="button" onClick={retryImageMigration}>Erneut prüfen</button>}</Card>
       <Card className="wide"><p className="eyebrow">Garmin · Historie & Backup</p><h2>Garmin-Export importieren</h2><p className="muted">Liest den vollständigen Garmin-Datenexport direkt im Browser. Vorhandene Aktivitäten werden als Duplikate erkannt und zusammengeführt.</p><input ref={garminInput} type="file" accept=".zip,.json,application/zip,application/json" hidden onChange={(event) => previewGarmin(event.target.files?.[0])} /><div className="button-row"><button onClick={() => garminInput.current?.click()} disabled={garminBusy}>{garminBusy ? "Export wird geprüft …" : "Garmin ZIP auswählen"}</button>{garminPreview && <button className="secondary" onClick={importGarmin}>Import starten</button>}</div>{garminPreview && <div className="import-preview"><div><span>Aktivitäten</span><strong>{garminPreview.total}</strong></div><div><span>Läufe</span><strong>{garminPreview.runs}</strong></div><div><span>Laufkilometer</span><strong>{garminPreview.distance.toFixed(1)} km</strong></div><div><span>Zeitraum</span><strong>{garminPreview.firstDate} – {garminPreview.lastDate}</strong></div><p className="muted import-types">{Object.entries(garminPreview.byType).sort((a, b) => b[1] - a[1]).map(([type, count]) => `${type}: ${count}`).join(" · ")}</p></div>}{state.garmin?.lastImportAt && <p className="muted">Letzter Import: {new Date(state.garmin.lastImportAt).toLocaleString("de-DE")} · {state.garmin.imported} neu · {state.garmin.duplicates} Duplikate</p>}{garminMessage && <p className="connection-message">{garminMessage}</p>}</Card>
-      <Card><p className="eyebrow">Apple Kalender</p><h2>Kalender-Abo</h2><p className="muted">Die Cloud-Adresse liefert deinen aktuellen Wochenplan automatisch als Kalenderabo.</p><div className="button-row"><button onClick={() => navigator.clipboard?.writeText(calendarUrl).then(() => setCalendarMessage("Kalenderadresse kopiert."))} disabled={!calendarToken}>Abo-Adresse kopieren</button><button className="secondary" onClick={() => downloadCalendar(state.plan)}>ICS als Datei</button></div>{calendarUrl && <><label className="calendar-url-label">Abo-Adresse<input readOnly value={calendarUrl} onFocus={(event) => event.target.select()} /></label><p className="muted">Auf dem iPhone: Kalender → Kalender hinzufügen → Kalenderabonnement hinzufügen → Adresse einsetzen.</p></>}{calendarMessage && <p className="connection-message">{calendarMessage}</p>}</Card>
+      <Card><p className="eyebrow">Apple Kalender</p><h2>Kalender-Abo</h2><p className="muted">Die Cloud-Adresse liefert deinen aktuellen Wochenplan automatisch als Kalenderabo. Der Feed signalisiert Apple jetzt Änderungen und einen 15-Minuten-Refresh.</p><div className="button-row"><button onClick={() => navigator.clipboard?.writeText(calendarUrl).then(() => setCalendarMessage("Kalenderadresse kopiert."))} disabled={!calendarToken}>Abo-Adresse kopieren</button><button className="secondary" onClick={checkCalendarFeed} disabled={!calendarToken || calendarBusy}>{calendarBusy ? "Prüfe Feed …" : "Abo-Feed prüfen"}</button><button className="secondary" onClick={() => downloadCalendar(state.plan)}>ICS als Datei</button></div>{calendarUrl && <><label className="calendar-url-label">Abo-Adresse<input readOnly value={calendarUrl} onFocus={(event) => event.target.select()} /></label><p className="muted">Auf dem iPhone: Kalender → Kalender hinzufügen → Kalenderabonnement hinzufügen → Adresse einsetzen. Falls Apple noch cached, kann die Aktualisierung trotz 15-Minuten-Hinweis etwas später sichtbar werden.</p></>}{calendarMessage && <p className="connection-message">{calendarMessage}</p>}</Card>
       <Card><p className="eyebrow">Lokale Daten</p><h2>Reset</h2><p className="muted">Entfernt Reviews, importierte Aktivitäten und lokale Einstellungen dieses Kontos aus diesem Browser.</p><button onClick={() => resetState(session?.user?.id)}>Daten zurücksetzen</button></Card>
     </div>}
   </>;

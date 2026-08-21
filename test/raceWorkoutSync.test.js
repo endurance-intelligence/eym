@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import fs from "node:fs";
 import { buildGarminRaceWorkout } from "../src/services/garminRaceWorkout.js";
 import {
   buildIntervalsRaceWorkoutPublication,
   intervalsRaceWorkoutDescription,
   raceWorkoutPublicationFingerprint,
+  raceWorkoutSyncTime,
 } from "../src/services/raceWorkoutSync.js";
 
 function workout() {
@@ -35,10 +37,12 @@ test("race publication payload is small, stable and server-safe", () => {
     raceKey: "event:urland 2026!",
     raceName: "Urland Lauf\nOerlinghausen",
     publishDate: "2026-08-12",
+    publishTime: "18:30",
   });
   assert.equal(publication.raceKey, "event:urland-2026");
   assert.equal(publication.raceName, "Urland Lauf Oerlinghausen");
   assert.equal(publication.publishDate, "2026-08-12");
+  assert.equal(publication.publishTime, "18:30");
   assert.equal(publication.steps.length, 3);
   assert.deepEqual(publication.steps[2], { distanceM: 620, paceSecondsPerKm: 270 });
 });
@@ -53,4 +57,21 @@ test("publication fingerprint changes for pace, corridor or sync day changes", (
   assert.notEqual(base, raceWorkoutPublicationFingerprint(changedTolerance, "2026-08-12"));
   assert.notEqual(base, raceWorkoutPublicationFingerprint(changedName, "2026-08-12"));
   assert.notEqual(base, raceWorkoutPublicationFingerprint(source, "2026-08-13"));
+});
+
+test("same-day race sync never schedules a fresh workout at midnight in the past", () => {
+  const now = new Date(2026, 7, 21, 13, 42, 0);
+  assert.equal(raceWorkoutSyncTime("2026-08-21", "", now), "13:52");
+  assert.equal(raceWorkoutSyncTime("2026-08-21", "18:30", now), "18:30");
+  assert.equal(raceWorkoutSyncTime("2026-08-21", "09:00", now), "13:52");
+  assert.equal(raceWorkoutSyncTime("2026-08-22", "", now), "12:00");
+});
+
+test("race workout edge function verifies the WORKOUT after upload", () => {
+  const source = fs.readFileSync(new URL("../supabase/functions/intervals/index.ts", import.meta.url), "utf8");
+  assert.match(source, /verifyPublishedRaceWorkout/);
+  assert.match(source, /category !== "WORKOUT"/);
+  assert.match(source, /type\.toLowerCase\(\) !== "run"/);
+  assert.match(source, /start_date_local: `\$\{workout\.publishDate\}T\$\{workout\.publishTime\}:00`/);
+  assert.match(source, /verified: true/);
 });

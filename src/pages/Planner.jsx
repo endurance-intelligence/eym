@@ -16,7 +16,7 @@ import {
   workoutTypes,
 } from "../services/plannerEngine";
 import { downloadCalendar } from "../services/calendar";
-import { preferredActivities, reviewKind } from "../services/activityUtils";
+import { plannerSportType, preferredActivities, reviewKind } from "../services/activityUtils";
 import { formatCrossTrainingContext, formatCrossTrainingCredit, summarizeCrossTrainingCredits } from "../services/crossTrainingLoad";
 import {
   applyOptionalLongRunExtension,
@@ -525,12 +525,12 @@ function weeklyClosureSummary({ weekStart, plan, activities, allActivities, revi
 }
 
 function isRunningActivity(activity) {
-  return normalizedType(activity.type || activity.sportType || activity.name) === "running";
+  return plannerSportType(activity) === "running";
 }
 
 function compatible(plan, activity) {
   const planType = normalizedType(`${plan.type} ${plan.title}`);
-  const activityType = normalizedType(`${activity.type || ""} ${activity.sportType || ""} ${activity.name || ""}`);
+  const activityType = plannerSportType(activity);
   return planType === activityType || (planType === "running" && activityType === "running");
 }
 

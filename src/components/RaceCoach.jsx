@@ -18,6 +18,7 @@ import {
 import {
   buildIntervalsRaceWorkoutPublication,
   raceWorkoutPublicationFingerprint,
+  raceWorkoutSyncTime,
 } from "../services/raceWorkoutSync";
 import RaceStrategyMap from "./RaceStrategyMap";
 import "./FuelPartner.css";
@@ -40,6 +41,7 @@ function sourceOptions(state) {
       label: profile.name || "Gespeicherter Race-Prep-Plan",
       detail: origin?.date || "Race Prep",
       date: origin?.date || profile.date || "",
+      time: origin?.time || profile.time || "",
       profile,
     };
   });
@@ -48,6 +50,7 @@ function sourceOptions(state) {
     label: event.name || "Wettkampf",
     detail: event.date || "Termin offen",
     date: event.date || "",
+    time: event.time || "",
     profile: racePrepProfileFromEvent(event),
   }));
   return [...saved, ...events.filter((event) => !saved.some((item) => item.profile.originEventId && item.profile.originEventId === event.profile.originEventId))];
@@ -369,11 +372,13 @@ export default function RaceCoach() {
     setGarminPublishBusy(true);
     setGarminExportMessage("Rennstrategie wird an Intervals.icu übergeben …");
     try {
+      const publishTime = raceWorkoutSyncTime(garminPublishDate, source?.time || "");
       const publication = buildIntervalsRaceWorkoutPublication({
         workout: garminWorkout,
         raceKey: sourceKey,
         raceName: garminWorkout.name,
         publishDate: garminPublishDate,
+        publishTime,
       });
       const result = await publishIntervalsRaceWorkout(publication, {
         forceGarminRefresh: Boolean(setup.garminPublishedAt),
@@ -387,7 +392,8 @@ export default function RaceCoach() {
         garminPublishedFingerprint: raceWorkoutPublicationFingerprint(garminWorkout, garminPublishDate),
         garminPublishedEventId: result.eventId || null,
       });
-      setGarminExportMessage(`„${garminWorkout.name}“ gesendet ✓ · ${Number(result.stepCount || garminWorkout.steps.length)} Pace-Abschnitte · ${garminPublishDate}${result.refreshed ? " · Garmin-Export frisch angestoßen" : ""}`);
+      const scheduled = result.startDateLocal ? String(result.startDateLocal).replace("T", " · ").slice(0, 18) : `${garminPublishDate} · ${publication.publishTime}`;
+      setGarminExportMessage(`Intervals.icu ✓ · strukturiertes Run-Workout verifiziert · ${Number(result.stepCount || garminWorkout.steps.length)} Pace-Abschnitte · ${scheduled}${result.refreshed ? " · Garmin-Export frisch angestoßen" : " · bereit für Garmin-Sync"}`);
     } catch (error) {
       setGarminExportMessage(error?.message || "Die Rennstrategie konnte nicht an Intervals.icu gesendet werden.");
     } finally {
@@ -667,7 +673,7 @@ export default function RaceCoach() {
               </button>
               <button type="button" className="secondary" onClick={downloadGarminWorkout} disabled={!garminWorkout.compatible}>FIT herunterladen</button>
               <div>
-                <b>{!state.intervals?.connected ? "Intervals.icu nicht verbunden" : !garminWorkout.compatible ? "Noch nicht exportierbar" : garminPublicationCurrent ? "Rennstrategie ist aktuell übertragen" : setup.garminPublishedAt ? "Änderungen noch nicht übertragen" : "Bereit zum Senden"}</b>
+                <b>{!state.intervals?.connected ? "Intervals.icu nicht verbunden" : !garminWorkout.compatible ? "Noch nicht exportierbar" : garminPublicationCurrent ? "Rennstrategie in Intervals.icu verifiziert" : setup.garminPublishedAt ? "Änderungen noch nicht übertragen" : "Bereit zum Senden"}</b>
                 <small>{!state.intervals?.connected ? "Verbindung zuerst unter Einstellungen aktivieren." : garminWorkout.compatible ? `${garminWorkout.steps.length} strukturierte Pace-Schritte · ${garminPublishDate}` : garminWorkout.compatibilityMessage}</small>
               </div>
             </div>

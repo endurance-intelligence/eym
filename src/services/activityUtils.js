@@ -24,6 +24,8 @@ function typeText(activity) {
 }
 
 export function isRunningActivity(activity) {
+  const override = String(activity?.sportTypeOverride || "").trim();
+  if (override) return override === "running";
   const type = String(activity?.type || activity?.sportType || "").toLowerCase();
   if (["run", "running", "trailrun", "trail_running", "virtualrun", "treadmill_running"].includes(type)) return true;
   if (activity?.category === "running") return true;
@@ -36,16 +38,22 @@ export function isRunningActivity(activity) {
 }
 
 export function isRoadCyclingActivity(activity) {
+  const override = String(activity?.sportTypeOverride || "").trim();
+  if (override) return override === "roadCycling";
   const text = typeText(activity);
   if (/roadride|road bike|roadbike|road cycling|rennrad|race bike|rennradfahren/.test(text)) return true;
   return Boolean(activity?.roadCycling || activity?.bikeType === "road");
 }
 
 export function isRowingActivity(activity) {
+  const override = String(activity?.sportTypeOverride || "").trim();
+  if (override) return override === "rowing";
   return /rowing|indoor rowing|rowerg|rudern|rudergerät/.test(typeText(activity));
 }
 
 export function isStrengthMobilityActivity(activity) {
+  const override = String(activity?.sportTypeOverride || "").trim();
+  if (override) return override === "strength" || override === "rowing";
   const text = typeText(activity);
   return isRowingActivity(activity) || /weighttraining|strength|workout|stabi|stabilität|mobility|mobilität|yoga|pilates|core/.test(text);
 }
@@ -64,6 +72,8 @@ export function reviewKindLabel(activity) {
 }
 
 export function sportFamily(activity) {
+  const override = String(activity?.sportTypeOverride || "").trim();
+  if (["running", "roadCycling", "soccer", "cycling", "swimming", "rowing", "walking", "strength"].includes(override)) return override;
   if (isRunningActivity(activity)) return "running";
   if (isRoadCyclingActivity(activity)) return "roadCycling";
   const text = typeText(activity);
@@ -87,6 +97,14 @@ export function sportGroup(activity) {
   if (family === "walking") return SPORT_GROUPS[6];
   if (family === "strength") return SPORT_GROUPS[7];
   return { key: "other", label: "Sonstige", types: [] };
+}
+
+export function plannerSportType(activity) {
+  const family = sportFamily(activity);
+  if (family === "roadCycling") return "cycling";
+  if (family === "soccer") return "football";
+  if (["running", "cycling", "swimming", "rowing", "walking", "strength"].includes(family)) return family;
+  return family || "other";
 }
 
 export function sourceLabel(activity) {

@@ -94,3 +94,11 @@ export function calendarSubscriptionUrl(token) {
   if (!token) return "";
   return `${supabaseUrl}/functions/v1/calendar?token=${encodeURIComponent(token)}`;
 }
+
+export async function fetchCalendarSubscriptionStatus(token) {
+  if (!token) throw new Error("Kalender-Token fehlt.");
+  const response = await fetch(`${calendarSubscriptionUrl(token)}&status=1`, { cache: "no-store" });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data?.ok) throw new Error(data?.message || "Kalender-Abo konnte nicht geprüft werden.");
+  return data;
+}

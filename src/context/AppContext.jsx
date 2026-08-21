@@ -428,9 +428,9 @@ export function AppProvider({ children }) {
 
 
   async function uploadLocalState() {
-    if (!session?.user?.id) return;
+    if (!session?.user?.id) return { ok: false, error: new Error("Keine aktive Cloud-Sitzung.") };
     const force = cloudConflict.current;
-    if (force && !window.confirm("Der lokale Stand überschreibt den neueren Cloud-Stand. Wirklich fortfahren?")) return;
+    if (force && !window.confirm("Der lokale Stand überschreibt den neueren Cloud-Stand. Wirklich fortfahren?")) return { ok: false, cancelled: true };
     setCloudStatus("saving");
     setCloudError("");
     try {
@@ -445,6 +445,7 @@ export function AppProvider({ children }) {
       cloudConflict.current = false;
       setCloudStatus("synced");
       flushQueuedImageDeletions(session.user.id, stateForCloud(state)).catch((error) => console.warn("Image cleanup postponed", error));
+      return { ok: true, saved };
     } catch (error) {
       if (error instanceof CloudConflictError || error?.code === "CLOUD_CONFLICT") {
         cloudConflict.current = true;
@@ -454,6 +455,7 @@ export function AppProvider({ children }) {
         setCloudStatus("error");
         setCloudError(error instanceof Error ? error.message : String(error));
       }
+      return { ok: false, error };
     }
   }
 
