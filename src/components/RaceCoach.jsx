@@ -375,7 +375,10 @@ export default function RaceCoach() {
         raceName: garminWorkout.name,
         publishDate: garminPublishDate,
       });
-      const result = await publishIntervalsRaceWorkout(publication);
+      const result = await publishIntervalsRaceWorkout(publication, {
+        forceGarminRefresh: Boolean(setup.garminPublishedAt),
+        existingEventId: setup.garminPublishedEventId || null,
+      });
       const publishedAt = result.publishedAt || new Date().toISOString();
       updateSetup({
         garminPublishDate,
@@ -384,7 +387,7 @@ export default function RaceCoach() {
         garminPublishedFingerprint: raceWorkoutPublicationFingerprint(garminWorkout, garminPublishDate),
         garminPublishedEventId: result.eventId || null,
       });
-      setGarminExportMessage(`„${garminWorkout.name}“ gesendet ✓ · ${Number(result.stepCount || garminWorkout.steps.length)} Pace-Abschnitte · ${garminPublishDate}`);
+      setGarminExportMessage(`„${garminWorkout.name}“ gesendet ✓ · ${Number(result.stepCount || garminWorkout.steps.length)} Pace-Abschnitte · ${garminPublishDate}${result.refreshed ? " · Garmin-Export frisch angestoßen" : ""}`);
     } catch (error) {
       setGarminExportMessage(error?.message || "Die Rennstrategie konnte nicht an Intervals.icu gesendet werden.");
     } finally {

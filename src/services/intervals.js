@@ -54,12 +54,12 @@ export async function syncIntervalsActivities(after = "2025-01-01") {
   return invokeIntervals("sync", { after });
 }
 
-export async function publishIntervalsWeek({ weekStart, weekEnd, plan }) {
-  return invokeIntervals("publish-plan", { weekStart, weekEnd, plan });
+export async function publishIntervalsWeek({ weekStart, weekEnd, plan, forceGarminRefresh = false }) {
+  return invokeIntervals("publish-plan", { weekStart, weekEnd, plan, forceGarminRefresh });
 }
 
-export async function publishIntervalsRaceWorkout(workout) {
-  return invokeIntervals("publish-race-workout", { workout });
+export async function publishIntervalsRaceWorkout(workout, { forceGarminRefresh = false, existingEventId = null } = {}) {
+  return invokeIntervals("publish-race-workout", { workout, forceGarminRefresh, existingEventId });
 }
 
 

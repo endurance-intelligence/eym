@@ -1795,6 +1795,7 @@ export default function Planner() {
         weekStart: isoDate(weekStart),
         weekEnd: isoDate(weekEnd),
         plan: publishablePlan,
+        forceGarminRefresh: Boolean(publishedWeek),
       });
       const publishedAt = result.publishedAt || new Date().toISOString();
       setState((current) => ({
@@ -1827,11 +1828,13 @@ export default function Planner() {
               uploaded: Number(result.uploaded || publishablePlan.length),
               guided: Number(result.guided || 0),
               notes: Number(result.notes || 0),
+              refreshed: Number(result.refreshed || 0),
             },
           },
         },
       }));
-      setStatus(`${Number(result.uploaded || publishablePlan.length)} Einheiten von Intervals.icu übernommen · ${Number(result.guided || 0)} strukturierte Workouts. Wichtig: EI kann nicht prüfen, ob Garmin Connect sie schon auf die Uhr übertragen hat. Bitte Garmin synchronisieren und die wichtigen Workouts einmal auf der Uhr öffnen.${provisionalTrackPlan.length ? ` ${provisionalTrackPlan.length} vorläufige Track-Einheit${provisionalTrackPlan.length === 1 ? "" : "en"} blieb${provisionalTrackPlan.length === 1 ? "" : "en"} nur im Wochenplan.` : ""}`);
+      const refreshed = Number(result.refreshed || 0);
+      setStatus(`${Number(result.uploaded || publishablePlan.length)} Einheiten von Intervals.icu übernommen · ${Number(result.guided || 0)} strukturierte Workouts.${refreshed ? ` ${refreshed} Workout${refreshed === 1 ? " wurde" : "s wurden"} dafür in Intervals.icu bewusst neu angelegt, damit der Garmin-Export erneut ausgelöst wird.` : ""} Wichtig: EI kann nicht prüfen, ob Garmin Connect sie schon auf die Uhr übertragen hat. Bitte Garmin synchronisieren und die wichtigen Workouts einmal auf der Uhr öffnen.${provisionalTrackPlan.length ? ` ${provisionalTrackPlan.length} vorläufige Track-Einheit${provisionalTrackPlan.length === 1 ? "" : "en"} blieb${provisionalTrackPlan.length === 1 ? "" : "en"} nur im Wochenplan.` : ""}`);
       setPublishConfirmOpen(false);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
@@ -3229,7 +3232,8 @@ export default function Planner() {
               <span>✓ Entfernte Einheiten werden auch aus dieser Intervals-Woche entfernt</span>
               <span>✓ EYM bleibt die führende Fassung; direkte Änderungen in Intervals.icu können beim nächsten Update überschrieben werden</span>
             </div>
-            <p className="muted"><strong>Wichtig:</strong> EI kann die Übergabe an Intervals.icu bestätigen, aber nicht sehen, ob Garmin Connect das Workout bereits auf deine Uhr synchronisiert hat. Nach dem Senden Garmin synchronisieren und wichtige Workouts einmal auf der Uhr öffnen. In Intervals.icu muss „Upload planned workouts“ aktiviert sein.</p>
+            <p className="muted"><strong>Wichtig:</strong> EI kann die Übergabe an Intervals.icu bestätigen, aber nicht sehen, ob Garmin Connect das Workout bereits auf deine Uhr synchronisiert hat. Nach dem Senden Garmin synchronisieren und wichtige Workouts einmal auf der Uhr öffnen. In Intervals.icu muss „Upload planned workouts“ aktiviert sein. Garmin erhält von Intervals.icu nur Workouts im nächsten 7-Tage-Fenster.</p>
+            {publishedWeek && <p className="planner-publish-refresh-note"><strong>Erneutes Senden:</strong> Strukturierte Workouts werden in Intervals.icu diesmal gelöscht und frisch angelegt. Ein normales Update desselben Events stößt den Garmin-Export nicht zuverlässig erneut an.</p>}
             <div className="modal-actions">
               <button type="button" onClick={() => setPublishConfirmOpen(false)}>Abbrechen</button>
               <button type="button" className="primary" disabled={publishBusy} onClick={publishWeek}>{publishBusy ? "Wird gesendet …" : "Bestätigen und senden"}</button>

@@ -1,0 +1,8 @@
+v3.9.100 - Garmin resend reliability
+
+- "Sync erneut anstoßen" no longer performs an unchanged Intervals.icu upsert.
+- Existing EI-owned structured workouts are deleted from Intervals.icu and recreated before a resend so the Garmin export is triggered again.
+- Race Strategy uses the same forced recreation on "Erneut an Garmin senden" / "Garmin aktualisieren".
+- First-time publication remains a normal upsert.
+- UI explains the Intervals.icu -> Garmin 7-day sync window and the forced refresh behavior.
+- No training, planner, fuel or workout-generation logic changed.

@@ -483,6 +483,8 @@ Deno.serve(async (request) => {
     if (action === "publish-race-workout") {
       const workout = normalizedRaceWorkout(body.workout);
       const externalId = `${RACE_PREFIX}${workout.raceKey}`;
+      const forceGarminRefresh = Boolean(body.forceGarminRefresh);
+      const existingEventId = body.existingEventId == null ? null : String(body.existingEventId);
       const movingTime = Math.max(1, Math.round(workout.steps.reduce(
         (sum, step) => sum + (step.distanceM / 1000) * step.paceSecondsPerKm,
         0,
@@ -497,6 +499,25 @@ Deno.serve(async (request) => {
         description: raceWorkoutDescription(workout),
         external_id: externalId,
       };
+      let refreshed = 0;
+      if (forceGarminRefresh) {
+        let refreshEvent: Record<string, unknown> | null = existingEventId
+          ? { id: existingEventId, external_id: externalId }
+          : null;
+        if (!refreshEvent) {
+          const query = new URLSearchParams({ oldest: workout.publishDate, newest: workout.publishDate });
+          const existingResponse = await intervalsGet(`/athlete/${athleteId}/events?${query.toString()}`, apiKey);
+          const existing = Array.isArray(existingResponse) ? existingResponse : [];
+          refreshEvent = existing.find((candidate) => String(candidate?.external_id || "") === externalId) || null;
+        }
+        if (refreshEvent) {
+          await intervalsRequest(`/athlete/${athleteId}/events/bulk-delete`, apiKey, {
+            method: "PUT",
+            body: JSON.stringify([{ id: refreshEvent.id, external_id: externalId }]),
+          });
+          refreshed = 1;
+        }
+      }
       const result = await intervalsRequest(`/athlete/${athleteId}/events/bulk?upsert=true`, apiKey, {
         method: "POST",
         body: JSON.stringify([event]),
@@ -511,12 +532,14 @@ Deno.serve(async (request) => {
         externalId,
         eventId: uploaded?.id || null,
         category: uploaded?.category || "WORKOUT",
+        refreshed,
       });
     }
 
     if (action === "publish-plan") {
       const weekStart = String(body.weekStart || "");
       const weekEnd = String(body.weekEnd || "");
+      const forceGarminRefresh = Boolean(body.forceGarminRefresh);
       if (!validDate(weekStart) || !validDate(weekEnd) || weekEnd < weekStart) {
         return json({ message: "Ungültiger Wochenzeitraum." }, 400);
       }
@@ -539,7 +562,29 @@ Deno.serve(async (request) => {
       const existingResponse = await intervalsGet(`/athlete/${athleteId}/events?${query.toString()}`, apiKey);
       const existing = Array.isArray(existingResponse) ? existingResponse : [];
       const owned = existing.filter((event) => String(event?.external_id || "").startsWith(PLAN_PREFIX));
-      const existingByExternalId = new Map(owned.map((event) => [String(event.external_id), event]));
+      const refreshExternalIds = new Set(
+        forceGarminRefresh
+          ? plan
+            .filter((item) => isGuidedPlanItem(item))
+            .map((item) => `${PLAN_PREFIX}${String(item.id || "")}`)
+          : [],
+      );
+      const refreshEvents = owned.filter((event) => refreshExternalIds.has(String(event.external_id || "")));
+
+      let refreshed = 0;
+      if (refreshEvents.length) {
+        await intervalsRequest(`/athlete/${athleteId}/events/bulk-delete`, apiKey, {
+          method: "PUT",
+          body: JSON.stringify(refreshEvents.map((event) => ({ id: event.id, external_id: event.external_id }))),
+        });
+        refreshed = refreshEvents.length;
+      }
+
+      const existingByExternalId = new Map(
+        owned
+          .filter((event) => !refreshExternalIds.has(String(event.external_id || "")))
+          .map((event) => [String(event.external_id), event]),
+      );
 
       const events = plan.map((item) => {
         const externalId = `${PLAN_PREFIX}${String(item.id || "")}`;
@@ -556,7 +601,7 @@ Deno.serve(async (request) => {
         uploaded = Array.isArray(result) ? result : [];
       }
 
-      const stale = owned.filter((event) => !desiredIds.has(String(event.external_id || "")));
+      const stale = owned.filter((event) => !refreshExternalIds.has(String(event.external_id || "")) && !desiredIds.has(String(event.external_id || "")));
       let deleted = 0;
       if (stale.length) {
         const result = await intervalsRequest(`/athlete/${athleteId}/events/bulk-delete`, apiKey, {
@@ -574,6 +619,7 @@ Deno.serve(async (request) => {
         weekEnd,
         uploaded: uploaded.length || events.length,
         deleted,
+        refreshed,
         guided,
         notes: events.length - guided,
         events: uploaded.map((event) => ({ id: event.id, externalId: event.external_id, category: event.category })),

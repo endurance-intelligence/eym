@@ -454,6 +454,7 @@
 .planner-track-planning-status button.selected{border-color:var(--accent);background:var(--accent);color:var(--accent-text);font-weight:900}
 .planner-track-planning-status.draft button.selected{border-color:#c99431;background:#8b661e;color:#fff6df}
 .planner-publish-draft-note{padding:11px 13px;border:1px solid #806328;border-radius:11px;background:rgba(255,207,104,.08);color:#f2dca8!important}
+.planner-publish-refresh-note{padding:11px 13px;border:1px solid rgba(121,224,161,.32);border-radius:11px;background:rgba(121,224,161,.07);color:#cbeed7!important}
 .planner-rowing-setup{display:grid;gap:14px;margin:18px 0;padding:16px;border:1px solid var(--accent-border);border-radius:15px;background:var(--accent-surface)}
 .planner-rowing-setup h3{margin:3px 0 5px}
 .planner-rowing-setup p:last-child{margin:0}
