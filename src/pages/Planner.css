@@ -2608,3 +2608,155 @@
   .planner-overview-state{grid-column:1/-1}
   .planner-overview-strip>button{grid-column:1/-1}
 }
+
+/* v3.9.103 – calm weekly overview; operational detail lives behind the workout */
+.planner-workout-compact{
+  grid-template-columns:34px minmax(0,1fr) auto!important;
+  gap:12px!important;
+  min-height:72px;
+  padding:12px 16px!important;
+  transition:background .16s ease,border-color .16s ease;
+}
+.planner-workout-compact.no-marker{grid-template-columns:minmax(0,1fr) auto!important}
+.planner-workout-detail-open{cursor:pointer}
+.planner-workout-detail-open:hover{background:color-mix(in srgb,var(--accent-surface) 34%,transparent)}
+.planner-workout-detail-open:focus-visible{outline:2px solid var(--accent);outline-offset:-3px;background:color-mix(in srgb,var(--accent-surface) 34%,transparent)}
+.planner-workout-compact-main{min-width:0}
+.planner-compact-kicker{display:flex!important;align-items:center!important;gap:8px!important;min-width:0}
+.planner-compact-kicker>span{font-size:9px!important;font-weight:850;letter-spacing:.055em!important;text-transform:uppercase}
+.planner-compact-system-alert{
+  padding:3px 7px!important;
+  border:1px solid color-mix(in srgb,var(--warning,#facc15) 42%,var(--border))!important;
+  border-radius:999px!important;
+  background:color-mix(in srgb,var(--warning,#facc15) 7%,transparent)!important;
+  color:var(--warning,#facc15)!important;
+  font-size:8px!important;
+  font-weight:850!important;
+  letter-spacing:.03em;
+  text-transform:none!important;
+}
+.planner-compact-title-row{display:flex!important;align-items:center!important;justify-content:space-between;gap:14px;min-width:0}
+.planner-compact-title-row h3{min-width:0;margin:4px 0 2px!important;font-size:15px!important;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.planner-workout-roles-compact{flex:none;opacity:.92}
+.planner-workout-roles-compact>summary{padding:0!important;border:0!important;background:transparent!important;gap:5px!important}
+.planner-workout-roles-compact>summary>span{min-height:24px;padding:4px 7px;font-size:9px}
+.planner-workout-compact-main>p{margin:0!important;color:var(--muted)!important;font-size:10.5px!important;line-height:1.4!important}
+.planner-workout-compact-main>small{margin-top:3px!important;font-size:9px!important}
+.planner-detail-cue{align-self:center;color:var(--muted);font-size:18px;line-height:1;transition:color .16s ease,transform .16s ease}
+.planner-workout-detail-open:hover .planner-detail-cue{color:var(--accent-bright);transform:translateX(2px)}
+
+.planner-workout-detail-modal{width:min(760px,calc(100vw - 28px));display:grid;gap:14px}
+.planner-workout-detail-head{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;padding-right:28px}
+.planner-workout-detail-head h2{margin:4px 0 5px;font-size:clamp(24px,3vw,32px)}
+.planner-workout-detail-summary{margin:0;color:var(--muted);font-size:12px;line-height:1.5}
+.planner-workout-detail-roles{flex:none}
+.planner-workout-detail-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.planner-workout-detail-grid>section{display:grid;gap:3px;padding:12px;border:1px solid var(--border);border-radius:12px;background:color-mix(in srgb,var(--bg-input) 52%,transparent)}
+.planner-workout-detail-grid span,.planner-workout-detail-purpose span,.planner-workout-detail-note>span,.planner-workout-detail-system span,.planner-workout-detail-fuel span{color:var(--muted);font-size:8px;font-weight:900;letter-spacing:.075em;text-transform:uppercase}
+.planner-workout-detail-grid strong{font-size:13px}
+.planner-workout-detail-grid small{color:var(--muted);font-size:9px;line-height:1.4}
+.planner-workout-detail-purpose,.planner-workout-detail-note{display:grid;gap:6px;padding:13px 14px;border:1px solid var(--border);border-radius:12px;background:transparent}
+.planner-workout-detail-purpose>div{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.planner-workout-detail-purpose strong{font-size:11px}
+.planner-workout-detail-purpose p,.planner-workout-detail-note p{margin:0;color:var(--text-soft);font-size:11px;line-height:1.55}
+.planner-workout-detail-purpose small{color:var(--muted);font-size:9px}
+.planner-workout-detail-system,.planner-workout-detail-fuel{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:11px 13px;border:1px solid var(--border);border-radius:12px;background:color-mix(in srgb,var(--bg-input) 44%,transparent)}
+.planner-workout-detail-system>div:first-child,.planner-workout-detail-fuel>div{display:grid;gap:2px;min-width:0}
+.planner-workout-detail-system strong,.planner-workout-detail-fuel strong{font-size:11px}
+.planner-workout-detail-system small,.planner-workout-detail-fuel small{color:var(--muted);font-size:9px;line-height:1.4}
+.planner-workout-detail-system.needs-approval,.planner-workout-detail-system.not-published,.planner-workout-detail-system.update-open,.planner-workout-detail-system.intervals-confirmed{border-color:color-mix(in srgb,var(--warning,#facc15) 36%,var(--border))}
+.planner-workout-detail-system.current{border-color:color-mix(in srgb,var(--success) 34%,var(--border))}
+.planner-workout-detail-system.coach{border-color:color-mix(in srgb,var(--accent) 35%,var(--border));background:color-mix(in srgb,var(--accent-surface) 38%,transparent)}
+.planner-workout-detail-system.dismissed{opacity:.72}
+.planner-workout-detail-fuel{color:var(--text);text-decoration:none}
+.planner-workout-detail-fuel:hover{border-color:var(--accent-border-strong);background:var(--accent-surface)}
+.planner-workout-detail-fuel>b{flex:none;color:var(--accent-bright);font-size:10px}
+.planner-workout-detail-fuel.warn{border-color:color-mix(in srgb,var(--warning,#facc15) 36%,var(--border))}
+.planner-workout-detail-system-meta{padding:0;border:1px solid var(--border);border-radius:11px;background:transparent}
+.planner-workout-detail-system-meta>summary{padding:10px 12px;color:var(--muted);font-size:9px;font-weight:800;cursor:pointer}
+.planner-workout-detail-system-meta>div{display:flex;flex-wrap:wrap;gap:7px;padding:0 12px 11px}
+.planner-workout-detail-system-meta span{padding:5px 7px;border-radius:999px;background:var(--bg-input);color:var(--muted);font-size:8px}
+.planner-workout-detail-system-meta b{color:var(--text-soft);font-weight:800}
+.planner-workout-detail-race{margin:0}
+.planner-workout-detail-actions{display:flex;justify-content:flex-end;gap:8px;padding-top:2px}
+.planner-workout-detail-actions .danger{margin-right:auto;color:#ff9a90;border-color:#75443f}
+
+@media(max-width:700px){
+  .planner-workout-compact{grid-template-columns:30px minmax(0,1fr) auto!important;padding:11px 12px!important}
+  .planner-workout-compact.no-marker{grid-template-columns:minmax(0,1fr) auto!important}
+  .planner-compact-title-row{align-items:flex-start;flex-direction:column;gap:4px}
+  .planner-compact-title-row h3{white-space:normal}
+  .planner-workout-roles-compact>summary{flex-wrap:wrap}
+  .planner-workout-detail-head{display:grid;gap:9px}
+  .planner-workout-detail-grid{grid-template-columns:1fr}
+  .planner-workout-detail-system,.planner-workout-detail-fuel{align-items:stretch;flex-direction:column}
+  .planner-workout-detail-purpose>div{display:grid;gap:3px}
+  .planner-workout-detail-actions{display:grid;grid-template-columns:1fr}
+  .planner-workout-detail-actions .danger{margin-right:0}
+}
+
+/* v3.9.103 – week itself follows the Briefing list rhythm */
+.shell main .planner-days.planner-days{
+  gap:0;
+  overflow:hidden;
+  border:1px solid var(--ui-border-subtle,var(--border));
+  border-radius:16px;
+  background:var(--ui-panel,var(--bg-card));
+}
+.shell main .planner-day.planner-day{
+  display:grid;
+  grid-template-columns:155px minmax(0,1fr);
+  overflow:visible;
+  border:0;
+  border-radius:0;
+  background:transparent;
+  box-shadow:none;
+}
+.shell main .planner-day.planner-day+.planner-day{border-top:1px solid var(--ui-border-subtle,var(--border))}
+.shell main .planner-day.planner-day>header{
+  display:grid;
+  align-content:start;
+  gap:8px;
+  min-height:0;
+  padding:14px 14px;
+  border:0;
+  background:transparent;
+}
+.planner-day-label{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.shell main .planner-day-label>strong{margin:0;font-size:12px;white-space:nowrap}
+.shell main .planner-day-label>span{
+  padding:3px 6px;
+  border-radius:999px;
+  background:var(--accent);
+  color:var(--accent-text);
+  font-size:8px;
+  font-weight:900;
+  letter-spacing:.055em;
+  text-transform:uppercase;
+}
+.shell main .planner-day-header-actions{display:grid;justify-items:start;gap:5px}
+.shell main .planner-day-header-actions small{max-width:130px;color:var(--muted);font-size:8.5px;line-height:1.35;text-align:left}
+.shell main .planner-day-header-actions button{
+  min-height:0;
+  padding:3px 0;
+  border:0;
+  background:transparent;
+  color:var(--muted);
+  font-size:8.5px;
+  text-decoration:underline;
+  text-decoration-color:transparent;
+  text-underline-offset:3px;
+}
+.shell main .planner-day-header-actions button:hover{color:var(--accent-bright);text-decoration-color:currentColor}
+.planner-day-body{min-width:0;border-left:1px solid var(--ui-border-subtle,var(--border))}
+.planner-day-body>.planner-workout+.planner-workout{border-top:1px solid var(--ui-border-subtle,var(--border))}
+.planner-day-body>.planner-availability-note{border-bottom:1px solid var(--ui-border-subtle,var(--border))}
+.planner-day-body>.planner-empty{min-height:58px;display:flex;align-items:center}
+
+@media(max-width:760px){
+  .shell main .planner-day.planner-day{grid-template-columns:1fr}
+  .shell main .planner-day.planner-day>header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-bottom:1px solid var(--ui-border-subtle,var(--border))}
+  .shell main .planner-day-header-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px}
+  .shell main .planner-day-header-actions small{max-width:150px;text-align:right}
+  .planner-day-body{border-left:0}
+}

@@ -270,86 +270,6 @@ function blocksTrainingDayByDefault(reason = "") {
   return ["Keine Zeit", "Krankheit", "Schmerzen", "Müde", "Bewusst ausgelassen"].includes(reason);
 }
 
-function PlannerActionIcon({ name }) {
-  const common = {
-    width: 16,
-    height: 16,
-    viewBox: "0 0 24 24",
-    fill: "none",
-    stroke: "currentColor",
-    strokeWidth: 1.8,
-    strokeLinecap: "round",
-    strokeLinejoin: "round",
-    "aria-hidden": true,
-  };
-
-  if (name === "edit") {
-    return (
-      <svg {...common}>
-        <path d="M12 20h9" />
-        <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" />
-      </svg>
-    );
-  }
-  if (name === "cancel") {
-    return (
-      <svg {...common}>
-        <rect x="3" y="5" width="18" height="16" rx="2" />
-        <path d="M16 3v4M8 3v4M3 10h18M9 14l6 6M15 14l-6 6" />
-      </svg>
-    );
-  }
-  if (name === "remove") {
-    return (
-      <svg {...common}>
-        <path d="M4 7h16" />
-        <path d="M9 7V4h6v3" />
-        <path d="m7 7 1 13h8l1-13" />
-        <path d="M10 11v5M14 11v5" />
-      </svg>
-    );
-  }
-  if (name === "restore") {
-    return (
-      <svg {...common}>
-        <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
-        <path d="M3 3v5h5" />
-      </svg>
-    );
-  }
-  if (name === "target") {
-    return (
-      <svg {...common}>
-        <circle cx="12" cy="12" r="9" />
-        <circle cx="12" cy="12" r="5" />
-        <circle cx="12" cy="12" r="1" />
-      </svg>
-    );
-  }
-  return (
-    <svg {...common}>
-      <path d="M12 9v4" />
-      <path d="M12 17h.01" />
-      <path d="M10.3 3.7 2.6 17a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.7a2 2 0 0 0-3.4 0Z" />
-    </svg>
-  );
-}
-
-function PlannerIconAction({ icon, label, className = "", onClick }) {
-  return (
-    <button
-      type="button"
-      className={`planner-icon-action ${className}`.trim()}
-      onClick={onClick}
-      aria-label={label}
-      title={label}
-    >
-      <PlannerActionIcon name={icon} />
-    </button>
-  );
-}
-
-
 function replacementWorkoutType(sport) {
   return {
     running: "Easy Run",
@@ -619,10 +539,11 @@ export default function Planner() {
   const [offsetWeeks, setOffsetWeeks] = useState(0);
   const [forecast, setForecast] = useState([]);
   const [status, setStatus] = useState("");
-  const [editing, setEditing] = useState(() => {
+  const [workoutDetailId, setWorkoutDetailId] = useState(() => {
     const requestedWorkout = state.plan.find((item) => String(item.id) === String(requestedWorkoutId || ""));
-    return requestedWorkout ? prepareWorkoutForEditing(requestedWorkout) : null;
+    return requestedWorkout?.id || null;
   });
+  const [editing, setEditing] = useState(null);
   const [missedEditing, setMissedEditing] = useState(null);
   const [planningOpen, setPlanningOpen] = useState(false);
   const [planningDraft, setPlanningDraft] = useState(null);
@@ -895,7 +816,10 @@ export default function Planner() {
   const planningTargetLabel = offsetWeeks === 1 ? "Nächste Woche" : "Aktuelle Woche";
   const closurePeriodLabel = offsetWeeks === 1 ? "aktuelle Woche" : "Vorwoche";
   const isPastWeek = offsetWeeks < 0;
-  const modalVisible = Boolean(editing || missedEditing || availabilityEditing || planningOpen || adjustmentOpen || planningInfoOpen || crossTrainingPreviewOpen || pendingPlanChange || publishConfirmOpen);
+  const detailWorkout = workoutDetailId
+    ? state.plan.find((item) => String(item.id) === String(workoutDetailId) && !item.archived) || null
+    : null;
+  const modalVisible = Boolean(detailWorkout || editing || missedEditing || availabilityEditing || planningOpen || adjustmentOpen || planningInfoOpen || crossTrainingPreviewOpen || pendingPlanChange || publishConfirmOpen);
   const editingTrackWorkout = editing && isTrackWorkout(editing)
     ? editing.structuredWorkout
     : null;
@@ -1965,7 +1889,13 @@ export default function Planner() {
   }
 
   function openWorkoutEditor(item) {
+    setWorkoutDetailId(null);
     setEditing(prepareWorkoutForEditing(item));
+  }
+
+  function openWorkoutDetails(item) {
+    if (!item?.id) return;
+    setWorkoutDetailId(item.id);
   }
 
   function openCompletedReview(destination, event) {
@@ -1981,21 +1911,13 @@ export default function Planner() {
 
   function openWorkoutFromRow(item, event) {
     if (event.target.closest?.("button, a, input, select, textarea")) return;
-    if (item.raceEvent) {
-      navigate("/mission");
-      return;
-    }
-    openWorkoutEditor(item);
+    openWorkoutDetails(item);
   }
 
   function openWorkoutFromKeyboard(item, event) {
     if (event.target !== event.currentTarget || !["Enter", " "].includes(event.key)) return;
     event.preventDefault();
-    if (item.raceEvent) {
-      navigate("/mission");
-      return;
-    }
-    openWorkoutEditor(item);
+    openWorkoutDetails(item);
   }
 
   function updateEditingType(type) {
@@ -2836,13 +2758,14 @@ export default function Planner() {
           return (
             <article className={`planner-day ${availability?.status === "blocked" ? "availability-blocked" : availability ? "availability-limited" : ""}`.trim()} key={dateKey}>
               <header>
-                <div><span>{dayFormatter.format(date)}</span><strong>{new Intl.DateTimeFormat("de-DE", { weekday: "long" }).format(date)}</strong></div>
+                <div className="planner-day-label"><strong>{dayFormatter.format(date)}</strong>{dateKey === todayKey && <span>Heute</span>}</div>
                 <div className="planner-day-header-actions">
                   {dayWeather && <small>{dayWeather.maxTemp}° · Böen {dayWeather.maxGust} · Regen {dayWeather.rainChance}%</small>}
                   {availabilityEditable && <button type="button" className={availability ? "blocked" : ""} onClick={() => openAvailability(dateKey)}>{availability ? (availability.status === "blocked" ? "Nicht verfügbar" : "Eingeschränkt") : "Verfügbarkeit"}</button>}
                 </div>
               </header>
 
+              <div className="planner-day-body">
               {availability && (
                 <div className="planner-availability-note">
                   <div className="planner-availability-note-main">
@@ -2870,7 +2793,7 @@ export default function Planner() {
                 });
                 return (
                   <div
-                    className={`planner-workout planner-actual completed ${reviewDestination ? "planner-workout-review-open" : ""}`}
+                    className={`planner-workout planner-workout-compact planner-actual completed ${reviewDestination ? "planner-workout-review-open" : ""}`}
                     key={`actual-${activity.id}`}
                     role={reviewDestination ? "button" : undefined}
                     tabIndex={reviewDestination ? 0 : undefined}
@@ -2880,12 +2803,14 @@ export default function Planner() {
                     onKeyDown={reviewDestination ? (event) => openCompletedReviewFromKeyboard(reviewDestination, event) : undefined}
                   >
                     <div className="planner-check">✓</div>
-                    <div className="planner-workout-main">
-                      <div><span>{activityTime(activity) ? `${activityTime(activity)} · ` : ""}ERLEDIGT</span><em>{String(activity.source || "Garmin").toUpperCase()}</em></div>
-                      <h3>{activity.name || activity.title || activity.type || "Training"}</h3>
+                    <div className="planner-workout-main planner-workout-compact-main">
+                      <div className="planner-compact-kicker"><span>{activityTime(activity) ? `${activityTime(activity)} · ` : ""}Erledigt</span></div>
+                      <div className="planner-compact-title-row">
+                        <h3>{activity.name || activity.title || activity.type || "Training"}</h3>
+                        <WorkoutRoleBadges assessment={roleAssessment} className="planner-workout-roles planner-workout-roles-compact" />
+                      </div>
                       <p>{activity.type || activity.sportType || "Einheit"}{Number(activity.distance || 0) ? ` · ${Number(activity.distance).toFixed(1)} km` : ""}{Number(activity.duration || 0) ? ` · ${Math.round(Number(activity.duration))} min` : ""}</p>
                     </div>
-                    <WorkoutRoleBadges assessment={roleAssessment} className="planner-workout-roles" />
                     {reviewDestination && <span className="planner-review-cue">Review →</span>}
                   </div>
                 );
@@ -2908,7 +2833,6 @@ export default function Planner() {
                   : null;
                 const canComplete = canManuallyCompleteWorkout(item, plannerNow);
                 const hasStateMarker = completed || isCancelled || canComplete;
-                const fuelRecommendation = fuelRecommendations.get(item.id);
                 const trackTemplateLabel = trackWorkoutTemplateLabel(item.structuredWorkout);
                 const paceLabel = loopWorkoutPaceLabel(item) || workoutPaceLabel(item, { includeSource: true });
                 const loopLabel = loopWorkoutCompactLabel(item);
@@ -2923,30 +2847,43 @@ export default function Planner() {
                   goal: goalProfile,
                   weekPrescription,
                 });
-                const matchedSourceLabel = matched ? String(matched.source || item.actualSource || "Garmin").toUpperCase() : "";
-                const showMatchedSource = Boolean(matchedSourceLabel)
-                  && !(matchedSourceLabel.includes("INTERVALS") && (trackSyncStatus || item.intervalsPublishedAt));
-                const coachCandidate = scienceAssessment.candidates.find((candidate) => candidate.id === item.id) || null;
-                const coachCandidateDecision = coachCandidate
-                  ? coachSuggestionDecision(coachSuggestionDecisions, coachDecisionKey(coachCandidate))
-                  : null;
-                const canRemoveFromPlan = item.source === "manual" && !item.raceEvent;
-                const raceEventDetails = item.raceEvent ? raceEventFromPlanItem(item, weekMissionEvents) : null;
-                const raceProtocol = item.raceEvent
-                  ? item.raceProtocol || buildRaceProtocolForState(state, raceEventDetails)
-                  : null;
-                const className = `planner-workout ${completed ? "completed" : ""} ${isMissed ? "missed" : ""} ${isCancelled ? "cancelled" : ""} ${hasStateMarker ? "" : "no-marker"} ${availabilityFocusId === item.id ? "planner-workout-highlighted" : ""}`;
+                const compactMetrics = [
+                  trackTemplateLabel,
+                  item.distance ? `${Number(item.distance).toFixed(1).replace(".0", "")} km` : "",
+                  matched && Number(matched.distance || item.actualDistance || 0) ? `${Number(matched.distance || item.actualDistance).toFixed(1).replace(".0", "")} km erledigt` : "",
+                  item.duration ? `${Math.round(Number(item.duration))} min` : "",
+                  paceLabel,
+                  loopLabel,
+                ].filter(Boolean).join(" · ");
+                const compactStatus = completed
+                  ? "Erledigt"
+                  : isCancelled
+                    ? "Ausgefallen"
+                    : isMissed
+                      ? "Rückmeldung offen"
+                      : item.optional
+                        ? "Optional"
+                        : "";
+                const garminAttention = trackSyncStatus?.action
+                  ? trackSyncStatus.state === TRACK_PUBLICATION_STATES.DRAFT
+                    ? "Vorläufig"
+                    : trackSyncStatus.state === TRACK_PUBLICATION_STATES.INTERVALS_CONFIRMED
+                      ? "Garmin prüfen"
+                      : "Garmin aktualisieren"
+                  : "";
+                const className = `planner-workout planner-workout-compact ${completed ? "completed" : ""} ${isMissed ? "missed" : ""} ${isCancelled ? "cancelled" : ""} ${hasStateMarker ? "" : "no-marker"} ${availabilityFocusId === item.id ? "planner-workout-highlighted" : ""}`;
+                const opensDetail = !completed;
                 return (
                   <div
-                    className={`${className} ${reviewDestination ? "planner-workout-review-open" : ""}`}
+                    className={`${className} ${reviewDestination ? "planner-workout-review-open" : opensDetail ? "planner-workout-detail-open" : ""}`}
                     id={`planner-workout-${item.id}`}
                     key={item.id}
-                    role={reviewDestination ? "button" : undefined}
-                    tabIndex={reviewDestination ? 0 : undefined}
-                    title={reviewDestination ? "Review öffnen" : completed ? "Review nach dem Aktivitätssync verfügbar" : undefined}
-                    aria-label={reviewDestination ? `${item.title}: Review öffnen` : undefined}
-                    onClick={reviewDestination ? (event) => openCompletedReview(reviewDestination, event) : undefined}
-                    onKeyDown={reviewDestination ? (event) => openCompletedReviewFromKeyboard(reviewDestination, event) : undefined}
+                    role={reviewDestination || opensDetail ? "button" : undefined}
+                    tabIndex={reviewDestination || opensDetail ? 0 : undefined}
+                    title={reviewDestination ? "Review öffnen" : opensDetail ? "Einheitsdetails öffnen" : undefined}
+                    aria-label={reviewDestination ? `${item.title}: Review öffnen` : opensDetail ? `${item.title}: Einheitsdetails öffnen` : undefined}
+                    onClick={reviewDestination ? (event) => openCompletedReview(reviewDestination, event) : opensDetail ? (event) => openWorkoutFromRow(item, event) : undefined}
+                    onKeyDown={reviewDestination ? (event) => openCompletedReviewFromKeyboard(reviewDestination, event) : opensDetail ? (event) => openWorkoutFromKeyboard(item, event) : undefined}
                   >
                     {completed && linkedCompletion && <div className="planner-check completed" title="Erledigt" aria-label="Erledigt">✓</div>}
                     {completed && !linkedCompletion && (
@@ -2977,243 +2914,238 @@ export default function Planner() {
                         {isMissed ? "!" : ""}
                       </button>
                     )}
-                    <div
-                      className={`planner-workout-main ${!completed && !isCancelled ? "planner-workout-open" : ""}`}
-                      role={!completed && !isCancelled ? "button" : undefined}
-                      tabIndex={!completed && !isCancelled ? 0 : undefined}
-                      title={!completed && !isCancelled ? item.raceEvent ? "Ziel öffnen" : "Training öffnen" : undefined}
-                      aria-label={!completed && !isCancelled ? `${item.title}: ${item.raceEvent ? "Ziel" : "Training"} öffnen` : undefined}
-                      onClick={!completed && !isCancelled ? (event) => openWorkoutFromRow(item, event) : undefined}
-                      onKeyDown={!completed && !isCancelled ? (event) => openWorkoutFromKeyboard(item, event) : undefined}
-                    >
-                      <div>
-                        <span>{workoutTimingLabel(item)} · {completed ? "ERLEDIGT" : isCancelled ? "AUSGEFALLEN" : isMissed ? "NICHT ERLEDIGT" : item.optional ? "OPTIONAL" : "PFLICHT"}</span>
-                        {item.weatherAdjusted && <em>WETTER</em>}
-                        {item.raceEvent && <em>EVENT {item.goalPriority || "B"}</em>}
-                        {item.comboSession && <em>KOMBI-TAG</em>}
-                        {item.doubleSession && <em>DOPPELTRAINING</em>}
-                        {trackSyncStatus
-                          ? <em>{trackSyncStatus.state === TRACK_PUBLICATION_STATES.DRAFT ? "VORLÄUFIG" : trackSyncStatus.state === TRACK_PUBLICATION_STATES.CURRENT ? "INTERVALS AKTUELL" : "FINAL"}</em>
-                          : item.intervalsPublishedAt && <em>INTERVALS</em>}
-                        {showMatchedSource && <em>{matchedSourceLabel}</em>}
+                    <div className="planner-workout-main planner-workout-compact-main">
+                      <div className="planner-compact-kicker">
+                        <span>{workoutTimingLabel(item)}{compactStatus ? ` · ${compactStatus}` : ""}</span>
+                        {garminAttention && <em className="planner-compact-system-alert">{garminAttention}</em>}
                       </div>
-                      <h3>{item.title}</h3>
-                      <p>{item.type}{trackTemplateLabel ? ` · ${trackTemplateLabel}` : ""}{item.distance ? ` · ${item.distance} km geplant` : ""}{matched && Number(matched.distance || item.actualDistance || 0) ? ` · ${Number(matched.distance || item.actualDistance).toFixed(1)} km erledigt` : ""}{item.duration ? ` · ${item.duration} min` : ""}{paceLabel ? ` · ${paceLabel}` : ""}</p>
-                      {loopLabel && !matched && <small className="planner-loop-row-label">{loopLabel}</small>}
-                      {matched && <small>{matched.name || item.actualTitle}</small>}
-                      {item.missedReason && <small>Grund: {item.missedReason}{item.missedNote ? ` · ${item.missedNote}` : ""}</small>}
-                      {missedSessionDecision?.cancellationId === item.id && (
-                        <details className={`planner-missed-session-inline ${missedSessionDecision.tone}`} onClick={(event) => event.stopPropagation()}>
-                          <summary>
-                            <span>Coach-Einordnung</span>
-                            <strong>{missedSessionDecision.title}</strong>
-                            <b>Details</b>
-                          </summary>
-                          <div className="planner-missed-session-body">
-                            <p>{missedSessionDecision.recommendation}</p>
-                            <small>{missedSessionDecision.reason}</small>
-                            {missedSessionDecision.canApply && (
-                              <button type="button" onClick={() => applyMissedLongRunExtension()}>
-                                + {missedSessionDecision.extraMinutes} min optional
-                              </button>
-                            )}
-                          </div>
-                        </details>
-                      )}
-                      {item.notes && !isCancelled && (String(item.notes).length > 150
-                        ? <details className="planner-workout-notes" onClick={(event) => event.stopPropagation()}><summary>Coach-Hinweis</summary><small>{item.notes}</small></details>
-                        : <small className="planner-workout-note-brief">{item.notes}</small>)}
-                      {item.raceEvent && raceProtocol && !completed && !isCancelled && (
-                        <details className="planner-race-protocol" onClick={(event) => event.stopPropagation()}>
-                          <summary className="planner-race-protocol-head">
-                            <div>
-                              <span>Race Protocol</span>
-                              <strong>{raceProtocol.enabled || raceProtocol.settings.mode === "auto" ? raceProtocol.recommendation.label : "Nur Wettkampf"}</strong>
-                              <small>{raceProtocol.enabled || raceProtocol.settings.mode === "auto" ? raceProtocol.recommendation.reason : "Kein zusätzlicher Race-Day-Ablauf."}</small>
-                            </div>
-                            <b>Plan anzeigen</b>
-                          </summary>
-                          <div className="planner-race-protocol-body">
-                            <div className="planner-race-protocol-modes" role="group" aria-label="Race Protocol auswählen">
-                              <button type="button" className={raceProtocol.settings.mode === "auto" ? "selected" : ""} onClick={() => updateRaceProtocol(item, { mode: "auto" })}>Auto</button>
-                              <button type="button" className={raceProtocol.settings.mode === "on" ? "selected" : ""} onClick={() => updateRaceProtocol(item, { mode: "on" })}>Race Protocol</button>
-                              <button type="button" className={raceProtocol.settings.mode === "off" ? "selected" : ""} onClick={() => updateRaceProtocol(item, { mode: "off" })}>Nur Wettkampf</button>
-                            </div>
-                            {raceProtocol.enabled && (
-                              <>
-                                <div className="planner-race-protocol-timeline">
-                                  {raceProtocol.timeline.filter((step) => step.key !== "start").map((step) => <article key={step.key}><span>{step.time || step.relative || "vor Start"}{step.optional ? " · optional" : ""}</span><b>{step.label}</b><small>{step.detail}</small></article>)}
-                                </div>
-                                <details className="planner-race-protocol-options">
-                                  <summary>Bausteine auswählen</summary>
-                                  <div>
-                                    {[
-                                      ["fueling", "🥣 Pre-Race Fueling"],
-                                      ["hydration", "💧 Trink-Reminder"],
-                                      ["activation", "⚡ Race-Day Activation"],
-                                      ["warmup", "🏃 Warm-up"],
-                                      ["strides", "↗ Strides"],
-                                      ["calendarReminders", "🔔 Kalender-Erinnerungen"],
-                                    ].map(([key, label]) => <label key={key}><input type="checkbox" checked={Boolean(raceProtocol.settings.components[key])} onChange={(event) => updateRaceProtocol(item, { components: { [key]: event.target.checked } })} /><span>{label}</span></label>)}
-                                  </div>
-                                  {raceProtocol.settings.components.activation && !raceProtocol.activationDecision.recommended && <small>{raceProtocol.activationDecision.reason}</small>}
-                                  {raceProtocol.settings.components.calendarReminders && !raceProtocol.startTimeKnown && <small>Kalender-Erinnerungen brauchen eine Startzeit am Event.</small>}
-                                </details>
-                              </>
-                            )}
-                          </div>
-                        </details>
-                      )}
-                      {trackSyncStatus && !matched && !completed && !isCancelled && !isMissed && (
-                        <div className={`planner-track-sync-status ${trackSyncStatus.state}`}>
-                          <div>
-                            <span>Garmin-Status</span>
-                            <strong>{trackSyncStatus.label}</strong>
-                            <small>{trackSyncStatus.detail}</small>
-                          </div>
-                          <div className="planner-track-sync-actions">
-                            {trackSyncStatus.action === "edit" && <button type="button" onClick={() => openWorkoutEditor(item)}>Finalisieren</button>}
-                            {trackSyncStatus.action === "accept" && <button type="button" className="primary" onClick={acceptCurrentWeek}>{trackSyncStatus.actionLabel}</button>}
-                            {trackSyncStatus.action === "publish" && <button type="button" className="primary" onClick={requestPublish}>{trackSyncStatus.actionLabel}</button>}
-                            {trackSyncStatus.action === "confirm-device" && <button type="button" className="primary" onClick={() => confirmTrackOnGarmin(item)}>{trackSyncStatus.actionLabel}</button>}
-                            {trackSyncStatus.secondaryAction === "publish" && <button type="button" onClick={requestPublish}>{trackSyncStatus.secondaryActionLabel}</button>}
-                          </div>
-                        </div>
-                      )}
-                      {coachCandidate && !matched && !completed && !isCancelled && !isMissed && !coachCandidateDecision && (
-                        <div className="planner-coach-inline">
-                          <div>
-                            <span>Coach empfiehlt</span>
-                            <strong>{coachCandidate.coachAlternative?.label || "Alternative prüfen"}</strong>
-                            <small>{coachCandidate.coachAlternative?.reason || coachCandidate.suggestion}</small>
-                          </div>
-                          <div className="planner-coach-inline-actions">
-                            <button type="button" className="primary" onClick={() => applyCoachSuggestion(coachCandidate)}>Annehmen</button>
-                            <button type="button" onClick={() => rejectCoachSuggestion(coachCandidate)}>Ablehnen</button>
-                          </div>
-                        </div>
-                      )}
-                      {coachCandidate && coachCandidateDecision?.status === "rejected" && !matched && !completed && !isCancelled && !isMissed && (
-                        <div className="planner-coach-inline dismissed">
-                          <div>
-                            <span>Coach-Vorschlag abgelehnt</span>
-                            <small>Die bestehende Einheit bleibt unverändert im Wochenplan.</small>
-                          </div>
-                          <button type="button" onClick={() => reconsiderCoachSuggestion(coachCandidate)}>Neu prüfen</button>
-                        </div>
-                      )}
-                      {item.coachAlternative?.source === "weather-cycling" && !matched && !completed && !isCancelled && !isMissed && (
-                        <div className="planner-weather-alternative">
-                          <div>
-                            <span>Coach-Alternative · Wetter</span>
-                            <strong>{item.coachAlternative.label}</strong>
-                            <small>{item.coachAlternative.reason}</small>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => openAdjustment(
-                              item.id,
-                              "replace",
-                              item.coachAlternative.key,
-                              item.coachAlternative,
-                            )}
-                          >
-                            Vorschlag prüfen
-                          </button>
-                        </div>
-                      )}
-                      {fuelRecommendation && !matched && !item.completed && !isCancelled && !isMissed && (
-                        <Link
-                          className={`planner-fuel-hint ${fuelRecommendation.warnings.length ? "warn" : ""}`}
-                          to={`/fuel?workout=${item.id}`}
-                        >
-                          <span>◒ Fuel · {fuelRecommendation.modeLabel}</span>
-                          <strong>{fuelRecommendation.packSummary}</strong>
-                          <small>{fuelRecommendation.warnings.length ? "Bestand oder Produktdaten prüfen →" : "Strategie ansehen →"}</small>
-                        </Link>
-                      )}
-                      {item.choicePending && item.choiceOptions && (
-                        <div className="planner-choice-actions">
-                          <button type="button" onClick={() => resolveSaturdayChoice(item, "orc")}>📍 ORC Track</button>
-                          <button type="button" onClick={() => resolveSaturdayChoice(item, "alternative")}>🟢 Alternativlauf</button>
-                        </div>
-                      )}
+                      <div className="planner-compact-title-row">
+                        <h3>{item.title}</h3>
+                        <WorkoutRoleBadges assessment={roleAssessment} className="planner-workout-roles planner-workout-roles-compact" />
+                      </div>
+                      {compactMetrics && <p>{compactMetrics}</p>}
+                      {(item.missedReason || isCancelled) && <small>{item.missedReason ? `Grund: ${item.missedReason}${item.missedNote ? ` · ${item.missedNote}` : ""}` : "Einheit wurde für diese Woche aus dem Plan genommen."}</small>}
                     </div>
-                    <WorkoutRoleBadges assessment={roleAssessment} className="planner-workout-roles" />
-                    {reviewDestination && <span className="planner-review-cue">Review →</span>}
-                    {!completed && (
-                      <>
-                        <div className="planner-actions planner-actions-desktop" aria-label={`${item.title}: Aktionen`}>
-                          {isMissed && (
-                            <PlannerIconAction
-                              icon="warning"
-                              label="Grund angeben"
-                              className="danger"
-                              onClick={() => openMissed(item)}
-                            />
-                          )}
-                          {isCancelled
-                            ? (
-                              <PlannerIconAction
-                                icon="restore"
-                                label="Wieder einplanen"
-                                onClick={() => restoreCancelledWorkout(item)}
-                              />
-                            )
-                            : item.raceEvent
-                              ? (
-                                <PlannerIconAction
-                                  icon="target"
-                                  label="Ziel öffnen"
-                                  onClick={() => navigate("/mission")}
-                                />
-                              )
-                              : (
-                                <PlannerIconAction
-                                  icon="edit"
-                                  label="Bearbeiten"
-                                  onClick={() => openWorkoutEditor(item)}
-                                />
-                              )}
-                          {!isPastWeek && !isCancelled && (
-                            <PlannerIconAction
-                              icon="cancel"
-                              label="Als ausgefallen markieren"
-                              onClick={() => openAdjustment(item.id, "cancel")}
-                            />
-                          )}
-                          {canRemoveFromPlan && (
-                            <PlannerIconAction
-                              icon="remove"
-                              label="Aus Wochenplan entfernen"
-                              className="danger"
-                              onClick={() => removeManualWorkout(item)}
-                            />
-                          )}
-                        </div>
-                        <details className="planner-actions-menu">
-                          <summary aria-label={`${item.title}: Aktionen öffnen`} title="Aktionen">•••</summary>
-                          <div>
-                            {isMissed && <button className="danger" onClick={() => openMissed(item)}>Grund angeben</button>}
-                            {isCancelled
-                              ? <button onClick={() => restoreCancelledWorkout(item)}>Wieder einplanen</button>
-                              : item.raceEvent
-                                ? <button onClick={() => navigate("/mission")}>Ziel öffnen</button>
-                                : <button onClick={() => openWorkoutEditor(item)}>Bearbeiten</button>}
-                            {!isPastWeek && !isCancelled && <button onClick={() => openAdjustment(item.id, "cancel")}>Fällt aus</button>}
-                            {canRemoveFromPlan && <button className="danger" onClick={() => removeManualWorkout(item)}>Aus Wochenplan entfernen</button>}
-                          </div>
-                        </details>
-                      </>
-                    )}
+                    {reviewDestination
+                      ? <span className="planner-review-cue">Review →</span>
+                      : opensDetail && <span className="planner-detail-cue" aria-hidden="true">→</span>}
                   </div>
                 );
               })}
+              </div>
             </article>
           );
         })}
       </div>
       </>}
+
+      {detailWorkout && (() => {
+        const matched = matches.get(detailWorkout.id) || (detailWorkout.matchedActivityId ? activityById.get(detailWorkout.matchedActivityId) : null);
+        const completed = Boolean(detailWorkout.completed || matched);
+        const isCancelled = Boolean(detailWorkout.plannedCancellation);
+        const isMissed = !isCancelled && detailWorkout.date < todayKey && !completed;
+        const fuelRecommendation = fuelRecommendations.get(detailWorkout.id);
+        const trackTemplate = trackWorkoutTemplateLabel(detailWorkout.structuredWorkout);
+        const paceLabel = loopWorkoutPaceLabel(detailWorkout) || workoutPaceLabel(detailWorkout, { includeSource: true });
+        const loopLabel = loopWorkoutCompactLabel(detailWorkout);
+        const roleAssessment = workoutRoleAssessment(detailWorkout, {
+          plan: state.plan,
+          goal: goalProfile,
+          weekPrescription,
+        });
+        const trackSyncStatus = trackPublicationStatus({
+          item: detailWorkout,
+          approvalState: weekApprovalState,
+          publishedWeekCurrent: Boolean(publishedWeek && !planChangedAfterPublish),
+          weekWasPublished: Boolean(publishedWeek),
+        });
+        const coachCandidate = scienceAssessment.candidates.find((candidate) => candidate.id === detailWorkout.id) || null;
+        const coachCandidateDecision = coachCandidate
+          ? coachSuggestionDecision(coachSuggestionDecisions, coachDecisionKey(coachCandidate))
+          : null;
+        const canRemoveFromPlan = detailWorkout.source === "manual" && !detailWorkout.raceEvent;
+        const raceEventDetails = detailWorkout.raceEvent ? raceEventFromPlanItem(detailWorkout, weekMissionEvents) : null;
+        const raceProtocol = detailWorkout.raceEvent
+          ? detailWorkout.raceProtocol || buildRaceProtocolForState(state, raceEventDetails)
+          : null;
+        const summaryMetrics = [
+          trackTemplate,
+          Number(detailWorkout.distance || 0) > 0 ? `${Number(detailWorkout.distance).toFixed(1).replace(".0", "")} km` : "",
+          Number(detailWorkout.duration || 0) > 0 ? `${Math.round(Number(detailWorkout.duration))} min` : "",
+          paceLabel,
+          loopLabel,
+        ].filter(Boolean);
+        return (
+          <div className="modal-backdrop">
+            <div className="modal planner-workout-detail-modal">
+              <button type="button" className="close" onClick={() => setWorkoutDetailId(null)}>×</button>
+              <div className="planner-workout-detail-head">
+                <div>
+                  <p className="eyebrow">{new Intl.DateTimeFormat("de-DE", { weekday: "long", day: "2-digit", month: "2-digit" }).format(new Date(`${detailWorkout.date}T12:00:00`))} · {workoutTimingLabel(detailWorkout)}</p>
+                  <h2>{detailWorkout.title}</h2>
+                  <p className="planner-workout-detail-summary">{summaryMetrics.join(" · ") || detailWorkout.type || "Training"}</p>
+                </div>
+                <WorkoutRoleBadges assessment={roleAssessment} className="planner-workout-detail-roles" />
+              </div>
+
+              <div className="planner-workout-detail-grid">
+                <section>
+                  <span>Einheit</span>
+                  <strong>{detailWorkout.type || "Training"}</strong>
+                  <small>{detailWorkout.optional ? "Optional eingeplant" : detailWorkout.fixed || detailWorkout.commitmentId ? "Fester Termin" : "Geplante Einheit"}</small>
+                </section>
+                <section>
+                  <span>Umfang</span>
+                  <strong>{Number(detailWorkout.distance || 0) > 0 ? `${Number(detailWorkout.distance).toFixed(1).replace(".0", "")} km` : Number(detailWorkout.duration || 0) > 0 ? `${Math.round(Number(detailWorkout.duration))} min` : "Offen"}</strong>
+                  <small>{Number(detailWorkout.distance || 0) > 0 && Number(detailWorkout.duration || 0) > 0 ? `${Math.round(Number(detailWorkout.duration))} min geplant` : paceLabel || "ohne weitere Vorgabe"}</small>
+                </section>
+                <section>
+                  <span>Status</span>
+                  <strong>{completed ? "Erledigt" : isCancelled ? "Ausgefallen" : isMissed ? "Rückmeldung offen" : "Geplant"}</strong>
+                  <small>{matched ? matched.name || "Aktivität zugeordnet" : detailWorkout.optional ? "kann ausgelassen werden" : "Teil des Wochenplans"}</small>
+                </section>
+              </div>
+
+              <section className="planner-workout-detail-purpose">
+                <div><span>Trainingszweck</span><strong>{roleAssessment.title}</strong></div>
+                <p>{roleAssessment.explanation}</p>
+                {roleAssessment.context && <small>{roleAssessment.context}</small>}
+              </section>
+
+              {detailWorkout.notes && <section className="planner-workout-detail-note"><span>Coach-Hinweis</span><p>{detailWorkout.notes}</p></section>}
+
+              {missedSessionDecision?.cancellationId === detailWorkout.id && (
+                <section className={`planner-workout-detail-system ${missedSessionDecision.tone}`}>
+                  <div><span>Coach-Einordnung</span><strong>{missedSessionDecision.title}</strong><small>{missedSessionDecision.recommendation} {missedSessionDecision.reason}</small></div>
+                  {missedSessionDecision.canApply && <button type="button" onClick={() => applyMissedLongRunExtension()}>+ {missedSessionDecision.extraMinutes} min optional</button>}
+                </section>
+              )}
+
+              {detailWorkout.raceEvent && raceProtocol && !completed && !isCancelled && (
+                <details className="planner-race-protocol planner-workout-detail-race">
+                  <summary className="planner-race-protocol-head">
+                    <div>
+                      <span>Race Protocol</span>
+                      <strong>{raceProtocol.enabled || raceProtocol.settings.mode === "auto" ? raceProtocol.recommendation.label : "Nur Wettkampf"}</strong>
+                      <small>{raceProtocol.enabled || raceProtocol.settings.mode === "auto" ? raceProtocol.recommendation.reason : "Kein zusätzlicher Race-Day-Ablauf."}</small>
+                    </div>
+                    <b>Plan anzeigen</b>
+                  </summary>
+                  <div className="planner-race-protocol-body">
+                    <div className="planner-race-protocol-modes" role="group" aria-label="Race Protocol auswählen">
+                      <button type="button" className={raceProtocol.settings.mode === "auto" ? "selected" : ""} onClick={() => updateRaceProtocol(detailWorkout, { mode: "auto" })}>Auto</button>
+                      <button type="button" className={raceProtocol.settings.mode === "on" ? "selected" : ""} onClick={() => updateRaceProtocol(detailWorkout, { mode: "on" })}>Race Protocol</button>
+                      <button type="button" className={raceProtocol.settings.mode === "off" ? "selected" : ""} onClick={() => updateRaceProtocol(detailWorkout, { mode: "off" })}>Nur Wettkampf</button>
+                    </div>
+                    {raceProtocol.enabled && <>
+                      <div className="planner-race-protocol-timeline">
+                        {raceProtocol.timeline.filter((step) => step.key !== "start").map((step) => <article key={step.key}><span>{step.time || step.relative || "vor Start"}{step.optional ? " · optional" : ""}</span><b>{step.label}</b><small>{step.detail}</small></article>)}
+                      </div>
+                      <details className="planner-race-protocol-options">
+                        <summary>Bausteine auswählen</summary>
+                        <div>
+                          {[
+                            ["fueling", "🥣 Pre-Race Fueling"],
+                            ["hydration", "💧 Trink-Reminder"],
+                            ["activation", "⚡ Race-Day Activation"],
+                            ["warmup", "🏃 Warm-up"],
+                            ["strides", "↗ Strides"],
+                            ["calendarReminders", "🔔 Kalender-Erinnerungen"],
+                          ].map(([key, label]) => <label key={key}><input type="checkbox" checked={Boolean(raceProtocol.settings.components[key])} onChange={(event) => updateRaceProtocol(detailWorkout, { components: { [key]: event.target.checked } })} /><span>{label}</span></label>)}
+                        </div>
+                        {raceProtocol.settings.components.activation && !raceProtocol.activationDecision.recommended && <small>{raceProtocol.activationDecision.reason}</small>}
+                        {raceProtocol.settings.components.calendarReminders && !raceProtocol.startTimeKnown && <small>Kalender-Erinnerungen brauchen eine Startzeit am Event.</small>}
+                      </details>
+                    </>}
+                  </div>
+                </details>
+              )}
+
+              {trackSyncStatus && !completed && !isCancelled && !isMissed && (
+                <section className={`planner-workout-detail-system ${trackSyncStatus.state}`}>
+                  <div>
+                    <span>Garmin</span>
+                    <strong>{trackSyncStatus.label}</strong>
+                    <small>{trackSyncStatus.detail}</small>
+                  </div>
+                  <div className="planner-track-sync-actions">
+                    {trackSyncStatus.action === "edit" && <button type="button" onClick={() => openWorkoutEditor(detailWorkout)}>Finalisieren</button>}
+                    {trackSyncStatus.action === "accept" && <button type="button" className="primary" onClick={acceptCurrentWeek}>{trackSyncStatus.actionLabel}</button>}
+                    {trackSyncStatus.action === "publish" && <button type="button" className="primary" onClick={requestPublish}>{trackSyncStatus.actionLabel}</button>}
+                    {trackSyncStatus.action === "confirm-device" && <button type="button" className="primary" onClick={() => confirmTrackOnGarmin(detailWorkout)}>{trackSyncStatus.actionLabel}</button>}
+                    {trackSyncStatus.secondaryAction === "publish" && <button type="button" onClick={requestPublish}>{trackSyncStatus.secondaryActionLabel}</button>}
+                  </div>
+                </section>
+              )}
+
+              {coachCandidate && !completed && !isCancelled && !isMissed && !coachCandidateDecision && (
+                <section className="planner-workout-detail-system coach">
+                  <div>
+                    <span>Coach empfiehlt</span>
+                    <strong>{coachCandidate.coachAlternative?.label || "Alternative prüfen"}</strong>
+                    <small>{coachCandidate.coachAlternative?.reason || coachCandidate.suggestion}</small>
+                  </div>
+                  <div className="planner-track-sync-actions">
+                    <button type="button" className="primary" onClick={() => { applyCoachSuggestion(coachCandidate); setWorkoutDetailId(null); }}>Annehmen</button>
+                    <button type="button" onClick={() => rejectCoachSuggestion(coachCandidate)}>Ablehnen</button>
+                  </div>
+                </section>
+              )}
+
+              {coachCandidate && coachCandidateDecision?.status === "rejected" && !completed && !isCancelled && !isMissed && (
+                <section className="planner-workout-detail-system dismissed">
+                  <div><span>Coach-Vorschlag</span><strong>Abgelehnt</strong><small>Die bestehende Einheit bleibt unverändert im Wochenplan.</small></div>
+                  <button type="button" onClick={() => reconsiderCoachSuggestion(coachCandidate)}>Neu prüfen</button>
+                </section>
+              )}
+
+              {detailWorkout.coachAlternative?.source === "weather-cycling" && !completed && !isCancelled && !isMissed && (
+                <section className="planner-workout-detail-system coach">
+                  <div><span>Coach-Alternative · Wetter</span><strong>{detailWorkout.coachAlternative.label}</strong><small>{detailWorkout.coachAlternative.reason}</small></div>
+                  <button type="button" onClick={() => { setWorkoutDetailId(null); openAdjustment(detailWorkout.id, "replace", detailWorkout.coachAlternative.key, detailWorkout.coachAlternative); }}>Vorschlag prüfen</button>
+                </section>
+              )}
+
+              {detailWorkout.choicePending && detailWorkout.choiceOptions && (
+                <section className="planner-workout-detail-system coach">
+                  <div><span>Samstagsentscheidung</span><strong>Einheit auswählen</strong><small>Beide Optionen belegen denselben Trainingsplatz.</small></div>
+                  <div className="planner-track-sync-actions">
+                    <button type="button" onClick={() => { resolveSaturdayChoice(detailWorkout, "orc"); setWorkoutDetailId(null); }}>📍 ORC Track</button>
+                    <button type="button" onClick={() => { resolveSaturdayChoice(detailWorkout, "alternative"); setWorkoutDetailId(null); }}>🟢 Alternativlauf</button>
+                  </div>
+                </section>
+              )}
+
+              {fuelRecommendation && !completed && !isCancelled && !isMissed && (
+                <Link className={`planner-workout-detail-fuel ${fuelRecommendation.warnings.length ? "warn" : ""}`} to={`/fuel?workout=${detailWorkout.id}`} onClick={() => setWorkoutDetailId(null)}>
+                  <div><span>Fuel</span><strong>{fuelRecommendation.packSummary}</strong><small>{fuelRecommendation.modeLabel}{fuelRecommendation.warnings.length ? " · Bestand oder Produktdaten prüfen" : " · Strategie ist vorbereitet"}</small></div>
+                  <b>Öffnen →</b>
+                </Link>
+              )}
+
+              <details className="planner-workout-detail-system-meta">
+                <summary>Planstatus & Systemdetails</summary>
+                <div>
+                  <span>Quelle <b>{String(detailWorkout.source || "planner").toUpperCase()}</b></span>
+                  <span>Priorität <b>{detailWorkout.optional ? "Optional" : "Geplant"}</b></span>
+                  <span>Termin <b>{detailWorkout.fixed || detailWorkout.commitmentId ? "Fixtermin" : detailWorkout.spontaneous ? "Spontan" : "Geplant"}</b></span>
+                  {detailWorkout.intervalsPublishedAt && <span>Intervals <b>veröffentlicht</b></span>}
+                </div>
+              </details>
+
+              <div className="planner-workout-detail-actions">
+                {detailWorkout.raceEvent
+                  ? <button type="button" className="primary" onClick={() => { setWorkoutDetailId(null); navigate("/mission"); }}>Ziel öffnen</button>
+                  : <button type="button" className="primary" onClick={() => openWorkoutEditor(detailWorkout)}>Bearbeiten</button>}
+                {!completed && isMissed && <button type="button" onClick={() => { setWorkoutDetailId(null); openMissed(detailWorkout); }}>Grund angeben</button>}
+                {!completed && isCancelled && <button type="button" onClick={() => { restoreCancelledWorkout(detailWorkout); setWorkoutDetailId(null); }}>Wieder einplanen</button>}
+                {!completed && !isCancelled && !isPastWeek && <button type="button" onClick={() => { setWorkoutDetailId(null); openAdjustment(detailWorkout.id, "cancel"); }}>Fällt aus</button>}
+                {canRemoveFromPlan && <button type="button" className="danger" onClick={() => { setWorkoutDetailId(null); removeManualWorkout(detailWorkout); }}>Entfernen</button>}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {publishConfirmOpen && (
         <div className="modal-backdrop">

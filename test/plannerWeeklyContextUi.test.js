@@ -25,13 +25,18 @@ test("race cards expose Auto, Race Protocol and Nur Wettkampf instead of forcing
   assert.match(plannerSource, /Kalender-Erinnerungen/);
 });
 
-test("weekly view keeps the default scan calm and moves verbose detail behind disclosures", () => {
+test("weekly view keeps the default scan calm and moves verbose detail into the workout detail view", () => {
   assert.match(plannerSource, /planner-week-focus-card/);
   assert.match(plannerSource, /Wochenfokus/);
-  assert.match(plannerSource, /<details className="planner-race-protocol"/);
-  assert.match(plannerSource, /<details className=\{`planner-missed-session-inline/);
-  assert.match(plannerSource, /<details className="planner-workout-notes"/);
+  assert.match(plannerSource, /planner-workout-compact/);
+  assert.match(plannerSource, /planner-workout-detail-modal/);
+  assert.match(plannerSource, /planner-workout-detail-purpose/);
+  assert.match(plannerSource, /planner-workout-detail-note/);
+  assert.match(plannerSource, /planner-workout-detail-system/);
+  assert.match(plannerSource, /planner-race-protocol planner-workout-detail-race/);
   assert.match(plannerSource, /planner-availability-note-details/);
+  assert.doesNotMatch(plannerSource, /planner-missed-session-inline/);
+  assert.doesNotMatch(plannerSource, /planner-workout-notes/);
 });
 
 

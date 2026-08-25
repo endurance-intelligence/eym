@@ -2737,3 +2737,22 @@ button:focus-visible,a:focus-visible,summary:focus-visible{
     min-height:0;
   }
 }
+
+/* v3.9.103 – workout roles complete the calm briefing week list */
+.briefing-week-item{align-items:center;color:inherit;text-decoration:none}
+.briefing-week-item-main{display:flex;align-items:center;gap:10px;min-width:0}
+.briefing-week-item-main>b{min-width:0}
+.briefing-week-role{display:flex;flex-wrap:wrap;gap:5px}
+.briefing-week-role>i{padding:3px 6px;border:1px solid var(--border);border-radius:999px;background:var(--bg-input);color:var(--muted-bright);font-size:9px;font-style:normal;font-weight:800;white-space:nowrap}
+.briefing-week-role>i.key{border-color:color-mix(in srgb,var(--accent) 40%,var(--border));color:var(--accent-bright)}
+.briefing-week-role>i.quality{border-color:color-mix(in srgb,#c084fc 44%,var(--border));color:#d8b4fe}
+.briefing-week-role>i.long{border-color:color-mix(in srgb,#60a5fa 42%,var(--border));color:#93c5fd}
+.briefing-week-role>i.easy,.briefing-week-role>i.steady{border-color:color-mix(in srgb,var(--accent) 28%,var(--border))}
+.briefing-week-item-link{margin:-5px -7px;padding:5px 7px;border-radius:9px;transition:background .16s ease}
+.briefing-week-item-link:hover{background:var(--accent-surface)}
+.briefing-week-item-link:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.briefing-week-detail{flex:none;color:var(--muted);text-align:right}
+@media(max-width:800px){
+  .briefing-week-item-main{align-items:flex-start;flex-direction:column;gap:4px}
+  .briefing-week-detail{text-align:left}
+}

@@ -12,6 +12,7 @@ import { briefingWorkoutDestination } from "../services/briefingNavigation";
 import { workoutPaceLabel } from "../services/workoutPace";
 import { isLoopWorkout, loopWorkoutCompactLabel, loopWorkoutPaceLabel } from "../services/loopWorkout";
 import { summarizeCrossTrainingCredits } from "../services/crossTrainingLoad";
+import { workoutRoleAssessment } from "../services/workoutRoles";
 import { currentWeekPrescription, keySessionDateLabel, missionFocusTarget, nextKeySession, weekHubSummary } from "../services/briefingHub";
 
 const dayLabel = new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" });
@@ -217,6 +218,7 @@ function weekRows(plan, activities) {
       if (matched) matchedIds.add(String(matched.id));
       items.push({
         id: `plan-${item.id}`,
+        planItemId: item.id,
         title: matched?.name || item.actualTitle || item.title,
         detail: [
           item.distance ? `${Number(matched?.distance || item.actualDistance || item.distance).toFixed(1)} km` : "",
@@ -224,6 +226,7 @@ function weekRows(plan, activities) {
           item.optional ? "optional" : "",
           item.missedReason ? `ausgefallen: ${item.missedReason}` : "",
         ].filter(Boolean).join(" · "),
+        roleAssessment: workoutRoleAssessment(item, { plan }),
         tone: item.missedReason ? "missed" : item.completed || matched ? "done" : dateKey < todayKey ? "missed" : "planned",
       });
     });
@@ -233,8 +236,10 @@ function weekRows(plan, activities) {
     visibleActuals.forEach((activity) => {
       items.push({
         id: `actual-${activity.id}`,
+        activityId: reviewKind(activity) ? activity.id : null,
         title: activity.name || activity.type || "Training",
         detail: [Number(activity.distance || 0) ? `${Number(activity.distance).toFixed(1)} km` : "", activity.type || activity.sportType || ""].filter(Boolean).join(" · "),
+        roleAssessment: workoutRoleAssessment(activity, { plan }),
         tone: "done",
       });
     });
@@ -447,7 +452,25 @@ export default function Briefing() {
         <details className="wide briefing-disclosure briefing-week-disclosure">
           <summary><div><p className="eyebrow">Wochenplan</p><strong>Komplette Woche anzeigen</strong><span>{weekSummary.meta} · {weekSummary.typeLabel} · {weekSummary.corridorLabel}</span></div><b>⌄</b></summary>
           <div className="briefing-week-list">
-            {rows.map((row) => <div className={`briefing-week-row ${row.today ? "today" : ""}`} key={row.dateKey}><div className="briefing-week-day"><strong>{dayLabel.format(row.date)}</strong>{row.today && <span>Heute</span>}</div><div className="briefing-week-items">{row.items.map((item) => <div className={`briefing-week-item ${item.tone}`} key={item.id}><b>{item.title}</b>{item.detail && <span>{item.detail}</span>}</div>)}</div></div>)}
+            {rows.map((row) => <div className={`briefing-week-row ${row.today ? "today" : ""}`} key={row.dateKey}>
+              <div className="briefing-week-day"><strong>{dayLabel.format(row.date)}</strong>{row.today && <span>Heute</span>}</div>
+              <div className="briefing-week-items">
+                {row.items.map((item) => {
+                  const content = <>
+                    <div className="briefing-week-item-main">
+                      <b>{item.title}</b>
+                      {item.roleAssessment?.markers?.length > 0 && <span className="briefing-week-role" aria-label={item.roleAssessment.markers.map((marker) => marker.label).join(" und ")}>
+                        {item.roleAssessment.markers.map((marker) => <i className={marker.tone} key={marker.key}>{marker.icon} {marker.label}</i>)}
+                      </span>}
+                    </div>
+                    {item.detail && <span className="briefing-week-detail">{item.detail}</span>}
+                  </>;
+                  if (item.planItemId) return <Link className={`briefing-week-item briefing-week-item-link ${item.tone}`} to="/planner" state={{ workoutId: item.planItemId }} key={item.id}>{content}</Link>;
+                  if (item.activityId) return <Link className={`briefing-week-item briefing-week-item-link ${item.tone}`} to="/training" state={{ activityId: item.activityId }} key={item.id}>{content}</Link>;
+                  return <div className={`briefing-week-item ${item.tone}`} key={item.id}>{content}</div>;
+                })}
+              </div>
+            </div>)}
             <Link className="briefing-week-link" to="/planner">Wochenplan bearbeiten →</Link>
           </div>
         </details>
