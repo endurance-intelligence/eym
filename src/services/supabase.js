@@ -92,7 +92,7 @@ export async function saveCloudState(userId, state, { expectedUpdatedAt = null, 
 
 export function calendarSubscriptionUrl(token) {
   if (!token) return "";
-  return `${supabaseUrl}/functions/v1/calendar?token=${encodeURIComponent(token)}`;
+  return `${supabaseUrl}/functions/v1/calendar/feed.ics?token=${encodeURIComponent(token)}`;
 }
 
 export async function fetchCalendarSubscriptionStatus(token) {

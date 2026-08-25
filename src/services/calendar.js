@@ -6,6 +6,45 @@ function escapeIcs(value) {
     .replace(/;/g, "\\;");
 }
 
+const encoder = new TextEncoder();
+
+function stableHash(value) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+function calendarUid(item, rawDate) {
+  const explicit = String(item?.id || "").trim();
+  if (explicit) return explicit;
+  const seed = [rawDate, item?.type, item?.title, item?.distance, item?.day].map((value) => String(value || "")).join("|");
+  return `plan-${stableHash(seed)}`;
+}
+
+function foldIcsLine(line) {
+  if (encoder.encode(line).length <= 75) return line;
+  const output = [];
+  let current = "";
+  for (const character of line) {
+    const candidate = `${current}${character}`;
+    if (encoder.encode(candidate).length > 75 && current) {
+      output.push(current);
+      current = ` ${character}`;
+    } else {
+      current = candidate;
+    }
+  }
+  if (current) output.push(current);
+  return output.join("\r\n");
+}
+
+function serializeCalendar(lines) {
+  return `${lines.join("\r\n").split("\r\n").map(foldIcsLine).join("\r\n")}\r\n`;
+}
+
 function isoDateLocal(date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -41,17 +80,21 @@ function timedDateValue(date = "", time = "") {
 function raceProtocolCalendarEvents(item, stamp) {
   const protocol = item?.raceProtocol;
   if (!item?.raceEvent || !protocol?.calendarReminders || !Array.isArray(protocol.calendarItems)) return [];
+  const baseUid = calendarUid(item, String(item.date || "race"));
   return protocol.calendarItems.flatMap((reminder) => {
     const start = timedDateValue(item.date, reminder.time);
     if (!start) return [];
     return [[
       "BEGIN:VEVENT",
-      `UID:${escapeIcs(`${item.id || "race"}-${reminder.key}`)}@endurance-intelligence`,
+      `UID:${escapeIcs(`${baseUid}-${reminder.key || "reminder"}`)}@endurance-intelligence`,
       `DTSTAMP:${stamp}`,
+      `LAST-MODIFIED:${stamp}`,
+      "SEQUENCE:0",
       `DTSTART:${start}`,
       `DURATION:PT15M`,
       `SUMMARY:${escapeIcs(reminder.title)}`,
       `DESCRIPTION:${escapeIcs(`${item.title || "Wettkampf"} · ${reminder.detail || "Race Protocol"}`)}`,
+      "STATUS:CONFIRMED",
       "TRANSP:TRANSPARENT",
       "END:VEVENT",
     ].join("\r\n")];
@@ -124,7 +167,7 @@ export function buildCalendar(plan) {
 
       const mainEvent = [
         "BEGIN:VEVENT",
-        `UID:${escapeIcs(item.id || crypto.randomUUID())}@endurance-intelligence`,
+        `UID:${escapeIcs(calendarUid(item, rawDate))}@endurance-intelligence`,
         `DTSTAMP:${stamp}`,
         `LAST-MODIFIED:${stamp}`,
         "SEQUENCE:0",
@@ -132,6 +175,7 @@ export function buildCalendar(plan) {
         `DTEND;VALUE=DATE:${nextDateValue(rawDate)}`,
         `SUMMARY:${escapeIcs(calendarSummary(item))}`,
         `DESCRIPTION:${escapeIcs(description)}`,
+        "STATUS:CONFIRMED",
         "TRANSP:TRANSPARENT",
         "END:VEVENT",
       ].join("\r\n");
@@ -139,20 +183,21 @@ export function buildCalendar(plan) {
     })
     .filter(Boolean);
 
-  return [
+  return serializeCalendar([
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
     "PRODID:-//Endurance Intelligence//Training Calendar//DE",
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
+    "NAME:Endurance Intelligence",
     "X-WR-CALNAME:Endurance Intelligence",
+    "X-WR-CALDESC:Adaptive Trainingsplanung von Endurance Intelligence",
     "X-PUBLISHED-TTL:PT15M",
     "REFRESH-INTERVAL;VALUE=DURATION:PT15M",
     "X-WR-REFRESH-INTERVAL;VALUE=DURATION:PT15M",
     ...events,
     "END:VCALENDAR",
-    "",
-  ].join("\r\n");
+  ]);
 }
 
 export function downloadCalendar(plan) {

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import { Buffer } from "node:buffer";
 import { buildCalendar, isCalendarItemVisible } from "../src/services/calendar.js";
 
 const normal = { id: "easy", date: "2026-08-12", title: "6 km locker", type: "Easy Run", distance: 6 };
@@ -21,13 +22,17 @@ test("cancelled and missed workouts are excluded from generated ICS calendars", 
   assert.doesNotMatch(content, /UID:placeholder@endurance-intelligence/);
 });
 
-test("calendar subscription applies the same cancellation filter and disables response caching", () => {
+test("calendar subscription applies the same cancellation filter and exposes Apple-friendly feed semantics", () => {
   const source = fs.readFileSync(new URL("../supabase/functions/calendar/index.ts", import.meta.url), "utf8");
   assert.match(source, /isCalendarItemVisible\(item\)/);
   assert.match(source, /!item\.missedReason/);
   assert.match(source, /!item\.plannedCancellation/);
   assert.match(source, /!item\.cancelledAt/);
-  assert.match(source, /Cache-Control.*no-store, max-age=0/);
+  assert.match(source, /Cache-Control.*public, max-age=0, must-revalidate/);
+  assert.match(source, /request.method !== "GET" && request.method !== "HEAD"/);
+  assert.match(source, /if-none-match/);
+  assert.match(source, /status: 304/);
+  assert.match(source, /X-EI-Calendar-Version/);
   assert.match(source, /eventDate\(item\)/);
   assert.match(source, /dateForWeekday\(item\.day\)/);
   assert.match(source, /X-WR-REFRESH-INTERVAL;VALUE=DURATION:PT15M/);
@@ -83,7 +88,7 @@ test("race protocol does not create calendar noise when reminders are disabled",
 
 test("calendar subscription includes the same race protocol reminder expansion", () => {
   const source = fs.readFileSync(new URL("../supabase/functions/calendar/index.ts", import.meta.url), "utf8");
-  assert.match(source, /raceProtocolCalendarEvents\(\{ \.\.\.item, date: rawDate \}, stamp\)/);
+  assert.match(source, /raceProtocolCalendarEvents\(\{ \.\.\.item, date: rawDate \}, stamp, sequence\)/);
   assert.match(source, /protocol\?\.calendarReminders/);
   assert.match(source, /DURATION:PT15M/);
   assert.match(source, /DTSTART:\$\{start\}/);
@@ -94,4 +99,30 @@ test("downloaded ICS advertises refresh metadata for calendar clients", () => {
   assert.match(content, /X-PUBLISHED-TTL:PT15M/);
   assert.match(content, /REFRESH-INTERVAL;VALUE=DURATION:PT15M/);
   assert.match(content, /LAST-MODIFIED:/);
+});
+
+
+test("calendar subscription config stays public for Apple and the client uses a .ics feed URL", () => {
+  const config = fs.readFileSync(new URL("../supabase/config.toml", import.meta.url), "utf8");
+  const service = fs.readFileSync(new URL("../src/services/supabase.js", import.meta.url), "utf8");
+  assert.match(config, /\[functions\.calendar\][\s\S]*verify_jwt\s*=\s*false/);
+  assert.match(service, /calendar\/feed\.ics\?token=/);
+});
+
+test("generated ICS uses deterministic fallback UIDs and RFC line folding", () => {
+  const anonymous = {
+    date: "2026-08-25",
+    title: "Sehr langer Trainingsname für Apple Kalender mit Umlauten und Emoji 🏃‍♂️ sowie zusätzlichen Hinweisen",
+    type: "Easy Run",
+    notes: "A".repeat(180),
+  };
+  const first = buildCalendar([anonymous]);
+  const second = buildCalendar([anonymous]);
+  const uid1 = first.match(/UID:(plan-[0-9a-f]+)@endurance-intelligence/)?.[1];
+  const uid2 = second.match(/UID:(plan-[0-9a-f]+)@endurance-intelligence/)?.[1];
+  assert.ok(uid1);
+  assert.equal(uid1, uid2);
+  for (const line of first.split("\r\n").filter(Boolean)) {
+    assert.ok(Buffer.byteLength(line, "utf8") <= 75, `ICS line exceeds 75 bytes: ${line}`);
+  }
 });

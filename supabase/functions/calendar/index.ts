@@ -5,8 +5,15 @@ const headers = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+const encoder = new TextEncoder();
+const FEED_VERSION = "3.9.102";
+
 function escapeIcs(value: unknown) {
-  return String(value ?? "").replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/,/g, "\\,").replace(/;/g, "\\;");
+  return String(value ?? "")
+    .replace(/\\/g, "\\\\")
+    .replace(/\r?\n/g, "\\n")
+    .replace(/,/g, "\\,")
+    .replace(/;/g, "\\;");
 }
 
 function utcStamp(date = new Date()) {
@@ -51,6 +58,43 @@ function calendarSequence(updatedAt: unknown) {
   return Math.max(0, Math.floor((value.getTime() - epoch) / 60000));
 }
 
+function stableHash(value: string) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+function calendarUid(item: Record<string, unknown>, rawDate: string) {
+  const explicit = String(item.id || "").trim();
+  if (explicit) return explicit;
+  const seed = [rawDate, item.type, item.title, item.distance, item.day].map((value) => String(value || "")).join("|");
+  return `plan-${stableHash(seed)}`;
+}
+
+function foldIcsLine(line: string) {
+  if (encoder.encode(line).length <= 75) return line;
+  const output: string[] = [];
+  let current = "";
+  for (const character of line) {
+    const candidate = `${current}${character}`;
+    if (encoder.encode(candidate).length > 75 && current) {
+      output.push(current);
+      current = ` ${character}`;
+    } else {
+      current = candidate;
+    }
+  }
+  if (current) output.push(current);
+  return output.join("\r\n");
+}
+
+function serializeCalendar(lines: string[]) {
+  return `${lines.join("\r\n").split("\r\n").map(foldIcsLine).join("\r\n")}\r\n`;
+}
+
 function timedDateValue(date: unknown, time: unknown) {
   const rawDate = String(date || "");
   const rawTime = String(time || "");
@@ -58,23 +102,27 @@ function timedDateValue(date: unknown, time: unknown) {
   return `${dateValue(rawDate)}T${rawTime.replace(":", "")}00`;
 }
 
-function raceProtocolCalendarEvents(item: Record<string, unknown>, stamp: string) {
+function raceProtocolCalendarEvents(item: Record<string, unknown>, stamp: string, sequence: number) {
   const protocol = item.raceProtocol && typeof item.raceProtocol === "object"
     ? item.raceProtocol as Record<string, unknown>
     : null;
   const reminders = Array.isArray(protocol?.calendarItems) ? protocol?.calendarItems as Record<string, unknown>[] : [];
   if (!item.raceEvent || !protocol?.calendarReminders || !reminders.length) return [];
+  const baseUid = calendarUid(item, String(item.date || "race"));
   return reminders.flatMap((reminder) => {
     const start = timedDateValue(item.date, reminder.time);
     if (!start) return [];
     return [[
       "BEGIN:VEVENT",
-      `UID:${escapeIcs(`${item.id || "race"}-${reminder.key || "reminder"}`)}@endurance-intelligence`,
+      `UID:${escapeIcs(`${baseUid}-${reminder.key || "reminder"}`)}@endurance-intelligence`,
       `DTSTAMP:${stamp}`,
+      `LAST-MODIFIED:${stamp}`,
+      `SEQUENCE:${sequence}`,
       `DTSTART:${start}`,
       "DURATION:PT15M",
       `SUMMARY:${escapeIcs(reminder.title || "Race Protocol")}`,
       `DESCRIPTION:${escapeIcs(`${item.title || "Wettkampf"} · ${reminder.detail || "Race Protocol"}`)}`,
+      "STATUS:CONFIRMED",
       "TRANSP:TRANSPARENT",
       "END:VEVENT",
     ].join("\r\n")];
@@ -90,6 +138,7 @@ function containsDistance(title: unknown, distance: number) {
 
 function calendarIcon(item: Record<string, unknown>) {
   const text = `${item.type || ""} ${item.title || ""}`.toLowerCase();
+  if (item.raceEvent || /wettkampf|race|marathon/.test(text)) return "🏁";
   if (item.choicePending || /samstagsoption|oder/.test(text)) return "🔀";
   if (item.fixed || /fußball|football|soccer|orc run|orc track/.test(text)) return "📍";
   if (/long run|longrun|backyard|intervall|schwelle|threshold|tempo/.test(text)) return "🔑";
@@ -145,7 +194,7 @@ function buildCalendar(plan: Record<string, unknown>[], updatedAt: unknown = nul
       ].filter(Boolean).join(" · ");
       const mainEvent = [
         "BEGIN:VEVENT",
-        `UID:${escapeIcs(item.id || crypto.randomUUID())}@endurance-intelligence`,
+        `UID:${escapeIcs(calendarUid(item, rawDate))}@endurance-intelligence`,
         `DTSTAMP:${stamp}`,
         `LAST-MODIFIED:${stamp}`,
         `SEQUENCE:${sequence}`,
@@ -153,31 +202,54 @@ function buildCalendar(plan: Record<string, unknown>[], updatedAt: unknown = nul
         `DTEND;VALUE=DATE:${nextDateValue(rawDate)}`,
         `SUMMARY:${escapeIcs(calendarSummary(item))}`,
         `DESCRIPTION:${escapeIcs(description)}`,
+        "STATUS:CONFIRMED",
         "TRANSP:TRANSPARENT",
         "END:VEVENT",
       ].join("\r\n");
-      return [mainEvent, ...raceProtocolCalendarEvents({ ...item, date: rawDate }, stamp)];
+      return [mainEvent, ...raceProtocolCalendarEvents({ ...item, date: rawDate }, stamp, sequence)];
     });
 
-  return [
+  return serializeCalendar([
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
     "PRODID:-//Endurance Intelligence//Training Calendar//DE",
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
+    "NAME:Endurance Intelligence",
     "X-WR-CALNAME:Endurance Intelligence",
+    "X-WR-CALDESC:Adaptive Trainingsplanung von Endurance Intelligence",
     "X-PUBLISHED-TTL:PT15M",
     "REFRESH-INTERVAL;VALUE=DURATION:PT15M",
     "X-WR-REFRESH-INTERVAL;VALUE=DURATION:PT15M",
     ...events,
     "END:VCALENDAR",
-    "",
-  ].join("\r\n");
+  ]);
+}
+
+function responseHeaders(updatedAt: unknown, generatedAt: string) {
+  const lastModifiedDate = new Date(String(updatedAt || ""));
+  const lastModified = Number.isNaN(lastModifiedDate.getTime()) ? new Date(generatedAt).toUTCString() : lastModifiedDate.toUTCString();
+  const versionKey = String(updatedAt || generatedAt).replace(/[^0-9A-Za-z]/g, "");
+  return {
+    ...headers,
+    "Content-Type": "text/calendar; charset=utf-8",
+    "Content-Disposition": 'inline; filename="endurance-intelligence.ics"',
+    "Cache-Control": "public, max-age=0, must-revalidate",
+    "Last-Modified": lastModified,
+    "ETag": `"ei-${versionKey}"`,
+    "X-Content-Type-Options": "nosniff",
+    "X-EI-Calendar-Version": FEED_VERSION,
+  };
 }
 
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") return new Response("ok", { headers });
-  const token = new URL(request.url).searchParams.get("token");
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    return new Response("Method not allowed.", { status: 405, headers: { ...headers, Allow: "GET, HEAD, OPTIONS" } });
+  }
+
+  const requestUrl = new URL(request.url);
+  const token = requestUrl.searchParams.get("token");
   if (!token) return new Response("Kalender-Token fehlt.", { status: 400, headers });
 
   const url = Deno.env.get("SUPABASE_URL")!;
@@ -195,28 +267,36 @@ Deno.serve(async (request) => {
   const content = buildCalendar(plan, data.updated_at);
   const eventCount = (content.match(/BEGIN:VEVENT/g) || []).length;
   const generatedAt = new Date().toISOString();
+  const feedHeaders = responseHeaders(data.updated_at, generatedAt);
 
-  if (new URL(request.url).searchParams.get("status") === "1") {
-    return new Response(JSON.stringify({
+  if (requestUrl.searchParams.get("status") === "1") {
+    const sampleEvents = plan
+      .filter((item: Record<string, unknown>) => isCalendarItemVisible(item))
+      .map((item: Record<string, unknown>) => ({ date: eventDate(item), title: calendarSummary(item) }))
+      .filter((item: { date: string; title: string }) => item.date)
+      .sort((left: { date: string }, right: { date: string }) => left.date.localeCompare(right.date))
+      .slice(0, 5);
+    return new Response(request.method === "HEAD" ? null : JSON.stringify({
       ok: true,
+      feedVersion: FEED_VERSION,
+      feedPath: requestUrl.pathname,
       planCount: plan.length,
       eventCount,
       updatedAt: data.updated_at || null,
       generatedAt,
+      sampleEvents,
     }), {
       headers: { ...headers, "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store, max-age=0" },
     });
   }
 
-  const lastModified = data.updated_at ? new Date(data.updated_at).toUTCString() : new Date().toUTCString();
-  return new Response(content, {
-    headers: {
-      ...headers,
-      "Content-Type": "text/calendar; charset=utf-8",
-      "Content-Disposition": 'inline; filename="endurance-intelligence.ics"',
-      "Cache-Control": "no-store, max-age=0",
-      "Last-Modified": lastModified,
-      "ETag": `W/"ei-${String(data.updated_at || generatedAt).replace(/[^0-9A-Za-z]/g, "")}"`,
-    },
+  const ifNoneMatch = request.headers.get("if-none-match");
+  if (ifNoneMatch && ifNoneMatch === feedHeaders.ETag) {
+    return new Response(null, { status: 304, headers: feedHeaders });
+  }
+
+  return new Response(request.method === "HEAD" ? null : content, {
+    status: 200,
+    headers: feedHeaders,
   });
 });
