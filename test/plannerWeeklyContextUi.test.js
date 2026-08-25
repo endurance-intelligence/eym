@@ -28,7 +28,11 @@ test("race cards expose Auto, Race Protocol and Nur Wettkampf instead of forcing
 test("weekly view keeps the default scan calm and moves verbose detail into the workout detail view", () => {
   assert.match(plannerSource, /planner-week-focus-card/);
   assert.match(plannerSource, /Wochenfokus/);
+  assert.match(plannerSource, /Plan geändert · erneut bestätigen/);
+  assert.match(plannerSource, /Woche komplett neu planen/);
   assert.match(plannerSource, /planner-workout-compact/);
+  assert.match(plannerSource, /planner-compact-trailing/);
+  assert.match(plannerSource, /⌚ Garmin ↻/);
   assert.match(plannerSource, /planner-workout-detail-modal/);
   assert.match(plannerSource, /planner-workout-detail-purpose/);
   assert.match(plannerSource, /planner-workout-detail-note/);
@@ -37,6 +41,7 @@ test("weekly view keeps the default scan calm and moves verbose detail into the 
   assert.match(plannerSource, /planner-availability-note-details/);
   assert.doesNotMatch(plannerSource, /planner-missed-session-inline/);
   assert.doesNotMatch(plannerSource, /planner-workout-notes/);
+  assert.doesNotMatch(plannerSource, /<button type="button" onClick=\{replanCurrentWeek\}>Neu planen<\/button>/);
 });
 
 

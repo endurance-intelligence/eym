@@ -2375,6 +2375,7 @@ export default function Planner() {
               {calendarToken && <span className="action-menu-status">✓ Kalenderabo aktiv</span>}
               {publishedWeek && <span className="action-menu-status">{planChangedAfterPublish ? "! Intervals-Stand veraltet" : garminChecksOpen.length ? `! ${garminChecksOpen.length} Garmin-Check${garminChecksOpen.length === 1 ? "" : "s"} offen` : `✓ ${publishedWeek.guided || 0} Workouts in Intervals bestätigt`}</span>}
               <button type="button" onClick={(event) => { setPlanningInfoOpen(true); event.currentTarget.closest("details")?.removeAttribute("open"); }}>Wie plant dein Coach?</button>
+              {!isPastWeek && weekPlan.length > 0 && <button type="button" onClick={(event) => { replanCurrentWeek(); event.currentTarget.closest("details")?.removeAttribute("open"); }}>Woche komplett neu planen</button>}
               <button type="button" onClick={(event) => { downloadCalendar(weekPlan); event.currentTarget.closest("details")?.removeAttribute("open"); }} disabled={!weekPlan.length}>ICS-Datei laden</button>
               <button type="button" onClick={(event) => { requestPublish(); event.currentTarget.closest("details")?.removeAttribute("open"); }} disabled={publishBusy || !weekAccepted || (!publishedWeek && publishablePlan.length === 0)}>{!weekAccepted && weekPlan.length ? "Plan zuerst annehmen" : publishedWeek ? "Sync erneut anstoßen" : "Für Garmin veröffentlichen"}</button>
             </div>
@@ -2401,17 +2402,16 @@ export default function Planner() {
         {!isPastWeek && weekPlan.length > 0 && (
           <section className={`planner-plan-approval ${weekApprovalState}`}>
             <div className="planner-plan-approval-copy">
-              <span>Planstatus</span>
-              <strong>{weekAccepted ? "Plan angenommen" : weekApprovalState === WEEK_APPROVAL_STATES.CHANGED ? "Änderungen prüfen" : "Plan prüfen und annehmen"}</strong>
+              <span className="planner-plan-approval-dot" aria-hidden="true" />
+              <strong>{weekAccepted ? "Plan aktuell" : weekApprovalState === WEEK_APPROVAL_STATES.CHANGED ? "Plan geändert · erneut bestätigen" : "Plan noch nicht bestätigt"}</strong>
               <small>{weekAccepted
-                ? `Bestätigt am ${acceptedAtLabel} · bereit zur Veröffentlichung über Intervals.icu.`
+                ? `Bestätigt am ${acceptedAtLabel} · bereit für Intervals und Garmin.`
                 : weekApprovalState === WEEK_APPROVAL_STATES.CHANGED
-                  ? "Der bestätigte Plan wurde verändert."
-                  : "Erst prüfen, dann freigeben."}</small>
+                  ? "Kurz prüfen und bestätigen; danach kann Garmin aktualisiert werden."
+                  : "Kurz prüfen und bestätigen, bevor die Woche veröffentlicht wird."}</small>
             </div>
             <div className="planner-plan-approval-actions">
               {!weekAccepted && <button type="button" className="primary" onClick={acceptCurrentWeek}>{weekApprovalState === WEEK_APPROVAL_STATES.CHANGED ? "Erneut annehmen" : "Plan annehmen"}</button>}
-              <button type="button" onClick={replanCurrentWeek}>Neu planen</button>
             </div>
           </section>
         )}
@@ -2871,6 +2871,13 @@ export default function Planner() {
                       ? "Garmin prüfen"
                       : "Garmin aktualisieren"
                   : "";
+                const garminCompactLabel = trackSyncStatus?.action
+                  ? trackSyncStatus.state === TRACK_PUBLICATION_STATES.DRAFT
+                    ? "⌚ Offen"
+                    : trackSyncStatus.state === TRACK_PUBLICATION_STATES.INTERVALS_CONFIRMED
+                      ? "⌚ Prüfen"
+                      : "⌚ Garmin ↻"
+                  : "";
                 const className = `planner-workout planner-workout-compact ${completed ? "completed" : ""} ${isMissed ? "missed" : ""} ${isCancelled ? "cancelled" : ""} ${hasStateMarker ? "" : "no-marker"} ${availabilityFocusId === item.id ? "planner-workout-highlighted" : ""}`;
                 const opensDetail = !completed;
                 return (
@@ -2917,11 +2924,13 @@ export default function Planner() {
                     <div className="planner-workout-main planner-workout-compact-main">
                       <div className="planner-compact-kicker">
                         <span>{workoutTimingLabel(item)}{compactStatus ? ` · ${compactStatus}` : ""}</span>
-                        {garminAttention && <em className="planner-compact-system-alert">{garminAttention}</em>}
                       </div>
                       <div className="planner-compact-title-row">
                         <h3>{item.title}</h3>
-                        <WorkoutRoleBadges assessment={roleAssessment} className="planner-workout-roles planner-workout-roles-compact" />
+                        <div className="planner-compact-trailing">
+                          <WorkoutRoleBadges assessment={roleAssessment} className="planner-workout-roles planner-workout-roles-compact" />
+                          {garminAttention && <em className={`planner-compact-system-alert ${trackSyncStatus?.state || ""}`} title={garminAttention} aria-label={garminAttention}>{garminCompactLabel}</em>}
+                        </div>
                       </div>
                       {compactMetrics && <p>{compactMetrics}</p>}
                       {(item.missedReason || isCancelled) && <small>{item.missedReason ? `Grund: ${item.missedReason}${item.missedNote ? ` · ${item.missedNote}` : ""}` : "Einheit wurde für diese Woche aus dem Plan genommen."}</small>}
