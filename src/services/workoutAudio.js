@@ -33,9 +33,11 @@ const cuePatterns = {
     { frequency: 660, offset: 0, duration: 0.1, gain: 0.18, type: "triangle" },
     { frequency: 880, offset: 0.12, duration: 0.16, gain: 0.22, type: "triangle" },
   ],
-  countdown3: [{ frequency: 620, offset: 0, duration: 0.18, gain: 0.3, type: "triangle" }],
-  countdown2: [{ frequency: 720, offset: 0, duration: 0.18, gain: 0.3, type: "triangle" }],
-  countdown1: [{ frequency: 860, offset: 0, duration: 0.24, gain: 0.34, type: "triangle" }],
+  countdown5: [{ frequency: 520, offset: 0, duration: 0.16, gain: 0.32, type: "triangle" }],
+  countdown4: [{ frequency: 570, offset: 0, duration: 0.16, gain: 0.34, type: "triangle" }],
+  countdown3: [{ frequency: 640, offset: 0, duration: 0.2, gain: 0.38, type: "triangle" }],
+  countdown2: [{ frequency: 760, offset: 0, duration: 0.2, gain: 0.4, type: "triangle" }],
+  countdown1: [{ frequency: 980, offset: 0, duration: 0.28, gain: 0.46, type: "square" }],
   start: [
     { frequency: 820, offset: 0, duration: 0.16, gain: 0.28, type: "triangle" },
     { frequency: 1120, offset: 0.17, duration: 0.28, gain: 0.34, type: "triangle" },
@@ -113,13 +115,15 @@ export async function playWorkoutAudioDemo() {
 
   try {
     const start = context.currentTime + 0.45;
-    scheduleCue(context, "countdown3", start);
-    scheduleCue(context, "countdown2", start + 1);
-    scheduleCue(context, "countdown1", start + 2);
-    scheduleCue(context, "start", start + 3);
-    scheduleCue(context, "end", start + 4.3);
-    scheduleCue(context, "switch", start + 5.2);
-    scheduleCue(context, "complete", start + 6.25);
+    scheduleCue(context, "countdown5", start);
+    scheduleCue(context, "countdown4", start + 1);
+    scheduleCue(context, "countdown3", start + 2);
+    scheduleCue(context, "countdown2", start + 3);
+    scheduleCue(context, "countdown1", start + 4);
+    scheduleCue(context, "start", start + 5);
+    scheduleCue(context, "end", start + 6.3);
+    scheduleCue(context, "switch", start + 7.2);
+    scheduleCue(context, "complete", start + 8.25);
     return true;
   } catch {
     return false;

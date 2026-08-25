@@ -368,7 +368,7 @@ export default function ExerciseGuide({ exercise, onClose, known = false, knownL
         )}
 
         <div className="exercise-guide-meta">
-          <span><b>Zeit</b>{Math.round(exercise.seconds / 15) * 15} Sek.</span>
+          <span><b>{exercise.prescription?.mode === "reps" || exercise.doseMode === "reps" ? "Vorgabe" : "Zeit"}</b>{exercise.prescription?.mode === "reps" ? exercise.prescription.label : exercise.doseMode === "reps" ? `${exercise.baseReps || 5}${exercise.repsPerSide ? "/Seite" : ""} Wdh.` : `${Math.round(exercise.seconds / 15) * 15} Sek.`}</span>
           <span><b>Material</b>{material.join(" oder ")}</span>
           <span><b>Fokus</b>{exercise.focusAreas?.length ? exercise.focusAreas.map(focusAreaLabel).join(" · ") : "Allgemein"}</span>
         </div>
@@ -388,6 +388,7 @@ export default function ExerciseGuide({ exercise, onClose, known = false, knownL
           </div>
         </div>
 
+        {exercise.prescription?.mode === "reps" && <p className="exercise-progression-note"><strong>Progression:</strong> {exercise.prescription.progressionReason}</p>}
         <div className="exercise-variations">
           <div><span>Leichter</span><p>{exercise.easier}</p></div>
           <div><span>Schwieriger</span><p>{exercise.harder}</p></div>

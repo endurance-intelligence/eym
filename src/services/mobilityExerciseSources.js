@@ -98,10 +98,18 @@ export function emptyCustomExerciseDraft() {
     id: "",
     sourceUrl: "",
     source: null,
+    sourceExerciseCount: 1,
+    sourceExerciseIndex: 1,
+    sourceSegment: "",
     name: "",
     subtitle: "",
     group: "Dynamisch",
+    doseMode: "time",
     seconds: 60,
+    baseReps: 5,
+    repsStep: 1,
+    maxSingleSetReps: 10,
+    repsPerSide: false,
     purpose: "",
     quickStart: "",
     instruction: "",
@@ -136,6 +144,8 @@ export function normalizeCustomExercise(draft = {}, existingId = "") {
       authorName: draft.source.authorName || "",
       thumbnailUrl: draft.source.thumbnailUrl || "",
       fetchedAt: draft.source.fetchedAt || "",
+      sourceGroupId: draft.source.sourceGroupId || draft.source.contentId || "",
+      segmentLabel: text(draft.sourceSegment || draft.source.segmentLabel),
     }
     : null;
   const id = existingId || draft.id || `custom-${crypto.randomUUID()}`;
@@ -143,7 +153,7 @@ export function normalizeCustomExercise(draft = {}, existingId = "") {
   const purpose = text(draft.purpose, "Persönlich gespeicherte Übung aus einer externen Inspirationsquelle.");
   const instruction = text(draft.instruction, draft.quickStart || "Bewegung kontrolliert und schmerzfrei ausführen.");
   const quickStart = text(draft.quickStart, instruction);
-  const sideSwitch = Boolean(draft.sideSwitch);
+  const sideSwitch = draft.doseMode === "reps" ? false : Boolean(draft.sideSwitch);
 
   return {
     id,
@@ -151,7 +161,12 @@ export function normalizeCustomExercise(draft = {}, existingId = "") {
     name,
     subtitle: text(draft.subtitle, source?.authorName ? `Inspiration von ${source.authorName}` : "Persönliche Übung"),
     group: text(draft.group, "Dynamisch"),
+    doseMode: draft.doseMode === "reps" ? "reps" : "time",
     seconds: Math.max(15, Math.min(600, Number(draft.seconds || 60))),
+    baseReps: Math.max(1, Math.min(30, Number(draft.baseReps || 5))),
+    repsStep: Math.max(1, Math.min(5, Number(draft.repsStep || 1))),
+    maxSingleSetReps: Math.max(5, Math.min(30, Number(draft.maxSingleSetReps || 10))),
+    repsPerSide: Boolean(draft.repsPerSide),
     equipment: unique(draft.equipment),
     focusAreas: unique(draft.focusAreas).slice(0, 4),
     intensity: ["low", "medium", "high"].includes(draft.intensity) ? draft.intensity : "medium",
@@ -171,8 +186,29 @@ export function normalizeCustomExercise(draft = {}, existingId = "") {
     easier: "Bewegungsweg, Tempo oder Belastungszeit reduzieren.",
     harder: "Nur bei sauberer Technik den Bewegungsweg oder die Belastungszeit erhöhen.",
     source,
+    sourceExerciseIndex: Math.max(1, Number(draft.sourceExerciseIndex || 1)),
     updatedAt: new Date().toISOString(),
   };
+}
+
+export function customExerciseDraftsForSource(source = {}, count = 1) {
+  const size = Math.max(1, Math.min(6, Number(count || 1)));
+  const baseGroupId = source.contentId || source.sourceGroupId || source.canonicalUrl || "external";
+  return Array.from({ length: size }, (_, index) => ({
+    ...emptyCustomExerciseDraft(),
+    sourceUrl: source.canonicalUrl || "",
+    sourceExerciseCount: size,
+    sourceExerciseIndex: index + 1,
+    subtitle: source.authorName ? `Inspiration von ${source.authorName}` : "Persönliche Übung aus externer Quelle",
+    source: {
+      ...source,
+      sourceGroupId: baseGroupId,
+    },
+  }));
+}
+
+export function customExerciseSourceKey(exercise = {}) {
+  return String(exercise?.source?.canonicalUrl || exercise?.source?.sourceGroupId || "").trim();
 }
 
 export function validateCustomExerciseDraft(draft = {}) {
@@ -209,5 +245,6 @@ export function customExerciseCoachMatch(exercise = {}, adaptiveProfile = null) 
 export function exerciseSourceLabel(source = {}) {
   if (!source?.canonicalUrl) return "Eigene Übung";
   const author = source.authorName ? ` · ${source.authorName}` : "";
-  return `${source.providerLabel || "Quelle"}${author}`;
+  const segment = source.segmentLabel ? ` · ${source.segmentLabel}` : "";
+  return `${source.providerLabel || "Quelle"}${author}${segment}`;
 }

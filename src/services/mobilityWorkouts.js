@@ -1,5 +1,6 @@
 import { adaptiveExerciseReason } from "./mobilityProgramming.js";
 import { customExerciseCoachMatch, mergeExerciseLibrary } from "./mobilityExerciseSources.js";
+import { mobilityExercisePrescription } from "./mobilityProgression.js";
 
 export const MOBILITY_EQUIPMENT = [
   { id: "mat", label: "Matte" },
@@ -273,6 +274,96 @@ export const MOBILITY_EXERCISES = [
     mistakes: ["Becken sinkt ab", "Schulter fällt ein", "Oberkörper dreht nach vorn"],
     easier: "Unteres Knie ablegen.",
     harder: "Oberes Bein anheben.",
+  }),
+  exercise({
+    id: "push-up",
+    name: "Liegestütze",
+    subtitle: "Körperlinie halten · Brust kontrolliert Richtung Boden",
+    group: "Kraft-Basis",
+    seconds: 30,
+    doseMode: "reps",
+    baseReps: 5,
+    repsStep: 1,
+    maxSingleSetReps: 10,
+    secondsPerRep: 3,
+    focusAreas: ["strength", "core"],
+    intensity: "medium",
+    visual: "push-up",
+    purpose: "Baut einfache Oberkörperkraft und Rumpfspannung auf, ohne eine komplizierte Übung zu benötigen.",
+    instruction: "Hände etwas breiter als schulterbreit. Körper als stabile Linie absenken und kontrolliert wieder hochdrücken.",
+    steps: ["Stützposition mit stabilem Rumpf einnehmen.", "Brust kontrolliert Richtung Boden absenken.", "Ohne Durchhängen wieder hochdrücken."],
+    cues: ["Körper bleibt in einer Linie", "Ellbogen nicht weit ausstellen", "Saubere Wiederholung vor Tempo"],
+    mistakes: ["Hüfte hängt durch", "Nur halbe Wiederholungen", "Kopf nach vorn schieben"],
+    easier: "Hände erhöht auf einer Bank oder stabilen Kante aufsetzen.",
+    harder: "Erst Wiederholungen sauber steigern, danach auf zwei Sätze wechseln.",
+  }),
+  exercise({
+    id: "sit-up",
+    name: "Sit-ups",
+    subtitle: "Einfache Rumpfkraft · kontrolliert statt schnell",
+    group: "Kraft-Basis",
+    seconds: 30,
+    doseMode: "reps",
+    baseReps: 5,
+    repsStep: 1,
+    maxSingleSetReps: 10,
+    secondsPerRep: 3,
+    equipment: ["mat"],
+    focusAreas: ["core", "strength"],
+    intensity: "medium",
+    visual: "sit-up",
+    purpose: "Ergänzt die statische Rumpfarbeit um eine einfache, messbare Wiederholungsübung.",
+    instruction: "Rückenlage, Knie gebeugt. Oberkörper kontrolliert aufrichten und ebenso kontrolliert wieder ablegen.",
+    steps: ["Füße stabil aufstellen und Bauchspannung aufbauen.", "Oberkörper ohne Schwung aufrichten.", "Langsam zurückrollen und die nächste saubere Wiederholung starten."],
+    cues: ["Keinen Schwung holen", "Nacken locker lassen", "Langsam abrollen"],
+    mistakes: ["Am Kopf ziehen", "Mit Schwung hochkommen", "Unkontrolliert zurückfallen"],
+    easier: "Nur bis zu den Schulterblättern aufrollen (Crunch).",
+    harder: "Erst Wiederholungen sauber steigern, danach auf zwei Sätze wechseln.",
+  }),
+  exercise({
+    id: "bodyweight-squat",
+    name: "Kniebeugen mit Körpergewicht",
+    subtitle: "Basis-Kraft · Hüfte und Beinachse kontrollieren",
+    group: "Kraft-Basis",
+    seconds: 35,
+    doseMode: "reps",
+    baseReps: 6,
+    repsStep: 1,
+    maxSingleSetReps: 12,
+    secondsPerRep: 3,
+    focusAreas: ["strength", "hips", "knee-axis"],
+    intensity: "medium",
+    visual: "goblet-squat",
+    purpose: "Trainiert eine grundlegende Beinbewegung ohne Zusatzgewicht und macht Fortschritt über saubere Wiederholungen sichtbar.",
+    instruction: "Füße etwa schulterbreit. Hüfte nach hinten und unten führen, Knie folgen den Fußspitzen, dann kontrolliert aufstehen.",
+    steps: ["Stabil und aufrecht stehen.", "Hüfte kontrolliert nach hinten und unten führen.", "Über den ganzen Fuß wieder aufrichten."],
+    cues: ["Knie folgen den Zehen", "Fersen bleiben am Boden", "Rumpf stabil"],
+    mistakes: ["Knie nach innen fallen lassen", "Fersen anheben", "Zu schnell in die Tiefe fallen"],
+    easier: "Auf eine Bank oder einen Stuhl absetzen und wieder aufstehen.",
+    harder: "Erst Wiederholungen steigern, später Goblet Squat verwenden.",
+  }),
+  exercise({
+    id: "reverse-lunge",
+    name: "Rückwärts-Ausfallschritte",
+    subtitle: "Beinachse und Hüftstabilität · kontrolliert pro Seite",
+    group: "Kraft-Basis",
+    seconds: 40,
+    doseMode: "reps",
+    baseReps: 5,
+    repsStep: 1,
+    maxSingleSetReps: 10,
+    repsPerSide: true,
+    secondsPerRep: 3,
+    focusAreas: ["strength", "hips", "knee-axis", "balance"],
+    intensity: "medium",
+    visual: "step-up",
+    purpose: "Trainiert einbeinige Stabilität und kontrollierte Kraft, ohne dass hohe Wiederholungszahlen nötig sind.",
+    instruction: "Aus dem Stand einen Schritt nach hinten setzen, beide Knie kontrolliert beugen und über das vordere Bein wieder zurückkommen.",
+    steps: ["Aufrecht stehen und Spannung aufbauen.", "Einen Fuß kontrolliert nach hinten setzen.", "Über das vordere Bein zurück in den Stand drücken und Seite wechseln."],
+    cues: ["Vorderes Knie bleibt stabil", "Oberkörper ruhig", "Schritt ausreichend lang"],
+    mistakes: ["Vorderes Knie kippt nach innen", "Zu kurzer Rückwärtsschritt", "Mit Schwung zurückspringen"],
+    easier: "Mit einer Hand leicht festhalten oder Bewegungsweg verkleinern.",
+    harder: "Erst Wiederholungen steigern, danach Zusatzgewicht ergänzen.",
   }),
   exercise({
     id: "slow-mountain-climber",
@@ -762,6 +853,33 @@ function requiresMaterialChange(previous, next) {
   return before.join("|") !== after.join("|");
 }
 
+function exerciseSourceKey(item = {}) {
+  return String(item?.source?.canonicalUrl || "").trim();
+}
+
+function workoutSectionFor(item = {}, adaptiveProfile = null, reason = "") {
+  if (item.group === "Abschluss") return "mobility";
+  if (item.doseMode === "reps" || ["Kraft-Basis", "Kraft", "Rumpf", "Rumpf & Haltung", "Gesäß & Hüfte", "Beinachse"].includes(item.group)) return "strength";
+  if (
+    ["before", "tomorrow"].includes(adaptiveProfile?.context?.timing)
+    && (reason === "Coach-Fokus heute" || ["Fuß & Sprunggelenk", "Balance", "Mobilität"].includes(item.group))
+  ) return "activation";
+  return "mobility";
+}
+
+export function mobilityWorkoutSections(items = []) {
+  const definitions = [
+    ["activation", "Aktivierung"],
+    ["strength", "Kraft & Stabilität"],
+    ["mobility", "Mobility & Abschluss"],
+  ];
+  return definitions.map(([id, label]) => ({
+    id,
+    label,
+    items: (Array.isArray(items) ? items : []).filter((item) => item.section === id),
+  })).filter((section) => section.items.length > 0);
+}
+
 export function buildMobilityWorkout({
   durationMinutes = 25,
   condition = "normal",
@@ -830,8 +948,8 @@ export function buildMobilityWorkout({
   const standardPriority = condition === "tired"
     ? ["Mobilität", "Fuß & Sprunggelenk", "Balance", "Rumpf", "Gesäß & Hüfte", "Fuß & Unterschenkel", "Beinachse"]
     : condition === "fresh"
-      ? ["Rumpf", "Gesäß & Hüfte", "Kraft", "Rumpf & Haltung", "Beinachse", "Fuß & Sprunggelenk", "Mobilität"]
-      : ["Rumpf", "Fuß & Sprunggelenk", "Gesäß & Hüfte", "Mobilität", "Balance", "Beinachse", "Kraft"];
+      ? ["Kraft-Basis", "Rumpf", "Gesäß & Hüfte", "Kraft", "Rumpf & Haltung", "Beinachse", "Fuß & Sprunggelenk", "Mobilität"]
+      : ["Rumpf", "Kraft-Basis", "Fuß & Sprunggelenk", "Gesäß & Hüfte", "Mobilität", "Balance", "Beinachse", "Kraft"];
   const standardSequence = interleaveExerciseGroups(pool, standardPriority, rotationOffset, exerciseUsage);
   const adaptiveSlots = Number(durationMinutes || 25) >= 20 ? 3 : 2;
   const customCoachIds = exerciseLibrary
@@ -852,9 +970,14 @@ export function buildMobilityWorkout({
   const items = [];
   let activeSeconds = 0;
   let totalSeconds = 0;
+  const selectedSourceKeys = new Set();
   const add = (item, reason = "Standard", round = 1, activeLimitSeconds = targetActiveSeconds) => {
     if (!item) return false;
-    const seconds = Number(item.seconds || 60);
+    if (item.doseMode === "reps" && items.some((selected) => selected.id === item.id)) return false;
+    const sourceKey = exerciseSourceKey(item);
+    if (sourceKey && selectedSourceKeys.has(sourceKey) && !selectedPhysioIds.has(item.id)) return false;
+    const prescription = mobilityExercisePrescription(item, exerciseHistory);
+    const seconds = Number(prescription.estimatedSeconds || item.seconds || 60);
     const known = knownIds.has(item.id);
     const configuredPreparationSeconds = longerPreparationForUnknown && !known
       ? newExercisePreparation
@@ -864,12 +987,16 @@ export function buildMobilityWorkout({
     const transitionBeforeSeconds = previous
       ? requiresMaterialChange(previous, item) ? materialTransition : normalTransition
       : 0;
-    const sideSwitchSeconds = item.sideSwitch ? Math.max(0, Number(item.sideSwitchSeconds ?? 5)) : 0;
+    const sideSwitchSeconds = prescription.mode === "reps" ? 0 : item.sideSwitch ? Math.max(0, Number(item.sideSwitchSeconds ?? 5)) : 0;
     const stepTotalSeconds = seconds + stepPreparationSeconds + transitionBeforeSeconds + sideSwitchSeconds;
     if (activeSeconds + seconds > activeLimitSeconds + 30 && items.length >= 3) return false;
     const matchedFocus = selectedFocusIds.filter((focusId) => item.focusAreas.includes(focusId));
     items.push({
       ...item,
+      seconds,
+      prescription,
+      section: workoutSectionFor(item, adaptiveProfile, reason),
+      sourceKey,
       stepId: `${item.id}-${round}-${items.length}`,
       round,
       selectionReason: reason,
@@ -881,6 +1008,7 @@ export function buildMobilityWorkout({
       materialChangeBefore: Boolean(previous && requiresMaterialChange(previous, item)),
       coachReason: adaptiveExerciseReason(adaptiveProfile, item),
     });
+    if (sourceKey) selectedSourceKeys.add(sourceKey);
     activeSeconds += seconds;
     totalSeconds += stepTotalSeconds;
     return true;
@@ -944,6 +1072,7 @@ export function buildMobilityWorkout({
       longerPreparationForUnknown,
     },
     items,
+    sections: mobilityWorkoutSections(items),
     missingPhysio,
     missingFocus,
     exerciseUsage,

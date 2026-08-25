@@ -73,3 +73,32 @@ test("alternating or bilateral exercise does not create a side-change phase", ()
   assert.equal(finished.complete, true);
   assert.deepEqual(finished.completedExerciseIds, ["dead-bug"]);
 });
+
+
+test("rep-based strength exercise waits for manual completion instead of auto-counting down", () => {
+  const pushUp = {
+    id: "push-up",
+    seconds: 20,
+    preparationSeconds: 3,
+    transitionBeforeSeconds: 0,
+    sideSwitch: false,
+    prescription: { mode: "reps", label: "5 Wdh." },
+  };
+  const work = advanceMobilityRunner({
+    items: [pushUp],
+    index: 0,
+    phase: "prepare",
+    sideIndex: 0,
+    remaining: 0,
+    running: true,
+    complete: false,
+    completedExerciseIds: [],
+  });
+  assert.equal(work.phase, "work");
+  assert.equal(work.remaining, null);
+  assert.equal(runnerPhaseSeconds([pushUp], 0, "work", 0), null);
+
+  const finished = advanceMobilityRunner(work);
+  assert.equal(finished.complete, true);
+  assert.deepEqual(finished.completedExerciseIds, ["push-up"]);
+});

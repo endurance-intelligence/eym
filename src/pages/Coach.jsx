@@ -8,7 +8,7 @@ import {
   reviewKindLabel,
 } from "../services/activityUtils";
 import ReviewModal from "../components/ReviewModal";
-import ExerciseGuide, { ExerciseGuideButton } from "../components/ExerciseGuide";
+import ExerciseGuide from "../components/ExerciseGuide";
 import RaceCoach from "../components/RaceCoach";
 import { activitiesWithGroups } from "../services/activityGroups";
 import { fmtDate } from "../utils/format";
@@ -76,6 +76,18 @@ function materialText(exercise) {
   return ids.length ? ids.map(equipmentLabel).join(" / ") : "Ohne Material";
 }
 
+function mobilityDoseLabel(exercise = {}) {
+  return exercise.prescription?.label || `${Math.round(Number(exercise.seconds || 0) / 15) * 15} Sek.`;
+}
+
+function mobilitySectionDescription(sectionId) {
+  return {
+    activation: "Bewegung vorbereiten, ohne Müdigkeit zu erzeugen.",
+    strength: "Einfache Kraft und Stabilität mit sauberer Progression.",
+    mobility: "Bewegungsqualität sichern und kontrolliert abschließen.",
+  }[sectionId] || "";
+}
+
 export default function Coach() {
   const { state, setState } = useApp();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -85,7 +97,6 @@ export default function Coach() {
   const [selectedGuide, setSelectedGuide] = useState(null);
   const [runner, setRunner] = useState(null);
   const [workoutShuffleOffset, setWorkoutShuffleOffset] = useState(0);
-  const [focusEditorOpen, setFocusEditorOpen] = useState(false);
   const [sessionCoachOverride, setSessionCoachOverride] = useState(null);
   const [dismissedCoachSuggestionId, setDismissedCoachSuggestionId] = useState("");
   const [wakeLockStatus, setWakeLockStatus] = useState("idle");
@@ -161,7 +172,6 @@ export default function Coach() {
     ? mergeMobilityFocusAreas(adaptiveProfile.focusAreaIds, focusAreaIds)
     : focusAreaIds);
   const effectiveCondition = coachOverride?.condition || (adaptiveProgrammingEnabled ? adaptiveProfile.condition : condition);
-  const focusPickerOpen = focusEditorOpen || focusAreaIds.length === 0;
   const knownExerciseCount = useMemo(() => new Set([...knownExerciseIds, ...physioExerciseIds]).size, [knownExerciseIds, physioExerciseIds]);
   const workoutOptions = useMemo(() => ({
     durationMinutes,
@@ -249,7 +259,6 @@ export default function Coach() {
   }
 
   function toggleFocus(id) {
-    setFocusEditorOpen(true);
     if (focusAreaIds.includes(id)) {
       updateMobility({ focusAreaIds: focusAreaIds.filter((item) => item !== id) });
     } else if (focusAreaIds.length < 3) {
@@ -337,7 +346,7 @@ export default function Coach() {
   async function testWorkoutAudio() {
     const ready = await activateWorkoutAudio({ demo: true, announce: "Audio aktiviert. Du hörst jetzt die Signaltöne." });
     if (!ready) return;
-    if (voiceCues) window.setTimeout(() => speakWorkoutCue("Drei, zwei, eins. Start. Seitenwechsel. Workout abgeschlossen."), 7600);
+    if (voiceCues) window.setTimeout(() => speakWorkoutCue("Fünf, vier, drei, zwei, eins. Start. Seitenwechsel. Workout abgeschlossen."), 9600);
   }
 
   async function startWorkout() {
@@ -368,7 +377,8 @@ export default function Coach() {
       running: true,
       complete: false,
       saved: false,
-      feedback: { fitScore: 0, zoneResponse: "" },
+      painExerciseIds: [],
+      feedback: { fitScore: 0, zoneResponse: "", painReported: false },
     });
   }
 
@@ -377,6 +387,51 @@ export default function Coach() {
     setWorkoutShuffleOffset(0);
     if (sessionCoachOverride) setSessionCoachOverride(null);
     setRunner(null);
+  }
+
+  function replaceRunnerExercise() {
+    if (!runner || !activeExercise) return;
+    const nextRotationOffset = nextMobilityWorkoutRotation(workoutOptions, workoutRotationOffset + 1);
+    const alternativeWorkout = buildMobilityWorkout({ ...workoutOptions, rotationOffset: nextRotationOffset });
+    const usedIds = new Set(runner.items.map((item, index) => index === runner.index ? "" : item.id));
+    const usedSources = new Set(runner.items.map((item, index) => index === runner.index ? "" : item.sourceKey).filter(Boolean));
+    const focusIds = new Set(activeExercise.focusAreas || []);
+    const replacement = alternativeWorkout.items.find((item) => (
+      !usedIds.has(item.id)
+      && (!item.sourceKey || !usedSources.has(item.sourceKey))
+      && (item.focusAreas || []).some((id) => focusIds.has(id))
+      && item.id !== activeExercise.id
+    )) || alternativeWorkout.items.find((item) => !usedIds.has(item.id) && item.id !== activeExercise.id);
+    if (!replacement) return;
+    setRunner((current) => {
+      if (!current) return current;
+      const items = current.items.map((item, index) => index === current.index ? { ...replacement, stepId: item.stepId } : item);
+      const phase = replacement.preparationSeconds > 0 ? "prepare" : "work";
+      return {
+        ...current,
+        items,
+        phase,
+        sideIndex: 0,
+        remaining: runnerPhaseSeconds(items, current.index, phase, 0),
+        running: true,
+      };
+    });
+  }
+
+  function markRunnerExerciseUncomfortable() {
+    if (!runner || !activeExercise) return;
+    setRunner((current) => {
+      if (!current) return current;
+      const painExerciseIds = [...new Set([...(current.painExerciseIds || []), activeExercise.id])];
+      const next = advanceMobilityRunner({ ...current, painExerciseIds });
+      return {
+        ...next,
+        painExerciseIds,
+        completedExerciseIds: (next.completedExerciseIds || []).filter((id) => id !== activeExercise.id),
+        running: !next.complete,
+        feedback: { ...(next.feedback || {}), painReported: true },
+      };
+    });
   }
 
   function openExerciseGuide(exercise) {
@@ -389,6 +444,7 @@ export default function Coach() {
     const timer = window.setInterval(() => {
       setRunner((current) => {
         if (!current?.running) return current;
+        if (current.remaining === null) return current;
         if (current.remaining > 1) return { ...current, remaining: current.remaining - 1 };
         return advanceMobilityRunner(current);
       });
@@ -462,6 +518,9 @@ export default function Coach() {
         title: completedRunner.title,
         durationMinutes: completedRunner.durationMinutes,
         exerciseIds: [...new Set(completedExerciseIds)],
+        prescriptions: Object.fromEntries(completedItems.map((item) => [item.id, item.prescription || null])),
+        painExerciseIds: [...new Set(Array.isArray(completedRunner.painExerciseIds) ? completedRunner.painExerciseIds : [])],
+        painReported: Boolean(completedRunner.feedback?.painReported || completedRunner.painExerciseIds?.length),
         focusAreaIds: Array.isArray(completedRunner.focusAreaIds) ? completedRunner.focusAreaIds : [],
         planItemId: completedRunner.planItemId || null,
         fitScore: Number(completedRunner.feedback?.fitScore || 0),
@@ -537,8 +596,9 @@ export default function Coach() {
     if (
       runner.running
       && !runner.complete
+      && Number.isFinite(runner.remaining)
       && runner.remaining > 0
-      && runner.remaining <= 3
+      && runner.remaining <= 5
       && (countdownBeforeStart || countdownBeforeEnd)
     ) {
       const countdownKey = `${runner.index}-${runner.phase}-${runner.remaining}`;
@@ -559,8 +619,10 @@ export default function Coach() {
       : runnerPhase === "side-switch"
         ? "Seitenwechsel"
         : "Übung";
+  const runnerUsesReps = runnerPhase === "work" && activeExercise?.prescription?.mode === "reps";
+  const runnerCountdownActive = Number.isFinite(runner?.remaining) && runner.remaining > 0 && runner.remaining <= 5;
   const runnerPhaseAction = runnerPhase === "work"
-    ? "Übung abschließen"
+    ? runnerUsesReps ? "Wiederholungen geschafft" : "Übung abschließen"
     : runnerPhase === "prepare"
       ? "Jetzt starten"
       : runnerPhase === "side-switch"
@@ -728,64 +790,6 @@ export default function Coach() {
 
       {activeTab === "mobility" && (
         <div className="grid mobility-coach-grid">
-          <Card className={`wide mobility-adaptive-card ${adaptiveProfile.safetyMode ? "safety" : effectiveCondition}`}>
-            <div className="mobility-adaptive-heading">
-              <div>
-                <p className="eyebrow">Heutiger Coach-Fokus</p>
-                <h2>{adaptiveProgrammingEnabled ? adaptiveProfile.title : "Automatische Auswahl pausiert"}</h2>
-                <p>{adaptiveProgrammingEnabled ? adaptiveProfile.reason : "Deine persönlichen Schwerpunkte und die manuell gewählte Tagesform bestimmen das Workout."}</p>
-              </div>
-              <label className="mobility-adaptive-toggle">
-                <input type="checkbox" checked={adaptiveProgrammingEnabled} onChange={(event) => { updateMobility({ adaptiveProgrammingEnabled: event.target.checked }); setRunner(null); }} />
-                <span><b>Coach programmiert automatisch</b><small>Reviews, heutiges Training und die nächste Schlüsseleinheit steuern die Auswahl.</small></span>
-              </label>
-            </div>
-            {adaptiveProgrammingEnabled && <>
-              <div className="mobility-adaptive-focuses">{adaptiveProfile.focusAreaIds.map((id) => <span key={id}>{focusAreaLabel(id)}</span>)}</div>
-              {adaptiveProfile.factors.length > 0 && <div className="mobility-adaptive-factors">{adaptiveProfile.factors.map((factor) => <span key={factor}>{factor}</span>)}</div>}
-              {adaptiveProfile.safetyMode && <p className="mobility-adaptive-safety"><strong>Schmerzsignal erkannt:</strong> Nur beschwerdefrei und kontrolliert arbeiten. Bei anhaltenden oder zunehmenden Beschwerden Einheit abbrechen.</p>}
-            </>}
-          </Card>
-
-          <Card className="wide mobility-focus-card">
-            <div className="settings-section-heading">
-              <div>
-                <p className="eyebrow">Persönliche Trainingsschwerpunkte</p>
-                <h2>Woran möchtest du arbeiten?</h2>
-              </div>
-              <div className="mobility-focus-heading-actions">
-                <span>{focusAreaIds.length}/3 gewählt</span>
-                {focusAreaIds.length > 0 && (
-                  <button type="button" onClick={() => setFocusEditorOpen((current) => !current)}>
-                    {focusPickerOpen ? "Auswahl schließen" : "Ändern"}
-                  </button>
-                )}
-              </div>
-            </div>
-            <p className="mobility-focus-summary"><b>Aktiv:</b> {focusAreaIds.length ? focusAreaIds.map(focusAreaLabel).join(" · ") : "Standard / ausgewogen"} <span>Die Auswahl wird in deiner Cloud-Konfiguration gespeichert.</span></p>
-            {focusPickerOpen && (
-              <div className="mobility-focus-editor">
-                <p className="muted">Optional und für jeden Nutzer frei einstellbar. Ohne Auswahl entsteht ein ausgewogenes Standard-Workout. Mit Schwerpunkten kommen je nach verfügbarer Zeit ein bis zwei passende Übungen zusätzlich in den Ablauf.</p>
-                <div className="mobility-focus-picker">
-                  <button type="button" className={!focusAreaIds.length ? "selected standard" : "standard"} onClick={() => { setFocusEditorOpen(true); updateMobility({ focusAreaIds: [] }); setRunner(null); }}>
-                    <strong>Standard / ausgewogen</strong>
-                    <span>Keine individuelle Priorität</span>
-                  </button>
-                  {MOBILITY_FOCUS_AREAS.map((focus) => {
-                    const selectedFocus = focusAreaIds.includes(focus.id);
-                    const disabled = !selectedFocus && focusAreaIds.length >= 3;
-                    return (
-                      <button type="button" disabled={disabled} className={selectedFocus ? "selected" : ""} onClick={() => toggleFocus(focus.id)} key={focus.id}>
-                        <strong>{focus.label}</strong>
-                        <span>{focus.description}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </Card>
-
           {coachOverride ? (
             <Card className="wide mobility-coach-suggestion active">
               <div>
@@ -812,144 +816,149 @@ export default function Coach() {
             </Card>
           ) : null}
 
-          <Card className="wide mobility-workout-hero">
-            <div className="mobility-workout-heading">
+          <Card className="wide mobility-workout-hero mobility-session-hero">
+            <div className="mobility-session-heading">
               <div>
-                <p className="eyebrow">Stabi & Mobility Workout</p>
-                <h2>{todayMobilityPlan ? `Heute geplant: ${todayMobilityPlan.title}` : workout.title}</h2>
-                <p className="muted">Physio-Übungen haben Vorrang. Danach berücksichtigt dein Coach deine persönlichen Schwerpunkte, Tagesform, Zeit und vorhandenes Material.</p>
+                <p className="eyebrow">Dein Programm heute</p>
+                <h2>{todayMobilityPlan ? todayMobilityPlan.title : adaptiveProgrammingEnabled ? adaptiveProfile.title : workout.title}</h2>
+                <div className="mobility-session-meta">
+                  <span>🧩 Ergänzung</span>
+                  <span>{workout.activeMinutes} min Bewegung</span>
+                  <span>{workout.items.length} Übungen</span>
+                </div>
               </div>
+              {!runner && <div className="mobility-session-actions">
+                <button type="button" className="secondary" onClick={shuffleWorkout} disabled={workout.items.length < 2} title="Trainingszweck und Schwerpunkte bleiben erhalten">↻ Programm variieren</button>
+                <button type="button" className="primary compact-primary" onClick={startWorkout}>▶ Training starten</button>
+              </div>}
             </div>
-            <div className="mobility-workout-summary">
-              <span><b>{workout.items.length}</b> Übungen</span>
-              <span><b>{secondsLabel(workout.activeSeconds)}</b> Training</span>
-              <span><b>{secondsLabel(workout.pauseSeconds)}</b> Vorbereitung & Wechsel</span>
-              <span><b>{secondsLabel(workout.totalSeconds)}</b> Gesamtzeit</span>
-              <span><b>{physioExerciseIds.length}</b> Physio-Prioritäten</span>
+
+            <div className="mobility-session-focuses">
+              {(effectiveFocusAreaIds.length ? effectiveFocusAreaIds : adaptiveProfile.focusAreaIds).map((id) => <span key={id}>{focusAreaLabel(id)}</span>)}
             </div>
-            <div className="mobility-controls">
-              <label>Reine Trainingszeit
-                <select value={durationMinutes} onChange={(event) => { updateMobility({ durationMinutes: Number(event.target.value) }); setRunner(null); }}>
-                  {[10, 15, 20, 25, 30].map((value) => <option value={value} key={value}>{value} Minuten Bewegung</option>)}
-                </select>
-              </label>
-              <label>Tagesform
-                <select value={effectiveCondition} disabled={adaptiveProgrammingEnabled && !coachOverride} onChange={(event) => { if (coachOverride) clearCoachOverride(); updateMobility({ condition: event.target.value }); setRunner(null); }}>
-                  <option value="fresh">Erholt</option><option value="normal">Normal</option><option value="tired">Müde / Regeneration</option>
-                </select>
-              </label>
+
+            <div className="mobility-session-why">
+              <span>Warum heute?</span>
+              <p>{coachOverride?.reason || (adaptiveProgrammingEnabled ? adaptiveProfile.reason : "Die Einheit verbindet deine persönlichen Schwerpunkte mit einer ausgewogenen Läufer-Basis.")}</p>
             </div>
-            <div className="mobility-equipment-picker">
-              <b>Vorhandenes Material</b>
-              <div>{MOBILITY_EQUIPMENT.map((item) => <button type="button" className={equipment.includes(item.id) ? "selected" : ""} onClick={() => toggleEquipment(item.id)} key={item.id}>{item.label}</button>)}</div>
+
+            <div className="mobility-session-sections">
+              {workout.sections.map((section) => <section key={section.id}>
+                <div><span>{section.label}</span><small>{mobilitySectionDescription(section.id)}</small></div>
+                <div>{section.items.map((exercise) => <button type="button" onClick={() => openExerciseGuide(exercise)} key={exercise.stepId}>
+                  <span><b>{exercise.name}</b><small>{exercise.selectionReason}</small></span>
+                  <strong>{mobilityDoseLabel(exercise)}</strong>
+                  {exercise.prescription?.mode === "reps" && <em>{exercise.prescription.progressionReason}</em>}
+                </button>)}</div>
+              </section>)}
             </div>
-            <details className="mobility-timer-settings">
-              <summary><span><b>Timer & Pausen</b><small>{preparationSeconds ? `${preparationSeconds}s Vorbereitung` : "3–2–1 Start-Countdown"} · {transitionSeconds}s Übungswechsel · Seitenwechsel automatisch 3–5s</small></span><strong>{knownExerciseCount} bekannt</strong></summary>
-              <div className="mobility-timer-grid">
-                <label>Vorbereitung bekannte Übung
-                  <select value={preparationSeconds} onChange={(event) => { updateMobility({ preparationSeconds: Number(event.target.value) }); setRunner(null); }}>
-                    {[0, 5, 10, 15, 20].map((value) => <option value={value} key={value}>{value === 0 ? "Nur 3–2–1 Countdown" : `${value} Sekunden`}</option>)}
-                  </select>
+
+            <details className="mobility-program-settings">
+              <summary><span><b>Programm anpassen</b><small>Zeit, Schwerpunkte, Material, Timer und Audio</small></span><strong>Optional</strong></summary>
+              <div className="mobility-program-settings-body">
+                <label className="mobility-adaptive-toggle compact">
+                  <input type="checkbox" checked={adaptiveProgrammingEnabled} onChange={(event) => { updateMobility({ adaptiveProgrammingEnabled: event.target.checked }); setRunner(null); }} />
+                  <span><b>Coach programmiert automatisch</b><small>Reviews, heutiges Training und die nächste Schlüsseleinheit steuern die Auswahl.</small></span>
                 </label>
-                <label>Vorbereitung neue Übung
-                  <select value={unknownPreparationSeconds} disabled={!longerPreparationForUnknown} onChange={(event) => { updateMobility({ unknownPreparationSeconds: Number(event.target.value) }); setRunner(null); }}>
-                    {[10, 15, 20, 30, 45].map((value) => <option value={value} key={value}>{value} Sekunden</option>)}
-                  </select>
-                </label>
-                <label>Normale Wechselpause
-                  <select value={transitionSeconds} onChange={(event) => { updateMobility({ transitionSeconds: Number(event.target.value) }); setRunner(null); }}>
-                    {[0, 5, 10, 15, 20].map((value) => <option value={value} key={value}>{value} Sekunden</option>)}
-                  </select>
-                </label>
-                <label>Pause bei Materialwechsel
-                  <select value={materialTransitionSeconds} onChange={(event) => { updateMobility({ materialTransitionSeconds: Number(event.target.value) }); setRunner(null); }}>
-                    {[10, 15, 20, 30, 45].map((value) => <option value={value} key={value}>{value} Sekunden</option>)}
-                  </select>
-                </label>
-                <label>Seite, mit der du beginnst
-                  <select value={weakSide} onChange={(event) => updateMobility({ weakSide: event.target.value })}>
-                    <option value="none">Standard: links beginnen</option>
-                    <option value="left">Links zuerst · aktuell schwächer</option>
-                    <option value="right">Rechts zuerst · aktuell schwächer</option>
-                  </select>
-                </label>
+                {adaptiveProgrammingEnabled && adaptiveProfile.factors.length > 0 && <div className="mobility-adaptive-factors">{adaptiveProfile.factors.map((factor) => <span key={factor}>{factor}</span>)}</div>}
+                {adaptiveProfile.safetyMode && <p className="mobility-adaptive-safety"><strong>Schmerzsignal erkannt:</strong> Nur beschwerdefrei und kontrolliert arbeiten. Auffällige Übungen abbrechen.</p>}
+
+                <div className="mobility-controls">
+                  <label>Reine Trainingszeit
+                    <select value={durationMinutes} onChange={(event) => { updateMobility({ durationMinutes: Number(event.target.value) }); setRunner(null); }}>
+                      {[10, 15, 20, 25, 30].map((value) => <option value={value} key={value}>{value} Minuten Bewegung</option>)}
+                    </select>
+                  </label>
+                  <label>Tagesform
+                    <select value={effectiveCondition} disabled={adaptiveProgrammingEnabled && !coachOverride} onChange={(event) => { if (coachOverride) clearCoachOverride(); updateMobility({ condition: event.target.value }); setRunner(null); }}>
+                      <option value="fresh">Erholt</option><option value="normal">Normal</option><option value="tired">Müde / Regeneration</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div className="mobility-focus-editor compact">
+                  <div className="settings-section-heading"><div><b>Persönliche Schwerpunkte</b><small>Maximal drei. Ohne Auswahl bleibt das Programm ausgewogen.</small></div><span>{focusAreaIds.length}/3</span></div>
+                  <div className="mobility-focus-picker compact">
+                    <button type="button" className={!focusAreaIds.length ? "selected standard" : "standard"} onClick={() => { updateMobility({ focusAreaIds: [] }); setRunner(null); }}><strong>Standard</strong><span>Ausgewogen</span></button>
+                    {MOBILITY_FOCUS_AREAS.map((focus) => {
+                      const selectedFocus = focusAreaIds.includes(focus.id);
+                      const disabled = !selectedFocus && focusAreaIds.length >= 3;
+                      return <button type="button" disabled={disabled} className={selectedFocus ? "selected" : ""} onClick={() => toggleFocus(focus.id)} key={focus.id}><strong>{focus.shortLabel}</strong><span>{focus.description}</span></button>;
+                    })}
+                  </div>
+                </div>
+
+                <div className="mobility-equipment-picker">
+                  <b>Vorhandenes Material</b>
+                  <div>{MOBILITY_EQUIPMENT.map((item) => <button type="button" className={equipment.includes(item.id) ? "selected" : ""} onClick={() => toggleEquipment(item.id)} key={item.id}>{item.label}</button>)}</div>
+                </div>
+
+                <details className="mobility-timer-settings nested">
+                  <summary><span><b>Timer & Audio</b><small>5–4–3–2–1 Hinweistöne vor Ende, Start und Seitenwechsel</small></span><strong>{knownExerciseCount} bekannt</strong></summary>
+                  <div className="mobility-timer-grid">
+                    <label>Vorbereitung bekannte Übung<select value={preparationSeconds} onChange={(event) => { updateMobility({ preparationSeconds: Number(event.target.value) }); setRunner(null); }}>{[0, 5, 10, 15, 20].map((value) => <option value={value} key={value}>{value === 0 ? "Nur Countdown" : `${value} Sekunden`}</option>)}</select></label>
+                    <label>Vorbereitung neue Übung<select value={unknownPreparationSeconds} disabled={!longerPreparationForUnknown} onChange={(event) => { updateMobility({ unknownPreparationSeconds: Number(event.target.value) }); setRunner(null); }}>{[10, 15, 20, 30, 45].map((value) => <option value={value} key={value}>{value} Sekunden</option>)}</select></label>
+                    <label>Normale Wechselpause<select value={transitionSeconds} onChange={(event) => { updateMobility({ transitionSeconds: Number(event.target.value) }); setRunner(null); }}>{[0, 5, 10, 15, 20].map((value) => <option value={value} key={value}>{value} Sekunden</option>)}</select></label>
+                    <label>Materialwechsel<select value={materialTransitionSeconds} onChange={(event) => { updateMobility({ materialTransitionSeconds: Number(event.target.value) }); setRunner(null); }}>{[10, 15, 20, 30, 45].map((value) => <option value={value} key={value}>{value} Sekunden</option>)}</select></label>
+                    <label>Startseite<select value={weakSide} onChange={(event) => updateMobility({ weakSide: event.target.value })}><option value="none">Standard: links</option><option value="left">Links zuerst</option><option value="right">Rechts zuerst</option></select></label>
+                  </div>
+                  <label className="mobility-timer-toggle"><input type="checkbox" checked={longerPreparationForUnknown} onChange={(event) => { updateMobility({ longerPreparationForUnknown: event.target.checked }); setRunner(null); }} /><span><b>Neue Übungen länger vorbereiten</b><small>Bekannte und Physio-Übungen starten schneller.</small></span></label>
+                  <label className="mobility-timer-toggle"><input type="checkbox" checked={audioEnabled} onChange={(event) => updateMobility({ audioEnabled: event.target.checked })} /><span><b>Hinweistöne</b><small>Die letzten fünf Sekunden werden hörbar. Ein eigener Ton markiert Ende, Seitenwechsel und Abschluss.</small></span></label>
+                  <label className="mobility-timer-toggle"><input type="checkbox" checked={voiceCues} disabled={!audioEnabled} onChange={(event) => updateMobility({ voiceCues: event.target.checked })} /><span><b>Coach ansagen lassen</b><small>Übungsstart, nächste Übung und Seitenwechsel auf Deutsch.</small></span></label>
+                  <div className={`mobility-audio-actions ${audioFeedback.tone}`}><button type="button" onClick={testWorkoutAudio}>5–4–3–2–1 testen</button><span className="mobility-audio-status" role="status">{audioFeedback.message}</span></div>
+                </details>
               </div>
-              <label className="mobility-timer-toggle"><input type="checkbox" checked={longerPreparationForUnknown} onChange={(event) => { updateMobility({ longerPreparationForUnknown: event.target.checked }); setRunner(null); }} /><span><b>Unbekannte Übungen länger vorbereiten</b><small>Markierte Physio-Übungen gelten automatisch als bekannt. Weitere Übungen kannst du in der Anleitung als bekannt markieren.</small></span></label>
-              <label className="mobility-timer-toggle"><input type="checkbox" checked={audioEnabled} onChange={(event) => updateMobility({ audioEnabled: event.target.checked })} /><span><b>Signaltöne im Workout</b><small>Deutlich hörbarer 3–2–1-Countdown vor Start und Ende sowie eigene Töne für Seitenwechsel und Workout-Abschluss.</small></span></label>
-              <label className="mobility-timer-toggle"><input type="checkbox" checked={voiceCues} disabled={!audioEnabled} onChange={(event) => updateMobility({ voiceCues: event.target.checked })} /><span><b>Übungen und Seitenwechsel ansagen</b><small>Der Coach nennt Übungsstart, nächste Übung, Seitenwechsel und Workout-Abschluss auf Deutsch.</small></span></label>
-              <div className={`mobility-audio-actions ${audioFeedback.tone}`}><button type="button" onClick={testWorkoutAudio}>Ton & Sprache aktivieren</button><span className="mobility-audio-status" role="status">{audioFeedback.message}</span></div>
-              <p>Die gewählte Zeit ist reine Bewegungszeit. Vorbereitung, Übungswechsel und automatisch hinterlegte Seitenwechsel kommen zusätzlich hinzu. Bei Seitstütz, Bandübungen und einbeinigen Übungen pausiert der Timer 3–5 Sekunden; alternierende Übungen und Fußkreisen laufen ohne künstliche Unterbrechung weiter.</p>
             </details>
             {workout.missingPhysio.length > 0 && <div className="mobility-warning"><strong>Physioübung aktuell nicht im Workout:</strong> {workout.missingPhysio.map((item) => `${item.name} (${(item.equipment || item.equipmentAny || []).map(equipmentLabel).join(" oder ")})`).join(", ")}</div>}
             {workout.missingFocus.length > 0 && <div className="mobility-warning"><strong>Schwerpunkt ohne passende Übung:</strong> {workout.missingFocus.map(focusAreaLabel).join(", ")}. Prüfe das ausgewählte Material.</div>}
           </Card>
 
-          <Card className="wide mobility-workout-plan">
-            <div className="settings-section-heading">
-              <div><p className="eyebrow">Heutiger Ablauf</p><h2>{workout.items.length} Übungsschritte</h2></div>
-              {!runner && <div className="mobility-workout-actions">
-                <button type="button" className="secondary" onClick={shuffleWorkout} disabled={workout.items.length < 2} title="Eine andere passende Auswahl und Reihenfolge erzeugen">↻ Neu mischen</button>
-                <button type="button" className="primary compact-primary" onClick={startWorkout}>Workout starten</button>
-              </div>}
-            </div>
-            {runner && (runner.complete || activeExercise) && (
-              <div className={`mobility-runner phase-${runnerPhase} ${runner.complete ? "complete" : ""} ${switchMoment ? "switch-now" : ""}`}>
+          {runner && <Card className="wide mobility-workout-plan mobility-workout-active-shell">
+            {(runner.complete || activeExercise) && (
+              <div className={`mobility-runner phase-${runnerPhase} ${runner.complete ? "complete" : ""} ${switchMoment ? "switch-now" : ""} ${runnerCountdownActive ? "countdown-active" : ""}`}>
                 {runner.complete ? <>
                   <p className="eyebrow">Geschafft</p>
                   <h2>Workout abgeschlossen</h2>
+                  <div className="mobility-completion-metrics"><span><b>{runner.completedExerciseIds?.length || 0}</b> Übungen</span><span><b>{workout.activeMinutes}</b> min Bewegung</span><span><b>{runner.painExerciseIds?.length || 0}</b> auffällig</span></div>
                   <p className="mobility-completion-note">{runner.saved ? (runner.planItemId ? "Die heutige Stabi-/Mobility-Einheit wurde automatisch als erledigt markiert." : "Das Workout wurde automatisch in deinem Verlauf gespeichert.") : "Workout wird gespeichert …"}</p>
                   <div className="mobility-completion-feedback">
-                    <div><span>Wie passend war die heutige Auswahl?</span><div className="mobility-score-buttons">{Array.from({ length: 10 }, (_, index) => index + 1).map((score) => <button type="button" className={Number(runner.feedback?.fitScore) === score ? "selected" : ""} onClick={() => saveMobilityFeedback({ fitScore: score })} key={score}>{score}</button>)}</div></div>
-                    <div><span>Wie fühlen sich die belasteten Bereiche jetzt an?</span><div className="mobility-response-buttons">{[["better", "Besser"], ["same", "Unverändert"], ["worse", "Schlechter"]].map(([value, label]) => <button type="button" className={runner.feedback?.zoneResponse === value ? "selected" : ""} onClick={() => saveMobilityFeedback({ zoneResponse: value })} key={value}>{label}</button>)}</div></div>
-                    <small>Dein Coach nutzt dieses Feedback bei der nächsten Übungsauswahl. Es ist optional.</small>
+                    <div><span>Wie hat sich die Einheit angefühlt?</span><div className="mobility-response-buttons mobility-feel-buttons">{[[9, "Sehr locker"], [8, "Gut"], [7, "Passend"], [5, "Anstrengend"], [3, "Zu viel"]].map(([score, label]) => <button type="button" className={Number(runner.feedback?.fitScore) === score ? "selected" : ""} onClick={() => saveMobilityFeedback({ fitScore: score })} key={score}>{label}</button>)}</div></div>
+                    <div><span>Beschwerden während oder nach der Einheit?</span><div className="mobility-response-buttons"><button type="button" className={runner.feedback?.painReported === false && !runner.painExerciseIds?.length ? "selected" : ""} disabled={Boolean(runner.painExerciseIds?.length)} onClick={() => saveMobilityFeedback({ painReported: false })}>Keine</button><button type="button" className={runner.feedback?.painReported || runner.painExerciseIds?.length ? "selected danger" : ""} onClick={() => saveMobilityFeedback({ painReported: true, zoneResponse: "worse" })}>Ja</button></div></div>
+                    <small>Saubere Wiederholungen werden erst nach zwei passenden Abschlüssen gesteigert. Bei Beschwerden hält oder reduziert der Coach die nächste Vorgabe.</small>
                   </div>
                   <button type="button" className="primary compact-primary" onClick={closeFinishedWorkout} disabled={!runner.saved}>Workout schließen</button>
                 </> : <>
-                  <div className="mobility-runner-topline"><span>{runnerPhaseLabel} · Schritt {runner.index + 1} von {runner.items.length}</span><small>{isExerciseKnown(activeExercise.id) ? "Bekannte Übung" : "Neue Übung"}</small></div>
+                  <div className="mobility-runner-topline"><span>{runnerPhaseLabel} · {runner.index + 1}/{runner.items.length}</span><small>{activeExercise.section === "strength" ? "Kraft & Stabilität" : activeExercise.section === "activation" ? "Aktivierung" : "Mobility"}</small></div>
                   {runner.running && wakeLockStatus === "active" && <span className="mobility-wake-status">Bildschirm bleibt während des Workouts aktiv</span>}
                   {audioEnabled && ["bad", "warn"].includes(audioFeedback.tone) && <div className={`mobility-audio-live ${audioFeedback.tone}`}><span>{audioFeedback.message}</span><button type="button" onClick={() => activateWorkoutAudio({ announce: voiceCues ? `Audio aktiv. ${activeExercise?.name || "Workout"}.` : "" })}>Ton aktivieren</button></div>}
-                  <h2>{runnerPhase === "transition"
-                    ? `Als Nächstes: ${activeExercise.name}`
-                    : runnerPhase === "side-switch"
-                      ? `Seitenwechsel: ${activeExercise.name}`
-                      : activeExercise.name}</h2>
+                  <h2>{runnerPhase === "transition" ? `Als Nächstes: ${activeExercise.name}` : runnerPhase === "side-switch" ? `Seitenwechsel: ${activeExercise.name}` : activeExercise.name}</h2>
                   {activeExercise.subtitle && <small className="mobility-exercise-subtitle">{activeExercise.subtitle}</small>}
-                  <strong>{secondsLabel(runner.remaining)}</strong>
+                  {runnerUsesReps
+                    ? <div className="mobility-rep-prescription"><strong>{mobilityDoseLabel(activeExercise)}</strong><span>{activeExercise.prescription.progressionReason}</span></div>
+                    : <strong className={runnerCountdownActive ? "mobility-countdown-time" : ""}>{secondsLabel(runner.remaining)}</strong>}
+                  {runnerCountdownActive && <span className="mobility-countdown-cue">Hinweiston · {runner.remaining}</span>}
                   {runnerSideLabel && <span className="mobility-side-status">{runnerSideLabel}{weakSide !== "none" && runnerSideLabel === sideOrder(weakSide)[0] ? " · zuerst trainiert" : ""}</span>}
                   <p>{runnerPhase === "transition"
                     ? `${activeExercise.materialChangeBefore ? "Material wechseln und " : "Position einnehmen und "}${materialText(activeExercise)} bereitlegen.`
                     : runnerPhase === "prepare"
                       ? activeExercise.quickStart || activeExercise.instruction
                       : runnerPhase === "side-switch"
-                        ? `Wechsle kontrolliert auf ${nextRunnerSideLabel(weakSide).toLocaleLowerCase("de-DE")}. Die Belastungszeit ist pausiert und startet nach dem 3–2–1-Countdown neu.`
+                        ? `Wechsle kontrolliert auf ${nextRunnerSideLabel(weakSide).toLocaleLowerCase("de-DE")}. Der Countdown kündigt den Neustart an.`
                         : activeExercise.instruction}</p>
-                  {runnerPhase !== "work" && activeExercise.cues?.length > 0 && <div className="mobility-runner-cues">{activeExercise.cues.slice(0, 3).map((cue) => <span key={cue}>{cue}</span>)}</div>}
-                  <div className="mobility-runner-tags"><small className="mobility-selection-reason">{activeExercise.selectionReason}</small>{activeExercise.coachReason && <small className="mobility-coach-reason">{activeExercise.coachReason}</small>}{!isExerciseKnown(activeExercise.id) && <small className="mobility-new-exercise">Mehr Zeit, weil noch nicht als bekannt markiert</small>}</div>
-                  <div className="button-row">
-                    <button type="button" onClick={() => setRunner({ ...runner, running: !runner.running })}>{runner.running ? "Pause" : "Weiter"}</button>
+                  {activeExercise.cues?.length > 0 && <div className="mobility-runner-cues">{activeExercise.cues.slice(0, 3).map((cue) => <span key={cue}>{cue}</span>)}</div>}
+                  <div className="mobility-runner-tags"><small className="mobility-selection-reason">{activeExercise.selectionReason}</small>{activeExercise.coachReason && <small className="mobility-coach-reason">{activeExercise.coachReason}</small>}</div>
+                  <div className="mobility-runner-primary-action"><button type="button" className="primary" onClick={() => setRunner((current) => advanceMobilityRunner(current))}>{runnerPhaseAction}</button></div>
+                  <div className="mobility-runner-secondary-actions">
+                    {!runnerUsesReps && <button type="button" onClick={() => setRunner({ ...runner, running: !runner.running })}>{runner.running ? "Pause" : "Weiter"}</button>}
                     <button type="button" className="secondary" onClick={() => openExerciseGuide(activeExercise)}>Anleitung</button>
-                    {!physioExerciseIds.includes(activeExercise.id) && <button type="button" className={`secondary ${isExerciseKnown(activeExercise.id) ? "selected" : ""}`} onClick={() => toggleKnownExercise(activeExercise.id)}>{isExerciseKnown(activeExercise.id) ? "✓ Kenne ich" : "Als bekannt markieren"}</button>}
-                    <button type="button" className="secondary" onClick={() => setRunner((current) => advanceMobilityRunner(current))}>{runnerPhaseAction}</button>
-                    <button type="button" className="secondary" onClick={() => setRunner(null)}>Beenden</button>
+                    {["prepare", "work"].includes(runnerPhase) && <button type="button" className="secondary" onClick={replaceRunnerExercise}>Übung ersetzen</button>}
+                    {runnerPhase === "work" && <button type="button" className="secondary danger" onClick={markRunnerExerciseUncomfortable}>⚠ Unangenehm / abbrechen</button>}
+                    <button type="button" className="secondary" onClick={() => setRunner(null)}>Workout beenden</button>
                   </div>
                 </>}
               </div>
             )}
-            <div className="mobility-exercise-list">
-              {workout.items.map((exercise, index) => (
-                <article className={runner?.index === index ? "active" : ""} key={exercise.stepId}>
-                  <span>{index + 1}</span>
-                  <div>
-                    <div className="mobility-exercise-heading"><div><strong>{exercise.name}</strong>{exercise.subtitle && <small className="mobility-exercise-subtitle">{exercise.subtitle}</small>}</div><ExerciseGuideButton exercise={exercise} onOpen={openExerciseGuide} compact /></div>
-                    <small>{exercise.group} · {Math.round(exercise.seconds / 15) * 15} Sek. Übung · {exercise.preparationSeconds} Sek. Vorbereitung{exercise.transitionBeforeSeconds ? ` · ${exercise.transitionBeforeSeconds} Sek. Wechsel davor` : ""}{exercise.sideSwitch ? ` · ${exercise.sideSwitchSeconds} Sek. Seitenwechsel` : ""}</small>
-                    <em>{exercise.selectionReason}</em>
-                    {exercise.coachReason && <small className="mobility-exercise-coach-reason">{exercise.coachReason}</small>}
-                    <p>{exercise.quickStart || exercise.instruction}</p>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </Card>
+          </Card>}
 
           <Card className="wide mobility-library-summary">
             <div>

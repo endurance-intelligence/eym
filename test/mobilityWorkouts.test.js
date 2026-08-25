@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   buildMobilityWorkout,
+  exerciseById,
   exerciseVideoSearchUrl,
   mobilityExerciseUsage,
   nextMobilityWorkoutRotation,
@@ -140,4 +141,29 @@ test("side-change pauses are exercise-specific and included in total time", () =
   assert.equal(ankleCircles.sideSwitchSeconds, 0);
   assert.equal(workout.pauseSeconds, expectedPauseSeconds);
   assert.equal(workout.totalSeconds, workout.activeSeconds + expectedPauseSeconds);
+});
+
+
+test("library contains simple progressive bodyweight basics", () => {
+  const pushUp = exerciseById("push-up");
+  const sitUp = exerciseById("sit-up");
+  assert.equal(pushUp.name, "Liegestütze");
+  assert.equal(pushUp.doseMode, "reps");
+  assert.equal(pushUp.baseReps, 5);
+  assert.equal(sitUp.name, "Sit-ups");
+  assert.equal(sitUp.baseReps, 5);
+});
+
+test("rep-based basics appear at most once in a generated session", () => {
+  const workout = buildMobilityWorkout({
+    durationMinutes: 30,
+    condition: "fresh",
+    equipment: ["mat"],
+    focusAreaIds: ["strength", "core"],
+    preferredExerciseIds: ["push-up", "sit-up"],
+  });
+  const ids = workout.items.map((item) => item.id);
+  assert.ok(ids.includes("push-up") || ids.includes("sit-up"));
+  assert.equal(ids.filter((id) => id === "push-up").length <= 1, true);
+  assert.equal(ids.filter((id) => id === "sit-up").length <= 1, true);
 });

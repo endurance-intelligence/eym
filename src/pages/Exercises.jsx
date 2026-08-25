@@ -14,6 +14,7 @@ import {
   mobilityExerciseUsage,
 } from "../services/mobilityWorkouts";
 import {
+  customExerciseDraftsForSource,
   emptyCustomExerciseDraft,
   exerciseSourceLabel,
   fetchExerciseSourceMetadata,
@@ -41,8 +42,11 @@ export default function Exercises() {
   const [librarySearch, setLibrarySearch] = useState("");
   const [exerciseEditorOpen, setExerciseEditorOpen] = useState(false);
   const [exerciseSourceUrl, setExerciseSourceUrl] = useState("");
+  const [exerciseSourceCount, setExerciseSourceCount] = useState(1);
   const [exerciseSourceStatus, setExerciseSourceStatus] = useState({ tone: "idle", message: "" });
-  const [customExerciseDraft, setCustomExerciseDraft] = useState(null);
+  const [customExerciseDrafts, setCustomExerciseDrafts] = useState([]);
+  const [activeCustomExerciseIndex, setActiveCustomExerciseIndex] = useState(0);
+  const customExerciseDraft = customExerciseDrafts[activeCustomExerciseIndex] || null;
   const [customExerciseMessage, setCustomExerciseMessage] = useState("");
   const [pageMessage, setPageMessage] = useState("");
 
@@ -77,32 +81,36 @@ export default function Exercises() {
     setExerciseEditorOpen(false);
     setExerciseSourceUrl("");
     setExerciseSourceStatus({ tone: "idle", message: "" });
-    setCustomExerciseDraft(null);
+    setExerciseSourceCount(1);
+    setCustomExerciseDrafts([]);
+    setActiveCustomExerciseIndex(0);
     setCustomExerciseMessage("");
   }
 
   function openNewExercise() {
     setExerciseSourceUrl("");
     setExerciseSourceStatus({ tone: "idle", message: "Füge zuerst den öffentlichen Instagram- oder YouTube-Link ein." });
-    setCustomExerciseDraft(null);
+    setExerciseSourceCount(1);
+    setCustomExerciseDrafts([]);
+    setActiveCustomExerciseIndex(0);
     setCustomExerciseMessage("");
     setExerciseEditorOpen(true);
   }
 
   function patchCustomExerciseDraft(patch) {
-    setCustomExerciseDraft((current) => current ? { ...current, ...patch } : current);
+    setCustomExerciseDrafts((current) => current.map((draft, index) => index === activeCustomExerciseIndex ? { ...draft, ...patch } : draft));
     setCustomExerciseMessage("");
   }
 
   function toggleCustomDraftList(field, id) {
-    setCustomExerciseDraft((current) => {
-      if (!current) return current;
-      const values = Array.isArray(current[field]) ? current[field] : [];
+    setCustomExerciseDrafts((current) => current.map((draft, index) => {
+      if (index !== activeCustomExerciseIndex) return draft;
+      const values = Array.isArray(draft[field]) ? draft[field] : [];
       return {
-        ...current,
+        ...draft,
         [field]: values.includes(id) ? values.filter((item) => item !== id) : [...values, id],
       };
-    });
+    }));
     setCustomExerciseMessage("");
   }
 
@@ -127,13 +135,8 @@ export default function Exercises() {
       });
     }
 
-    const base = emptyCustomExerciseDraft();
-    setCustomExerciseDraft({
-      ...base,
-      sourceUrl: source.canonicalUrl,
-      source,
-      subtitle: source.authorName ? `Inspiration von ${source.authorName}` : "Persönliche Übung aus externer Quelle",
-    });
+    setCustomExerciseDrafts(customExerciseDraftsForSource(source, exerciseSourceCount));
+    setActiveCustomExerciseIndex(0);
     setCustomExerciseMessage("");
     if (metadataLoaded) {
       setExerciseSourceStatus({
@@ -144,26 +147,39 @@ export default function Exercises() {
   }
 
   function saveCustomExercise() {
-    const error = validateCustomExerciseDraft(customExerciseDraft);
-    if (error) {
-      setCustomExerciseMessage(error);
-      return;
+    const drafts = customExerciseDrafts.length ? customExerciseDrafts : (customExerciseDraft ? [customExerciseDraft] : []);
+    if (!drafts.length) return;
+    for (let index = 0; index < drafts.length; index += 1) {
+      const error = validateCustomExerciseDraft(drafts[index]);
+      if (error) {
+        setActiveCustomExerciseIndex(index);
+        setCustomExerciseMessage(`Übung ${index + 1}: ${error}`);
+        return;
+      }
     }
-    const normalized = normalizeCustomExercise(customExerciseDraft, customExerciseDraft.id || "");
-    const next = customExercises.some((item) => item.id === normalized.id)
-      ? customExercises.map((item) => item.id === normalized.id ? normalized : item)
-      : [...customExercises, normalized];
+    const normalizedExercises = drafts.map((draft) => normalizeCustomExercise(draft, draft.id || ""));
+    let next = [...customExercises];
+    normalizedExercises.forEach((normalized) => {
+      next = next.some((item) => item.id === normalized.id)
+        ? next.map((item) => item.id === normalized.id ? normalized : item)
+        : [...next, normalized];
+    });
     updateMobility({ customExercises: next });
-    setPageMessage(`${normalized.name} wurde in deiner persönlichen Übungsbibliothek gespeichert.`);
+    setPageMessage(normalizedExercises.length > 1
+      ? `${normalizedExercises.length} Übungen wurden aus einer gemeinsamen Quelle in deiner Bibliothek gespeichert.`
+      : `${normalizedExercises[0].name} wurde in deiner persönlichen Übungsbibliothek gespeichert.`);
     closeExerciseEditor();
   }
 
   function editCustomExercise(exercise) {
-    setCustomExerciseDraft({
+    setCustomExerciseDrafts([{
       ...emptyCustomExerciseDraft(),
       ...exercise,
       sourceUrl: exercise.source?.canonicalUrl || "",
-    });
+      sourceSegment: exercise.source?.segmentLabel || "",
+    }]);
+    setActiveCustomExerciseIndex(0);
+    setExerciseSourceCount(1);
     setExerciseSourceUrl(exercise.source?.canonicalUrl || "");
     setCustomExerciseMessage("");
     setExerciseSourceStatus({ tone: "idle", message: "Persönliche Übung wird bearbeitet." });
@@ -333,11 +349,18 @@ export default function Exercises() {
           <label>Öffentlicher Instagram- oder YouTube-Link
             <input type="url" value={exerciseSourceUrl} onChange={(event) => setExerciseSourceUrl(event.target.value)} placeholder="https://www.instagram.com/reel/…" disabled={Boolean(customExerciseDraft?.id)} />
           </label>
-          {!customExerciseDraft?.id && <button type="button" className="primary compact-primary" onClick={inspectExerciseSource}>Quelle prüfen</button>}
+          {!customExerciseDraft?.id && <label className="exercise-source-count">Übungen im Video
+            <select value={exerciseSourceCount} onChange={(event) => setExerciseSourceCount(Number(event.target.value))}>{[1, 2, 3, 4, 5, 6].map((value) => <option value={value} key={value}>{value}</option>)}</select>
+          </label>}
+          {!customExerciseDraft?.id && <button type="button" className="primary compact-primary" onClick={inspectExerciseSource}>Quelle aufteilen</button>}
         </div>
         {exerciseSourceStatus.message && <p className={`exercise-source-status ${exerciseSourceStatus.tone}`}>{exerciseSourceStatus.message}</p>}
 
         {customExerciseDraft && <div className="custom-exercise-editor">
+          {customExerciseDrafts.length > 1 && <div className="custom-source-exercise-tabs">
+            <div><b>{customExerciseDrafts.length} Übungen aus einer Quelle</b><small>Jede Übung wird separat gespeichert. Der Coach zeigt dieselbe Videoquelle in einem automatisch erzeugten Workout höchstens einmal.</small></div>
+            <div>{customExerciseDrafts.map((draft, index) => <button type="button" className={activeCustomExerciseIndex === index ? "selected" : ""} onClick={() => { setActiveCustomExerciseIndex(index); setCustomExerciseMessage(""); }} key={`${draft.source?.sourceGroupId || "source"}-${index}`}>Übung {index + 1}{draft.name ? ` · ${draft.name}` : ""}</button>)}</div>
+          </div>}
           <div className="custom-exercise-source-preview">
             {customExerciseDraft.source?.thumbnailUrl
               ? <img src={customExerciseDraft.source.thumbnailUrl} alt="Vorschaubild der Inspirationsquelle" loading="lazy" referrerPolicy="no-referrer" />
@@ -353,7 +376,11 @@ export default function Exercises() {
           <div className="custom-exercise-form-grid">
             <label>Name der Übung<input value={customExerciseDraft.name} onChange={(event) => patchCustomExerciseDraft({ name: event.target.value })} placeholder="z. B. Dynamischer Lunge-to-Knee-Drive" /></label>
             <label>Übungsgruppe<input value={customExerciseDraft.group} onChange={(event) => patchCustomExerciseDraft({ group: event.target.value })} placeholder="Dynamische Stabilität" /></label>
-            <label>Dauer je Übung<select value={customExerciseDraft.seconds} onChange={(event) => patchCustomExerciseDraft({ seconds: Number(event.target.value) })}>{[30, 45, 60, 75, 90, 120].map((value) => <option value={value} key={value}>{value} Sekunden</option>)}</select></label>
+            {customExerciseDrafts.length > 1 && <label>Position im Video / Hinweis<input value={customExerciseDraft.sourceSegment || ""} onChange={(event) => patchCustomExerciseDraft({ sourceSegment: event.target.value })} placeholder="z. B. Übung 2 · ab 0:18" /></label>}
+            <label>Steuerung<select value={customExerciseDraft.doseMode || "time"} onChange={(event) => patchCustomExerciseDraft({ doseMode: event.target.value })}><option value="time">Zeit</option><option value="reps">Wiederholungen mit Progression</option></select></label>
+            {customExerciseDraft.doseMode === "reps"
+              ? <label>Start-Wiederholungen<input type="number" min="1" max="30" value={customExerciseDraft.baseReps || 5} onChange={(event) => patchCustomExerciseDraft({ baseReps: Number(event.target.value) })} /></label>
+              : <label>Dauer je Übung<select value={customExerciseDraft.seconds} onChange={(event) => patchCustomExerciseDraft({ seconds: Number(event.target.value) })}>{[30, 45, 60, 75, 90, 120].map((value) => <option value={value} key={value}>{value} Sekunden</option>)}</select></label>}
             <label>Coach-Einsatz<select value={customExerciseDraft.coachUse} onChange={(event) => patchCustomExerciseDraft({ coachUse: event.target.value })}><option value="general">Allgemeine Stabi</option><option value="activation">Aktivierung vor Belastung</option><option value="recovery">Regeneration nach Belastung</option><option value="strength">Kraft an freien Tagen</option></select></label>
             <label className="wide-field">Wofür ist die Übung gut?<textarea rows="2" value={customExerciseDraft.purpose} onChange={(event) => patchCustomExerciseDraft({ purpose: event.target.value })} placeholder="Trainiert Hüftstabilität, Balance und kontrollierte Kraftübertragung." /></label>
             <label className="wide-field">Kurz erklärt<textarea rows="3" value={customExerciseDraft.quickStart} onChange={(event) => patchCustomExerciseDraft({ quickStart: event.target.value, instruction: event.target.value })} placeholder="Ausgangsposition, Bewegungsweg und wichtigster Technikhinweis in zwei bis drei Sätzen." /></label>
@@ -369,15 +396,16 @@ export default function Exercises() {
           </div>
 
           <div className="custom-exercise-toggles">
-            <label><input type="checkbox" checked={customExerciseDraft.sideSwitch} onChange={(event) => patchCustomExerciseDraft({ sideSwitch: event.target.checked })} /><span><b>Seitenwechsel nötig</b><small>Der Timer teilt die Belastungszeit auf beide Seiten auf.</small></span></label>
+            {customExerciseDraft.doseMode === "reps" && <label><input type="checkbox" checked={Boolean(customExerciseDraft.repsPerSide)} onChange={(event) => patchCustomExerciseDraft({ repsPerSide: event.target.checked })} /><span><b>Wiederholungen pro Seite</b><small>Die Vorgabe wird z. B. als 5/Seite geführt und gemeinsam abgeschlossen.</small></span></label>}
+            {customExerciseDraft.doseMode !== "reps" && <label><input type="checkbox" checked={customExerciseDraft.sideSwitch} onChange={(event) => patchCustomExerciseDraft({ sideSwitch: event.target.checked })} /><span><b>Seitenwechsel nötig</b><small>Der Timer teilt die Belastungszeit auf beide Seiten auf.</small></span></label>}
             <label><input type="checkbox" checked={customExerciseDraft.avoidBeforeQuality} onChange={(event) => patchCustomExerciseDraft({ avoidBeforeQuality: event.target.checked })} /><span><b>Nicht vor Track, Fußball oder Longrun</b><small>Für dynamische oder ermüdende Übungen mit Bedacht setzen.</small></span></label>
             <label><input type="checkbox" checked={customExerciseDraft.coachApproved} onChange={(event) => patchCustomExerciseDraft({ coachApproved: event.target.checked })} /><span><b>Für Coach-Auswahl freigeben</b><small>Ohne Freigabe bleibt die Übung nur in deiner persönlichen Bibliothek.</small></span></label>
           </div>
-          {customExerciseDraft.sideSwitch && <label className="custom-side-switch-seconds">Pause für Seitenwechsel<input type="number" min="3" max="10" step="1" value={customExerciseDraft.sideSwitchSeconds} onChange={(event) => patchCustomExerciseDraft({ sideSwitchSeconds: Number(event.target.value) })} /> Sekunden</label>}
+          {customExerciseDraft.doseMode !== "reps" && customExerciseDraft.sideSwitch && <label className="custom-side-switch-seconds">Pause für Seitenwechsel<input type="number" min="3" max="10" step="1" value={customExerciseDraft.sideSwitchSeconds} onChange={(event) => patchCustomExerciseDraft({ sideSwitchSeconds: Number(event.target.value) })} /> Sekunden</label>}
 
           {customExerciseMessage && <p className="form-error">{customExerciseMessage}</p>}
           <div className="button-row">
-            <button type="button" className="primary" onClick={saveCustomExercise}>{customExerciseDraft.id ? "Änderung speichern" : "Übung speichern"}</button>
+            <button type="button" className="primary" onClick={saveCustomExercise}>{customExerciseDraft.id ? "Änderung speichern" : customExerciseDrafts.length > 1 ? `${customExerciseDrafts.length} Übungen speichern` : "Übung speichern"}</button>
             <button type="button" className="secondary" onClick={closeExerciseEditor}>Abbrechen</button>
           </div>
         </div>}

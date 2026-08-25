@@ -179,7 +179,8 @@ function historySignals(history = []) {
   const recent = (Array.isArray(history) ? history : []).slice(0, 6);
   const poor = recent.filter((entry) => numeric(entry.fitScore) > 0 && numeric(entry.fitScore) <= 4);
   const worse = recent.filter((entry) => entry.zoneResponse === "worse");
-  return { poor: poor.length, worse: worse.length };
+  const pain = recent.filter((entry) => entry.painReported || (Array.isArray(entry.painExerciseIds) && entry.painExerciseIds.length));
+  return { poor: poor.length, worse: worse.length, pain: pain.length };
 }
 
 export function mergeMobilityFocusAreas(primary = [], secondary = [], limit = 3) {
@@ -235,7 +236,7 @@ export function buildAdaptiveMobilityProfile({
     title = "Freier Tag: vollständige Läufer-Stabilität mit Kraftanteil";
     reason = "Die letzten Reviews sind stabil und heute liegt kein harter Laufreiz an. Der Coach darf deshalb neben Mobilität auch kontrollierte Kraft- und Beinachsenarbeit einbauen.";
     focusAreaIds = mergeMobilityFocusAreas(["core", "hips", "strength"], focusAreaIds);
-    preferredExerciseIds = unique(["dead-bug", "side-plank", "glute-bridge", "step-up", "suitcase-carry", ...preferredExerciseIds]);
+    preferredExerciseIds = unique(["push-up", "sit-up", "bodyweight-squat", "dead-bug", "side-plank", "glute-bridge", "step-up", "suitcase-carry", ...preferredExerciseIds]);
     factors.push("Stabile Reviews und freier Trainingstag");
   }
 
@@ -250,10 +251,10 @@ export function buildAdaptiveMobilityProfile({
     preferredExerciseIds = unique(["ankle-pumps", "ankle-circles", "knee-to-wall", ...preferredExerciseIds]);
     factors.push("Review-Signal: Krämpfe");
   }
-  if (historyState.poor >= 2 || historyState.worse >= 1) {
+  if (historyState.poor >= 2 || historyState.worse >= 1 || historyState.pain >= 1) {
     condition = "tired";
-    excludedExerciseIds = unique(["slow-mountain-climber", "goblet-squat", "weighted-rdl", ...excludedExerciseIds]);
-    factors.push("Letzte Mobility-Auswahl wurde schwach bewertet");
+    excludedExerciseIds = unique(["slow-mountain-climber", "goblet-squat", "weighted-rdl", "reverse-lunge", ...excludedExerciseIds]);
+    factors.push(historyState.pain >= 1 ? "Letzte Stabi-/Mobility-Einheit enthielt ein Schmerzsignal" : "Letzte Mobility-Auswahl wurde schwach bewertet");
   }
 
   const safetyMode = signals.pain > 0;

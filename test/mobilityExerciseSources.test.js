@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   customExerciseCoachMatch,
+  customExerciseDraftsForSource,
   mergeExerciseLibrary,
   normalizeCustomExercise,
   parseExerciseSourceUrl,
@@ -101,4 +102,52 @@ test("only coach-approved personal exercises can enter generated workouts", () =
 
   assert.equal(ids.includes(approved.id), true);
   assert.equal(ids.includes(disabled.id), false);
+});
+
+
+test("one Reel can be prepared as several separate exercise drafts", () => {
+  const drafts = customExerciseDraftsForSource({ ...source, contentId: "ABC_123" }, 4);
+  assert.equal(drafts.length, 4);
+  assert.deepEqual(drafts.map((draft) => draft.sourceExerciseIndex), [1, 2, 3, 4]);
+  assert.ok(drafts.every((draft) => draft.source.sourceGroupId === "ABC_123"));
+});
+
+test("automatic workout never repeats the same full video source twice", () => {
+  const first = customExercise({ id: "custom-source-a", name: "Hip Airplane" });
+  const second = customExercise({ id: "custom-source-b", name: "Copenhagen light" });
+  const adaptiveProfile = {
+    id: "adaptive-source-dedupe",
+    condition: "normal",
+    safetyMode: false,
+    focusAreaIds: ["hips", "core"],
+    preferredExerciseIds: [first.id, second.id],
+    excludedExerciseIds: [],
+    context: { kind: "track", timing: "before" },
+  };
+  const workout = buildMobilityWorkout({
+    durationMinutes: 15,
+    equipment: ["mat"],
+    focusAreaIds: ["hips", "core"],
+    customExercises: [first, second],
+    preferredExerciseIds: [first.id, second.id],
+    adaptiveProfile,
+  });
+  const fromSource = workout.items.filter((item) => item.source?.canonicalUrl === source.canonicalUrl);
+  assert.equal(fromSource.length, 1);
+});
+
+
+test("custom Reel exercises can use the same gradual rep progression model", () => {
+  const exercise = customExercise({
+    id: "custom-push-pattern",
+    name: "Reel Push Pattern",
+    doseMode: "reps",
+    baseReps: 5,
+    repsPerSide: true,
+    sideSwitch: true,
+  });
+  assert.equal(exercise.doseMode, "reps");
+  assert.equal(exercise.baseReps, 5);
+  assert.equal(exercise.repsPerSide, true);
+  assert.equal(exercise.sideSwitch, false);
 });
