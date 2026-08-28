@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { Card, PageTitle } from "../components/UI";
@@ -12,7 +12,7 @@ import ExerciseGuide from "../components/ExerciseGuide";
 import RaceCoach from "../components/RaceCoach";
 import { activitiesWithGroups } from "../services/activityGroups";
 import { fmtDate } from "../utils/format";
-import { playWorkoutAudioDemo, playWorkoutCue, primeWorkoutAudio, speakWorkoutCue, workoutAudioCapabilities } from "../services/workoutAudio";
+import { playWorkoutAudioDemo, playWorkoutCountdown, playWorkoutCue, primeWorkoutAudio, speakWorkoutCue, workoutAudioCapabilities, workoutVoiceOptions } from "../services/workoutAudio";
 import { releaseScreenWakeLock, requestScreenWakeLock } from "../services/wakeLock";
 import {
   buildCoachState,
@@ -101,6 +101,7 @@ export default function Coach() {
   const [dismissedCoachSuggestionId, setDismissedCoachSuggestionId] = useState("");
   const [wakeLockStatus, setWakeLockStatus] = useState("idle");
   const [audioFeedback, setAudioFeedback] = useState({ tone: "idle", message: "Ton und Sprache vor dem Workout einmal testen." });
+  const [workoutVoices, setWorkoutVoices] = useState(() => workoutVoiceOptions());
   const previousRunnerRef = useRef(null);
   const cueKeyRef = useRef("");
   const wakeLockRef = useRef(null);
@@ -150,6 +151,22 @@ export default function Coach() {
   const longerPreparationForUnknown = mobilitySettings.longerPreparationForUnknown !== false;
   const audioEnabled = mobilitySettings.audioEnabled !== false;
   const voiceCues = mobilitySettings.voiceCues !== false;
+  const voiceURI = String(mobilitySettings.voiceURI || "");
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.speechSynthesis) return undefined;
+    const synthesis = window.speechSynthesis;
+    const refreshVoices = () => setWorkoutVoices(workoutVoiceOptions());
+    refreshVoices();
+    const timer = window.setTimeout(refreshVoices, 300);
+    if (synthesis.addEventListener) synthesis.addEventListener("voiceschanged", refreshVoices);
+    else synthesis.onvoiceschanged = refreshVoices;
+    return () => {
+      window.clearTimeout(timer);
+      if (synthesis.removeEventListener) synthesis.removeEventListener("voiceschanged", refreshVoices);
+      else if (synthesis.onvoiceschanged === refreshVoices) synthesis.onvoiceschanged = null;
+    };
+  }, []);
   const weakSide = ["left", "right"].includes(mobilitySettings.weakSide) ? mobilitySettings.weakSide : "none";
   const workoutHistory = useMemo(
     () => Array.isArray(mobilitySettings.history) ? mobilitySettings.history : [],
@@ -305,6 +322,10 @@ export default function Coach() {
     setWorkoutShuffleOffset(nextRotationOffset - workoutHistory.length);
   }
 
+  const speakCue = useCallback((text, options = {}) => {
+    return speakWorkoutCue(text, { voiceURI, ...options });
+  }, [voiceURI]);
+
   async function activateWorkoutAudio({ demo = false, announce = "" } = {}) {
     if (!audioEnabled) {
       setAudioFeedback({ tone: "bad", message: "Signaltöne sind ausgeschaltet. Aktiviere sie unter Timer & Pausen." });
@@ -317,7 +338,7 @@ export default function Coach() {
       : primeWorkoutAudio({ audible: true });
     // Trigger speech before the first await so strict mobile browsers still
     // treat it as part of the user's click/tap interaction.
-    const speechReady = voiceCues && announce ? speakWorkoutCue(announce) : !voiceCues;
+    const speechReady = voiceCues && announce ? speakCue(announce) : !voiceCues;
     const tonesReady = await tonePromise;
     const capabilities = workoutAudioCapabilities();
 
@@ -344,15 +365,22 @@ export default function Coach() {
   }
 
   async function testWorkoutAudio() {
-    const ready = await activateWorkoutAudio({ demo: true, announce: "Audio aktiviert. Du hörst jetzt die Signaltöne." });
+    const ready = await activateWorkoutAudio({ demo: true, announce: "Audio aktiviert. Du hörst jetzt den Drei Zwei Eins Countdown mit Start und Ende." });
     if (!ready) return;
-    if (voiceCues) window.setTimeout(() => speakWorkoutCue("Fünf, vier, drei, zwei, eins. Start. Seitenwechsel. Workout abgeschlossen."), 9600);
+  }
+
+  async function testWorkoutVoice() {
+    await activateWorkoutAudio({
+      announce: voiceCues
+        ? "Hallo. Ich begleite dich heute durch dein Stabi und Mobility Workout. Drei, zwei, eins. Start."
+        : "",
+    });
   }
 
   async function startWorkout() {
     if (!workout.items.length) return;
     const items = workout.items.map((item) => ({ ...item }));
-    const firstPhase = items[0].preparationSeconds > 0 ? "prepare" : "work";
+    const firstPhase = "prepare";
     if (audioEnabled) {
       await activateWorkoutAudio({
         announce: voiceCues
@@ -571,20 +599,23 @@ export default function Coach() {
       || Number(previous.sideIndex || 0) !== Number(runner.sideIndex || 0);
     if (runner.complete && !previous?.complete) {
       playWorkoutCue("complete");
-      if (voiceCues) speakWorkoutCue("Workout abgeschlossen");
+      if (voiceCues) speakCue("Workout abgeschlossen");
     } else if (phaseChanged) {
       if (runner.phase === "side-switch") {
         playWorkoutCue("switch");
-        if (voiceCues) speakWorkoutCue(`${activeExercise?.switchCue || "Seite wechseln"}. ${nextRunnerSideLabel(weakSide)}. Start in ${runner.remaining} Sekunden`);
+        if (voiceCues) speakCue(`${activeExercise?.switchCue || "Seite wechseln"}. ${nextRunnerSideLabel(weakSide)}. Start in ${runner.remaining} Sekunden`);
       } else {
-        if (previous?.phase === "work") playWorkoutCue("end");
+        if (previous?.phase === "work") {
+          playWorkoutCue("end");
+          if (voiceCues) speakCue("Ende.");
+        }
         if (runner.phase === "transition" && voiceCues) {
-          speakWorkoutCue(`Übung beendet. Als Nächstes ${activeExercise?.name || "die nächste Übung"}. Wechselpause ${runner.remaining} Sekunden.`);
+          speakCue(`Als Nächstes ${activeExercise?.name || "die nächste Übung"}. Wechselpause ${runner.remaining} Sekunden.`, { interrupt: false });
         }
         if (runner.phase === "work") {
           playWorkoutCue("start");
           const sideLabel = activeRunnerSideLabel(activeExercise, runner.phase, runner.sideIndex, weakSide);
-          if (voiceCues) speakWorkoutCue(`Start ${activeExercise?.name || "Übung"}${sideLabel ? `. ${sideLabel}` : ""}`);
+          if (voiceCues) speakCue(`Start ${activeExercise?.name || "Übung"}${sideLabel ? `. ${sideLabel}` : ""}`);
         }
       }
     }
@@ -597,20 +628,19 @@ export default function Coach() {
       runner.running
       && !runner.complete
       && Number.isFinite(runner.remaining)
-      && runner.remaining > 0
-      && runner.remaining <= 5
+      && runner.remaining === 3
       && (countdownBeforeStart || countdownBeforeEnd)
     ) {
-      const countdownKey = `${runner.index}-${runner.phase}-${runner.remaining}`;
+      const countdownKey = `${runner.index}-${runner.phase}-${Number(runner.sideIndex || 0)}-321`;
       if (cueKeyRef.current !== countdownKey) {
         cueKeyRef.current = countdownKey;
-        playWorkoutCue(`countdown${runner.remaining}`);
+        playWorkoutCountdown();
       }
     }
 
 
     previousRunnerRef.current = runner;
-  }, [runner, activeExercise, audioEnabled, voiceCues, weakSide]);
+  }, [runner, activeExercise, audioEnabled, voiceCues, weakSide, speakCue]);
   const runnerPhase = runner?.phase || "work";
   const runnerPhaseLabel = runnerPhase === "prepare"
     ? "Vorbereitung"
@@ -620,7 +650,7 @@ export default function Coach() {
         ? "Seitenwechsel"
         : "Übung";
   const runnerUsesReps = runnerPhase === "work" && activeExercise?.prescription?.mode === "reps";
-  const runnerCountdownActive = Number.isFinite(runner?.remaining) && runner.remaining > 0 && runner.remaining <= 5;
+  const runnerCountdownActive = Number.isFinite(runner?.remaining) && runner.remaining > 0 && runner.remaining <= 3;
   const runnerPhaseAction = runnerPhase === "work"
     ? runnerUsesReps ? "Wiederholungen geschafft" : "Übung abschließen"
     : runnerPhase === "prepare"
@@ -894,7 +924,7 @@ export default function Coach() {
                 </div>
 
                 <details className="mobility-timer-settings nested">
-                  <summary><span><b>Timer & Audio</b><small>5–4–3–2–1 Hinweistöne vor Ende, Start und Seitenwechsel</small></span><strong>{knownExerciseCount} bekannt</strong></summary>
+                  <summary><span><b>Timer & Audio</b><small>3–2–1 hörbar vor Start, Übungsende und Seitenwechsel</small></span><strong>{knownExerciseCount} bekannt</strong></summary>
                   <div className="mobility-timer-grid">
                     <label>Vorbereitung bekannte Übung<select value={preparationSeconds} onChange={(event) => { updateMobility({ preparationSeconds: Number(event.target.value) }); setRunner(null); }}>{[0, 5, 10, 15, 20].map((value) => <option value={value} key={value}>{value === 0 ? "Nur Countdown" : `${value} Sekunden`}</option>)}</select></label>
                     <label>Vorbereitung neue Übung<select value={unknownPreparationSeconds} disabled={!longerPreparationForUnknown} onChange={(event) => { updateMobility({ unknownPreparationSeconds: Number(event.target.value) }); setRunner(null); }}>{[10, 15, 20, 30, 45].map((value) => <option value={value} key={value}>{value} Sekunden</option>)}</select></label>
@@ -903,9 +933,19 @@ export default function Coach() {
                     <label>Startseite<select value={weakSide} onChange={(event) => updateMobility({ weakSide: event.target.value })}><option value="none">Standard: links</option><option value="left">Links zuerst</option><option value="right">Rechts zuerst</option></select></label>
                   </div>
                   <label className="mobility-timer-toggle"><input type="checkbox" checked={longerPreparationForUnknown} onChange={(event) => { updateMobility({ longerPreparationForUnknown: event.target.checked }); setRunner(null); }} /><span><b>Neue Übungen länger vorbereiten</b><small>Bekannte und Physio-Übungen starten schneller.</small></span></label>
-                  <label className="mobility-timer-toggle"><input type="checkbox" checked={audioEnabled} onChange={(event) => updateMobility({ audioEnabled: event.target.checked })} /><span><b>Hinweistöne</b><small>Die letzten fünf Sekunden werden hörbar. Ein eigener Ton markiert Ende, Seitenwechsel und Abschluss.</small></span></label>
-                  <label className="mobility-timer-toggle"><input type="checkbox" checked={voiceCues} disabled={!audioEnabled} onChange={(event) => updateMobility({ voiceCues: event.target.checked })} /><span><b>Coach ansagen lassen</b><small>Übungsstart, nächste Übung und Seitenwechsel auf Deutsch.</small></span></label>
-                  <div className={`mobility-audio-actions ${audioFeedback.tone}`}><button type="button" onClick={testWorkoutAudio}>5–4–3–2–1 testen</button><span className="mobility-audio-status" role="status">{audioFeedback.message}</span></div>
+                  <label className="mobility-timer-toggle"><input type="checkbox" checked={audioEnabled} onChange={(event) => updateMobility({ audioEnabled: event.target.checked })} /><span><b>Hinweistöne</b><small>Drei, zwei, eins wird vor Start und Ende deutlich signalisiert. Start, Ende, Seitenwechsel und Abschluss haben eigene Töne.</small></span></label>
+                  <label className="mobility-timer-toggle"><input type="checkbox" checked={voiceCues} disabled={!audioEnabled} onChange={(event) => updateMobility({ voiceCues: event.target.checked })} /><span><b>Coach ansagen lassen</b><small>Übungsstart, Ende, nächste Übung und Seitenwechsel auf Deutsch.</small></span></label>
+                  {voiceCues && <div className="mobility-voice-settings">
+                    <label>Coach-Stimme
+                      <select value={voiceURI} onChange={(event) => updateMobility({ voiceURI: event.target.value })}>
+                        <option value="">Automatisch – beste verfügbare deutsche Stimme{workoutVoices[0]?.name ? ` (${workoutVoices[0].name})` : ""}</option>
+                        {workoutVoices.map((voice) => <option value={voice.voiceURI} key={voice.voiceURI}>{voice.name}{voice.natural ? " · natürlich" : ""}</option>)}
+                      </select>
+                      <small>EI bevorzugt automatisch Natural-, Premium- oder Online-Stimmen. Welche Stimmen verfügbar sind, hängt von Browser und Gerät ab.</small>
+                    </label>
+                    <button type="button" className="secondary" onClick={testWorkoutVoice}>Stimme testen</button>
+                  </div>}
+                  <div className={`mobility-audio-actions ${audioFeedback.tone}`}><button type="button" onClick={testWorkoutAudio}>3–2–1 · Start/Ende testen</button><span className="mobility-audio-status" role="status">{audioFeedback.message}</span></div>
                 </details>
               </div>
             </details>

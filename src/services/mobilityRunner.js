@@ -20,8 +20,8 @@ export function runnerPhaseSeconds(items, index, phase, sideIndex = 0) {
   const item = items?.[index];
   if (!item) return 0;
   if (phase === "transition") return Math.max(0, Number(item.transitionBeforeSeconds || 0));
-  if (phase === "prepare") return Math.max(0, Number(item.preparationSeconds || 0));
-  if (phase === "side-switch") return item.sideSwitch ? Math.max(0, Number(item.sideSwitchSeconds ?? 5)) : 0;
+  if (phase === "prepare") return Math.max(3, Number(item.preparationSeconds || 0));
+  if (phase === "side-switch") return item.sideSwitch ? Math.max(3, Number(item.sideSwitchSeconds ?? 5)) : 0;
   if (phase === "work") return item.prescription?.mode === "reps" ? null : sideWorkSeconds(item, sideIndex);
   return 0;
 }

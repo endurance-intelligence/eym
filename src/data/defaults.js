@@ -69,6 +69,7 @@ export const defaultState = {
     longerPreparationForUnknown: true,
     audioEnabled: true,
     voiceCues: true,
+    voiceURI: "",
     weakSide: "none",
     coachFocusOverride: null,
     history: [],

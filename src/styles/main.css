@@ -2809,3 +2809,21 @@ button:focus-visible,a:focus-visible,summary:focus-visible{
 .custom-exercise-source-preview{display:grid;grid-template-columns:100px minmax(0,1fr);gap:13px;align-items:center;padding:12px;border:1px solid var(--border);border-radius:13px;background:var(--bg-sidebar)}.custom-exercise-source-preview img,.custom-exercise-source-preview>span{width:100px;height:76px;object-fit:cover;border-radius:10px;background:var(--bg-input)}.custom-exercise-source-preview>span{display:grid;place-items:center;font-size:24px}.custom-exercise-source-preview>div{display:grid;gap:4px;min-width:0}.custom-exercise-source-preview p{margin:0;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.custom-exercise-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.custom-exercise-form-grid label{display:grid;gap:6px}.custom-exercise-form-grid input,.custom-exercise-form-grid select,.custom-exercise-form-grid textarea{width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:10px;background:var(--bg-input);color:var(--text)}.custom-exercise-form-grid .wide-field{grid-column:1/-1}
 @media(max-width:950px){.mobility-session-sections{grid-template-columns:1fr}.mobility-session-heading{flex-direction:column}.mobility-session-actions{justify-content:flex-start}.mobility-focus-picker.compact{grid-template-columns:repeat(2,minmax(0,1fr))}.mobility-feel-buttons{grid-template-columns:1fr 1fr!important}.exercise-source-input-row{grid-template-columns:1fr 130px}.exercise-source-input-row>button{grid-column:1/-1}.custom-exercise-form-grid{grid-template-columns:1fr}.custom-exercise-form-grid .wide-field{grid-column:auto}}
 @media(max-width:620px){.mobility-session-why{grid-template-columns:1fr;gap:5px}.mobility-session-actions{display:grid;width:100%;grid-template-columns:1fr}.mobility-session-actions button{width:100%!important}.mobility-focus-picker.compact{grid-template-columns:1fr 1fr}.mobility-runner-secondary-actions{display:grid;grid-template-columns:1fr 1fr}.mobility-runner-secondary-actions button{width:100%}.mobility-feel-buttons{grid-template-columns:1fr!important}.exercise-source-input-row{grid-template-columns:1fr}.exercise-source-input-row>button{grid-column:auto}.custom-exercise-source-preview{grid-template-columns:72px minmax(0,1fr)}.custom-exercise-source-preview img,.custom-exercise-source-preview>span{width:72px;height:64px}}
+
+/* v3.9.107 – natural coach voice selection and explicit 3-2-1 audio */
+.mobility-voice-settings{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  gap:10px;
+  align-items:end;
+  margin:0 12px 10px;
+  padding:11px 12px;
+  border:1px solid var(--border);
+  border-radius:12px;
+  background:var(--bg-input);
+}
+.mobility-voice-settings label{display:grid;gap:6px;color:var(--text-soft);font-size:11px;font-weight:800}
+.mobility-voice-settings select{width:100%;min-width:0}
+.mobility-voice-settings small{color:var(--muted);font-weight:500;line-height:1.4}
+.mobility-voice-settings button{width:auto;white-space:nowrap}
+@media(max-width:620px){.mobility-voice-settings{grid-template-columns:1fr}.mobility-voice-settings button{width:100%}}

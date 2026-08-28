@@ -102,3 +102,14 @@ test("rep-based strength exercise waits for manual completion instead of auto-co
   assert.equal(finished.complete, true);
   assert.deepEqual(finished.completedExerciseIds, ["push-up"]);
 });
+
+test("zero preparation still reserves a real three-second start countdown", () => {
+  const exercise = {
+    id: "push-up",
+    seconds: 30,
+    preparationSeconds: 0,
+    transitionBeforeSeconds: 0,
+    sideSwitch: false,
+  };
+  assert.equal(runnerPhaseSeconds([exercise], 0, "prepare", 0), 3);
+});
