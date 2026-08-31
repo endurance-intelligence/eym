@@ -21,6 +21,8 @@ import {
   raceWorkoutSyncTime,
 } from "../services/raceWorkoutSync";
 import RaceStrategyMap from "./RaceStrategyMap";
+import PitCrewLive from "./PitCrewLive";
+import { pitCrewRaceEligible } from "../services/pitCrewCoach.js";
 import "./FuelPartner.css";
 
 function localDateKey(date = new Date()) {
@@ -164,6 +166,7 @@ export default function RaceCoach() {
   const [hoveredSegmentIndex, setHoveredSegmentIndex] = useState(null);
   const [garminExportMessage, setGarminExportMessage] = useState("");
   const [garminPublishBusy, setGarminPublishBusy] = useState(false);
+  const [pitCrewOpen, setPitCrewOpen] = useState(false);
   const sources = useMemo(() => sourceOptions(state), [state]);
   const requestedSource = searchParams.get("race");
   const source = sources.find((item) => item.key === requestedSource) || sources[0] || null;
@@ -216,6 +219,7 @@ export default function RaceCoach() {
   const profilePolyline = elevationPolyline(setup.routeProfile);
   const routeTicks = routeDistanceTicks(setup.routeProfile);
   const activeSegmentIndex = hoveredSegmentIndex ?? selectedSegmentIndex;
+  const pitCrewEligible = pitCrewRaceEligible(plan?.profile || {});
 
   useEffect(() => {
     const url = source?.profile?.routeGpxUrl;
@@ -540,6 +544,30 @@ export default function RaceCoach() {
         <article><span>{plan.profile.format === "loop" ? "Starttakt" : "Ø Ziel-Schnitt"}</span><strong>{plan.profile.format === "loop" ? plan.summary.loopInterval : plan.routePlan ? paceLabel(plan.routePlan.averagePaceSecondsPerKm) : plan.summary.pace}</strong><small>{plan.trackPlan ? "Rennziel zählt · nicht die GPS-Abweichung" : plan.routePlan ? "Splits werden ans Profil angepasst" : "Race-Plan"}</small></article>
         <article className="race-coach-strategy-status"><span>Strategie</span><strong>{plan.trackPlan ? `${plan.trackPlan.lapsLabel} Runden` : plan.routePlan ? `${plan.routePlan.segments.length} Splits` : "Basisplan"}</strong><small>{plan.trackPlan ? `${plan.trackPlan.lapDistanceM} m Bahn · Track Race` : plan.routePlan ? "Kilometerweise vorbereitet" : "GPX ergänzt die exakten Splits"}</small></article>
       </div>
+
+      {pitCrewEligible && (
+        <section className="pit-crew-launch">
+          <div>
+            <small>BACKYARD · LIVE MODE</small>
+            <h3>Pit Crew Coach</h3>
+            <p>Große Kacheln fürs Handy: Getränk zuerst, tatsächliche Aufnahme statt starrem Plan, Athletenstatus + Wetter nur bei Bedarf. Quick-Pit schaltet automatisch nach Restzeit.</p>
+          </div>
+          <button type="button" onClick={() => setPitCrewOpen(true)}>Pit Crew Live öffnen</button>
+        </section>
+      )}
+
+      {pitCrewOpen && (
+        <PitCrewLive
+          race={{
+            key: sourceKey,
+            name: source.label,
+            date: source.date,
+            time: source.time,
+            loopIntervalMinutes: plan.profile.loopIntervalMinutes || 60,
+          }}
+          onClose={() => setPitCrewOpen(false)}
+        />
+      )}
 
       {plan.trackPlan && (
         <section className="race-coach-track-plan">
