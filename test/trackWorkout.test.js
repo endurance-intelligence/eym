@@ -22,6 +22,7 @@ import {
 } from "../src/services/trackWorkout.js";
 import {
   intervalDescription,
+  intervalsWorkoutType,
   isGuidedPlanItem,
   isProvisionalTrackPlanItem,
 } from "../supabase/functions/_shared/structuredWorkout.ts";
@@ -398,6 +399,16 @@ test("automatic distance remains an explicit opt-in for loop workouts", () => {
   assert.match(description, /Boxenstopp 1\n- Press lap 10m intensity=recovery/);
 });
 
+
+test("pre-race strides keep their explicit run sport instead of matching ride inside the title", () => {
+  const shakeout = {
+    type: "Easy Run",
+    title: "Shake-out / Pre-Race Activation · 5 × 20 s Strides",
+  };
+  assert.equal(intervalsWorkoutType(shakeout), "Run");
+  assert.equal(intervalsWorkoutType({ type: "Radfahren", title: "90 min locker" }), "Ride");
+  assert.equal(intervalsWorkoutType({ type: "Workout", title: "Rennrad Grundlagenrunde" }), "Ride");
+});
 
 test("pre-race strides export duration, broad pace target and recovery to Garmin via Intervals", () => {
   const shakeout = { type: "Easy Run", title: "Shake-out / Pre-Race Activation · 5 × 20 s Strides" };

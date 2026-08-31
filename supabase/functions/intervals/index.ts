@@ -6,7 +6,12 @@ import {
   readableIntervalsError,
 } from "../_shared/intervalsErrors.ts";
 import { intervalsRoutePayload } from "../_shared/intervalsRoute.ts";
-import { intervalDescription, isGuidedPlanItem, isProvisionalTrackPlanItem } from "../_shared/structuredWorkout.ts";
+import {
+  intervalDescription,
+  intervalsWorkoutType,
+  isGuidedPlanItem,
+  isProvisionalTrackPlanItem,
+} from "../_shared/structuredWorkout.ts";
 import { intervalsStartDateLocal } from "../_shared/plannerTiming.ts";
 
 const corsHeaders = {
@@ -217,12 +222,6 @@ function safeMinutes(value: unknown, fallback = 60) {
   return Math.max(1, Math.min(24 * 60, Number.isFinite(parsed) ? parsed : fallback));
 }
 
-function workoutType(item: Record<string, unknown>) {
-  const value = `${item.type || ""} ${item.title || ""}`.toLowerCase();
-  if (/rad|ride|bike|cycling/.test(value)) return "Ride";
-  return "Run";
-}
-
 function safeRaceText(value: unknown, fallback = "") {
   const text = String(value || "").replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim();
   return (text || fallback).slice(0, 120);
@@ -356,7 +355,7 @@ function planEvent(item: Record<string, unknown>, existingId?: unknown) {
   if (guided) {
     return {
       ...base,
-      type: workoutType(item),
+      type: intervalsWorkoutType(item),
       description: intervalDescription(item),
     };
   }

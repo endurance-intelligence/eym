@@ -5,9 +5,67 @@ function safeMinutes(value: unknown, fallback = 60) {
   return Math.max(1, Math.min(24 * 60, Number.isFinite(parsed) ? parsed : fallback));
 }
 
-function workoutType(item: Record<string, unknown>) {
-  const value = `${item.type || ""} ${item.title || ""}`.toLowerCase();
-  if (/rad|ride|bike|cycling/.test(value)) return "Ride";
+function normalizedSportText(value: unknown) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9äöüß]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function hasSportTerm(value: unknown, terms: string[]) {
+  const normalized = normalizedSportText(value);
+  if (!normalized) return false;
+  const padded = ` ${normalized} `;
+  return terms.some((term) => padded.includes(` ${term} `));
+}
+
+const rideSportTerms = [
+  "ride",
+  "roadride",
+  "road ride",
+  "radfahren",
+  "radtour",
+  "radtraining",
+  "rennrad",
+  "cycling",
+  "bike",
+  "biking",
+  "gravel",
+  "gravel ride",
+  "e bike",
+  "ebike",
+  "virtual ride",
+  "indoor cycling",
+];
+
+const runSportTerms = [
+  "run",
+  "running",
+  "easy run",
+  "long run",
+  "longrun",
+  "orc run",
+  "orc track",
+  "track",
+  "interval",
+  "intervalle",
+  "schwellenlauf",
+  "tempo run",
+  "laufen",
+  "race",
+  "wettkampf",
+  "loop training",
+  "backyard",
+  "backyard training",
+];
+
+export function intervalsWorkoutType(item: Record<string, unknown>) {
+  const explicitType = item.type;
+  if (hasSportTerm(explicitType, rideSportTerms)) return "Ride";
+  if (hasSportTerm(explicitType, runSportTerms)) return "Run";
+
+  if (hasSportTerm(item.title, rideSportTerms)) return "Ride";
   return "Run";
 }
 
@@ -284,7 +342,7 @@ export function intervalDescription(item: Record<string, unknown>) {
     ].join("\n");
   }
 
-  if (workoutType(item) === "Ride") {
+  if (intervalsWorkoutType(item) === "Ride") {
     return `- ${duration}m Z2 HR`;
   }
 
