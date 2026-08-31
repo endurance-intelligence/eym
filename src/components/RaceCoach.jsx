@@ -22,7 +22,15 @@ import {
 } from "../services/raceWorkoutSync";
 import RaceStrategyMap from "./RaceStrategyMap";
 import PitCrewLive from "./PitCrewLive";
+import PitCrewSharedSession from "./PitCrewSharedSession";
 import { pitCrewRaceEligible } from "../services/pitCrewCoach.js";
+import {
+  createPitCrewShare,
+  readPitCrewLocalSnapshot,
+  rememberPitCrewShareToken,
+  sharePitCrewUrl,
+  storedPitCrewShareToken,
+} from "../services/pitCrewShare.js";
 import "./FuelPartner.css";
 
 function localDateKey(date = new Date()) {
@@ -167,6 +175,9 @@ export default function RaceCoach() {
   const [garminExportMessage, setGarminExportMessage] = useState("");
   const [garminPublishBusy, setGarminPublishBusy] = useState(false);
   const [pitCrewOpen, setPitCrewOpen] = useState(false);
+  const [pitCrewShareTokens, setPitCrewShareTokens] = useState({});
+  const [pitCrewShareBusy, setPitCrewShareBusy] = useState(false);
+  const [pitCrewShareMessage, setPitCrewShareMessage] = useState("");
   const sources = useMemo(() => sourceOptions(state), [state]);
   const requestedSource = searchParams.get("race");
   const source = sources.find((item) => item.key === requestedSource) || sources[0] || null;
@@ -220,6 +231,41 @@ export default function RaceCoach() {
   const routeTicks = routeDistanceTicks(setup.routeProfile);
   const activeSegmentIndex = hoveredSegmentIndex ?? selectedSegmentIndex;
   const pitCrewEligible = pitCrewRaceEligible(plan?.profile || {});
+  const pitCrewRace = pitCrewEligible ? {
+    key: sourceKey,
+    name: source?.label || "Backyard",
+    date: source?.date || "",
+    time: source?.time || "",
+    loopIntervalMinutes: plan?.profile?.loopIntervalMinutes || 60,
+  } : null;
+  const pitCrewShareToken = sourceKey
+    ? (pitCrewShareTokens[sourceKey] || storedPitCrewShareToken(sourceKey))
+    : "";
+
+  async function sharePitCrew() {
+    if (!pitCrewRace || !sourceKey || pitCrewShareBusy) return;
+    setPitCrewShareBusy(true);
+    setPitCrewShareMessage("");
+    try {
+      const created = await createPitCrewShare({
+        raceKey: sourceKey,
+        race: pitCrewRace,
+        state: readPitCrewLocalSnapshot(pitCrewRace),
+      });
+      rememberPitCrewShareToken(sourceKey, created.token);
+      setPitCrewShareTokens((current) => ({ ...current, [sourceKey]: created.token }));
+      const result = await sharePitCrewUrl(created.url, pitCrewRace.name);
+      setPitCrewShareMessage(result === "copied"
+        ? "Crew-Link kopiert ✓"
+        : result === "shared"
+          ? "Crew-Link geteilt ✓"
+          : "Crew-Link erstellt. Du kannst ihn jederzeit erneut teilen.");
+    } catch (error) {
+      setPitCrewShareMessage(error?.message || "Crew-Link konnte nicht erstellt werden.");
+    } finally {
+      setPitCrewShareBusy(false);
+    }
+  }
 
   useEffect(() => {
     const url = source?.profile?.routeGpxUrl;
@@ -466,6 +512,25 @@ export default function RaceCoach() {
         </label>
       </div>
 
+      {pitCrewEligible && (
+        <section className="pit-crew-launch">
+          <div className="pit-crew-launch-main">
+            <small>PIT CREW · LIVE</small>
+            <h3>Pit Crew Coach</h3>
+            <p>Eigener Rennbereich für die Box: Live-Versorgung, Athletenstatus, Wetter und bestätigte Aufnahme. Nicht mehr irgendwo in der Rennstrategie versteckt.</p>
+          </div>
+          <div className="pit-crew-launch-actions">
+            <button type="button" onClick={() => setPitCrewOpen(true)}>Pit Crew Live öffnen</button>
+            <button type="button" className="secondary" disabled={pitCrewShareBusy} onClick={sharePitCrew}>{pitCrewShareBusy ? "Crew-Link wird erstellt …" : "Crew-Link teilen"}</button>
+          </div>
+          {pitCrewShareMessage && <p className="pit-crew-share-message">{pitCrewShareMessage}</p>}
+        </section>
+      )}
+
+      {pitCrewOpen && (pitCrewShareToken
+        ? <PitCrewSharedSession token={pitCrewShareToken} race={pitCrewRace} onClose={() => setPitCrewOpen(false)} />
+        : <PitCrewLive race={pitCrewRace} onClose={() => setPitCrewOpen(false)} />)}
+
       <section className="race-coach-setup">
         <div className="race-coach-section-heading">
           <div><span>Race Setup</span><h3>Zielzeit + echte Strecke statt Durchschnittspace</h3></div>
@@ -544,30 +609,6 @@ export default function RaceCoach() {
         <article><span>{plan.profile.format === "loop" ? "Starttakt" : "Ø Ziel-Schnitt"}</span><strong>{plan.profile.format === "loop" ? plan.summary.loopInterval : plan.routePlan ? paceLabel(plan.routePlan.averagePaceSecondsPerKm) : plan.summary.pace}</strong><small>{plan.trackPlan ? "Rennziel zählt · nicht die GPS-Abweichung" : plan.routePlan ? "Splits werden ans Profil angepasst" : "Race-Plan"}</small></article>
         <article className="race-coach-strategy-status"><span>Strategie</span><strong>{plan.trackPlan ? `${plan.trackPlan.lapsLabel} Runden` : plan.routePlan ? `${plan.routePlan.segments.length} Splits` : "Basisplan"}</strong><small>{plan.trackPlan ? `${plan.trackPlan.lapDistanceM} m Bahn · Track Race` : plan.routePlan ? "Kilometerweise vorbereitet" : "GPX ergänzt die exakten Splits"}</small></article>
       </div>
-
-      {pitCrewEligible && (
-        <section className="pit-crew-launch">
-          <div>
-            <small>BACKYARD · LIVE MODE</small>
-            <h3>Pit Crew Coach</h3>
-            <p>Große Kacheln fürs Handy: Getränk zuerst, tatsächliche Aufnahme statt starrem Plan, Athletenstatus + Wetter nur bei Bedarf. Quick-Pit schaltet automatisch nach Restzeit.</p>
-          </div>
-          <button type="button" onClick={() => setPitCrewOpen(true)}>Pit Crew Live öffnen</button>
-        </section>
-      )}
-
-      {pitCrewOpen && (
-        <PitCrewLive
-          race={{
-            key: sourceKey,
-            name: source.label,
-            date: source.date,
-            time: source.time,
-            loopIntervalMinutes: plan.profile.loopIntervalMinutes || 60,
-          }}
-          onClose={() => setPitCrewOpen(false)}
-        />
-      )}
 
       {plan.trackPlan && (
         <section className="race-coach-track-plan">

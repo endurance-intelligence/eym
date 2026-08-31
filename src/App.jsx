@@ -3,6 +3,7 @@ import { HashRouter, Navigate, Routes, Route } from "react-router-dom";
 import Layout from "./components/Layout";
 import Briefing from "./pages/Briefing";
 import Auth from "./pages/Auth";
+import PitCrewSharedSession from "./components/PitCrewSharedSession";
 import Onboarding from "./pages/Onboarding";
 import { useApp } from "./context/AppContext";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -26,6 +27,8 @@ function deferredPage(Component) {
 
 export default function App() {
   const { state, session, authLoading, cloudStatus } = useApp();
+  const sharedPitCrewToken = new URLSearchParams(window.location.search).get("crew");
+  if (sharedPitCrewToken) return <PitCrewSharedSession token={sharedPitCrewToken} />;
   if (authLoading) return <main className="auth-shell"><section className="auth-card"><p className="eyebrow">Endurance Intelligence</p><h1>Cloud wird verbunden …</h1></section></main>;
   if (!session) return <Auth />;
   if (cloudStatus === "local" || cloudStatus === "loading") return <main className="auth-shell"><section className="auth-card"><p className="eyebrow">Endurance Intelligence</p><h1>Dein Profil wird geladen …</h1><p className="muted">Dein vorhandener Stand wird zuerst geprüft, damit nichts überschrieben wird.</p></section></main>;
