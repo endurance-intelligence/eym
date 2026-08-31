@@ -126,9 +126,58 @@ function sourcePriority(activity) {
   return 2;
 }
 
+function activitySource(activity) {
+  return String(activity?.source || "").trim().toLowerCase();
+}
+
+function intervalsIdentity(activity) {
+  if (activity?.intervalsId) return String(activity.intervalsId);
+  const id = String(activity?.id || "");
+  return id.startsWith("intervals-") ? id.slice("intervals-".length) : "";
+}
+
+function providerIdentity(activity) {
+  const source = activitySource(activity);
+  if (source === "intervals") return intervalsIdentity(activity);
+  if (source === "garmin") {
+    if (activity?.garminId) return String(activity.garminId);
+    if (activity?.externalId) return String(activity.externalId);
+    const id = String(activity?.id || "");
+    return id.startsWith("garmin-") ? id.slice("garmin-".length) : "";
+  }
+  if (source === "strava") {
+    if (activity?.stravaId) return String(activity.stravaId);
+    if (activity?.externalId) return String(activity.externalId);
+    const id = String(activity?.id || "");
+    return id.startsWith("strava-") ? id.slice("strava-".length) : "";
+  }
+  return "";
+}
+
 export function activitiesLikelySame(left, right) {
   if (!left || !right || left === right) return false;
-  if (left.intervalsId && right.intervalsId && String(left.intervalsId) === String(right.intervalsId)) return true;
+
+  // Intervals.icu IDs are authoritative. Two different Intervals activities must
+  // never be collapsed merely because they happened on the same day with a
+  // similar distance/duration (e.g. track warm-up and cool-down).
+  const leftIntervalsId = intervalsIdentity(left);
+  const rightIntervalsId = intervalsIdentity(right);
+  if (leftIntervalsId && rightIntervalsId) return leftIntervalsId === rightIntervalsId;
+
+  const leftSource = activitySource(left);
+  const rightSource = activitySource(right);
+  const sameSource = Boolean(leftSource && leftSource === rightSource);
+  if (sameSource) {
+    const leftProviderId = providerIdentity(left);
+    const rightProviderId = providerIdentity(right);
+    if (leftProviderId && rightProviderId) return leftProviderId === rightProviderId;
+
+    // Heuristic matching is intended to reconcile the same workout imported
+    // from different providers. For records from the same provider, keeping a
+    // genuine second session is safer than silently deleting it.
+    return false;
+  }
+
   if (left.externalId && right.externalId && String(left.externalId) === String(right.externalId)) return true;
   if (left.garminId && right.garminId && String(left.garminId) === String(right.garminId)) return true;
   if (sportFamily(left) !== sportFamily(right)) return false;
@@ -146,7 +195,11 @@ export function activitiesLikelySame(left, right) {
 
   const leftTime = activityTimestamp(left).getTime();
   const rightTime = activityTimestamp(right).getTime();
-  const timeClose = leftTime > 0 && rightTime > 0 ? Math.abs(leftTime - rightTime) <= 4 * 60 * 60 * 1000 : true;
+  const leftHasClock = Boolean(String(left?.startDateLocal || left?.date || "").includes("T"));
+  const rightHasClock = Boolean(String(right?.startDateLocal || right?.date || "").includes("T"));
+  const timeClose = leftHasClock && rightHasClock && leftTime > 0 && rightTime > 0
+    ? Math.abs(leftTime - rightTime) <= 15 * 60 * 1000
+    : true;
   return distanceClose && durationClose && timeClose;
 }
 
