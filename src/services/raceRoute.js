@@ -33,7 +33,12 @@ function tagValue(body, tagName) {
 }
 
 function pointMatches(xmlText, tagName) {
-  const regex = new RegExp(`<(?:\\w+:)?${tagName}\\b([^>]*)>([\\s\\S]*?)<\\/(?:\\w+:)?${tagName}>`, "gi");
+  // GPX 1.1 permits points without child elements to be self-closing. Accept
+  // both <trkpt ... /> and paired <trkpt ...>...</trkpt> representations.
+  const regex = new RegExp(
+    `<(?:\\w+:)?${tagName}\\b([^>]*?)(?:\\/\\s*>|>([\\s\\S]*?)<\\/(?:\\w+:)?${tagName}\\s*>)`,
+    "gi",
+  );
   return [...String(xmlText || "").matchAll(regex)].map((match) => {
     const attrs = match[1] || "";
     const latMatch = attrs.match(/\blat=["']([^"']+)["']/i);
@@ -42,7 +47,7 @@ function pointMatches(xmlText, tagName) {
     const lat = Number(latMatch[1]);
     const lon = Number(lonMatch[1]);
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
-    const eleText = tagValue(match[2], "ele");
+    const eleText = tagValue(match[2] || "", "ele");
     const ele = eleText === "" ? null : numeric(eleText);
     return { lat, lon, ele };
   }).filter(Boolean);
@@ -101,6 +106,94 @@ function downsample(points, maxPoints = 600) {
     const point = points[Math.min(points.length - 1, Math.round(index * step))];
     return compactRoutePoint(point);
   });
+}
+
+function median(values) {
+  const sorted = values.filter(Number.isFinite).sort((left, right) => left - right);
+  if (!sorted.length) return 0;
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+function routeFootprintMeters(points) {
+  if (!points.length) return { widthM: 0, heightM: 0, diagonalM: 0 };
+  const latitudes = points.map((point) => Number(point.lat)).filter(Number.isFinite);
+  const longitudes = points.map((point) => Number(point.lon)).filter(Number.isFinite);
+  if (!latitudes.length || !longitudes.length) return { widthM: 0, heightM: 0, diagonalM: 0 };
+  const centerLat = (Math.min(...latitudes) + Math.max(...latitudes)) / 2;
+  const heightM = haversineMeters(
+    { lat: Math.min(...latitudes), lon: longitudes[0] },
+    { lat: Math.max(...latitudes), lon: longitudes[0] },
+  );
+  const widthM = haversineMeters(
+    { lat: centerLat, lon: Math.min(...longitudes) },
+    { lat: centerLat, lon: Math.max(...longitudes) },
+  );
+  return {
+    widthM: round(widthM, 1),
+    heightM: round(heightM, 1),
+    diagonalM: round(Math.hypot(widthM, heightM), 1),
+  };
+}
+
+function repeatedReturnCandidate(points, anchorIndex) {
+  const anchor = points[anchorIndex];
+  if (!anchor) return null;
+  const visits = [];
+  points.forEach((point) => {
+    if (haversineMeters(anchor, point) > 18) return;
+    const distanceM = numeric(point.distanceKm) * 1000;
+    if (!visits.length || distanceM - visits.at(-1) >= 120) visits.push(distanceM);
+  });
+  const gaps = visits.slice(1).map((distanceM, index) => distanceM - visits[index])
+    .filter((gap) => gap >= 250 && gap <= 600);
+  if (gaps.length < 2) return null;
+  const lapDistanceM = median(gaps);
+  const deviationM = median(gaps.map((gap) => Math.abs(gap - lapDistanceM)));
+  return { lapDistanceM, deviationM, returnCount: gaps.length };
+}
+
+export function analyzeTrackRoute(route, { name = "", expectedDistanceKm = 0 } = {}) {
+  const points = (Array.isArray(route?.profilePoints) ? route.profilePoints : [])
+    .map((point) => ({
+      distanceKm: numeric(point.distanceKm),
+      lat: Number(point.lat),
+      lon: Number(point.lon),
+    }))
+    .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lon))
+    .sort((left, right) => left.distanceKm - right.distanceKm);
+  if (points.length < 8) return { isTrack: false, lapDistanceM: 0, confidence: "none" };
+
+  const anchors = [...new Set([0, .17, .33, .5, .67, .83]
+    .map((fraction) => Math.min(points.length - 1, Math.round((points.length - 1) * fraction))))];
+  const candidates = anchors.map((index) => repeatedReturnCandidate(points, index)).filter(Boolean)
+    .sort((left, right) => right.returnCount - left.returnCount || left.deviationM - right.deviationM);
+  const best = candidates[0] || null;
+  const footprint = routeFootprintMeters(points);
+  const text = `${name || ""} ${route?.name || ""}`.toLowerCase();
+  const nameHint = /(?:\bbahn(?:meeting|lauf|rennen)?\b|\btrack\b|stadion|400\s*m|5000\s*m|5000m)/i.test(text);
+  const expectedMeters = numeric(expectedDistanceKm) * 1000;
+  const compactEnough = footprint.diagonalM > 0 && footprint.diagonalM <= 300;
+  const repeated400 = Boolean(best && best.lapDistanceM >= 340 && best.lapDistanceM <= 460 && best.deviationM <= 35);
+  const enoughReturns = Boolean(best && best.returnCount >= (nameHint ? 2 : 4));
+  const repeatedDistance = numeric(route?.distanceKm) * 1000 >= 1200 || expectedMeters >= 1200;
+  const isTrack = compactEnough && repeatedDistance && repeated400 && enoughReturns;
+  const measuredLap = isTrack ? best.lapDistanceM : 0;
+  const lapDistanceM = isTrack && measuredLap >= 380 && measuredLap <= 420
+    ? 400
+    : isTrack
+      ? Math.round(measuredLap / 10) * 10
+      : 0;
+
+  return {
+    isTrack,
+    lapDistanceM,
+    measuredLapDistanceM: isTrack ? round(measuredLap, 1) : 0,
+    returnCount: best?.returnCount || 0,
+    footprint,
+    confidence: isTrack ? (nameHint ? "high" : "geometry") : "none",
+    nameHint,
+  };
 }
 
 function interpolateElevation(points, distanceM) {
@@ -268,14 +361,81 @@ function normalizedPaceOverrides(paceOverrides, segmentCount) {
   );
 }
 
-export function buildRoutePacingPlan({ route, targetDurationMinutes, fuelStrategy = null, paceOverrides = null } = {}) {
+function closeEnoughForDistanceNormalization(routeDistanceKm, raceDistanceKm) {
+  if (!(routeDistanceKm > 0) || !(raceDistanceKm > 0)) return false;
+  return Math.abs(routeDistanceKm - raceDistanceKm) <= Math.max(0.35, raceDistanceKm * 0.035);
+}
+
+function canonicalRaceKilometres(route, raceDistanceKm) {
+  const routeDistanceKm = numeric(route?.distanceKm);
+  if (!(routeDistanceKm > 0) || !(raceDistanceKm > 0)) return route.segments || [];
+  const routePerRaceKm = routeDistanceKm / raceDistanceKm;
+  const segments = [];
+  for (let startKm = 0, index = 0; startKm < raceDistanceKm - 0.0001; startKm += 1, index += 1) {
+    const endKm = Math.min(raceDistanceKm, startKm + 1);
+    const distanceKm = endKm - startKm;
+    segments.push({
+      index: index + 1,
+      startKm: round(startKm, 3),
+      endKm: round(endKm, 3),
+      distanceKm: round(distanceKm, 3),
+      routeStartKm: round(startKm * routePerRaceKm, 4),
+      routeEndKm: round(endKm * routePerRaceKm, 4),
+      gainM: 0,
+      lossM: 0,
+      startElevationM: null,
+      endElevationM: null,
+      netGradePercent: 0,
+    });
+  }
+  return segments;
+}
+
+function normalizedRouteSegments(route, raceDistanceKm, canonicalKilometres) {
+  const routeDistanceKm = numeric(route?.distanceKm);
+  const normalizeDistance = closeEnoughForDistanceNormalization(routeDistanceKm, raceDistanceKm);
+  if (!normalizeDistance) {
+    return { segments: route.segments || [], normalized: false, effectiveDistanceKm: routeDistanceKm };
+  }
+  if (canonicalKilometres) {
+    return {
+      segments: canonicalRaceKilometres(route, raceDistanceKm),
+      normalized: true,
+      effectiveDistanceKm: raceDistanceKm,
+    };
+  }
+  const scale = raceDistanceKm / routeDistanceKm;
+  return {
+    normalized: true,
+    effectiveDistanceKm: raceDistanceKm,
+    segments: (route.segments || []).map((segment) => ({
+      ...segment,
+      routeStartKm: numeric(segment.startKm),
+      routeEndKm: numeric(segment.endKm),
+      startKm: round(numeric(segment.startKm) * scale, 4),
+      endKm: round(numeric(segment.endKm) * scale, 4),
+      distanceKm: round(numeric(segment.distanceKm) * scale, 4),
+    })),
+  };
+}
+
+export function buildRoutePacingPlan({
+  route,
+  targetDurationMinutes,
+  raceDistanceKm = 0,
+  canonicalKilometres = false,
+  fuelStrategy = null,
+  paceOverrides = null,
+} = {}) {
   if (!route?.segments?.length) return null;
   const durationMinutes = numeric(targetDurationMinutes);
   if (!(durationMinutes > 0)) return null;
 
   const targetSeconds = durationMinutes * 60;
-  const overrides = normalizedPaceOverrides(paceOverrides, route.segments.length);
-  const prepared = route.segments.map((segment, index) => ({
+  const normalizedRoute = normalizedRouteSegments(route, numeric(raceDistanceKm), canonicalKilometres);
+  const sourceSegments = normalizedRoute.segments;
+  const overrides = normalizedPaceOverrides(paceOverrides, sourceSegments.length);
+  const prepared = sourceSegments.map((segment, index) => ({
     segment,
     distanceKm: Math.max(0, numeric(segment.distanceKm)),
     factor: terrainFactor(segment),
@@ -335,7 +495,12 @@ export function buildRoutePacingPlan({ route, targetDurationMinutes, fuelStrateg
   return {
     route,
     targetDurationMinutes: durationMinutes,
-    averagePaceSecondsPerKm: route.distanceKm > 0 ? targetSeconds / route.distanceKm : 0,
+    raceDistanceKm: normalizedRoute.effectiveDistanceKm,
+    gpxDistanceKm: numeric(route.distanceKm),
+    distanceNormalized: normalizedRoute.normalized,
+    averagePaceSecondsPerKm: normalizedRoute.effectiveDistanceKm > 0
+      ? targetSeconds / normalizedRoute.effectiveDistanceKm
+      : 0,
     manualPaceCount: overridesUsable ? Object.keys(overrides).length : 0,
     paceOverridesApplied: overridesUsable,
     paceOverrideWarning: Object.keys(overrides).length > 0 && !overridesUsable

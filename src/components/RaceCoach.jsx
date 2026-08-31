@@ -42,7 +42,7 @@ function sourceOptions(state) {
       detail: origin?.date || "Race Prep",
       date: origin?.date || profile.date || "",
       time: origin?.time || profile.time || "",
-      profile,
+      profile: sourceProfileWithEventContext(profile, origin),
     };
   });
   const events = missionRaceEvents.map((event) => ({
@@ -51,13 +51,38 @@ function sourceOptions(state) {
     detail: event.date || "Termin offen",
     date: event.date || "",
     time: event.time || "",
-    profile: racePrepProfileFromEvent(event),
+    profile: sourceProfileWithEventContext(racePrepProfileFromEvent(event), event),
   }));
   return [...saved, ...events.filter((event) => !saved.some((item) => item.profile.originEventId && item.profile.originEventId === event.profile.originEventId))];
 }
 
 function numberLabel(value, digits = 0) {
   return Number(value || 0).toLocaleString("de-DE", { maximumFractionDigits: digits });
+}
+
+function exactNumberLabel(value, digits = 2) {
+  return Number(value || 0).toLocaleString("de-DE", {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  });
+}
+
+function sourceProfileWithEventContext(profile = {}, event = null) {
+  if (!event) return profile;
+  const eventDistanceKm = Number(event.targetKm || event.targetMaxKm || event.targetMinKm || 0);
+  return {
+    ...profile,
+    eventDistanceKm: eventDistanceKm > 0 ? eventDistanceKm : Number(profile.eventDistanceKm || 0),
+    courseType: event.courseType || profile.courseType || "",
+    loopMode: event.loopMode || profile.loopMode || "",
+    eventTimeLimit: event.eventTimeLimit || profile.eventTimeLimit || "",
+  };
+}
+
+function splitClock(seconds) {
+  const total = Math.max(0, Math.round(Number(seconds || 0)));
+  const minutes = Math.floor(total / 60);
+  return `${minutes}:${String(total % 60).padStart(2, "0")}`;
 }
 
 function paceLabel(secondsPerKm) {
@@ -471,7 +496,8 @@ export default function RaceCoach() {
             <div className="race-coach-route-head">
               <div><span>RENNSTRECKE</span><strong>{setup.routeProfile.name || source.label}</strong><small>{numberLabel(setup.routeProfile.pointCount)} GPX-Punkte</small></div>
               <div className="race-coach-route-metrics">
-                <span><b>{numberLabel(setup.routeProfile.distanceKm, 2)} km</b> Strecke</span>
+                <span><b>{numberLabel(setup.routeProfile.distanceKm, 2)} km</b> GPX</span>
+                {plan.routePlan?.distanceNormalized && <span><b>{numberLabel(plan.profile.distanceKm, 2)} km</b> Rennziel</span>}
                 <span><b>+{numberLabel(setup.routeProfile.ascentM)} m</b> bergauf</span>
                 <span><b>−{numberLabel(setup.routeProfile.descentM)} m</b> bergab</span>
               </div>
@@ -509,16 +535,32 @@ export default function RaceCoach() {
       </section>
 
       <div className="race-coach-summary">
-        <article><span>Rennen</span><strong>{setup.routeProfile ? `${numberLabel(setup.routeProfile.distanceKm, 2)} km` : plan.summary.distance}</strong><small>{source.label}</small></article>
+        <article><span>Rennen</span><strong>{plan.trackPlan ? `${exactNumberLabel(plan.profile.distanceKm)} km` : plan.summary.distance}</strong><small>{source.label}</small></article>
         <article><span>Zielzeit</span><strong>{plan.summary.duration}</strong><small>{setup.targetDurationMinutes > 0 ? "von dir festgelegt" : plan.profile.durationEstimated ? "aus Race Prep geschätzt" : "aus Race Prep"}</small></article>
-        <article><span>{plan.profile.format === "loop" ? "Starttakt" : setup.routeProfile ? "Ø Ziel-Schnitt" : "Gesamt-Schnitt"}</span><strong>{plan.profile.format === "loop" ? plan.summary.loopInterval : plan.routePlan ? paceLabel(plan.routePlan.averagePaceSecondsPerKm) : plan.summary.pace}</strong><small>{plan.routePlan ? "Splits werden ans Profil angepasst" : "Race-Plan"}</small></article>
-        <article className="race-coach-strategy-status"><span>Strategie</span><strong>{plan.routePlan ? `${plan.routePlan.segments.length} Splits` : "Basisplan"}</strong><small>{plan.routePlan ? "Kilometerweise vorbereitet" : "GPX ergänzt die exakten Splits"}</small></article>
+        <article><span>{plan.profile.format === "loop" ? "Starttakt" : "Ø Ziel-Schnitt"}</span><strong>{plan.profile.format === "loop" ? plan.summary.loopInterval : plan.routePlan ? paceLabel(plan.routePlan.averagePaceSecondsPerKm) : plan.summary.pace}</strong><small>{plan.trackPlan ? "Rennziel zählt · nicht die GPS-Abweichung" : plan.routePlan ? "Splits werden ans Profil angepasst" : "Race-Plan"}</small></article>
+        <article className="race-coach-strategy-status"><span>Strategie</span><strong>{plan.trackPlan ? `${plan.trackPlan.lapsLabel} Runden` : plan.routePlan ? `${plan.routePlan.segments.length} Splits` : "Basisplan"}</strong><small>{plan.trackPlan ? `${plan.trackPlan.lapDistanceM} m Bahn · Track Race` : plan.routePlan ? "Kilometerweise vorbereitet" : "GPX ergänzt die exakten Splits"}</small></article>
       </div>
+
+      {plan.trackPlan && (
+        <section className="race-coach-track-plan">
+          <div className="race-coach-section-heading">
+            <div><span>Track Race Plan</span><h3>{exactNumberLabel(plan.profile.distanceKm)} km · {plan.trackPlan.lapsLabel} Runden</h3></div>
+            <small>Rundensplit statt GPS-Momentanpace</small>
+          </div>
+          <div className="race-coach-track-metrics">
+            <article><span>Runden</span><strong>{plan.trackPlan.lapsLabel}</strong><small>{plan.trackPlan.lapDistanceM} m Bahn</small></article>
+            <article><span>200 m</span><strong>{splitClock(plan.trackPlan.split200Seconds)}</strong><small>Orientierung Halb-Runde</small></article>
+            <article><span>{plan.trackPlan.lapDistanceM} m</span><strong>{splitClock(plan.trackPlan.lapSplitSeconds)}</strong><small>Ziel je voller Runde</small></article>
+            <article><span>1.000 m</span><strong>{splitClock(plan.trackPlan.split1000Seconds)}</strong><small>Ziel-Schnitt</small></article>
+          </div>
+          <p className="race-coach-track-note">Die Eventdistanz von <b>{exactNumberLabel(plan.profile.distanceKm)} km</b> ist für Zielzeit und Splits maßgeblich. Die GPX mit {exactNumberLabel(plan.trackPlan.gpxDistanceKm)} km liefert nur die Geometrie der Bahn und wird innerhalb der GPS-Toleranz auf die Renndistanz normalisiert.</p>
+        </section>
+      )}
 
       {plan.routePlan && (
         <section className="race-coach-route-plan">
           <div className="race-coach-section-heading race-coach-route-plan-heading">
-            <div><span>Route Intelligence</span><h3>Deine Kilometerstrategie</h3></div>
+            <div><span>{plan.trackPlan ? "Track Splits" : "Route Intelligence"}</span><h3>{plan.trackPlan ? "Kilometersplits für die Bahn" : "Deine Kilometerstrategie"}</h3></div>
             <div className="race-coach-route-plan-meta">
               <small>Gesamt {clockLabel(plan.routePlan.targetDurationMinutes)} · Ø {paceLabel(plan.routePlan.averagePaceSecondsPerKm)} · Zielzeit bleibt fix</small>
               {plan.routePlan.manualPaceCount > 0 && <button type="button" className="race-coach-text-button" onClick={resetAllSegmentPaces}>Alle Pace-Anpassungen zurücksetzen</button>}
@@ -584,7 +626,9 @@ export default function RaceCoach() {
             })}
           </div>
           {(plan.routePlan.segments?.length || 0) > 24 && <button type="button" className="race-coach-route-toggle" onClick={() => setShowAllRoute((current) => !current)}>{showAllRoute ? "Kompakt anzeigen" : `Alle ${plan.routePlan.segments.length} Kilometerabschnitte anzeigen`}</button>}
-          <p className="race-coach-route-note">Die Zielzeit bleibt exakt erhalten. Mit −5 s / +5 s kannst du einzelne Kilometer bewusst schneller oder langsamer festnageln; die übrigen nicht fixierten Splits werden automatisch neu ausbalanciert. „Auto“ gibt einen Kilometer wieder an die Streckenlogik zurück. Ein Klick auf einen Kilometer hebt denselben Abschnitt auf der Karte hervor.</p>
+          <p className="race-coach-route-note">{plan.trackPlan
+            ? "Auf der Bahn sind die Kilometerabschnitte Kontrollpunkte; gesteuert wird primär über den 400-m-Rundensplit. Die Zielzeit bleibt exakt auf der Eventdistanz. Ein Klick auf einen Kilometer hebt denselben Abschnitt auf der Karte hervor."
+            : "Die Zielzeit bleibt exakt erhalten. Mit −5 s / +5 s kannst du einzelne Kilometer bewusst schneller oder langsamer festnageln; die übrigen nicht fixierten Splits werden automatisch neu ausbalanciert. „Auto“ gibt einen Kilometer wieder an die Streckenlogik zurück. Ein Klick auf einen Kilometer hebt denselben Abschnitt auf der Karte hervor."}</p>
         </section>
       )}
 
@@ -683,8 +727,8 @@ export default function RaceCoach() {
         </section>
       )}
 
-      <section className="race-coach-blueprint">
-        <div className="race-coach-section-heading"><div><span>Race Blueprint</span><h3>Die vier Rennphasen hinter den Kilometerzahlen</h3></div><small>Plan statt spontane Pace-Jagd</small></div>
+      <section className={`race-coach-blueprint ${plan.trackPlan ? "track" : ""}`}>
+        <div className="race-coach-section-heading"><div><span>{plan.trackPlan ? "Track Race Blueprint" : "Race Blueprint"}</span><h3>{plan.trackPlan ? "Rundenplan statt Prozent-Schablone" : "Die vier Rennphasen hinter den Kilometerzahlen"}</h3></div><small>{plan.trackPlan ? `${plan.trackPlan.lapDistanceM}-m-Splits führen das Rennen` : "Plan statt spontane Pace-Jagd"}</small></div>
         <div className="race-coach-phase-grid">
           {plan.phases.map((phase) => (
             <article key={phase.key}>

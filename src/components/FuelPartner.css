@@ -3297,3 +3297,17 @@
     align-items: flex-start;
   }
 }
+
+/* v3.9.112 – track-aware race strategy */
+.race-coach-track-plan{display:grid;gap:12px;padding:15px;border:1px solid color-mix(in srgb,var(--accent) 52%,var(--border));border-radius:14px;background:linear-gradient(145deg,color-mix(in srgb,var(--accent-surface) 36%,var(--bg-sidebar)),var(--bg-sidebar))}
+.race-coach-track-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.race-coach-track-metrics article{display:grid;gap:4px;padding:11px;border:1px solid var(--border);border-radius:11px;background:var(--bg-input)}
+.race-coach-track-metrics span,.race-coach-track-metrics small{color:var(--muted);font-size:9px}
+.race-coach-track-metrics strong{font-size:17px}
+.race-coach-track-note{margin:0;color:var(--muted-bright);font-size:10px;line-height:1.5}
+.race-coach-track-note b{color:var(--text)}
+.race-coach-blueprint.track{border-color:color-mix(in srgb,var(--accent) 38%,var(--border));background:linear-gradient(145deg,color-mix(in srgb,var(--accent-surface) 22%,var(--bg-sidebar)),var(--bg-sidebar))}
+.race-coach-blueprint.track .race-coach-phase-grid article{position:relative;overflow:hidden}
+.race-coach-blueprint.track .race-coach-phase-grid article::before{content:"";position:absolute;inset:0 auto 0 0;width:2px;background:var(--accent-bright);opacity:.72}
+@media(max-width:1050px){.race-coach-track-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:700px){.race-coach-track-metrics{grid-template-columns:1fr}}

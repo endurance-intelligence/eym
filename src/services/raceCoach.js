@@ -1,5 +1,5 @@
 import { normalizeRacePrepProfile } from "./racePrepPlanner.js";
-import { buildRoutePacingPlan } from "./raceRoute.js";
+import { analyzeTrackRoute, buildRoutePacingPlan } from "./raceRoute.js";
 
 const DISTANCE_CHECKPOINTS = [0.1, 0.25, 0.5, 0.75, 0.9, 1];
 const TIME_CHECKPOINTS = [0.1, 0.25, 0.5, 0.75, 0.9, 1];
@@ -64,6 +64,89 @@ function signedDuration(minutes) {
     ? `${hours}:${String(mins).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`
     : `${mins}:${String(seconds).padStart(2, "0")}`;
   return `${Number(minutes || 0) < 0 ? "−" : "+"}${value}`;
+}
+
+function raceDistanceFromName(name = "") {
+  const text = String(name || "").toLowerCase().replace(",", ".");
+  const metreMatch = text.match(/\b(1500|3000|5000|10000)\s*m\b/);
+  if (metreMatch) return Number(metreMatch[1]) / 1000;
+  const kmMatch = text.match(/\b(1(?:0)?|2|3|5)\s*km\b/);
+  return kmMatch ? Number(kmMatch[1]) : 0;
+}
+
+function authoritativeRaceDistance(profile, routeProfile) {
+  const explicit = numeric(profile.eventDistanceKm || profile.raceDistanceKm);
+  if (explicit > 0) return explicit;
+  if (profile.format === "distance" && numeric(profile.distanceKm) > 0) return numeric(profile.distanceKm);
+  const named = raceDistanceFromName(profile.name);
+  if (named > 0) return named;
+  return numeric(routeProfile?.distanceKm);
+}
+
+function lapCountLabel(value) {
+  const rounded = Math.round(Number(value || 0) * 2) / 2;
+  return rounded.toLocaleString("de-DE", { maximumFractionDigits: 1 });
+}
+
+function splitLabel(seconds) {
+  const total = Math.max(0, Math.round(Number(seconds || 0)));
+  const minutes = Math.floor(total / 60);
+  return `${minutes}:${String(total % 60).padStart(2, "0")}`;
+}
+
+function trackRaceBlueprint(trackPlan) {
+  const laps = Number(trackPlan.laps || 0);
+  const fullLaps = Math.max(1, Math.floor(laps));
+  const rhythmEnd = Math.max(2, Math.min(fullLaps - 2, Math.floor(laps * 0.58)));
+  const lateEnd = Math.max(rhythmEnd + 1, Math.min(fullLaps, Math.floor(laps * 0.8)));
+  const remainingLaps = Math.max(0.5, Math.round((laps - lateEnd) * 2) / 2);
+  const tolerance = Math.max(1, Math.min(3, Math.round(trackPlan.lapSplitSeconds * 0.02)));
+  return [
+    {
+      key: "opening",
+      range: "Start → Runde 1",
+      title: "Kontrolliert einsortieren",
+      detail: `Erste Runde nicht überziehen. 200 m etwa ${splitLabel(trackPlan.split200Seconds)}, 400 m etwa ${splitLabel(trackPlan.lapSplitSeconds)}. Keine Sekunden auf den ersten Metern bunkern.`,
+    },
+    {
+      key: "work",
+      range: rhythmEnd > 2 ? `Runde 2–${rhythmEnd}` : "Runde 2",
+      title: "Rhythmus festnageln",
+      detail: `Runden möglichst eng um ${splitLabel(trackPlan.lapSplitSeconds)} halten (ca. ±${tolerance} s). Positionen nutzen, aber nicht wegen einzelner Überholmanöver den Rhythmus verlassen.`,
+    },
+    {
+      key: "late",
+      range: lateEnd > rhythmEnd + 1 ? `Runde ${rhythmEnd + 1}–${lateEnd}` : `Runde ${lateEnd}`,
+      title: "Arbeit annehmen",
+      detail: "Jetzt wird es unangenehm: Frequenz, Haltung und Kurvenrhythmus halten. Nicht auf die Momentanpace reagieren – der Rundensplit entscheidet.",
+    },
+    {
+      key: "finish",
+      range: `Letzte ${lapCountLabel(remainingLaps)} Runden`,
+      title: "Rennen freigeben",
+      detail: `Ab ${Math.min(800, trackPlan.lapDistanceM * 2)} m vor Ziel aktiv entscheiden. Letzte Runde voll committen, wenn Beine und Atmung noch sauber kontrollierbar sind.`,
+    },
+  ];
+}
+
+function buildTrackRacePlan(profile, routeProfile, targetPaceSeconds, trackAnalysis) {
+  if (!trackAnalysis?.isTrack || !(targetPaceSeconds > 0) || !(profile.distanceKm > 0)) return null;
+  const lapDistanceM = trackAnalysis.lapDistanceM || 400;
+  const laps = profile.distanceKm * 1000 / lapDistanceM;
+  const split200Seconds = targetPaceSeconds * 0.2;
+  const lapSplitSeconds = targetPaceSeconds * lapDistanceM / 1000;
+  const plan = {
+    lapDistanceM,
+    laps,
+    lapsLabel: lapCountLabel(laps),
+    split200Seconds,
+    lapSplitSeconds,
+    split1000Seconds: targetPaceSeconds,
+    gpxDistanceKm: numeric(routeProfile?.distanceKm),
+    raceDistanceKm: profile.distanceKm,
+    analysis: trackAnalysis,
+  };
+  return { ...plan, phases: trackRaceBlueprint(plan) };
 }
 
 function phaseForProgress(progress) {
@@ -196,7 +279,14 @@ export function normalizeRaceCoachStatus(input = {}, profile = {}) {
 }
 
 export function buildRaceCoachPlan(inputProfile = {}, { routeProfile = null, fuelStrategy = null, paceOverrides = null } = {}) {
-  const profile = normalizeRacePrepProfile(inputProfile);
+  const normalizedProfile = normalizeRacePrepProfile(inputProfile);
+  const raceDistanceKm = authoritativeRaceDistance(normalizedProfile, routeProfile);
+  const trackAnalysis = analyzeTrackRoute(routeProfile, { name: normalizedProfile.name, expectedDistanceKm: raceDistanceKm });
+  const freeLoopDistanceRace = normalizedProfile.loopMode === "free" && raceDistanceKm > 0;
+  const trackDistanceRace = trackAnalysis.isTrack && raceDistanceKm > 0;
+  const profile = freeLoopDistanceRace || trackDistanceRace
+    ? { ...normalizedProfile, format: "distance", distanceKm: raceDistanceKm }
+    : normalizedProfile;
   if (!(profile.durationMinutes > 0)) {
     return { valid: false, profile, error: "Für den Race Coach fehlt eine erwartete Renndauer." };
   }
@@ -207,22 +297,31 @@ export function buildRaceCoachPlan(inputProfile = {}, { routeProfile = null, fue
   const targetPaceSeconds = profile.format === "distance" && profile.distanceKm > 0
     ? profile.durationMinutes * 60 / profile.distanceKm
     : 0;
+  const trackPlan = buildTrackRacePlan(profile, routeProfile, targetPaceSeconds, trackAnalysis);
   const checkpoints = profile.format === "loop"
     ? loopCheckpoints(profile)
     : profile.format === "time"
       ? timeCheckpoints(profile)
       : distanceCheckpoints(profile);
   const routePlan = profile.format === "distance" && routeProfile
-    ? buildRoutePacingPlan({ route: routeProfile, targetDurationMinutes: profile.durationMinutes, fuelStrategy, paceOverrides })
+    ? buildRoutePacingPlan({
+      route: routeProfile,
+      targetDurationMinutes: profile.durationMinutes,
+      raceDistanceKm: profile.distanceKm,
+      canonicalKilometres: Boolean(trackPlan),
+      fuelStrategy,
+      paceOverrides,
+    })
     : null;
 
   return {
     valid: true,
     profile,
     targetPaceSeconds,
-    phases: phaseBlueprint(profile, targetPaceSeconds),
+    phases: trackPlan?.phases || phaseBlueprint(profile, targetPaceSeconds),
     checkpoints,
     routePlan,
+    trackPlan,
     summary: {
       duration: durationLabel(profile.durationMinutes),
       distance: profile.distanceKm > 0 ? `${round(profile.distanceKm, 1).toLocaleString("de-DE")} km` : "offene Distanz",

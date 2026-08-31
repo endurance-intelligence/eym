@@ -354,3 +354,18 @@ test("carb-free drink leaves the carbohydrate budget to fuel instead of creating
   assert.equal(plan.strategy.rows.reduce((sum, row) => sum + row.fuel.length, 0), 4);
   assert.ok(plan.strategy.rows.flatMap((row) => row.fuel).every((entry) => /25 g KH/.test(entry.detail)));
 });
+
+test("mission track metadata is preserved for Race Strategy even when Race Prep still uses loop logistics", () => {
+  const profile = racePrepProfileFromEvent({
+    id: "asg-track",
+    name: "ASG Bahn-Meeting 2026",
+    targetKm: 5,
+    courseType: "loop",
+    loopKm: 0.4,
+    loopMode: "free",
+    targetTime: "00:20:00",
+  });
+  assert.equal(profile.eventDistanceKm, 5);
+  assert.equal(profile.courseType, "loop");
+  assert.equal(profile.loopMode, "free");
+});

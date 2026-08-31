@@ -132,6 +132,10 @@ export function racePrepProfileFromEvent(event = {}) {
     source: "mission",
     originEventId: event.id || "",
     routeGpxUrl: event.routeGpxUrl || event.gpxUrl || "",
+    eventDistanceKm: targetDistance,
+    courseType: event.courseType || (loopKm > 0 ? "loop" : ""),
+    loopMode: event.loopMode || (/backyard/.test(text) ? "fixed_interval" : /heartbeat/.test(text) ? "time_limit" : "free"),
+    eventTimeLimit: event.eventTimeLimit || "",
   });
 }
 

@@ -166,3 +166,59 @@ test("race coach forwards manual kilometre paces into the route strategy", () =>
   assert.equal(Math.round(plan.routePlan.segments[1].paceSecondsPerKm), 315);
   assert.ok(Math.abs(plan.routePlan.segments.at(-1).cumulativeMinutes - 15) < 0.01);
 });
+
+test("5000 m track race stays a distance race and exposes 200/400 m splits", () => {
+  const profilePoints = [];
+  const corners = [
+    [52.0, 8.0],
+    [52.0, 8.00146],
+    [52.0009, 8.00146],
+    [52.0009, 8.0],
+  ];
+  for (let lap = 0; lap <= 12; lap += 1) {
+    corners.forEach(([lat, lon], corner) => profilePoints.push({
+      lat,
+      lon,
+      distanceKm: Math.min(4.99, lap * 0.4 + corner * 0.1),
+    }));
+  }
+  profilePoints.push({ lat: 52.0, lon: 8.0, distanceKm: 4.99 });
+  const routeProfile = {
+    name: "Sportpark am Oelbach - 5000 m Bahn 1",
+    distanceKm: 4.99,
+    ascentM: 0,
+    descentM: 0,
+    profilePoints,
+    segments: [
+      { startKm: 0, endKm: 1, distanceKm: 1, gainM: 0, lossM: 0, netGradePercent: 0 },
+      { startKm: 1, endKm: 2, distanceKm: 1, gainM: 0, lossM: 0, netGradePercent: 0 },
+      { startKm: 2, endKm: 3, distanceKm: 1, gainM: 0, lossM: 0, netGradePercent: 0 },
+      { startKm: 3, endKm: 4, distanceKm: 1, gainM: 0, lossM: 0, netGradePercent: 0 },
+      { startKm: 4, endKm: 4.99, distanceKm: 0.99, gainM: 0, lossM: 0, netGradePercent: 0 },
+    ],
+  };
+  const plan = buildRaceCoachPlan({
+    name: "ASG Bahn-Meeting 2026",
+    format: "loop",
+    loopKm: 0.4,
+    loopIntervalMinutes: 60,
+    rounds: 13,
+    durationMinutes: 20,
+    eventDistanceKm: 5,
+    courseType: "loop",
+    loopMode: "free",
+  }, { routeProfile });
+
+  assert.equal(plan.profile.format, "distance");
+  assert.equal(plan.profile.distanceKm, 5);
+  assert.equal(Math.round(plan.targetPaceSeconds), 240);
+  assert.equal(plan.trackPlan.lapDistanceM, 400);
+  assert.equal(plan.trackPlan.lapsLabel, "12,5");
+  assert.equal(Math.round(plan.trackPlan.split200Seconds), 48);
+  assert.equal(Math.round(plan.trackPlan.lapSplitSeconds), 96);
+  assert.equal(plan.summary.loopInterval, "");
+  assert.equal(plan.routePlan.distanceNormalized, true);
+  assert.equal(plan.routePlan.segments.length, 5);
+  assert.match(plan.phases[0].range, /Runde 1/);
+  assert.match(plan.phases.at(-1).range, /2,5 Runden/);
+});

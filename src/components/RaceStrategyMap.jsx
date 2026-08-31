@@ -57,8 +57,8 @@ function coordinateAtDistance(points, distanceKm) {
 }
 
 function coordinatesForSegment(points, segment) {
-  const startKm = numeric(segment.startKm);
-  const endKm = numeric(segment.endKm);
+  const startKm = numeric(segment.routeStartKm ?? segment.startKm);
+  const endKm = numeric(segment.routeEndKm ?? segment.endKm);
   const start = coordinateAtDistance(points, startKm);
   const end = coordinateAtDistance(points, endKm);
   if (!start || !end) return [];

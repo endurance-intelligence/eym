@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildRoutePacingPlan, parseGpxRoute, routeDistanceWarning } from "../src/services/raceRoute.js";
+import { analyzeTrackRoute, buildRoutePacingPlan, parseGpxRoute, routeDistanceWarning } from "../src/services/raceRoute.js";
 
 const SAMPLE_GPX = `<?xml version="1.0"?>
 <gpx version="1.1"><trk><name>Testkurs</name><trkseg>
@@ -27,6 +27,57 @@ test("GPX route parser returns distance, elevation and kilometre segments", () =
   assert.ok(Number.isFinite(route.profilePoints[0].lat));
   assert.ok(Number.isFinite(route.profilePoints[0].lon));
   assert.ok(route.segments.slice(0, -1).every((segment) => Math.abs(segment.distanceKm - 1) < 0.01));
+});
+
+test("GPX parser accepts self-closing track points without elevation", () => {
+  const route = parseGpxRoute(`<?xml version="1.0"?>
+<gpx version="1.1"><trk><name>Flache Bahn</name><trkseg>
+<trkpt lat="52.0000" lon="8.0000" />
+<trkpt lat="52.0000" lon="8.0020" />
+<trkpt lat="52.0000" lon="8.0040" />
+</trkseg></trk></gpx>`);
+  assert.equal(route.pointCount, 3);
+  assert.ok(route.distanceKm > 0.2);
+});
+
+test("repeated compact 400 m geometry is recognized as a track", () => {
+  const points = [];
+  const corners = [
+    [52.0, 8.0],
+    [52.0, 8.00146],
+    [52.0009, 8.00146],
+    [52.0009, 8.0],
+  ];
+  for (let lap = 0; lap <= 12; lap += 1) {
+    corners.forEach(([lat, lon], corner) => points.push({ lat, lon, distanceKm: lap * 0.4 + corner * 0.1 }));
+  }
+  points.push({ lat: 52.0, lon: 8.0, distanceKm: 5.0 });
+  const analysis = analyzeTrackRoute(
+    { name: "Sportpark 5000 m Bahn 1", distanceKm: 5, profilePoints: points },
+    { expectedDistanceKm: 5 },
+  );
+  assert.equal(analysis.isTrack, true);
+  assert.equal(analysis.lapDistanceM, 400);
+});
+
+test("normal GPS distance drift is normalized to the official race distance", () => {
+  const route = {
+    distanceKm: 4.99,
+    segments: [
+      { startKm: 0, endKm: 1, distanceKm: 1, gainM: 0, lossM: 0, netGradePercent: 0 },
+      { startKm: 1, endKm: 2, distanceKm: 1, gainM: 0, lossM: 0, netGradePercent: 0 },
+      { startKm: 2, endKm: 3, distanceKm: 1, gainM: 0, lossM: 0, netGradePercent: 0 },
+      { startKm: 3, endKm: 4, distanceKm: 1, gainM: 0, lossM: 0, netGradePercent: 0 },
+      { startKm: 4, endKm: 4.99, distanceKm: 0.99, gainM: 0, lossM: 0, netGradePercent: 0 },
+    ],
+  };
+  const plan = buildRoutePacingPlan({ route, targetDurationMinutes: 20, raceDistanceKm: 5, canonicalKilometres: true });
+  assert.equal(plan.distanceNormalized, true);
+  assert.equal(plan.raceDistanceKm, 5);
+  assert.equal(plan.segments.length, 5);
+  assert.ok(plan.segments.every((segment) => Math.abs(segment.distanceKm - 1) < 0.001));
+  assert.equal(Math.round(plan.averagePaceSecondsPerKm), 240);
+  assert.ok(Math.abs(plan.segments.at(-1).cumulativeMinutes - 20) < 0.01);
 });
 
 test("route pacing plan slows climbing kilometres and still lands on target time", () => {
