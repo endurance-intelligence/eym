@@ -2779,3 +2779,14 @@
   .shell main .planner-day-header-actions small{max-width:150px;text-align:right}
   .planner-day-body{border-left:0}
 }
+
+/* v3.9.109 – live mission-event guard for already generated weeks */
+.planner-event-week-side{display:grid;gap:9px;justify-items:end}
+.planner-event-week-side>button{min-width:190px;padding:8px 11px;font-size:9px}
+.planner-event-week-card.needs-refresh{
+  border-color:color-mix(in srgb,var(--warning) 58%,var(--border));
+  background:linear-gradient(145deg,color-mix(in srgb,var(--warning) 8%,var(--bg-card)),var(--bg-card-alt));
+}
+.planner-event-week-card.needs-refresh .eyebrow{color:var(--warning)}
+.planner-event-week-card.needs-refresh .planner-event-week-badges span{border-color:color-mix(in srgb,var(--warning) 42%,var(--border));color:var(--warning)}
+@media(max-width:720px){.planner-event-week-side{justify-items:start}.planner-event-week-side>button{width:100%}}

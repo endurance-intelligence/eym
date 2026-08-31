@@ -28,6 +28,7 @@ import { publishIntervalsWeek } from "../services/intervals";
 import { DEFAULT_REPLACEMENT_SPORTS, SPORT_OPTIONS, sortCommitments, sportLabel } from "../services/configuration";
 import { goalRequirements } from "../services/scienceCoach";
 import { missionEvents } from "../services/goalPlanning";
+import { plannerEventSyncStatus } from "../services/plannerEventSync";
 import { buildRacePrepPlan, racePrepProfileFromEvent } from "../services/racePrepPlanner";
 import {
   buildRaceProtocol,
@@ -595,7 +596,8 @@ export default function Planner() {
     const value = item.date || "";
     return value >= isoDate(weekStart) && value <= isoDate(weekEnd) && !item.archived;
   }).sort((a, b) => `${a.date}${workoutSortTime(a)}${a.title || ""}`.localeCompare(`${b.date}${workoutSortTime(b)}${b.title || ""}`)), [state.plan, weekStart, weekEnd]);
-  const weekEventEntries = useMemo(() => weekPlan.filter((item) => item.raceEvent), [weekPlan]);
+  const weekEventSync = useMemo(() => plannerEventSyncStatus(weekMissionEvents, weekPlan), [weekMissionEvents, weekPlan]);
+  const weekEventPlanNeedsRefresh = offsetWeeks >= 0 && weekPlan.length > 0 && !weekEventSync.upToDate;
   const fuelRecommendations = useMemo(() => new Map(
     weekPlan
       .filter(isFuelRelevantWorkout)
@@ -793,7 +795,8 @@ export default function Planner() {
   const approvalFingerprint = useMemo(() => planPublicationFingerprint(weekPlan), [weekPlan]);
   const weekApprovals = config.weekApprovals || {};
   const weekApproval = weekApprovals[weekKey] || null;
-  const weekApprovalState = weekPlanApprovalStatus(weekApprovals, weekKey, approvalFingerprint);
+  const storedWeekApprovalState = weekPlanApprovalStatus(weekApprovals, weekKey, approvalFingerprint);
+  const weekApprovalState = weekEventPlanNeedsRefresh ? WEEK_APPROVAL_STATES.CHANGED : storedWeekApprovalState;
   const weekAccepted = weekApprovalState === WEEK_APPROVAL_STATES.ACCEPTED;
   const acceptedAtLabel = weekAccepted && weekApproval?.acceptedAt
     ? new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(weekApproval.acceptedAt))
@@ -960,6 +963,11 @@ export default function Planner() {
   }
 
   function acceptCurrentWeek() {
+    if (weekEventPlanNeedsRefresh) {
+      replanCurrentWeek();
+      setStatus("Deine Mission enthält einen Wettkampf in dieser Woche, der im aktuellen Plan noch fehlt oder geändert wurde. Bitte die Woche zuerst auf den Wettkampf abstimmen.");
+      return;
+    }
     if (!weekPlan.length || !approvalFingerprint) return;
     const acceptedAt = new Date().toISOString();
     setState((current) => ({
@@ -1768,6 +1776,10 @@ export default function Planner() {
   }
 
   function requestPublish() {
+    if (weekEventPlanNeedsRefresh) {
+      setStatus("Der Wochenplan ist gegenüber deiner Mission veraltet. Bitte den Wettkampf zuerst über „Woche auf Wettkampf abstimmen“ einplanen, bevor Intervals/Garmin aktualisiert wird.");
+      return;
+    }
     if (!weekAccepted) {
       setStatus("Bitte den Wochenplan zuerst annehmen. So landet kein ungeprüfter Entwurf auf Garmin.");
       return;
@@ -2367,7 +2379,7 @@ export default function Planner() {
             ✦ {isPastWeek ? "Woche abgeschlossen" : weekPlan.length ? "Woche anpassen" : planningWeekLocked ? "Noch nicht planbar" : offsetWeeks === 1 ? "Nächste Woche planen" : "Woche planen"}
           </button>
           <button className={`planner-publish-button ${publishedWeek && !planChangedAfterPublish ? "intervals-published-button" : ""}`} onClick={requestPublish} disabled={publishBusy || !weekAccepted || (!publishedWeek && publishablePlan.length === 0)}>
-            {publishBusy ? "Senden …" : !weekAccepted && weekPlan.length ? "Plan erst annehmen" : publishedWeek ? (planChangedAfterPublish ? "Für Garmin aktualisieren" : "✓ Intervals") : "Für Garmin senden"}
+            {publishBusy ? "Senden …" : weekEventPlanNeedsRefresh ? "Wettkampf einplanen" : !weekAccepted && weekPlan.length ? "Plan erst annehmen" : publishedWeek ? (planChangedAfterPublish ? "Für Garmin aktualisieren" : "✓ Intervals") : "Für Garmin senden"}
           </button>
           <details className="action-menu planner-action-menu">
             <summary aria-label="Weitere Aktionen" title="Weitere Aktionen">•••</summary>
@@ -2377,7 +2389,7 @@ export default function Planner() {
               <button type="button" onClick={(event) => { setPlanningInfoOpen(true); event.currentTarget.closest("details")?.removeAttribute("open"); }}>Wie plant dein Coach?</button>
               {!isPastWeek && weekPlan.length > 0 && <button type="button" onClick={(event) => { replanCurrentWeek(); event.currentTarget.closest("details")?.removeAttribute("open"); }}>Woche komplett neu planen</button>}
               <button type="button" onClick={(event) => { downloadCalendar(weekPlan); event.currentTarget.closest("details")?.removeAttribute("open"); }} disabled={!weekPlan.length}>ICS-Datei laden</button>
-              <button type="button" onClick={(event) => { requestPublish(); event.currentTarget.closest("details")?.removeAttribute("open"); }} disabled={publishBusy || !weekAccepted || (!publishedWeek && publishablePlan.length === 0)}>{!weekAccepted && weekPlan.length ? "Plan zuerst annehmen" : publishedWeek ? "Sync erneut anstoßen" : "Für Garmin veröffentlichen"}</button>
+              <button type="button" onClick={(event) => { requestPublish(); event.currentTarget.closest("details")?.removeAttribute("open"); }} disabled={publishBusy || !weekAccepted || (!publishedWeek && publishablePlan.length === 0)}>{weekEventPlanNeedsRefresh ? "Wettkampf zuerst einplanen" : !weekAccepted && weekPlan.length ? "Plan zuerst annehmen" : publishedWeek ? "Sync erneut anstoßen" : "Für Garmin veröffentlichen"}</button>
             </div>
           </details>
         </div>
@@ -2403,15 +2415,19 @@ export default function Planner() {
           <section className={`planner-plan-approval ${weekApprovalState}`}>
             <div className="planner-plan-approval-copy">
               <span className="planner-plan-approval-dot" aria-hidden="true" />
-              <strong>{weekAccepted ? "Plan aktuell" : weekApprovalState === WEEK_APPROVAL_STATES.CHANGED ? "Plan geändert · erneut bestätigen" : "Plan noch nicht bestätigt"}</strong>
-              <small>{weekAccepted
-                ? `Bestätigt am ${acceptedAtLabel} · bereit für Intervals und Garmin.`
-                : weekApprovalState === WEEK_APPROVAL_STATES.CHANGED
-                  ? "Kurz prüfen und bestätigen; danach kann Garmin aktualisiert werden."
-                  : "Kurz prüfen und bestätigen, bevor die Woche veröffentlicht wird."}</small>
+              <strong>{weekEventPlanNeedsRefresh ? "Wettkampf noch nicht im Wochenplan" : weekAccepted ? "Plan aktuell" : weekApprovalState === WEEK_APPROVAL_STATES.CHANGED ? "Plan geändert · erneut bestätigen" : "Plan noch nicht bestätigt"}</strong>
+              <small>{weekEventPlanNeedsRefresh
+                ? "Mission und Wochenplan sind nicht mehr deckungsgleich. Der Coach muss die Woche mit Wettkampf, Frische und Pre-Race-Ablauf neu abstimmen."
+                : weekAccepted
+                  ? `Bestätigt am ${acceptedAtLabel} · bereit für Intervals und Garmin.`
+                  : weekApprovalState === WEEK_APPROVAL_STATES.CHANGED
+                    ? "Kurz prüfen und bestätigen; danach kann Garmin aktualisiert werden."
+                    : "Kurz prüfen und bestätigen, bevor die Woche veröffentlicht wird."}</small>
             </div>
             <div className="planner-plan-approval-actions">
-              {!weekAccepted && <button type="button" className="primary" onClick={acceptCurrentWeek}>{weekApprovalState === WEEK_APPROVAL_STATES.CHANGED ? "Erneut annehmen" : "Plan annehmen"}</button>}
+              {weekEventPlanNeedsRefresh
+                ? <button type="button" className="primary" onClick={replanCurrentWeek}>Woche auf Wettkampf abstimmen</button>
+                : !weekAccepted && <button type="button" className="primary" onClick={acceptCurrentWeek}>{weekApprovalState === WEEK_APPROVAL_STATES.CHANGED ? "Erneut annehmen" : "Plan annehmen"}</button>}
             </div>
           </section>
         )}
@@ -2575,7 +2591,7 @@ export default function Planner() {
 
       <div className="planner-week-nav">
         <button disabled={offsetWeeks === 0 && !previousWeekHasPlan} title={offsetWeeks === 0 && !previousWeekHasPlan ? "Keine ältere geplante Woche vorhanden" : "Vorherige Woche"} onClick={() => { setOffsetWeeks((value) => value - 1); setForecast([]); setStatus(""); }}>←</button>
-        <div><strong>{dayFormatter.format(weekStart)} – {dayFormatter.format(weekEnd)}</strong><span>{offsetWeeks === 0 ? `Aktuelle Woche · ${weekAccepted ? "angenommen" : weekApprovalState === WEEK_APPROVAL_STATES.CHANGED ? "geändert" : "Entwurf"}` : offsetWeeks === 1 ? `Nächste Woche · ${weekAccepted ? "angenommen" : weekApprovalState === WEEK_APPROVAL_STATES.CHANGED ? "geändert" : weekPlan.length ? "Entwurf" : "noch nicht geplant"}` : "Abgeschlossene Trainingswoche"}</span></div>
+        <div><strong>{dayFormatter.format(weekStart)} – {dayFormatter.format(weekEnd)}</strong><span>{offsetWeeks === 0 ? `Aktuelle Woche · ${weekEventPlanNeedsRefresh ? "Wettkampf offen" : weekAccepted ? "angenommen" : weekApprovalState === WEEK_APPROVAL_STATES.CHANGED ? "geändert" : "Entwurf"}` : offsetWeeks === 1 ? `Nächste Woche · ${weekAccepted ? "angenommen" : weekApprovalState === WEEK_APPROVAL_STATES.CHANGED ? "geändert" : weekPlan.length ? "Entwurf" : "noch nicht geplant"}` : "Abgeschlossene Trainingswoche"}</span></div>
         <button disabled={offsetWeeks >= 1} title={offsetWeeks >= 1 ? "Es wird immer nur die nächste Woche vorbereitet" : "Nächste Woche"} onClick={() => { setOffsetWeeks((value) => value + 1); setForecast([]); setStatus(""); }}>→</button>
       </div>
 
@@ -2587,20 +2603,25 @@ export default function Planner() {
         </div>
         <div title={crossTrainingLabel || "Keine zusätzliche sportübergreifende Belastung erkannt"}><span>Zusatzlast</span><strong>{crossTrainingSummary.details.length ? (crossTrainingSummary.impactLevel === "adjust" ? "Prüfen" : crossTrainingSummary.impactLevel === "review" ? "Review offen" : "Im Rahmen") : "–"}</strong></div>
         <div><span>Erledigt</span><strong>{weekActivities.length} Einheiten</strong></div>
-        <div className="planner-overview-state"><span>Status</span><strong>{isPastWeek ? "Abgeschlossen" : weekPlan.length ? (weekAccepted ? "Angenommen · Änderungen gezielt" : weekApprovalState === WEEK_APPROVAL_STATES.CHANGED ? "Geändert · erneut annehmen" : "Entwurf · noch annehmen") : planningWeekLocked ? "Wochenabschluss fehlt" : "Bereit zur Planung"}</strong></div>
+        <div className="planner-overview-state"><span>Status</span><strong>{isPastWeek ? "Abgeschlossen" : weekPlan.length ? (weekEventPlanNeedsRefresh ? "Wettkampf einplanen" : weekAccepted ? "Angenommen · Änderungen gezielt" : weekApprovalState === WEEK_APPROVAL_STATES.CHANGED ? "Geändert · erneut annehmen" : "Entwurf · noch annehmen") : planningWeekLocked ? "Wochenabschluss fehlt" : "Bereit zur Planung"}</strong></div>
         <button onClick={() => setEditing(createBlank(weekStart))} disabled={isPastWeek || planningWeekPending}>+ Einheit</button>
       </section>
 
-      {weekEventEntries.length > 0 && (
-        <Card className="wide planner-event-week-card">
+      {weekMissionEvents.length > 0 && (
+        <Card className={`wide planner-event-week-card ${weekEventPlanNeedsRefresh ? "needs-refresh" : "is-synced"}`}>
           <div className="planner-event-week-main">
             <p className="eyebrow">Wettkampf diese Woche</p>
-            <h2>{weekEventEntries.map((item) => item.title).join(" · ")}</h2>
-            <p>Der Coach integriert den Wettkampf als Wochenreiz und schützt die unmittelbare Frische, ohne die Hauptmission aus dem Blick zu verlieren.</p>
-            {config.lastPlanningTarget?.name && <small>Trainingsfokus: <strong>{config.lastPlanningTarget.name}</strong>.</small>}
+            <h2>{weekMissionEvents.map((event) => event.name || "Event").join(" · ")}</h2>
+            <p>{weekEventPlanNeedsRefresh
+              ? "Der Wettkampf steht in deiner Mission, ist aber im aktuellen Wochenplan noch nicht korrekt abgebildet. Der Coach soll jetzt Qualität, Frische, Shake-out und den Wettkampftag darauf abstimmen."
+              : "Der Coach integriert den Wettkampf als Wochenreiz und schützt die unmittelbare Frische, ohne die Hauptmission aus dem Blick zu verlieren."}</p>
+            {config.lastPlanningTarget?.name && <small>Strategischer Trainingsfokus bleibt: <strong>{config.lastPlanningTarget.name}</strong>.</small>}
           </div>
-          <div className="planner-event-week-badges">
-            {weekEventEntries.map((item) => <span key={item.id}>{item.distance ? `${item.distance} km` : "Event"}{item.time ? ` · ${item.time} Uhr` : ""} · Prio {item.goalPriority || "B"}</span>)}
+          <div className="planner-event-week-side">
+            <div className="planner-event-week-badges">
+              {weekMissionEvents.map((event) => <span key={event.id || `${event.date}-${event.name}`}>{event.targetKm ? `${Number(event.targetKm).toFixed(1).replace(".0", "")} km` : "Event"}{event.time ? ` · ${event.time} Uhr` : ""} · {event.priority || "B"}-Event</span>)}
+            </div>
+            {weekEventPlanNeedsRefresh && <button type="button" className="primary" onClick={replanCurrentWeek}>Woche auf Wettkampf abstimmen</button>}
           </div>
         </Card>
       )}

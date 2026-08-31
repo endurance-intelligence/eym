@@ -76,3 +76,11 @@ test("cross-training UI separates total load from running kilometres and waits f
   assert.doesNotMatch(plannerSource, /Planersatz/);
   assert.doesNotMatch(plannerSource, /bis zu <strong>\{crossTrainingPreview\.creditKm/);
 });
+
+test("weekly planner surfaces live mission races even when the stored week is stale", () => {
+  assert.match(plannerSource, /plannerEventSyncStatus\(weekMissionEvents, weekPlan\)/);
+  assert.match(plannerSource, /Wettkampf noch nicht im Wochenplan/);
+  assert.match(plannerSource, /Woche auf Wettkampf abstimmen/);
+  assert.match(plannerSource, /weekMissionEvents\.length > 0/);
+  assert.match(plannerSource, /Wettkampf zuerst einplanen/);
+});
