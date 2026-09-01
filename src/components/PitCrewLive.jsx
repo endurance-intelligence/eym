@@ -9,6 +9,7 @@ import {
   summarizePitSelection,
 } from "../services/pitCrewCoach.js";
 import { fetchPitCrewWeather, pitWeatherIcon } from "../services/pitCrewWeather.js";
+import { athleteCareHints } from "../services/pitCrewCare.js";
 import "./PitCrewLive.css";
 
 const STATUS_OPTIONS = [
@@ -189,27 +190,29 @@ export default function PitCrewLive({ race, onClose }) {
     };
   }, [race]);
 
-  const effectiveWeather = useMemo(() => [...new Set([...(autoWeather?.flags || []), ...weather])], [autoWeather, weather]);
-  const previousHistory = useMemo(() => history.filter((record) => Number(record.round) !== Number(saveRound)), [history, saveRound]);
-  const planningHistory = useMemo(() => previousHistory.map((record) => ({
+  // These values are cheap render-time derivations. Let the React Compiler decide
+  // whether to memoize them instead of maintaining dependency arrays manually.
+  const effectiveWeather = [...new Set([...(autoWeather?.flags || []), ...weather])];
+  const previousHistory = history.filter((record) => Number(record.round) !== Number(saveRound));
+  const planningHistory = previousHistory.map((record) => ({
     ...record,
     summary: record.carryStatus === "pending" && record.provisionalSummary ? record.provisionalSummary : record.summary,
-  })), [previousHistory]);
-  const pendingCarry = useMemo(() => [...history].reverse().find((record) => record.carryStatus === "pending" && Array.isArray(record.carrySelection) && record.carrySelection.length), [history]);
+  }));
+  const pendingCarry = [...history].reverse().find((record) => record.carryStatus === "pending" && Array.isArray(record.carrySelection) && record.carrySelection.length);
 
-  const recommendation = useMemo(() => recommendPitCrew({
+  const recommendation = recommendPitCrew({
     round: Math.max(1, timing.currentRound || 1),
     minutesToStart: timing.minutesToStart,
     history: planningHistory,
     flags,
     weather: effectiveWeather,
-  }), [effectiveWeather, flags, planningHistory, timing.currentRound, timing.minutesToStart]);
+  });
 
-  const assessment = useMemo(() => assessPitSelection(selection, planningHistory, { weather: effectiveWeather }), [effectiveWeather, planningHistory, selection]);
-  const historyRolling = useMemo(() => rollingPitAverage(history, null, 3), [history]);
-  const confirmedNow = useMemo(() => summarizePitSelection(selection.filter((entry) => entry.timing !== "carry")), [selection]);
-  const carryNow = useMemo(() => summarizePitSelection(selection.filter((entry) => entry.timing === "carry")), [selection]);
-  const metricStatus = useMemo(() => pitMetricStatus(assessment.summary, assessment.rolling, { weather: effectiveWeather }), [assessment.rolling, assessment.summary, effectiveWeather]);
+  const assessment = assessPitSelection(selection, planningHistory, { weather: effectiveWeather });
+  const historyRolling = rollingPitAverage(history, null, 3);
+  const confirmedNow = summarizePitSelection(selection.filter((entry) => entry.timing !== "carry"));
+  const carryNow = summarizePitSelection(selection.filter((entry) => entry.timing === "carry"));
+  const metricStatus = pitMetricStatus(assessment.summary, assessment.rolling, { weather: effectiveWeather });
   const suggestionSummary = recommendation.summary;
   const modeTitle = modeLabel(timing.mode);
   const portableMode = recommendation.mode === "go" || recommendation.mode === "quick";
@@ -221,6 +224,16 @@ export default function PitCrewLive({ race, onClose }) {
   const categoryProducts = PIT_CREW_PRODUCTS.filter((product) => product.category === activeCategory);
   const lastRecord = history.length ? history[history.length - 1] : null;
   const alert = warningText(metricStatus, assessment);
+  const elapsedMinutes = anchor && timing.started ? Math.max(0, (now.getTime() - anchor.getTime()) / 60000) : 0;
+  const athleteCare = athleteCareHints({
+    round: Math.max(1, timing.currentRound || 1),
+    elapsedMinutes,
+    minutesToStart: timing.minutesToStart,
+    mode: timing.mode,
+    flags,
+    weather: effectiveWeather,
+    observation: autoWeather,
+  });
 
   function selectPortion(productId, portionId) {
     setSaveMessage("");
@@ -403,6 +416,23 @@ export default function PitCrewLive({ race, onClose }) {
                 <button type="button" key={key} className={flags.includes(key) ? "active" : ""} onClick={() => setFlags((current) => toggleValue(current, key))}><b>{icon}</b><span>{label}</span></button>
               ))}
             </div>
+          </div>
+        </details>
+
+        <details className={`pit-live-collapse pit-live-care ${athleteCare.urgent ? "urgent" : ""}`}>
+          <summary><span>ATHLETE CARE</span><b>{athleteCare.summary}</b><i>›</i></summary>
+          <div className="pit-live-collapse-body">
+            <p className="pit-live-help">Nur Gedächtnisstützen für die Crew – nichts abhaken, nichts erzwingen. Hinweise passen sich an Restzeit, Rennverlauf, Athletenstatus und Wetter an.</p>
+            {athleteCare.hints.length ? (
+              <div className="pit-live-care-list">
+                {athleteCare.hints.map((hint) => (
+                  <div key={hint.key} className={hint.urgent ? "urgent" : ""}>
+                    <b>{hint.icon}</b>
+                    <span>{hint.text}</span>
+                  </div>
+                ))}
+              </div>
+            ) : <p className="pit-live-care-clear">✓ Aktuell keine besondere Care-Aktion nötig. Routine ruhig weiterlaufen lassen.</p>}
           </div>
         </details>
 
