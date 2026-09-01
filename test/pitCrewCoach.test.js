@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   assessPitSelection,
   pitCrewRaceEligible,
+  pitMetricStatus,
   pitTimeMode,
   recommendPitCrew,
   rollingPitAverage,
@@ -88,4 +89,21 @@ test("rolling average smooths a light hour instead of forcing immediate catch-up
 test("pit crew live mode is limited to fixed-interval loop races", () => {
   assert.equal(pitCrewRaceEligible({ format: "loop", loopMode: "fixed_interval", name: "OWL Backyard" }), true);
   assert.equal(pitCrewRaceEligible({ format: "distance", loopMode: "free", name: "5000 m" }), false);
+});
+
+
+test("pit quantities multiply nutrients without floating-point display garbage", () => {
+  const summary = summarizePitSelection([
+    { productId: "milk-roll", portionId: "1", quantity: 2 },
+    { productId: "haribo", portionId: "20g", quantity: 1 },
+  ]);
+  assert.equal(summary.carbs, 71.4);
+  assert.equal(Number.isFinite(summary.carbs), true);
+});
+
+test("mini status colors low intake orange and excessive intake red while rolling context can keep a light hour green", () => {
+  assert.equal(pitMetricStatus({ carbs: 30, fluidMl: 200 }, { hours: 3, carbsPerHour: 42 }).carbs, "low");
+  assert.equal(pitMetricStatus({ carbs: 85, fluidMl: 500 }, { hours: 3, carbsPerHour: 74 }).carbs, "high");
+  assert.equal(pitMetricStatus({ carbs: 35, fluidMl: 400 }, { hours: 3, carbsPerHour: 52 }).carbs, "good");
+  assert.equal(pitMetricStatus({ carbs: 55, fluidMl: 200 }, { hours: 3, carbsPerHour: 55 }, { weather: ["hot"] }).fluid, "low");
 });

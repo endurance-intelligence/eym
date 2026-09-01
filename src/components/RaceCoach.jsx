@@ -86,6 +86,8 @@ function sourceProfileWithEventContext(profile = {}, event = null) {
     courseType: event.courseType || profile.courseType || "",
     loopMode: event.loopMode || profile.loopMode || "",
     eventTimeLimit: event.eventTimeLimit || profile.eventTimeLimit || "",
+    location: event.location || profile.location || "",
+    place: event.place || profile.place || null,
   };
 }
 
@@ -236,6 +238,8 @@ export default function RaceCoach() {
     name: source?.label || "Backyard",
     date: source?.date || "",
     time: source?.time || "",
+    location: source?.profile?.location || "",
+    place: source?.profile?.place || null,
     loopIntervalMinutes: plan?.profile?.loopIntervalMinutes || 60,
   } : null;
   const pitCrewShareToken = sourceKey

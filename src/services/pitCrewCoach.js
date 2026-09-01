@@ -164,10 +164,11 @@ export function pitPortion(productId, portionId) {
   return product.portions.find((portion) => String(portion.id) === String(portionId)) || product.portions[0] || null;
 }
 
-export function pitSelectionItem(productId, portionId) {
+export function pitSelectionItem(productId, portionId, quantity = 1) {
   const product = pitProduct(productId);
   const portion = pitPortion(productId, portionId);
   if (!product || !portion) return null;
+  const count = Math.max(1, Math.min(20, Math.round(Number(quantity || 1))));
   return {
     productId: product.id,
     portionId: portion.id,
@@ -176,17 +177,18 @@ export function pitSelectionItem(productId, portionId) {
     category: product.category,
     estimated: Boolean(product.estimated),
     traits: product.traits || [],
-    carbs: Number(portion.carbs || 0),
-    fluidMl: Number(portion.fluidMl || 0),
-    caffeineMg: Number(portion.caffeineMg || 0),
-    sodiumMg: Number(portion.sodiumMg || 0),
+    quantity: count,
+    carbs: round1(Number(portion.carbs || 0) * count),
+    fluidMl: Math.round(Number(portion.fluidMl || 0) * count),
+    caffeineMg: round1(Number(portion.caffeineMg || 0) * count),
+    sodiumMg: Math.round(Number(portion.sodiumMg || 0) * count),
     portionLabel: portion.label,
   };
 }
 
 export function summarizePitSelection(selection = []) {
   const items = (Array.isArray(selection) ? selection : [])
-    .map((entry) => pitSelectionItem(entry.productId, entry.portionId))
+    .map((entry) => pitSelectionItem(entry.productId, entry.portionId, entry.quantity))
     .filter(Boolean);
   return {
     items,
@@ -376,6 +378,37 @@ export function assessPitSelection(selection = [], history = [], { weather = [] 
     : "";
 
   return { tone, headline, detail: `${detail}${fluidNote}`, summary, rolling };
+}
+
+
+export function pitMetricStatus(summary = {}, rolling = {}, { weather = [] } = {}) {
+  const weatherSet = new Set(weather || []);
+  const carbs = Number(summary.carbs || 0);
+  const fluidMl = Number(summary.fluidMl || 0);
+  const rollingCarbs = Number(rolling.carbsPerHour || 0);
+  const rollingHours = Number(rolling.hours || 0);
+  const fluidFloor = weatherSet.has("hot") ? 450 : weatherSet.has("cold") ? 250 : 300;
+  const fluidCeiling = weatherSet.has("hot") ? 950 : weatherSet.has("cold") ? 700 : 800;
+
+  let carbsTone = "good";
+  if (carbs < 40 && (!rollingHours || rollingCarbs < 48)) carbsTone = "low";
+  if (carbs > 75 && (!rollingHours || rollingCarbs > 62)) carbsTone = "high";
+
+  let rollingTone = rollingHours ? "good" : "neutral";
+  if (rollingHours && rollingCarbs < 45) rollingTone = "low";
+  if (rollingHours && rollingCarbs > 70) rollingTone = "high";
+
+  let fluidTone = fluidMl ? "good" : "neutral";
+  if (fluidMl > 0 && fluidMl < fluidFloor) fluidTone = "low";
+  if (fluidMl > fluidCeiling) fluidTone = "high";
+
+  return {
+    carbs: carbsTone,
+    fluid: fluidTone,
+    rolling: rollingTone,
+    fluidFloor,
+    fluidCeiling,
+  };
 }
 
 export function pitCrewRaceEligible(profile = {}) {
