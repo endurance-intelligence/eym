@@ -30,7 +30,6 @@ export default function PitCrewSharedSession({ token, race: raceFallback = null,
 
   useEffect(() => {
     let active = true;
-    setError("");
     loadPitCrewShare(token)
       .then((loaded) => {
         if (!active) return;

@@ -7,7 +7,7 @@ import {
   rememberPitCrewShareToken,
   storedPitCrewShareToken,
   writePitCrewLocalSnapshot,
-} from "../src/services/pitCrewShare.js";
+} from "../src/services/pitCrewShareCore.js";
 
 function memoryStorage() {
   const values = new Map();
