@@ -141,6 +141,7 @@ export default function PitCrewLive({ race, onClose }) {
   const [anchorAt, setAnchorAt] = useState(() => stored?.anchorAt || plannedAnchor(race)?.toISOString() || "");
   const [selection, setSelection] = useState([]);
   const [selectionMode, setSelectionMode] = useState("suggestion");
+  const [selectionDirty, setSelectionDirty] = useState(false);
   const [carryAdjust, setCarryAdjust] = useState({});
   const [pitCategory, setPitCategory] = useState("drink");
   const [saveMessage, setSaveMessage] = useState("");
@@ -149,6 +150,7 @@ export default function PitCrewLive({ race, onClose }) {
   const [weatherError, setWeatherError] = useState("");
   const loadedPitRound = useRef(null);
   const liveSnapshotBeforeDemo = useRef(null);
+  const loopFuelingRef = useRef(null);
   const anchor = anchorAt ? new Date(anchorAt) : null;
   const intervalMinutes = Number(race?.loopIntervalMinutes || 60);
   const liveTiming = timeContext(anchor, intervalMinutes, now);
@@ -181,7 +183,8 @@ export default function PitCrewLive({ race, onClose }) {
     const existing = history.find((record) => Number(record.round) === Number(pitRound));
     setSelection(existing ? selectionWithTiming(existing) : []);
     setSelectionMode(existing ? "manual" : "suggestion");
-    setSaveMessage(existing ? `Pit ${pitRound} ist gespeichert und kann angepasst werden.` : "");
+    setSelectionDirty(false);
+    setSaveMessage(existing ? `Loop ${Number(pitRound) + 1} ist startklar und kann bei Bedarf angepasst werden.` : "");
   }, [editingRound, history, pitRound]);
 
   useEffect(() => {
@@ -240,6 +243,10 @@ export default function PitCrewLive({ race, onClose }) {
   });
   const activeSelection = selectionMode === "suggestion" && editingRound == null ? suggestedSelection : selection;
   const readyLoopNumber = Math.max(1, Number(saveRound || 0) + 1);
+  const savedCurrentPit = editingRound == null
+    ? history.find((record) => Number(record.round) === Number(saveRound))
+    : null;
+  const savedLoopReady = Boolean(savedCurrentPit && !loopMustClose && !selectionDirty);
   const assessment = assessPitSelection(activeSelection, planningHistory, { weather: effectiveWeather });
   const historyRolling = rollingPitAverage(history, null, 3);
   const metricStatus = pitMetricStatus(assessment.summary, assessment.rolling, { weather: effectiveWeather });
@@ -278,6 +285,7 @@ export default function PitCrewLive({ race, onClose }) {
     const base = selectionMode === "suggestion" && editingRound == null ? suggestedSelection : selection;
     setSelection(mutator(base));
     setSelectionMode("manual");
+    setSelectionDirty(true);
     setSaveMessage("");
   }
 
@@ -330,8 +338,9 @@ export default function PitCrewLive({ race, onClose }) {
       .sort((left, right) => Number(left.round) - Number(right.round)));
     setSaveMessage(editingRound != null
       ? `Pit ${saveRound} korrigiert.`
-      : `Loop ${readyLoopNumber} bereit · ${formatNumber(summary.carbs)} g im Pit bestätigt${carrySelection.length ? ` · ${formatNumber(provisionalSummary.carbs - summary.carbs)} g mitgegeben` : ""}.`);
+      : `Loop ${readyLoopNumber} startklar · ${formatNumber(summary.carbs)} g im Pit bestätigt${carrySelection.length ? ` · ${formatNumber(provisionalSummary.carbs - summary.carbs)} g mitgegeben` : ""}.`);
     setSelectionMode("manual");
+    setSelectionDirty(false);
     setEditingRound(null);
   }
 
@@ -382,6 +391,7 @@ export default function PitCrewLive({ race, onClose }) {
     setEditingRound(Number(lastRecord.round));
     setSelection(selectionWithTiming(lastRecord));
     setSelectionMode("manual");
+    setSelectionDirty(false);
     setSaveMessage(`Pit ${lastRecord.round} zur Korrektur geöffnet.`);
   }
 
@@ -390,6 +400,7 @@ export default function PitCrewLive({ race, onClose }) {
       liveSnapshotBeforeDemo.current = {
         selection,
         selectionMode,
+        selectionDirty,
         carryAdjust,
         editingRound,
         saveMessage,
@@ -407,6 +418,7 @@ export default function PitCrewLive({ race, onClose }) {
     setWeather([]);
     setSelection([]);
     setSelectionMode("suggestion");
+    setSelectionDirty(false);
     setCarryAdjust({});
     setEditingRound(null);
     setSaveMessage("Demo-Modus aktiv · echte Live-Daten bleiben unverändert.");
@@ -423,6 +435,7 @@ export default function PitCrewLive({ race, onClose }) {
     setAnchorAt(liveStored?.anchorAt || plannedAnchor(race)?.toISOString() || "");
     setSelection(Array.isArray(transient.selection) ? transient.selection : []);
     setSelectionMode(transient.selectionMode || "suggestion");
+    setSelectionDirty(Boolean(transient.selectionDirty));
     setCarryAdjust(transient.carryAdjust || {});
     setEditingRound(transient.editingRound ?? null);
     setSaveMessage("Demo beendet · zurück in der echten Live-Session.");
@@ -441,6 +454,7 @@ export default function PitCrewLive({ race, onClose }) {
     setEditingRound(null);
     setSelection([]);
     setSelectionMode("suggestion");
+    setSelectionDirty(false);
     setCarryAdjust({});
     setSaveMessage(delta > 0 ? "Nächste Demo-Loop geladen." : "Vorherige Demo-Loop geladen.");
     loadedPitRound.current = null;
@@ -502,17 +516,27 @@ export default function PitCrewLive({ race, onClose }) {
     const planned = activeSelection.filter((entry) => (entry.timing || "now") === "carry");
     const plannedSummary = summarizePitSelection(planned);
     const activePending = loopMustClose ? pendingCarry : null;
-    const loopNumber = activePending ? Number(activePending.round) + 1 : Math.max(1, Number(saveRound) + 1);
+    const preparedPending = !loopMustClose && pendingCarry && Number(pendingCarry.round) === Number(pitRound)
+      ? pendingCarry
+      : null;
+    const loopNumber = activePending
+      ? Number(activePending.round) + 1
+      : preparedPending
+        ? Number(preparedPending.round) + 1
+        : Math.max(1, Number(saveRound) + 1);
     const pendingItems = activePending?.carrySelection || [];
+    const preparedItems = preparedPending?.carrySelection || [];
     const allRated = pendingItems.length > 0 && pendingItems.every((entry, index) => Object.prototype.hasOwnProperty.call(carryAdjust, carryResultKey(entry, index)));
     const summary = activePending
-      ? `⚠️ Loop ${loopNumber} offen`
-      : planned.length
-        ? `${formatNumber(plannedSummary.carbs)} g KH · ${plannedSummary.fluidMl} ml`
-        : "noch nichts für Loop";
+      ? `⚠️ Loop ${loopNumber} abschließen`
+      : preparedPending
+        ? `✓ Loop ${loopNumber} startklar`
+        : planned.length
+          ? `${formatNumber(plannedSummary.carbs)} g KH · ${plannedSummary.fluidMl} ml`
+          : "noch nichts für Loop";
 
     return (
-      <details className={`pit-live-collapse pit-live-loop ${activePending ? "loop-open" : ""}`} open={activePending ? true : undefined}>
+      <details ref={loopFuelingRef} className={`pit-live-collapse pit-live-loop ${activePending ? "loop-open" : preparedPending ? "loop-ready" : ""}`} open={activePending ? true : undefined}>
         <summary><span>FUELING LOOP</span><b>{summary}</b><i>›</i></summary>
         <div className="pit-live-collapse-body">
           {activePending ? (
@@ -548,6 +572,12 @@ export default function PitCrewLive({ race, onClose }) {
                 <button type="button" className="pit-live-primary" disabled={!allRated} onClick={() => confirmPendingCarry("rated")}>Loop {loopNumber} abschließen</button>
               </div>
             </div>
+          ) : preparedPending ? (
+            <div className="pit-live-loop-plan pit-live-loop-prepared">
+              <p className="pit-live-help">Loop {loopNumber} ist vorbereitet. Das hier wurde mitgegeben:</p>
+              {preparedItems.length ? <div className="pit-live-loop-plan-items">{preparedItems.map((entry) => <span key={`${entry.productId}:${entry.portionId}`}>{selectionLabel(entry)}</span>)}</div> : <p className="pit-live-loop-empty">Kein zusätzliches Loop-Fueling mitgegeben.</p>}
+              <p className="pit-live-loop-ready-note">✓ Beim nächsten Pit nur kurz bestätigen, was tatsächlich genommen wurde.</p>
+            </div>
           ) : (
             <div className="pit-live-loop-plan">
               <p className="pit-live-help">Hier wird nur gezeigt, was für Loop {loopNumber} mitgegeben wird. Der Idealvorschlag oben legt das automatisch fest.</p>
@@ -564,6 +594,14 @@ export default function PitCrewLive({ race, onClose }) {
     );
   }
 
+  function focusPendingLoop() {
+    if (!loopMustClose) return;
+    const target = loopFuelingRef.current;
+    if (!target) return;
+    target.open = true;
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
   function resetSession() {
     if (demoActive) {
       beginDemo();
@@ -578,6 +616,7 @@ export default function PitCrewLive({ race, onClose }) {
     setWeather([]);
     setSelection([]);
     setSelectionMode("suggestion");
+    setSelectionDirty(false);
     setCarryAdjust({});
     setEditingRound(null);
     setAnchorAt(plannedAnchor(race)?.toISOString() || "");
@@ -606,7 +645,7 @@ export default function PitCrewLive({ race, onClose }) {
         <section className={`pit-live-clock mode-${timing.mode} ${timing.started ? "" : "prestart"}`}>
           <b>{timing.started ? `RUNDE ${timing.currentRound}` : "VOR START"}</b>
           <span>Nächster Start <strong>{hhmm(timing.nextStart)}</strong></span>
-          {timing.started && <em>{modeTitle}</em>}
+          {timing.started && <em><span>Pit Modus:</span><strong>{modeTitle}</strong></em>}
         </section>
 
         {demoActive && (
@@ -689,7 +728,12 @@ export default function PitCrewLive({ race, onClose }) {
               <div className="pit-live-history-rows">{history.map((record, index) => ({ record, index })).slice(-5).reverse().map(({ record, index }) => {
                 const carried = (record.carriedSelection || record.carrySelection || []).length > 0;
                 const tone = historyTone(record, index);
-                return <div key={record.round} className={`tone-${tone}`}><em aria-hidden="true" /><b>{carried ? `Pit ${record.round} → Loop ${Number(record.round) + 1}` : `Pit ${record.round}`}</b><span>{formatNumber(record.summary?.carbs ?? summarizePitSelection(record.selection).carbs)} g KH{record.carryStatus === "pending" ? ` · Loop ${Number(record.round) + 1} offen` : ""}</span></div>;
+                const pendingText = record.carryStatus === "pending"
+                  ? Number(record.round) < Number(pitRound)
+                    ? ` · Loop ${Number(record.round) + 1} abschließen`
+                    : ` · Loop ${Number(record.round) + 1} startklar`
+                  : "";
+                return <div key={record.round} className={`tone-${tone}`}><em aria-hidden="true" /><b>{carried ? `Pit ${record.round} → Loop ${Number(record.round) + 1}` : `Pit ${record.round}`}</b><span>{formatNumber(record.summary?.carbs ?? summarizePitSelection(record.selection).carbs)} g KH{pendingText}</span></div>;
               })}</div>
               <button type="button" className="pit-live-secondary pit-live-wide" onClick={editLastPit}>Letzten Pit korrigieren</button>
             </div>
@@ -724,7 +768,22 @@ export default function PitCrewLive({ race, onClose }) {
           <div className={`tone-${metricStatus.fluid}`}><small>💧</small><b>{assessment.summary.fluidMl} ml</b></div>
           <div className={`tone-${metricStatus.rolling}`}><small>Ø3h</small><b>{assessment.rolling.hours ? `${Math.round(assessment.rolling.carbsPerHour)} g/h` : "–"}</b></div>
           {assessment.summary.caffeineMg > 0 && <div className="tone-neutral"><small>☕</small><b>{Math.round(assessment.summary.caffeineMg)} mg</b></div>}
-          <button type="button" disabled={!activeSelection.length || loopMustClose} onClick={savePit}>{loopMustClose ? `ERST LOOP ${pendingLoopNumber} ABSCHLIESSEN` : editingRound != null ? `PIT ${saveRound} KORRIGIEREN` : demoActive ? `DEMO · LOOP ${readyLoopNumber} BEREIT` : `LOOP ${readyLoopNumber} BEREIT`}</button>
+          <button
+            type="button"
+            className={`pit-live-main-action${loopMustClose ? " needs-close" : savedLoopReady ? " is-ready" : ""}`}
+            disabled={loopMustClose ? false : savedLoopReady || !activeSelection.length}
+            onClick={loopMustClose ? focusPendingLoop : savePit}
+          >
+            {loopMustClose
+              ? `LOOP ${pendingLoopNumber} ABSCHLIESSEN`
+              : editingRound != null
+                ? `PIT ${saveRound} KORRIGIEREN`
+                : savedLoopReady
+                  ? `✓ LOOP ${readyLoopNumber} STARTKLAR`
+                  : demoActive
+                    ? `DEMO · LOOP ${readyLoopNumber} STARTKLAR MACHEN`
+                    : `LOOP ${readyLoopNumber} STARTKLAR MACHEN`}
+          </button>
         </section>
       </main>
     </div>
