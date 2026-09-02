@@ -4,6 +4,8 @@ import {
   assessPitSelection,
   PIT_CREW_PRODUCTS,
   pitCrewRaceEligible,
+  pitCrewArrivalState,
+  pitCountdownLabel,
   pitMetricStatus,
   pitTimeMode,
   recommendPitCrew,
@@ -11,12 +13,28 @@ import {
   summarizePitSelection,
 } from "../src/services/pitCrewCoach.js";
 
-test("pit time mode turns a late return into quick/go mode without an arrival button", () => {
+test("pit time mode derives the crew mode from remaining time after arrival", () => {
   assert.equal(pitTimeMode(9), "normal");
   assert.equal(pitTimeMode(6), "compact");
   assert.equal(pitTimeMode(4), "quick");
   assert.equal(pitTimeMode(2.5), "go");
 });
+
+
+test("arrival state keeps the athlete outside until the crew explicitly marks the return", () => {
+  assert.deepEqual(pitCrewArrivalState({ started: true, currentRound: 7, arrivalRound: 6, loopMustClose: true }), {
+    arrived: false,
+    awaitingArrival: true,
+    loopReadyToClose: false,
+  });
+  assert.deepEqual(pitCrewArrivalState({ started: true, currentRound: 7, arrivalRound: 7, loopMustClose: true }), {
+    arrived: true,
+    awaitingArrival: false,
+    loopReadyToClose: true,
+  });
+  assert.equal(pitCountdownLabel(8.7), "08:42");
+});
+
 
 test("go mode suggests only portable Isostar plus gel", () => {
   const recommendation = recommendPitCrew({ round: 9, minutesToStart: 2.4, history: [] });

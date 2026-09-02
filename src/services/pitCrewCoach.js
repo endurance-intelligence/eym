@@ -414,6 +414,23 @@ export function pitMetricStatus(summary = {}, rolling = {}, { weather = [] } = {
   };
 }
 
+export function pitCrewArrivalState({ started = false, currentRound = 0, arrivalRound = 0, loopMustClose = false } = {}) {
+  const round = Math.max(0, Number(currentRound || 0));
+  const arrived = Boolean(started && round > 0 && Number(arrivalRound || 0) === round);
+  return {
+    arrived,
+    awaitingArrival: Boolean(started && round > 0 && !arrived),
+    loopReadyToClose: Boolean(loopMustClose && arrived),
+  };
+}
+
+export function pitCountdownLabel(minutesToStart) {
+  const totalSeconds = Math.max(0, Math.floor(Number(minutesToStart || 0) * 60));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
 export function pitCrewRaceEligible(profile = {}) {
   const mode = String(profile.loopMode || "").toLowerCase();
   const name = String(profile.name || "").toLowerCase();

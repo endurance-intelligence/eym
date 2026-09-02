@@ -45,6 +45,8 @@ test("shared pit snapshot preserves only race-operation state", () => {
     history: [{ round: 1, summary: { carbs: 55 } }],
     flags: ["thirsty"],
     weather: ["warm"],
+    arrivalRound: 4,
+    arrivalAt: "2026-09-26T09:52:15.000Z",
     unrelated: "must-not-survive",
   };
   writePitCrewLocalSnapshot(race, snapshot, storage);
@@ -54,5 +56,7 @@ test("shared pit snapshot preserves only race-operation state", () => {
     history: snapshot.history,
     flags: snapshot.flags,
     weather: snapshot.weather,
+    arrivalRound: snapshot.arrivalRound,
+    arrivalAt: snapshot.arrivalAt,
   });
 });

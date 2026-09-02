@@ -16,6 +16,8 @@ function normalizedSnapshot(value = {}) {
     history: Array.isArray(value?.history) ? value.history : [],
     flags: Array.isArray(value?.flags) ? value.flags : [],
     weather: Array.isArray(value?.weather) ? value.weather : [],
+    arrivalRound: Math.max(0, Number(value?.arrivalRound || 0)),
+    arrivalAt: String(value?.arrivalAt || ""),
   };
 }
 
