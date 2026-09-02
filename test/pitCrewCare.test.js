@@ -5,7 +5,7 @@ import { athleteCareHints } from "../src/services/pitCrewCare.js";
 test("athlete care stays quiet early when athlete and weather are stable", () => {
   const care = athleteCareHints({ round: 2, elapsedMinutes: 90, minutesToStart: 12, mode: "normal" });
   assert.equal(care.hints.length, 0);
-  assert.match(care.summary, /nichts Besonderes/);
+  assert.equal(care.summary, "alles okay");
 });
 
 test("rain produces dry sock and clothing memory aids without completion tracking", () => {
@@ -62,4 +62,34 @@ test("quick mode keeps care deliberately short", () => {
   const care = athleteCareHints({ round: 10, elapsedMinutes: 570, minutesToStart: 4.2, mode: "quick", flags: ["heavy-legs", "tired"] });
   assert.ok(care.hints.some((item) => item.key === "quick-care"));
   assert.ok(care.hints.length <= 2);
+});
+
+test("athlete care exposes green notice and urgent attention levels for the crew shell", () => {
+  const quiet = athleteCareHints({ round: 2, elapsedMinutes: 90, minutesToStart: 12, mode: "normal" });
+  assert.equal(quiet.level, "good");
+  assert.equal(quiet.summary, "alles okay");
+
+  const wet = athleteCareHints({
+    round: 5,
+    elapsedMinutes: 260,
+    minutesToStart: 13,
+    mode: "normal",
+    weather: ["rain"],
+    recentWeather: [["rain"], ["rain"]],
+    observation: { temperature: 16 },
+  });
+  assert.equal(wet.level, "notice");
+  assert.ok(wet.hints.some((item) => item.key === "wet-gear-change"));
+
+  const wetCold = athleteCareHints({
+    round: 6,
+    elapsedMinutes: 330,
+    minutesToStart: 11,
+    mode: "normal",
+    weather: ["rain", "cold"],
+    recentWeather: [["rain"], ["rain"]],
+    observation: { temperature: 8 },
+  });
+  assert.equal(wetCold.level, "urgent");
+  assert.equal(wetCold.summary, "bitte beachten");
 });

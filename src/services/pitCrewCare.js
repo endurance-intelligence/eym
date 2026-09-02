@@ -23,10 +23,6 @@ function rank(items = []) {
   return uniqueByKey(items).sort((left, right) => Number(right.priority || 0) - Number(left.priority || 0));
 }
 
-function compactLabel(item) {
-  return `${item.icon || "•"} ${item.short || item.title || "Hinweis"}`;
-}
-
 /**
  * Pure race-care helper. It never marks anything as done and deliberately
  * avoids medical/treatment language: the output is only a crew memory aid.
@@ -38,9 +34,13 @@ export function athleteCareHints({
   mode = "normal",
   flags = [],
   weather = [],
+  recentWeather = [],
   observation = null,
 } = {}) {
   const active = new Set([...(flags || []), ...(weather || [])]);
+  const recentWeatherRows = Array.isArray(recentWeather) ? recentWeather : [];
+  const rainyRecentLoops = recentWeatherRows.filter((row) => Array.isArray(row) && row.includes("rain")).length;
+  const repeatedRain = rainyRecentLoops >= 2;
   const hour = hourNumber(elapsedMinutes);
   const currentRound = Math.max(1, Number(round || 1));
   const minutes = Number(minutesToStart);
@@ -65,6 +65,17 @@ export function athleteCareHints({
       "trockenes Shirt",
       "Nasses Oberteil nicht unnötig lange anlassen – trockenes Shirt bzw. trockene Schicht bereitlegen.",
       90,
+      true,
+    );
+  }
+
+  if (repeatedRain) {
+    add(
+      "wet-gear-change",
+      "🧺",
+      "Wechselkleidung",
+      "Mehrere Loops waren nass. Trockene Socken und Wechselkleidung griffbereit legen; Shirt, Jacke und bei Bedarf Hose kurz prüfen.",
+      104,
       true,
     );
   }
@@ -198,13 +209,21 @@ export function athleteCareHints({
   }
 
   const hasUrgent = hints.some((item) => item.urgent);
-  const summary = hints.length
-    ? `${hints.length} Hinweis${hints.length === 1 ? "" : "e"} · ${hints.slice(0, 2).map(compactLabel).join(" · ")}`
-    : "aktuell nichts Besonderes";
+  const temperature = Number(observation?.temperature);
+  const criticalWeather = (repeatedRain && (active.has("cold") || active.has("too-cold") || (Number.isFinite(temperature) && temperature <= 10)))
+    || active.has("too-cold")
+    || active.has("too-warm");
+  const level = !hints.length ? "good" : criticalWeather ? "urgent" : "notice";
+  const summary = level === "good"
+    ? "alles okay"
+    : level === "urgent"
+      ? "bitte beachten"
+      : `${hints.length} Hinweis${hints.length === 1 ? "" : "e"}`;
 
   return {
     hints,
     summary,
+    level,
     urgent: hasUrgent,
     elapsedHours: Math.max(0, Number((Number(elapsedMinutes || 0) / 60).toFixed(1))),
     minutesToStart: Number.isFinite(minutes) ? minutes : null,

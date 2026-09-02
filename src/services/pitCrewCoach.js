@@ -164,11 +164,13 @@ export function pitPortion(productId, portionId) {
   return product.portions.find((portion) => String(portion.id) === String(portionId)) || product.portions[0] || null;
 }
 
-export function pitSelectionItem(productId, portionId, quantity = 1) {
+export function pitSelectionItem(productId, portionId, quantity = 1, intakeFactor = 1) {
   const product = pitProduct(productId);
   const portion = pitPortion(productId, portionId);
   if (!product || !portion) return null;
   const count = Math.max(1, Math.min(20, Math.round(Number(quantity || 1))));
+  const factorNumber = Number(intakeFactor);
+  const factor = Number.isFinite(factorNumber) ? Math.max(0, Math.min(1, factorNumber)) : 1;
   return {
     productId: product.id,
     portionId: portion.id,
@@ -178,17 +180,18 @@ export function pitSelectionItem(productId, portionId, quantity = 1) {
     estimated: Boolean(product.estimated),
     traits: product.traits || [],
     quantity: count,
-    carbs: round1(Number(portion.carbs || 0) * count),
-    fluidMl: Math.round(Number(portion.fluidMl || 0) * count),
-    caffeineMg: round1(Number(portion.caffeineMg || 0) * count),
-    sodiumMg: Math.round(Number(portion.sodiumMg || 0) * count),
+    intakeFactor: factor,
+    carbs: round1(Number(portion.carbs || 0) * count * factor),
+    fluidMl: Math.round(Number(portion.fluidMl || 0) * count * factor),
+    caffeineMg: round1(Number(portion.caffeineMg || 0) * count * factor),
+    sodiumMg: Math.round(Number(portion.sodiumMg || 0) * count * factor),
     portionLabel: portion.label,
   };
 }
 
 export function summarizePitSelection(selection = []) {
   const items = (Array.isArray(selection) ? selection : [])
-    .map((entry) => pitSelectionItem(entry.productId, entry.portionId, entry.quantity))
+    .map((entry) => pitSelectionItem(entry.productId, entry.portionId, entry.quantity, entry.intakeFactor))
     .filter(Boolean);
   return {
     items,

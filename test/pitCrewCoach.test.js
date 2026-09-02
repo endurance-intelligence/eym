@@ -107,3 +107,9 @@ test("mini status colors low intake orange and excessive intake red while rollin
   assert.equal(pitMetricStatus({ carbs: 35, fluidMl: 400 }, { hours: 3, carbsPerHour: 52 }).carbs, "good");
   assert.equal(pitMetricStatus({ carbs: 55, fluidMl: 200 }, { hours: 3, carbsPerHour: 55 }, { weather: ["hot"] }).fluid, "low");
 });
+
+test("partial loop drink scales actual carbs and fluid without treating it as a failure", () => {
+  const summary = summarizePitSelection([{ productId: "isostar", portionId: "200", quantity: 1, intakeFactor: 0.5 }]);
+  assert.equal(summary.carbs, 7);
+  assert.equal(summary.fluidMl, 100);
+});
