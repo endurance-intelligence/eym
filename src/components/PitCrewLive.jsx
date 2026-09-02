@@ -78,7 +78,7 @@ function modeLabel(mode) {
   if (mode === "go") return "GO MODE";
   if (mode === "quick") return "QUICK PIT";
   if (mode === "compact") return "KOMPAKT";
-  return "NORMAL";
+  return "STANDARD-PIT";
 }
 
 function toggleValue(values, key) {
@@ -128,26 +128,41 @@ function warningText(metricStatus, assessment) {
 }
 
 export default function PitCrewLive({ race, onClose }) {
-  const storageKey = `endurance-pit-crew:${race?.key || race?.name || "backyard"}:${race?.date || "open"}`;
-  const stored = useMemo(() => safeStoredSession(storageKey), [storageKey]);
+  const baseStorageKey = `endurance-pit-crew:${race?.key || race?.name || "backyard"}:${race?.date || "open"}`;
+  const stored = useMemo(() => safeStoredSession(baseStorageKey), [baseStorageKey]);
+  const [demoActive, setDemoActive] = useState(false);
+  const [demoRound, setDemoRound] = useState(1);
+  const [demoMinutesToStart, setDemoMinutesToStart] = useState(10);
+  const storageKey = demoActive ? `${baseStorageKey}:demo` : baseStorageKey;
   const [now, setNow] = useState(() => new Date());
   const [history, setHistory] = useState(() => Array.isArray(stored?.history) ? stored.history : []);
   const [flags, setFlags] = useState(() => Array.isArray(stored?.flags) ? stored.flags : []);
   const [weather, setWeather] = useState(() => Array.isArray(stored?.weather) ? stored.weather : []);
   const [anchorAt, setAnchorAt] = useState(() => stored?.anchorAt || plannedAnchor(race)?.toISOString() || "");
   const [selection, setSelection] = useState([]);
-  const [inputMode, setInputMode] = useState("now");
   const [carryAdjust, setCarryAdjust] = useState({});
   const [carryEditOpen, setCarryEditOpen] = useState(false);
-  const [activeCategory, setActiveCategory] = useState("drink");
+  const [pitCategory, setPitCategory] = useState("drink");
+  const [loopCategory, setLoopCategory] = useState("drink");
   const [saveMessage, setSaveMessage] = useState("");
   const [editingRound, setEditingRound] = useState(null);
   const [autoWeather, setAutoWeather] = useState(null);
   const [weatherError, setWeatherError] = useState("");
   const loadedPitRound = useRef(null);
+  const liveSnapshotBeforeDemo = useRef(null);
   const anchor = anchorAt ? new Date(anchorAt) : null;
   const intervalMinutes = Number(race?.loopIntervalMinutes || 60);
-  const timing = timeContext(anchor, intervalMinutes, now);
+  const liveTiming = timeContext(anchor, intervalMinutes, now);
+  const demoBase = plannedAnchor(race) || new Date(2000, 0, 1, 6, 0, 0, 0);
+  const demoNextStart = new Date(demoBase.getTime() + Math.max(1, Number(demoRound || 1)) * intervalMinutes * 60 * 1000);
+  const timing = demoActive ? {
+    started: true,
+    currentRound: Math.max(1, Number(demoRound || 1)),
+    pitRound: Math.max(1, Number(demoRound || 1)),
+    nextStart: demoNextStart,
+    minutesToStart: Math.max(0, Number(demoMinutesToStart || 0)),
+    mode: pitTimeMode(demoMinutesToStart),
+  } : liveTiming;
   const pitRound = timing.pitRound;
   const saveRound = editingRound ?? pitRound;
 
@@ -210,8 +225,6 @@ export default function PitCrewLive({ race, onClose }) {
 
   const assessment = assessPitSelection(selection, planningHistory, { weather: effectiveWeather });
   const historyRolling = rollingPitAverage(history, null, 3);
-  const confirmedNow = summarizePitSelection(selection.filter((entry) => entry.timing !== "carry"));
-  const carryNow = summarizePitSelection(selection.filter((entry) => entry.timing === "carry"));
   const metricStatus = pitMetricStatus(assessment.summary, assessment.rolling, { weather: effectiveWeather });
   const suggestionSummary = recommendation.summary;
   const modeTitle = modeLabel(timing.mode);
@@ -221,10 +234,13 @@ export default function PitCrewLive({ race, onClose }) {
     return !portableMode && product?.category !== "drink";
   });
   const suggestionLoop = recommendation.selection.filter((entry) => !suggestionPit.includes(entry));
-  const categoryProducts = PIT_CREW_PRODUCTS.filter((product) => product.category === activeCategory);
   const lastRecord = history.length ? history[history.length - 1] : null;
   const alert = warningText(metricStatus, assessment);
-  const elapsedMinutes = anchor && timing.started ? Math.max(0, (now.getTime() - anchor.getTime()) / 60000) : 0;
+  const elapsedMinutes = demoActive
+    ? Math.max(0, timing.currentRound * intervalMinutes - timing.minutesToStart)
+    : anchor && timing.started
+      ? Math.max(0, (now.getTime() - anchor.getTime()) / 60000)
+      : 0;
   const athleteCare = athleteCareHints({
     round: Math.max(1, timing.currentRound || 1),
     elapsedMinutes,
@@ -235,14 +251,14 @@ export default function PitCrewLive({ race, onClose }) {
     observation: autoWeather,
   });
 
-  function selectPortion(productId, portionId) {
+  function selectPortion(productId, portionId, timingMode) {
     setSaveMessage("");
     setSelection((current) => {
-      const existing = current.find((item) => item.productId === productId && (item.timing || "now") === inputMode);
+      const existing = current.find((item) => item.productId === productId && (item.timing || "now") === timingMode);
       if (existing && String(existing.portionId) === String(portionId)) return current;
       return [
-        ...current.filter((item) => !(item.productId === productId && (item.timing || "now") === inputMode)),
-        { productId, portionId: String(portionId), timing: inputMode, quantity: 1 },
+        ...current.filter((item) => !(item.productId === productId && (item.timing || "now") === timingMode)),
+        { productId, portionId: String(portionId), timing: timingMode, quantity: 1 },
       ];
     });
   }
@@ -337,7 +353,125 @@ export default function PitCrewLive({ race, onClose }) {
     setSaveMessage(`Pit ${lastRecord.round} zur Korrektur geöffnet.`);
   }
 
+  function beginDemo() {
+    if (!demoActive) {
+      liveSnapshotBeforeDemo.current = {
+        selection,
+        carryAdjust,
+        carryEditOpen,
+        editingRound,
+        saveMessage,
+      };
+    }
+    if (typeof window !== "undefined") {
+      if (!demoActive) window.localStorage.setItem(baseStorageKey, JSON.stringify({ anchorAt, history, flags, weather }));
+      window.localStorage.removeItem(`${baseStorageKey}:demo`);
+    }
+    setDemoActive(true);
+    setDemoRound(1);
+    setDemoMinutesToStart(10);
+    setHistory([]);
+    setFlags([]);
+    setWeather([]);
+    setSelection([]);
+    setCarryAdjust({});
+    setCarryEditOpen(false);
+    setEditingRound(null);
+    setSaveMessage("Demo-Modus aktiv · echte Live-Daten bleiben unverändert.");
+    loadedPitRound.current = null;
+  }
+
+  function endDemo() {
+    const liveStored = safeStoredSession(baseStorageKey);
+    const transient = liveSnapshotBeforeDemo.current || {};
+    setDemoActive(false);
+    setHistory(Array.isArray(liveStored?.history) ? liveStored.history : []);
+    setFlags(Array.isArray(liveStored?.flags) ? liveStored.flags : []);
+    setWeather(Array.isArray(liveStored?.weather) ? liveStored.weather : []);
+    setAnchorAt(liveStored?.anchorAt || plannedAnchor(race)?.toISOString() || "");
+    setSelection(Array.isArray(transient.selection) ? transient.selection : []);
+    setCarryAdjust(transient.carryAdjust || {});
+    setCarryEditOpen(Boolean(transient.carryEditOpen));
+    setEditingRound(transient.editingRound ?? null);
+    setSaveMessage("Demo beendet · zurück in der echten Live-Session.");
+    liveSnapshotBeforeDemo.current = null;
+    loadedPitRound.current = null;
+  }
+
+  function moveDemoLoop(delta) {
+    if (!demoActive) return;
+    setDemoRound((current) => Math.max(1, Number(current || 1) + delta));
+    setDemoMinutesToStart(10);
+    setEditingRound(null);
+    setSelection([]);
+    setCarryAdjust({});
+    setCarryEditOpen(false);
+    setSaveMessage(delta > 0 ? "Nächste Demo-Loop geladen." : "Vorherige Demo-Loop geladen.");
+    loadedPitRound.current = null;
+  }
+
+  function clearTimingSelection(timingMode) {
+    setSelection((current) => current.filter((entry) => (entry.timing || "now") !== timingMode));
+    setSaveMessage("");
+  }
+
+  function renderFuelingSection(timingMode, title, category, setCategory, emptyLabel) {
+    const selected = selection.filter((entry) => (entry.timing || "now") === timingMode);
+    const summary = summarizePitSelection(selected);
+    const products = PIT_CREW_PRODUCTS.filter((product) => product.category === category);
+    const isCarry = timingMode === "carry";
+    return (
+      <details className="pit-live-collapse">
+        <summary>
+          <span>{title}</span>
+          <b>{selected.length ? `${formatNumber(summary.carbs)} g KH · ${summary.fluidMl} ml` : emptyLabel}</b>
+          <i>›</i>
+        </summary>
+        <div className="pit-live-collapse-body pit-live-intake">
+          {editingRound != null && <div className="pit-live-edit-banner">Pit {editingRound} wird korrigiert. Speichern ersetzt nur diesen Pit.</div>}
+          <p className="pit-live-help">{isCarry
+            ? "Was für die nächste Loop mitgeht. Bei der Rückkehr reicht normalerweise ein Tap auf „✓ Wie geplant“."
+            : "Nur tatsächlich im Pit gegessen oder getrunken eintragen – ideal zum schnellen Gegencheck der Crew."}</p>
+          <div className="pit-live-category-tabs">
+            {CATEGORIES.map(([key, label]) => <button type="button" key={key} className={category === key ? "active" : ""} onClick={() => setCategory(key)}>{label}</button>)}
+          </div>
+          <div className="pit-live-product-grid">
+            {products.map((product) => {
+              const selectedInMode = selection.find((item) => item.productId === product.id && (item.timing || "now") === timingMode);
+              return (
+                <article key={product.id} className={selectedInMode ? "selected" : ""}>
+                  <div><b>{product.icon}</b><strong>{product.label}{product.estimated ? " ≈" : ""}</strong>{selectedInMode && quantity(selectedInMode) > 1 && <em>×{quantity(selectedInMode)}</em>}</div>
+                  <div className="pit-live-portions">
+                    {product.portions.map((portion) => (
+                      <button type="button" key={portion.id} className={selectedInMode && String(selectedInMode.portionId) === String(portion.id) ? "active" : ""} onClick={() => selectPortion(product.id, portion.id, timingMode)}>
+                        <b>{portion.label}</b><span>{portion.carbs ? `${formatNumber(portion.carbs)} g KH` : "0 g KH"}</span>
+                      </button>
+                    ))}
+                  </div>
+                  {selectedInMode && (
+                    <div className="pit-live-quantity">
+                      <button type="button" onClick={() => changeQuantity(product.id, timingMode, -1)}>−</button>
+                      <b>{quantity(selectedInMode)}</b>
+                      <button type="button" onClick={() => changeQuantity(product.id, timingMode, 1)}>+</button>
+                      <span>{formatNumber(summarizePitSelection([selectedInMode]).carbs)} g KH gesamt</span>
+                    </div>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+          {selected.length > 0 && <button type="button" className="pit-live-secondary pit-live-clear" onClick={() => clearTimingSelection(timingMode)}>{isCarry ? "Fueling Loop Auswahl leeren" : "Fueling Pit Auswahl leeren"}</button>}
+        </div>
+      </details>
+    );
+  }
+
   function resetSession() {
+    if (demoActive) {
+      beginDemo();
+      setSaveMessage("Demo auf Loop 1 zurückgesetzt.");
+      return;
+    }
     const confirmed = typeof window === "undefined" || window.confirm("Wirklich die gesamte Live-Session löschen? Alle gespeicherten Pits, Statusmeldungen und Crew-Daten dieser Session werden zurückgesetzt.");
     if (!confirmed) return;
     if (typeof window !== "undefined") window.localStorage.removeItem(storageKey);
@@ -355,18 +489,47 @@ export default function PitCrewLive({ race, onClose }) {
   return (
     <div className="pit-live-shell" role="dialog" aria-modal="true" aria-label="Pit Crew Live">
       <header className="pit-live-topbar">
-        <div><small>PIT CREW LIVE</small><strong>{race?.name || "Backyard"}</strong></div>
+        <div><small>PIT CREW LIVE{demoActive ? " · DEMO" : ""}</small><strong>{race?.name || "Backyard"}</strong></div>
         <button type="button" onClick={onClose} aria-label="Pit Crew schließen">Schließen</button>
       </header>
 
       <main className="pit-live-main">
-        <section className={`pit-live-clock mode-${timing.mode}`}>
+        <details className="pit-live-collapse pit-live-weather-top">
+          <summary><span>WETTER</span><b>{autoWeather ? `${pitWeatherIcon(autoWeather.weatherCode, autoWeather.isDay)} ${autoWeather.temperature} °C · ${autoWeather.windSpeed} km/h` : weatherError ? "Auto nicht verfügbar" : "wird automatisch geladen …"}</b><i>›</i></summary>
+          <div className="pit-live-collapse-body">
+            {autoWeather ? <div className="pit-live-weather-facts"><span><b>{autoWeather.feelsLike} °C</b> gefühlt</span><span><b>{autoWeather.humidity} %</b> Feuchte</span><span><b>{formatNumber(autoWeather.precipitation)} mm</b> Regen</span><span><b>{autoWeather.windGusts} km/h</b> Böen</span></div> : <p className="pit-live-help">{weatherError || "Wetter wird geladen …"}</p>}
+            <p className="pit-live-help">Automatisch erkannt. Nur antippen, wenn die Situation vor Ort deutlich anders ist.</p>
+            <div className="pit-live-weather-grid">
+              {WEATHER_OPTIONS.map(([key, icon, label]) => <button type="button" key={key} className={weather.includes(key) ? "active" : ""} onClick={() => setWeather((current) => toggleValue(current, key))}>{icon} {label}</button>)}
+            </div>
+          </div>
+        </details>
+
+        <section className={`pit-live-clock mode-${timing.mode} ${timing.started ? "" : "prestart"}`}>
           <b>{timing.started ? `RUNDE ${timing.currentRound}` : "VOR START"}</b>
           <span>Nächster Start <strong>{hhmm(timing.nextStart)}</strong></span>
-          <em>{modeTitle}</em>
+          {timing.started && <em>{modeTitle}</em>}
         </section>
 
-        {!anchor && (
+        {demoActive && (
+          <section className="pit-live-demo-panel">
+            <div className="pit-live-demo-head">
+              <div><small>DEMO-MODUS · LIVE-DATEN UNVERÄNDERT</small><strong>Loop {timing.currentRound} simulieren</strong></div>
+              <button type="button" className="pit-live-secondary" onClick={endDemo}>Demo beenden</button>
+            </div>
+            <div className="pit-live-demo-loop">
+              <button type="button" className="pit-live-secondary" disabled={demoRound <= 1} onClick={() => moveDemoLoop(-1)}>← Loop</button>
+              <button type="button" className="pit-live-primary" onClick={() => moveDemoLoop(1)}>Nächste Loop →</button>
+            </div>
+            <div className="pit-live-demo-times" aria-label="Demo Pit-Zeit">
+              {[[10, "STANDARD"], [6, "KOMPAKT"], [4, "QUICK"], [2, "GO"]].map(([minutes, label]) => (
+                <button type="button" key={minutes} className={demoMinutesToStart === minutes ? "active" : ""} onClick={() => setDemoMinutesToStart(minutes)}><b>{minutes} min</b><span>{label}</span></button>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {!demoActive && !anchor && (
           <section className="pit-live-anchor-warning">
             <b>Startzeit fehlt</b>
             <p>Einmal die echte Startzeit setzen. Danach leitet die Uhr alle Loops und Quick-Pit-Fenster automatisch ab.</p>
@@ -436,56 +599,8 @@ export default function PitCrewLive({ race, onClose }) {
           </div>
         </details>
 
-        <details className="pit-live-collapse">
-          <summary><span>WETTER</span><b>{autoWeather ? `${pitWeatherIcon(autoWeather.weatherCode, autoWeather.isDay)} ${autoWeather.temperature} °C · ${autoWeather.windSpeed} km/h` : weatherError ? "Auto nicht verfügbar" : "wird automatisch geladen …"}</b><i>›</i></summary>
-          <div className="pit-live-collapse-body">
-            {autoWeather ? <div className="pit-live-weather-facts"><span><b>{autoWeather.feelsLike} °C</b> gefühlt</span><span><b>{autoWeather.humidity} %</b> Feuchte</span><span><b>{formatNumber(autoWeather.precipitation)} mm</b> Regen</span><span><b>{autoWeather.windGusts} km/h</b> Böen</span></div> : <p className="pit-live-help">{weatherError || "Wetter wird geladen …"}</p>}
-            <p className="pit-live-help">Automatisch erkannt. Nur antippen, wenn die Situation vor Ort deutlich anders ist.</p>
-            <div className="pit-live-weather-grid">
-              {WEATHER_OPTIONS.map(([key, icon, label]) => <button type="button" key={key} className={weather.includes(key) ? "active" : ""} onClick={() => setWeather((current) => toggleValue(current, key))}>{icon} {label}</button>)}
-            </div>
-          </div>
-        </details>
-
-        <details className="pit-live-collapse">
-          <summary><span>AUFNAHME</span><b>{selection.length ? `${formatNumber(confirmedNow.carbs)} g im Pit · ${formatNumber(carryNow.carbs)} g Loop` : "noch nichts erfasst"}</b><i>›</i></summary>
-          <div className="pit-live-collapse-body pit-live-intake">
-            {editingRound != null && <div className="pit-live-edit-banner">Pit {editingRound} wird korrigiert. Speichern ersetzt nur diesen Pit.</div>}
-            <div className="pit-live-intake-mode">
-              <button type="button" className={inputMode === "now" ? "active" : ""} onClick={() => setInputMode("now")}><b>IM PIT GENOMMEN</b><span>zählt sofort</span></button>
-              <button type="button" className={inputMode === "carry" ? "active" : ""} onClick={() => setInputMode("carry")}><b>MIT AUF LOOP</b><span>1-Tap-Bestätigung bei Rückkehr</span></button>
-            </div>
-            <div className="pit-live-category-tabs">
-              {CATEGORIES.map(([key, label]) => <button type="button" key={key} className={activeCategory === key ? "active" : ""} onClick={() => setActiveCategory(key)}>{label}</button>)}
-            </div>
-            <div className="pit-live-product-grid">
-              {categoryProducts.map((product) => {
-                const selectedInMode = selection.find((item) => item.productId === product.id && (item.timing || "now") === inputMode);
-                return (
-                  <article key={product.id} className={selectedInMode ? "selected" : ""}>
-                    <div><b>{product.icon}</b><strong>{product.label}{product.estimated ? " ≈" : ""}</strong>{selectedInMode && quantity(selectedInMode) > 1 && <em>×{quantity(selectedInMode)}</em>}</div>
-                    <div className="pit-live-portions">
-                      {product.portions.map((portion) => (
-                        <button type="button" key={portion.id} className={selectedInMode && String(selectedInMode.portionId) === String(portion.id) ? "active" : ""} onClick={() => selectPortion(product.id, portion.id)}>
-                          <b>{portion.label}</b><span>{portion.carbs ? `${formatNumber(portion.carbs)} g KH` : "0 g KH"}</span>
-                        </button>
-                      ))}
-                    </div>
-                    {selectedInMode && (
-                      <div className="pit-live-quantity">
-                        <button type="button" onClick={() => changeQuantity(product.id, inputMode, -1)}>−</button>
-                        <b>{quantity(selectedInMode)}</b>
-                        <button type="button" onClick={() => changeQuantity(product.id, inputMode, 1)}>+</button>
-                        <span>{formatNumber(summarizePitSelection([selectedInMode]).carbs)} g KH gesamt</span>
-                      </div>
-                    )}
-                  </article>
-                );
-              })}
-            </div>
-            {selection.length > 0 && <button type="button" className="pit-live-secondary pit-live-clear" onClick={() => setSelection([])}>Aktuelle Auswahl verwerfen</button>}
-          </div>
-        </details>
+        {renderFuelingSection("now", "FUELING PIT", pitCategory, setPitCategory, "noch nichts im Pit")}
+        {renderFuelingSection("carry", "FUELING LOOP", loopCategory, setLoopCategory, "noch nichts für Loop")}
 
         {history.length > 0 && (
           <details className="pit-live-collapse">
@@ -498,11 +613,22 @@ export default function PitCrewLive({ race, onClose }) {
         )}
 
         <details className="pit-live-collapse pit-live-tools">
-          <summary><span>WERKZEUGE</span><b>Demo / Korrektur</b><i>›</i></summary>
+          <summary><span>WERKZEUGE</span><b>{demoActive ? "Demo läuft" : "Demo / Korrektur"}</b><i>›</i></summary>
           <div className="pit-live-collapse-body">
-            <p className="pit-live-help">Die komplette Session nur für Demo/Neustart löschen. Vor dem Löschen kommt immer eine Sicherheitsabfrage.</p>
-            {!race?.time && <button type="button" className="pit-live-secondary pit-live-wide" onClick={() => setAnchorAt(new Date().toISOString())}>Startzeit = jetzt</button>}
-            <button type="button" className="pit-live-danger pit-live-wide" onClick={resetSession}>Gesamte Live-Session zurücksetzen</button>
+            {!demoActive ? (
+              <>
+                <p className="pit-live-help">Demo startet eine getrennte Simulation. Du kannst mehrere Loops, Fueling, Status und alle Zeitmodi in Minuten zeigen – die echte Session bleibt unangetastet.</p>
+                <button type="button" className="pit-live-primary pit-live-wide" onClick={beginDemo}>Demo-Modus starten</button>
+                {!race?.time && <button type="button" className="pit-live-secondary pit-live-wide" onClick={() => setAnchorAt(new Date().toISOString())}>Startzeit = jetzt</button>}
+                <button type="button" className="pit-live-danger pit-live-wide" onClick={resetSession}>Gesamte Live-Session zurücksetzen</button>
+              </>
+            ) : (
+              <>
+                <p className="pit-live-help">Demo-Daten liegen separat. „Demo neu starten“ löscht nur die Simulation; „Demo beenden“ holt die echte Live-Session zurück.</p>
+                <button type="button" className="pit-live-secondary pit-live-wide" onClick={beginDemo}>Demo neu starten</button>
+                <button type="button" className="pit-live-primary pit-live-wide" onClick={endDemo}>Demo beenden</button>
+              </>
+            )}
           </div>
         </details>
 
@@ -514,7 +640,7 @@ export default function PitCrewLive({ race, onClose }) {
           <div className={`tone-${metricStatus.fluid}`}><small>💧</small><b>{assessment.summary.fluidMl} ml</b></div>
           <div className={`tone-${metricStatus.rolling}`}><small>Ø3h</small><b>{assessment.rolling.hours ? `${Math.round(assessment.rolling.carbsPerHour)} g/h` : "–"}</b></div>
           {assessment.summary.caffeineMg > 0 && <div className="tone-neutral"><small>☕</small><b>{Math.round(assessment.summary.caffeineMg)} mg</b></div>}
-          <button type="button" disabled={!selection.length} onClick={savePit}>{editingRound != null ? `PIT ${saveRound} KORRIGIEREN` : `PIT ${saveRound} SPEICHERN`}</button>
+          <button type="button" disabled={!selection.length} onClick={savePit}>{demoActive ? `DEMO · PIT ${saveRound} ${editingRound != null ? "KORRIGIEREN" : "SPEICHERN"}` : editingRound != null ? `PIT ${saveRound} KORRIGIEREN` : `PIT ${saveRound} SPEICHERN`}</button>
         </section>
       </main>
     </div>
