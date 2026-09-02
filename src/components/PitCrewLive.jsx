@@ -140,6 +140,7 @@ export default function PitCrewLive({ race, onClose }) {
   const [weather, setWeather] = useState(() => Array.isArray(stored?.weather) ? stored.weather : []);
   const [anchorAt, setAnchorAt] = useState(() => stored?.anchorAt || plannedAnchor(race)?.toISOString() || "");
   const [selection, setSelection] = useState([]);
+  const [selectionMode, setSelectionMode] = useState("suggestion");
   const [carryAdjust, setCarryAdjust] = useState({});
   const [pitCategory, setPitCategory] = useState("drink");
   const [saveMessage, setSaveMessage] = useState("");
@@ -179,6 +180,7 @@ export default function PitCrewLive({ race, onClose }) {
     loadedPitRound.current = pitRound;
     const existing = history.find((record) => Number(record.round) === Number(pitRound));
     setSelection(existing ? selectionWithTiming(existing) : []);
+    setSelectionMode(existing ? "manual" : "suggestion");
     setSaveMessage(existing ? `Pit ${pitRound} ist gespeichert und kann angepasst werden.` : "");
   }, [editingRound, history, pitRound]);
 
@@ -223,9 +225,6 @@ export default function PitCrewLive({ race, onClose }) {
     weather: effectiveWeather,
   });
 
-  const assessment = assessPitSelection(selection, planningHistory, { weather: effectiveWeather });
-  const historyRolling = rollingPitAverage(history, null, 3);
-  const metricStatus = pitMetricStatus(assessment.summary, assessment.rolling, { weather: effectiveWeather });
   const suggestionSummary = recommendation.summary;
   const modeTitle = modeLabel(timing.mode);
   const portableMode = recommendation.mode === "go" || recommendation.mode === "quick";
@@ -234,6 +233,16 @@ export default function PitCrewLive({ race, onClose }) {
     return !portableMode && product?.category !== "drink";
   });
   const suggestionLoop = recommendation.selection.filter((entry) => !suggestionPit.includes(entry));
+  const suggestedSelection = recommendation.selection.map((item) => {
+    const product = PIT_CREW_PRODUCTS.find((entry) => entry.id === item.productId);
+    const carry = portableMode || product?.category === "drink";
+    return { ...item, timing: carry ? "carry" : "now", quantity: quantity(item) };
+  });
+  const activeSelection = selectionMode === "suggestion" && editingRound == null ? suggestedSelection : selection;
+  const readyLoopNumber = Math.max(1, Number(saveRound || 0) + 1);
+  const assessment = assessPitSelection(activeSelection, planningHistory, { weather: effectiveWeather });
+  const historyRolling = rollingPitAverage(history, null, 3);
+  const metricStatus = pitMetricStatus(assessment.summary, assessment.rolling, { weather: effectiveWeather });
   const lastRecord = history.length ? history[history.length - 1] : null;
   const alert = warningText(metricStatus, assessment);
   const elapsedMinutes = demoActive
@@ -265,9 +274,15 @@ export default function PitCrewLive({ race, onClose }) {
     return "good";
   }
 
-  function selectPortion(productId, portionId, timingMode) {
+  function updateSelection(mutator) {
+    const base = selectionMode === "suggestion" && editingRound == null ? suggestedSelection : selection;
+    setSelection(mutator(base));
+    setSelectionMode("manual");
     setSaveMessage("");
-    setSelection((current) => {
+  }
+
+  function selectPortion(productId, portionId, timingMode) {
+    updateSelection((current) => {
       const existing = current.find((item) => item.productId === productId && (item.timing || "now") === timingMode);
       if (existing && String(existing.portionId) === String(portionId)) return current;
       return [
@@ -278,36 +293,25 @@ export default function PitCrewLive({ race, onClose }) {
   }
 
   function changeQuantity(productId, timingMode, delta) {
-    setSaveMessage("");
-    setSelection((current) => current.flatMap((entry) => {
+    updateSelection((current) => current.flatMap((entry) => {
       if (entry.productId !== productId || (entry.timing || "now") !== timingMode) return [entry];
       const next = Math.max(0, Math.min(20, quantity(entry) + delta));
       return next ? [{ ...entry, quantity: next }] : [];
     }));
   }
 
-  function useSuggestion() {
-    setSelection(recommendation.selection.map((item) => {
-      const product = PIT_CREW_PRODUCTS.find((entry) => entry.id === item.productId);
-      const carry = portableMode || product?.category === "drink";
-      return { ...item, timing: carry ? "carry" : "now", quantity: quantity(item) };
-    }));
-    setEditingRound(null);
-    setSaveMessage("");
-  }
-
   function savePit() {
     if (loopMustClose) {
-      setSaveMessage(`Bitte Loop ${pendingLoopNumber} zuerst abschließen. Danach wird der nächste Pit mit den echten Werten gespeichert.`);
+      setSaveMessage(`Bitte Loop ${pendingLoopNumber} zuerst abschließen. Danach kann die nächste Loop mit den echten Werten bereitgemacht werden.`);
       return;
     }
-    if (!selection.length) {
-      setSaveMessage("Noch nichts ausgewählt. Nur echte Aufnahme und bewusst mitgegebenes Loop-Fuel speichern.");
+    if (!activeSelection.length) {
+      setSaveMessage("Noch nichts vorgesehen. Bitte Fueling Pit bzw. Loop prüfen.");
       return;
     }
     const existing = history.find((item) => Number(item.round) === Number(saveRound));
-    const consumedSelection = selection.filter((entry) => entry.timing !== "carry").map(({ productId, portionId, quantity: count }) => ({ productId, portionId, quantity: quantity({ quantity: count }) }));
-    const carrySelection = selection.filter((entry) => entry.timing === "carry").map(({ productId, portionId, quantity: count }) => ({ productId, portionId, quantity: quantity({ quantity: count }) }));
+    const consumedSelection = activeSelection.filter((entry) => entry.timing !== "carry").map(({ productId, portionId, quantity: count }) => ({ productId, portionId, quantity: quantity({ quantity: count }) }));
+    const carrySelection = activeSelection.filter((entry) => entry.timing === "carry").map(({ productId, portionId, quantity: count }) => ({ productId, portionId, quantity: quantity({ quantity: count }) }));
     const summary = summarizePitSelection(consumedSelection);
     const provisionalSummary = summarizePitSelection([...consumedSelection, ...carrySelection]);
     const record = {
@@ -326,7 +330,8 @@ export default function PitCrewLive({ race, onClose }) {
       .sort((left, right) => Number(left.round) - Number(right.round)));
     setSaveMessage(editingRound != null
       ? `Pit ${saveRound} korrigiert.`
-      : `Pit ${saveRound} gespeichert · ${formatNumber(summary.carbs)} g bestätigt${carrySelection.length ? ` · ${formatNumber(provisionalSummary.carbs - summary.carbs)} g für Loop ${Number(saveRound) + 1} mitgegeben` : ""}.`);
+      : `Loop ${readyLoopNumber} bereit · ${formatNumber(summary.carbs)} g im Pit bestätigt${carrySelection.length ? ` · ${formatNumber(provisionalSummary.carbs - summary.carbs)} g mitgegeben` : ""}.`);
+    setSelectionMode("manual");
     setEditingRound(null);
   }
 
@@ -376,6 +381,7 @@ export default function PitCrewLive({ race, onClose }) {
     if (!lastRecord) return;
     setEditingRound(Number(lastRecord.round));
     setSelection(selectionWithTiming(lastRecord));
+    setSelectionMode("manual");
     setSaveMessage(`Pit ${lastRecord.round} zur Korrektur geöffnet.`);
   }
 
@@ -383,6 +389,7 @@ export default function PitCrewLive({ race, onClose }) {
     if (!demoActive) {
       liveSnapshotBeforeDemo.current = {
         selection,
+        selectionMode,
         carryAdjust,
         editingRound,
         saveMessage,
@@ -399,6 +406,7 @@ export default function PitCrewLive({ race, onClose }) {
     setFlags([]);
     setWeather([]);
     setSelection([]);
+    setSelectionMode("suggestion");
     setCarryAdjust({});
     setEditingRound(null);
     setSaveMessage("Demo-Modus aktiv · echte Live-Daten bleiben unverändert.");
@@ -414,6 +422,7 @@ export default function PitCrewLive({ race, onClose }) {
     setWeather(Array.isArray(liveStored?.weather) ? liveStored.weather : []);
     setAnchorAt(liveStored?.anchorAt || plannedAnchor(race)?.toISOString() || "");
     setSelection(Array.isArray(transient.selection) ? transient.selection : []);
+    setSelectionMode(transient.selectionMode || "suggestion");
     setCarryAdjust(transient.carryAdjust || {});
     setEditingRound(transient.editingRound ?? null);
     setSaveMessage("Demo beendet · zurück in der echten Live-Session.");
@@ -431,18 +440,18 @@ export default function PitCrewLive({ race, onClose }) {
     setDemoMinutesToStart(10);
     setEditingRound(null);
     setSelection([]);
+    setSelectionMode("suggestion");
     setCarryAdjust({});
     setSaveMessage(delta > 0 ? "Nächste Demo-Loop geladen." : "Vorherige Demo-Loop geladen.");
     loadedPitRound.current = null;
   }
 
   function clearTimingSelection(timingMode) {
-    setSelection((current) => current.filter((entry) => (entry.timing || "now") !== timingMode));
-    setSaveMessage("");
+    updateSelection((current) => current.filter((entry) => (entry.timing || "now") !== timingMode));
   }
 
   function renderPitFuelingSection() {
-    const selected = selection.filter((entry) => (entry.timing || "now") === "now");
+    const selected = activeSelection.filter((entry) => (entry.timing || "now") === "now");
     const summary = summarizePitSelection(selected);
     const products = PIT_CREW_PRODUCTS.filter((product) => product.category === pitCategory);
     return (
@@ -454,18 +463,18 @@ export default function PitCrewLive({ race, onClose }) {
         </summary>
         <div className="pit-live-collapse-body pit-live-intake">
           {editingRound != null && <div className="pit-live-edit-banner">Pit {editingRound} wird korrigiert. Speichern ersetzt nur diesen Pit.</div>}
-          <p className="pit-live-help">Nur tatsächlich im Pit gegessen oder getrunken eintragen – ideal zum schnellen Gegencheck der Crew.</p>
+          <p className="pit-live-help">Der Idealvorschlag ist vorausgewählt. Nur ändern, wenn im Pit tatsächlich etwas anderes gegessen oder getrunken wird.</p>
           <div className="pit-live-category-tabs">
             {CATEGORIES.map(([key, label]) => <button type="button" key={key} className={pitCategory === key ? "active" : ""} onClick={() => setPitCategory(key)}>{label}</button>)}
           </div>
           <div className="pit-live-product-grid">
             {products.map((product) => {
-              const selectedInMode = selection.find((item) => item.productId === product.id && (item.timing || "now") === "now");
+              const selectedInMode = activeSelection.find((item) => item.productId === product.id && (item.timing || "now") === "now");
               return (
                 <article key={product.id} className={selectedInMode ? "selected" : ""}>
                   <div><b>{product.icon}</b><strong>{product.label}{product.estimated ? " ≈" : ""}</strong>{selectedInMode && quantity(selectedInMode) > 1 && <em>×{quantity(selectedInMode)}</em>}</div>
                   <div className="pit-live-portions">
-                    {product.portions.map((portion) => (
+                    {product.portions.filter((portion) => !portion.hidden).map((portion) => (
                       <button type="button" key={portion.id} className={selectedInMode && String(selectedInMode.portionId) === String(portion.id) ? "active" : ""} onClick={() => selectPortion(product.id, portion.id, "now")}>
                         <b>{portion.label}</b><span>{portion.carbs ? `${formatNumber(portion.carbs)} g KH` : "0 g KH"}</span>
                       </button>
@@ -490,7 +499,7 @@ export default function PitCrewLive({ race, onClose }) {
   }
 
   function renderLoopFuelingSection() {
-    const planned = selection.filter((entry) => (entry.timing || "now") === "carry");
+    const planned = activeSelection.filter((entry) => (entry.timing || "now") === "carry");
     const plannedSummary = summarizePitSelection(planned);
     const activePending = loopMustClose ? pendingCarry : null;
     const loopNumber = activePending ? Number(activePending.round) + 1 : Math.max(1, Number(saveRound) + 1);
@@ -547,7 +556,7 @@ export default function PitCrewLive({ race, onClose }) {
                   <div className="pit-live-loop-plan-items">{planned.map((entry) => <span key={`${entry.productId}:${entry.portionId}`}>{selectionLabel(entry)}</span>)}</div>
                   <button type="button" className="pit-live-secondary pit-live-clear" onClick={() => clearTimingSelection("carry")}>Loop-Fueling leeren</button>
                 </>
-              ) : <p className="pit-live-loop-empty">Noch nichts mitgegeben. „Vorschlag übernehmen“ füllt diesen Bereich automatisch.</p>}
+              ) : <p className="pit-live-loop-empty">Für diese Loop ist aktuell kein zusätzliches Loop-Fueling vorgesehen.</p>}
             </div>
           )}
         </div>
@@ -568,6 +577,7 @@ export default function PitCrewLive({ race, onClose }) {
     setFlags([]);
     setWeather([]);
     setSelection([]);
+    setSelectionMode("suggestion");
     setCarryAdjust({});
     setEditingRound(null);
     setAnchorAt(plannedAnchor(race)?.toISOString() || "");
@@ -626,7 +636,7 @@ export default function PitCrewLive({ race, onClose }) {
         )}
 
         {loopMustClose && (
-          <div className="pit-live-loop-gate">⚠️ Bitte Loop {pendingLoopNumber} zuerst abschließen – danach wird der nächste Pit mit den tatsächlichen Werten gespeichert.</div>
+          <div className="pit-live-loop-gate">⚠️ Bitte Loop {pendingLoopNumber} zuerst abschließen – danach wird die nächste Loop mit den tatsächlichen Werten bereitgemacht.</div>
         )}
 
         <section className="pit-live-recommendation">
@@ -637,7 +647,7 @@ export default function PitCrewLive({ race, onClose }) {
           {suggestionPit.length > 0 && <div className="pit-live-suggestion-group"><small>IM PIT ANBIETEN</small><div>{suggestionPit.map((entry) => <span key={`pit:${entry.productId}:${entry.portionId}`}>{selectionLabel(entry)}</span>)}</div></div>}
           {suggestionLoop.length > 0 && <div className="pit-live-suggestion-group"><small>FÜR NÄCHSTE LOOP BEREITLEGEN</small><div>{suggestionLoop.map((entry) => <span key={`loop:${entry.productId}:${entry.portionId}`}>{selectionLabel(entry)}</span>)}</div></div>}
           <p><b>Warum?</b> {recommendation.why}</p>
-          <button type="button" className="pit-live-primary" disabled={loopMustClose} onClick={useSuggestion}>{loopMustClose ? `Loop ${pendingLoopNumber} erst abschließen` : "Vorschlag übernehmen"}</button>
+          <div className="pit-live-auto-plan-note">✓ Der Idealvorschlag ist automatisch vorausgewählt. Nur ändern, wenn es im Pit tatsächlich anders läuft.</div>
         </section>
 
         <details className="pit-live-collapse">
@@ -714,7 +724,7 @@ export default function PitCrewLive({ race, onClose }) {
           <div className={`tone-${metricStatus.fluid}`}><small>💧</small><b>{assessment.summary.fluidMl} ml</b></div>
           <div className={`tone-${metricStatus.rolling}`}><small>Ø3h</small><b>{assessment.rolling.hours ? `${Math.round(assessment.rolling.carbsPerHour)} g/h` : "–"}</b></div>
           {assessment.summary.caffeineMg > 0 && <div className="tone-neutral"><small>☕</small><b>{Math.round(assessment.summary.caffeineMg)} mg</b></div>}
-          <button type="button" disabled={!selection.length || loopMustClose} onClick={savePit}>{loopMustClose ? `LOOP ${pendingLoopNumber} ABSCHLIESSEN` : demoActive ? `DEMO · PIT ${saveRound} ${editingRound != null ? "KORRIGIEREN" : "SPEICHERN"}` : editingRound != null ? `PIT ${saveRound} KORRIGIEREN` : `PIT ${saveRound} SPEICHERN`}</button>
+          <button type="button" disabled={!activeSelection.length || loopMustClose} onClick={savePit}>{loopMustClose ? `ERST LOOP ${pendingLoopNumber} ABSCHLIESSEN` : editingRound != null ? `PIT ${saveRound} KORRIGIEREN` : demoActive ? `DEMO · LOOP ${readyLoopNumber} BEREIT` : `LOOP ${readyLoopNumber} BEREIT`}</button>
         </section>
       </main>
     </div>

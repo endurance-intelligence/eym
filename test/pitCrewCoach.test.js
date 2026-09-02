@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   assessPitSelection,
+  PIT_CREW_PRODUCTS,
   pitCrewRaceEligible,
   pitMetricStatus,
   pitTimeMode,
@@ -112,4 +113,14 @@ test("partial loop drink scales actual carbs and fluid without treating it as a 
   const summary = summarizePitSelection([{ productId: "isostar", portionId: "200", quantity: 1, intakeFactor: 0.5 }]);
   assert.equal(summary.carbs, 7);
   assert.equal(summary.fluidMl, 100);
+});
+
+
+test("crew-facing snack portions use practical pit units instead of a scale", () => {
+  const roulette = PIT_CREW_PRODUCTS.find((product) => product.id === "haribo");
+  const salt = PIT_CREW_PRODUCTS.find((product) => product.id === "salt-sticks");
+  const fusilli = PIT_CREW_PRODUCTS.find((product) => product.id === "fusilli");
+  assert.deepEqual(roulette.portions.map((portion) => portion.label), ["½ Rolle", "1 Rolle"]);
+  assert.deepEqual(salt.portions.filter((portion) => !portion.hidden).map((portion) => portion.label), ["½ Handvoll", "1 Handvoll"]);
+  assert.deepEqual(fusilli.portions.map((portion) => portion.label), ["75 g gekocht", "100 g gekocht"]);
 });

@@ -110,8 +110,8 @@ export const PIT_CREW_PRODUCTS = [
     traits: ["sweet", "quick"],
     estimated: true,
     portions: [
-      { id: "10g", label: "10 g", carbs: 7.7, fluidMl: 0, caffeineMg: 0 },
-      { id: "20g", label: "20 g", carbs: 15.4, fluidMl: 0, caffeineMg: 0 },
+      { id: "10g", label: "½ Rolle", carbs: 7.7, fluidMl: 0, caffeineMg: 0 },
+      { id: "20g", label: "1 Rolle", carbs: 15.4, fluidMl: 0, caffeineMg: 0 },
     ],
   },
   {
@@ -122,9 +122,9 @@ export const PIT_CREW_PRODUCTS = [
     traits: ["savory", "salty", "crunchy"],
     estimated: true,
     portions: [
-      { id: "10g", label: "10 g", carbs: 7.5, fluidMl: 0, caffeineMg: 0 },
-      { id: "20g", label: "20 g", carbs: 15, fluidMl: 0, caffeineMg: 0 },
-      { id: "30g", label: "30 g", carbs: 22.5, fluidMl: 0, caffeineMg: 0 },
+      { id: "10g", label: "½ Handvoll", carbs: 7.5, fluidMl: 0, caffeineMg: 0 },
+      { id: "20g", label: "20 g (alt)", carbs: 15, fluidMl: 0, caffeineMg: 0, hidden: true },
+      { id: "30g", label: "1 Handvoll", carbs: 22.5, fluidMl: 0, caffeineMg: 0 },
     ],
   },
   {
@@ -300,7 +300,7 @@ function normalSuggestion({ round = 1, history = [], flags = [], weather = [] } 
 
   if (active.has("tired") && caffeineLast3 < 45) {
     return {
-      selection: [choice("cola", "150"), choice("water", "200"), choice("fusilli", "100"), choice("salt-sticks", "20g")],
+      selection: [choice("cola", "150"), choice("water", "200"), choice("fusilli", "100"), choice("salt-sticks", "10g")],
       why: "Müdigkeit gemeldet und zuletzt wenig Koffein: kleine Cola-Portion dynamisch eingebaut.",
     };
   }
