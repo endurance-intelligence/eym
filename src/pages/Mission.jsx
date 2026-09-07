@@ -83,7 +83,6 @@ export default function Mission() {
   const [editingId, setEditingId] = useState(null);
   const [showEditor, setShowEditor] = useState(false);
   const [eventSearchQuery, setEventSearchQuery] = useState("");
-  const [selectedMilestoneId, setSelectedMilestoneId] = useState(null);
   const [forecasts, setForecasts] = useState({});
   const [showArchived, setShowArchived] = useState(false);
   const [showAllAchievements, setShowAllAchievements] = useState(false);
@@ -135,14 +134,8 @@ export default function Mission() {
     ? loopMatchPlan({ ...mainCourseProfile, targetKm: Number(mainTarget?.targetKm || 0) })
     : null;
   const goalPath = useMemo(() => buildGoalPath(activeMilestones, mainTarget, new Date()), [activeMilestones, mainTarget]);
-  const selectedMilestone = goalPath.find((item) => item.id === selectedMilestoneId) || null;
+  const selectedMilestone = goalPath.find((item) => String(item.id) === String(requestedMilestoneId)) || null;
   const archivedMilestones = milestones.filter((item) => item.archived);
-
-  useEffect(() => {
-    if (requestedMilestoneId && goalPath.some((item) => String(item.id) === String(requestedMilestoneId))) {
-      setSelectedMilestoneId(requestedMilestoneId);
-    }
-  }, [goalPath, requestedMilestoneId]);
 
   useEffect(() => {
     goalPath.forEach((item) => {
@@ -163,6 +156,11 @@ export default function Mission() {
 
   function change(event) {
     const { name, value, type, checked } = event.target;
+    if (name === "location") {
+      placeRequest.current?.abort();
+      setPlaceSuggestions([]);
+      setPlaceStatus("");
+    }
     setDraft((current) => ({
       ...current,
       [name]: type === "checkbox" ? checked : value,
@@ -185,11 +183,7 @@ export default function Mission() {
 
   useEffect(() => {
     const query = draft.location.trim();
-    if (draft.place || (draft.eventCatalogId && draft.eventDataStatus === "verified") || query.length < 3) {
-      setPlaceSuggestions([]);
-      setPlaceStatus("");
-      return undefined;
-    }
+    if (draft.place || (draft.eventCatalogId && draft.eventDataStatus === "verified") || query.length < 3) return undefined;
 
     const timer = window.setTimeout(async () => {
       placeRequest.current?.abort();
@@ -297,7 +291,7 @@ export default function Mission() {
   }
 
   function edit(item) {
-    setSelectedMilestoneId(null);
+    closeMilestoneDetails();
     const courseProfile = eventCourseProfile(item);
     setEditingId(item.id);
     setEventSearchQuery("");
@@ -412,14 +406,12 @@ export default function Mission() {
   }
 
   function openMilestoneDetails(id) {
-    setSelectedMilestoneId(id);
     const next = new URLSearchParams(searchParams);
     next.set("event", String(id));
     setSearchParams(next, { replace: true });
   }
 
   function closeMilestoneDetails() {
-    setSelectedMilestoneId(null);
     if (!searchParams.has("event")) return;
     const next = new URLSearchParams(searchParams);
     next.delete("event");

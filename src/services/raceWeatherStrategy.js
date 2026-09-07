@@ -185,8 +185,8 @@ export function windImpactForBearing(runBearing, windFromDegrees, windSpeedKmh =
   const delta = (normalizeDegrees(windFromDegrees) - normalizeDegrees(runBearing)) * Math.PI / 180;
   const headwindKmh = speed * Math.cos(delta);
   const crosswindKmh = Math.abs(speed * Math.sin(delta));
-  let label = "leichter Seitenwind";
-  let tone = "neutral";
+  let label;
+  let tone;
   if (headwindKmh >= 18) { label = "starker Gegenwind"; tone = "hard"; }
   else if (headwindKmh >= 8) { label = "Gegenwind"; tone = "warn"; }
   else if (headwindKmh <= -18) { label = "starker Rückenwind"; tone = "good"; }

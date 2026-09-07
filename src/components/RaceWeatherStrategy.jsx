@@ -105,27 +105,35 @@ export default function RaceWeatherStrategy({
     () => resolveRaceWeatherDuration({ race: raceInput, targetDurationMinutes }),
     [raceInput, targetDurationMinutes],
   );
-  const [forecastState, setForecastState] = useState({ status: "idle", data: null, error: "" });
-  const key = useMemo(() => storageKey(raceInput), [raceDate, raceName, raceInput]);
+  const [forecastResult, setForecastResult] = useState({ requestKey: "", status: "idle", data: null, error: "" });
+  const key = useMemo(() => storageKey(raceInput), [raceInput]);
+  const forecastEligible = Boolean(raceDate && raceTime && !["too-early", "missing"].includes(confidence.key));
+  const requestKey = useMemo(() => JSON.stringify({
+    race: raceInput,
+    raceDistanceKm: Number(raceDistanceKm || 0),
+    durationMinutes: durationInfo.minutes,
+    routeProfile,
+  }), [durationInfo.minutes, raceDistanceKm, raceInput, routeProfile]);
+  const forecastState = !forecastEligible
+    ? { status: confidence.key, data: null, error: "" }
+    : forecastResult.requestKey === requestKey
+      ? forecastResult
+      : { status: "loading", data: null, error: "" };
 
   useEffect(() => {
+    if (!forecastEligible) return undefined;
     let active = true;
-    if (!raceDate || !raceTime || confidence.key === "too-early" || confidence.key === "missing") {
-      setForecastState({ status: confidence.key, data: null, error: "" });
-      return () => { active = false; };
-    }
-    setForecastState((current) => ({ ...current, status: "loading", error: "" }));
     fetchRaceWeatherForecast({ race: raceInput, routeProfile, raceDistanceKm, targetDurationMinutes: durationInfo.minutes })
       .then((data) => {
         if (!active) return;
-        setForecastState({ status: data.status, data, error: "" });
+        setForecastResult({ requestKey, status: data.status, data, error: "" });
       })
       .catch((error) => {
         if (!active) return;
-        setForecastState({ status: "error", data: null, error: error?.message || "Race-Wetter konnte nicht geladen werden." });
+        setForecastResult({ requestKey, status: "error", data: null, error: error?.message || "Race-Wetter konnte nicht geladen werden." });
       });
     return () => { active = false; };
-  }, [confidence.key, durationInfo.minutes, raceDate, raceDistanceKm, raceInput, raceTime, routeProfile]);
+  }, [durationInfo.minutes, forecastEligible, raceDistanceKm, raceInput, requestKey, routeProfile]);
 
   const strategy = useMemo(() => {
     if (forecastState.status !== "ready" || !forecastState.data?.forecasts?.length) return null;
@@ -137,7 +145,7 @@ export default function RaceWeatherStrategy({
       forecasts: forecastState.data.forecasts,
       confidence: forecastState.data.confidence,
     });
-  }, [durationInfo.minutes, forecastState, raceDistanceKm, raceInput, routeProfile]);
+  }, [durationInfo.minutes, forecastState.data, forecastState.status, raceDistanceKm, raceInput, routeProfile]);
 
   const trackWind = useMemo(() => {
     if (!strategy || !trackPlan || !forecastState.data?.forecasts?.length) return [];
@@ -154,13 +162,11 @@ export default function RaceWeatherStrategy({
   }, [durationInfo.minutes, forecastState.data, raceDate, raceDistanceKm, raceTime, routeProfile, strategy, trackPlan]);
 
   const snapshot = useMemo(() => raceWeatherSnapshot(strategy), [strategy]);
-  const [changes, setChanges] = useState([]);
+  const previousSnapshot = useMemo(() => snapshot ? readSnapshot(key) : null, [key, snapshot]);
+  const changes = useMemo(() => compareRaceWeatherSnapshots(previousSnapshot, snapshot), [previousSnapshot, snapshot]);
 
   useEffect(() => {
-    if (!snapshot) return;
-    const previous = readSnapshot(key);
-    setChanges(compareRaceWeatherSnapshots(previous, snapshot));
-    writeSnapshot(key, snapshot);
+    if (snapshot) writeSnapshot(key, snapshot);
   }, [key, snapshot]);
 
   if (!raceDate || !raceTime) return null;
