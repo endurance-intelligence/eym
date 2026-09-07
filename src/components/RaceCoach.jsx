@@ -23,6 +23,7 @@ import {
 import RaceStrategyMap from "./RaceStrategyMap";
 import PitCrewLive from "./PitCrewLive";
 import PitCrewSharedSession from "./PitCrewSharedSession";
+import RaceWeatherStrategy from "./RaceWeatherStrategy";
 import { pitCrewRaceEligible } from "../services/pitCrewCoach.js";
 import {
   createPitCrewShare,
@@ -613,6 +614,26 @@ export default function RaceCoach() {
         <article><span>{plan.profile.format === "loop" ? "Starttakt" : "Ø Ziel-Schnitt"}</span><strong>{plan.profile.format === "loop" ? plan.summary.loopInterval : plan.routePlan ? paceLabel(plan.routePlan.averagePaceSecondsPerKm) : plan.summary.pace}</strong><small>{plan.trackPlan ? "Rennziel zählt · nicht die GPS-Abweichung" : plan.routePlan ? "Splits werden ans Profil angepasst" : "Race-Plan"}</small></article>
         <article className="race-coach-strategy-status"><span>Strategie</span><strong>{plan.trackPlan ? `${plan.trackPlan.lapsLabel} Runden` : plan.routePlan ? `${plan.routePlan.segments.length} Splits` : "Basisplan"}</strong><small>{plan.trackPlan ? `${plan.trackPlan.lapDistanceM} m Bahn · Track Race` : plan.routePlan ? "Kilometerweise vorbereitet" : "GPX ergänzt die exakten Splits"}</small></article>
       </div>
+
+      <RaceWeatherStrategy
+        race={{
+          name: source?.label || "Rennen",
+          date: source?.date || "",
+          time: source?.time || "",
+          location: source?.profile?.location || "",
+          place: source?.profile?.place || null,
+          targetKm: Number(plan?.profile?.distanceKm || source?.profile?.eventDistanceKm || 0),
+          targetTime: source?.profile?.targetTime || "",
+          loopMode: source?.profile?.loopMode || "",
+          loopKm: Number(source?.profile?.loopKm || 0),
+          loopIntervalMinutes: Number(source?.profile?.loopIntervalMinutes || 0),
+          eventTimeLimit: source?.profile?.eventTimeLimit || "",
+        }}
+        routeProfile={setup.routeProfile}
+        raceDistanceKm={Number(plan?.profile?.distanceKm || setup.routeProfile?.distanceKm || 0)}
+        targetDurationMinutes={Number(setup.targetDurationMinutes || plan?.routePlan?.targetDurationMinutes || 0)}
+        trackPlan={plan?.trackPlan || null}
+      />
 
       {plan.trackPlan && (
         <section className="race-coach-track-plan">

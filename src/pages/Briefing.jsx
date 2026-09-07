@@ -14,6 +14,7 @@ import { isLoopWorkout, loopWorkoutCompactLabel, loopWorkoutPaceLabel } from "..
 import { summarizeCrossTrainingCredits } from "../services/crossTrainingLoad";
 import { workoutRoleAssessment } from "../services/workoutRoles";
 import { currentWeekPrescription, keySessionDateLabel, missionFocusTarget, nextKeySession, weekHubSummary } from "../services/briefingHub";
+import { raceForecastConfidence, raceWeekEvent } from "../services/raceWeatherStrategy";
 
 const dayLabel = new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" });
 const todayLabel = new Intl.DateTimeFormat("de-DE", { weekday: "long", day: "2-digit", month: "long" });
@@ -300,6 +301,9 @@ export default function Briefing() {
   const name = displayName(state, session);
   const weekPrescription = currentWeekPrescription(state.planner, now);
   const { mainTarget: missionTarget, focusTarget } = missionFocusTarget(state.mission, weekPrescription);
+  const raceWeekRace = raceWeekEvent(state.mission, now);
+  const raceWeekForecast = raceWeekRace ? raceForecastConfidence(raceWeekRace.date, now) : null;
+  const raceWeekHref = raceWeekRace?.id ? `/mission?event=${encodeURIComponent(raceWeekRace.id)}` : "/mission";
 
   const nextEvent = (state.mission.milestones || [])
     .filter((item) => !item.archived && !item.isMainTarget && new Date(`${item.date}T23:59:59`) >= now)
@@ -354,6 +358,17 @@ export default function Briefing() {
           </div>
           <span className="briefing-best-slot-state">Spontan</span>
         </section>
+      )}
+      {raceWeekRace && (
+        <Link className={`briefing-race-weather-banner confidence-${raceWeekForecast?.key || "open"}`} to={raceWeekHref} aria-label={`Rennwetter und Details für ${raceWeekRace.name} öffnen`}>
+          <span className="briefing-race-weather-icon" aria-hidden="true">🌦️</span>
+          <div>
+            <p>RENNWOCHE · HINWEIS ZUM RENNWETTER</p>
+            <strong>{raceWeekRace.name} · {dayLabel.format(new Date(`${raceWeekRace.date}T12:00:00`))}{raceWeekRace.time ? ` · ${raceWeekRace.time} Uhr` : ""}</strong>
+            <small>{raceWeekForecast?.label || "Race Weather"} · Wetter, Regen, Temperatur und Wind für dein Rennfenster prüfen. Die Eventdetails werden bis zum Start laufend konkreter.</small>
+          </div>
+          <span className="briefing-race-weather-action">Rennwetter & Details →</span>
+        </Link>
       )}
       <div className="grid briefing-grid">
         <Card className="wide today-card premium-briefing-card">

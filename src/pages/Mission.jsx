@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { Card, PageTitle, Metric } from "../components/UI";
 import EventAutocomplete from "../components/EventAutocomplete";
 import EditorModal from "../components/EditorModal";
 import TrainingSectionNav from "../components/SectionNav";
+import RaceWeatherStrategy from "../components/RaceWeatherStrategy";
 import { daysUntil, fmtDate } from "../utils/format";
-import { buildEventAdvice, fetchEventForecast } from "../services/eventWeather";
+import { fetchEventForecast } from "../services/eventWeather";
 import { placeSuggestionSubtitle, searchPlaces } from "../services/placeSearch";
 import { deriveAchievements } from "../services/achievements";
 import { activityDate, isRunningActivity, preferredActivities } from "../services/activityUtils";
@@ -75,6 +77,8 @@ function nextDay(dateString) {
 
 export default function Mission() {
   const { state, setState } = useApp();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedMilestoneId = searchParams.get("event") || "";
   const [draft, setDraft] = useState(emptyEvent);
   const [editingId, setEditingId] = useState(null);
   const [showEditor, setShowEditor] = useState(false);
@@ -133,6 +137,12 @@ export default function Mission() {
   const goalPath = useMemo(() => buildGoalPath(activeMilestones, mainTarget, new Date()), [activeMilestones, mainTarget]);
   const selectedMilestone = goalPath.find((item) => item.id === selectedMilestoneId) || null;
   const archivedMilestones = milestones.filter((item) => item.archived);
+
+  useEffect(() => {
+    if (requestedMilestoneId && goalPath.some((item) => String(item.id) === String(requestedMilestoneId))) {
+      setSelectedMilestoneId(requestedMilestoneId);
+    }
+  }, [goalPath, requestedMilestoneId]);
 
   useEffect(() => {
     goalPath.forEach((item) => {
@@ -401,14 +411,19 @@ export default function Mission() {
     });
   }
 
-  async function loadForecast(item) {
-    setForecasts((current) => ({ ...current, [item.id]: { loading: true } }));
-    try {
-      const forecast = await fetchEventForecast(item.place || item.location, item.date);
-      setForecasts((current) => ({ ...current, [item.id]: forecast }));
-    } catch (error) {
-      setForecasts((current) => ({ ...current, [item.id]: { error: error.message } }));
-    }
+  function openMilestoneDetails(id) {
+    setSelectedMilestoneId(id);
+    const next = new URLSearchParams(searchParams);
+    next.set("event", String(id));
+    setSearchParams(next, { replace: true });
+  }
+
+  function closeMilestoneDetails() {
+    setSelectedMilestoneId(null);
+    if (!searchParams.has("event")) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete("event");
+    setSearchParams(next, { replace: true });
   }
 
   function timelineWeather(item) {
@@ -424,7 +439,6 @@ export default function Mission() {
   }
 
   function eventCard(item, archived = false) {
-    const forecast = forecasts[item.id];
     const courseProfile = eventCourseProfile(item);
     const discipline = inferGoalDiscipline(item);
     const disciplineLabel = GOAL_DISCIPLINE_OPTIONS.find((option) => option.value === discipline)?.label || "Allgemeine Ausdauer";
@@ -458,16 +472,20 @@ export default function Mission() {
           <p>Die Pace ist die rechnerische Obergrenze ohne Sicherheitspuffer und wird nicht automatisch an Garmin gesendet. Runde und Boxenstopp enden erst durch deine LAP-Taste.</p>
         </div>}
         {item.isMainTarget && <p><strong>Vorbereitung ab:</strong> {fmtDate(item.preparationStartDate || preparationStartDate)}</p>}
+        {!archived && item.location && item.time && (
+          <RaceWeatherStrategy
+            race={item}
+            raceDistanceKm={Number(item.targetKm || 0)}
+          />
+        )}
+        {!archived && (!item.location || !item.time) && (
+          <p className="muted">Race Weather Intelligence wird aktiv, sobald Eventort und Startzeit vollständig hinterlegt sind.</p>
+        )}
         <div className="event-actions">
           {!archived && <button onClick={() => edit(item)}>Bearbeiten</button>}
           <button onClick={() => archive(item.id)}>{archived ? "Reaktivieren" : "Archivieren"}</button>
           <button className="danger-button" onClick={() => remove(item.id)}>Löschen</button>
-          {!archived && item.location && <button onClick={() => loadForecast(item)}>Wetter prüfen</button>}
         </div>
-        {forecast?.loading && <p className="muted">Wetter wird geladen …</p>}
-        {forecast?.error && <p className="bad">{forecast.error}</p>}
-        {forecast?.unavailable && <div className="event-weather"><b>Wetterprognose</b><p>{forecast.reason}</p></div>}
-        {forecast && !forecast.loading && !forecast.error && !forecast.unavailable && <div className="event-weather"><b>Prognose für {forecast.place}</b><p>{forecast.condition} · {forecast.min}–{forecast.max} °C · Regen {forecast.rainChance}% · Wind {forecast.wind} km/h</p><p><strong>Planung:</strong> {buildEventAdvice(forecast)}</p></div>}
       </Card>
     );
   }
@@ -603,7 +621,7 @@ export default function Mission() {
                   <div className="mission-goal-path-meta"><span>{role}</span><span>{days} {days === 1 ? "Tag" : "Tage"}</span></div>
                   {timelineWeather(item)}
                 </div>
-                <button type="button" className="mission-goal-path-details" onClick={() => setSelectedMilestoneId(item.id)}>Details <span aria-hidden="true">→</span></button>
+                <button type="button" className="mission-goal-path-details" onClick={() => openMilestoneDetails(item.id)}>Details <span aria-hidden="true">→</span></button>
               </article>;
             })}
           </div>
@@ -615,7 +633,7 @@ export default function Mission() {
           description={`${fmtDate(selectedMilestone.date)}${selectedMilestone.time ? ` · ${selectedMilestone.time} Uhr` : ""}`}
           width="wide"
           className="mission-goal-path-modal"
-          onClose={() => setSelectedMilestoneId(null)}
+          onClose={closeMilestoneDetails}
         >
           <div className="mission-goal-path-detail">{eventCard(selectedMilestone)}</div>
         </EditorModal>}
