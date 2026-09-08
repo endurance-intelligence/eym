@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   assessPitSelection,
+  buildPitCrewCustomProduct,
+  PIT_CREW_DEFAULT_STOCK_IDS,
   PIT_CREW_PRODUCTS,
   pitCrewRaceEligible,
   pitCrewArrivalState,
@@ -141,4 +143,44 @@ test("crew-facing snack portions use practical pit units instead of a scale", ()
   assert.deepEqual(roulette.portions.map((portion) => portion.label), ["½ Rolle", "1 Rolle"]);
   assert.deepEqual(salt.portions.filter((portion) => !portion.hidden).map((portion) => portion.label), ["½ Handvoll", "1 Handvoll"]);
   assert.deepEqual(fusilli.portions.map((portion) => portion.label), ["75 g gekocht", "100 g gekocht"]);
+});
+
+
+test("vorrat keeps discussed products active by default and extra backyard basics optional", () => {
+  assert.ok(PIT_CREW_DEFAULT_STOCK_IDS.includes("isostar"));
+  assert.ok(PIT_CREW_DEFAULT_STOCK_IDS.includes("maurten100"));
+  assert.ok(PIT_CREW_DEFAULT_STOCK_IDS.includes("fusilli"));
+  assert.equal(PIT_CREW_DEFAULT_STOCK_IDS.includes("pizza"), false);
+  assert.ok(PIT_CREW_PRODUCTS.some((product) => product.id === "pizza"));
+});
+
+test("recommendation is constrained to products that are actually in the race stock", () => {
+  const recommendation = recommendPitCrew({
+    round: 2,
+    minutesToStart: 10,
+    products: PIT_CREW_PRODUCTS,
+    availableProductIds: ["water", "banana"],
+  });
+  assert.ok(recommendation.selection.length > 0);
+  assert.ok(recommendation.selection.every((entry) => ["water", "banana"].includes(entry.productId)));
+  assert.match(recommendation.why, /Vorrat|angepasst/i);
+});
+
+test("spontaneous custom food can contribute carbs, sodium and caffeine with an explicit estimate", () => {
+  const pizza = buildPitCrewCustomProduct({
+    label: "Pizza vom Lieferdienst",
+    category: "food",
+    portionLabel: "1 Stück",
+    carbs: 32,
+    sodiumMg: 420,
+    caffeineMg: 0,
+    taste: "savory",
+    digestion: "heavy",
+  }, "custom-pizza");
+  const products = [...PIT_CREW_PRODUCTS, pizza];
+  const summary = summarizePitSelection([{ productId: "custom-pizza", portionId: "1" }], products);
+  assert.equal(summary.carbs, 32);
+  assert.equal(summary.sodiumMg, 420);
+  assert.equal(summary.items[0].digestion, "heavy");
+  assert.equal(summary.items[0].nutritionSource, "manual");
 });

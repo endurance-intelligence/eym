@@ -47,6 +47,8 @@ test("shared pit snapshot preserves only race-operation state", () => {
     weather: ["warm"],
     arrivalRound: 4,
     arrivalAt: "2026-09-26T09:52:15.000Z",
+    stockIds: ["water", "isostar", "custom-pizza"],
+    customProducts: [{ id: "custom-pizza", label: "Pizza", portions: [{ id: "1", carbs: 30 }] }],
     unrelated: "must-not-survive",
   };
   writePitCrewLocalSnapshot(race, snapshot, storage);
@@ -58,5 +60,16 @@ test("shared pit snapshot preserves only race-operation state", () => {
     weather: snapshot.weather,
     arrivalRound: snapshot.arrivalRound,
     arrivalAt: snapshot.arrivalAt,
+    stockIds: snapshot.stockIds,
+    customProducts: snapshot.customProducts,
   });
+});
+
+test("old crew snapshots without a stockroom keep stockIds unset so the UI can apply its defaults", () => {
+  const storage = memoryStorage();
+  const race = { key: "legacy", date: "2026-09-26" };
+  storage.setItem(pitCrewStorageKey(race), JSON.stringify({ history: [] }));
+  const snapshot = readPitCrewLocalSnapshot(race, storage);
+  assert.equal(snapshot.stockIds, null);
+  assert.deepEqual(snapshot.customProducts, []);
 });

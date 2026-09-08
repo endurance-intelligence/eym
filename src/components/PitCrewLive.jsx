@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   assessPitSelection,
+  buildPitCrewCustomProduct,
+  PIT_CREW_DEFAULT_STOCK_IDS,
   PIT_CREW_PRODUCTS,
   pitMetricStatus,
   pitTimeMode,
@@ -39,6 +41,18 @@ const CATEGORIES = [
   ["gel", "⚡ Gel"],
   ["refresh", "🥒 Refresh"],
 ];
+
+const EMPTY_STOCK_ITEM = {
+  label: "",
+  category: "food",
+  portionLabel: "1 Portion",
+  carbs: "",
+  fluidMl: "",
+  sodiumMg: "",
+  caffeineMg: "",
+  taste: "neutral",
+  digestion: "normal",
+};
 
 function safeStoredSession(key) {
   if (typeof window === "undefined") return null;
@@ -96,8 +110,8 @@ function formatNumber(value, digits = 1) {
   return number.toLocaleString("de-DE", { maximumFractionDigits: digits });
 }
 
-function selectionLabel(entry) {
-  const product = PIT_CREW_PRODUCTS.find((item) => item.id === entry.productId);
+function selectionLabel(entry, products = PIT_CREW_PRODUCTS) {
+  const product = products.find((item) => item.id === entry.productId);
   const portion = product?.portions.find((item) => String(item.id) === String(entry.portionId));
   if (!product || !portion) return entry.productId;
   const count = quantity(entry);
@@ -143,6 +157,11 @@ export default function PitCrewLive({ race, onClose }) {
   const [anchorAt, setAnchorAt] = useState(() => stored?.anchorAt || plannedAnchor(race)?.toISOString() || "");
   const [arrivalRound, setArrivalRound] = useState(() => Math.max(0, Number(stored?.arrivalRound || 0)));
   const [arrivalAt, setArrivalAt] = useState(() => String(stored?.arrivalAt || ""));
+  const [customProducts, setCustomProducts] = useState(() => Array.isArray(stored?.customProducts) ? stored.customProducts : []);
+  const [stockIds, setStockIds] = useState(() => Array.isArray(stored?.stockIds) ? stored.stockIds : PIT_CREW_DEFAULT_STOCK_IDS);
+  const [stockCategory, setStockCategory] = useState("drink");
+  const [showStockForm, setShowStockForm] = useState(false);
+  const [stockItemDraft, setStockItemDraft] = useState(EMPTY_STOCK_ITEM);
   const [selection, setSelection] = useState([]);
   const [selectionMode, setSelectionMode] = useState("suggestion");
   const [selectionDirty, setSelectionDirty] = useState(false);
@@ -178,8 +197,8 @@ export default function PitCrewLive({ race, onClose }) {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    window.localStorage.setItem(storageKey, JSON.stringify({ anchorAt, history, flags, weather, arrivalRound, arrivalAt }));
-  }, [anchorAt, arrivalAt, arrivalRound, flags, history, storageKey, weather]);
+    window.localStorage.setItem(storageKey, JSON.stringify({ anchorAt, history, flags, weather, arrivalRound, arrivalAt, stockIds, customProducts }));
+  }, [anchorAt, arrivalAt, arrivalRound, customProducts, flags, history, stockIds, storageKey, weather]);
 
   useEffect(() => {
     if (loadedPitRound.current === pitRound || editingRound != null) return;
@@ -231,6 +250,10 @@ export default function PitCrewLive({ race, onClose }) {
   });
   const athleteNeedsArrival = Boolean(arrivalState.awaitingArrival && editingRound == null);
   const loopReadyToClose = Boolean(arrivalState.loopReadyToClose && editingRound == null);
+  const productCatalog = [...PIT_CREW_PRODUCTS, ...customProducts];
+  const knownStockIds = new Set(productCatalog.map((product) => String(product.id)));
+  const activeStockIds = stockIds.filter((id) => knownStockIds.has(String(id)));
+  const availableProducts = productCatalog.filter((product) => activeStockIds.includes(String(product.id)));
 
   const recommendation = recommendPitCrew({
     round: Math.max(1, timing.currentRound || 1),
@@ -238,18 +261,20 @@ export default function PitCrewLive({ race, onClose }) {
     history: planningHistory,
     flags,
     weather: effectiveWeather,
+    products: productCatalog,
+    availableProductIds: activeStockIds,
   });
 
   const suggestionSummary = recommendation.summary;
   const modeTitle = modeLabel(timing.mode);
   const portableMode = recommendation.mode === "go" || recommendation.mode === "quick";
   const suggestionPit = recommendation.selection.filter((entry) => {
-    const product = PIT_CREW_PRODUCTS.find((item) => item.id === entry.productId);
+    const product = productCatalog.find((item) => item.id === entry.productId);
     return !portableMode && product?.category !== "drink";
   });
   const suggestionLoop = recommendation.selection.filter((entry) => !suggestionPit.includes(entry));
   const suggestedSelection = recommendation.selection.map((item) => {
-    const product = PIT_CREW_PRODUCTS.find((entry) => entry.id === item.productId);
+    const product = productCatalog.find((entry) => entry.id === item.productId);
     const carry = portableMode || product?.category === "drink";
     return { ...item, timing: carry ? "carry" : "now", quantity: quantity(item) };
   });
@@ -259,8 +284,8 @@ export default function PitCrewLive({ race, onClose }) {
     ? history.find((record) => Number(record.round) === Number(saveRound))
     : null;
   const savedLoopReady = Boolean(savedCurrentPit && !loopMustClose && !selectionDirty);
-  const assessment = assessPitSelection(activeSelection, planningHistory, { weather: effectiveWeather });
-  const historyRolling = rollingPitAverage(history, null, 3);
+  const assessment = assessPitSelection(activeSelection, planningHistory, { weather: effectiveWeather, products: productCatalog });
+  const historyRolling = rollingPitAverage(history, null, 3, productCatalog);
   const metricStatus = pitMetricStatus(assessment.summary, assessment.rolling, { weather: effectiveWeather });
   const lastRecord = history.length ? history[history.length - 1] : null;
   const alert = warningText(metricStatus, assessment);
@@ -286,8 +311,8 @@ export default function PitCrewLive({ race, onClose }) {
 
   function historyTone(record, index) {
     if (record.carryStatus === "pending") return "open";
-    const recordSummary = record.summary || summarizePitSelection(record.selection || []);
-    const rolling = rollingPitAverage(history.slice(Math.max(0, index - 2), index + 1), null, 3);
+    const recordSummary = record.summary || summarizePitSelection(record.selection || [], productCatalog);
+    const rolling = rollingPitAverage(history.slice(Math.max(0, index - 2), index + 1), null, 3, productCatalog);
     const status = pitMetricStatus(recordSummary, rolling, { weather: record.weather || [] });
     if (status.carbs === "high" || status.fluid === "high" || status.rolling === "high") return "high";
     if (status.carbs === "low" || status.fluid === "low" || status.rolling === "low") return "low";
@@ -329,6 +354,47 @@ export default function PitCrewLive({ race, onClose }) {
     setSaveMessage(`Loop ${round}: Athlet zurück · noch ${pitCountdownLabel(timing.minutesToStart)} bis zum nächsten Start.`);
   }
 
+  function toggleStockProduct(productId) {
+    const id = String(productId);
+    const removing = stockIds.includes(id);
+    setStockIds((current) => removing ? current.filter((item) => String(item) !== id) : [...new Set([...current, id])]);
+    if (removing) {
+      setSelection((current) => current.filter((entry) => String(entry.productId) !== id));
+      if (selectionMode === "manual") setSelectionDirty(true);
+    }
+    setSaveMessage(removing ? "Aus Vorrat entfernt · Vorschlag wird automatisch angepasst." : "Zum Vorrat hinzugefügt · ab jetzt für Fueling verfügbar.");
+  }
+
+  function selectStarterStock() {
+    const customIds = customProducts.map((product) => product.id);
+    setStockIds([...new Set([...PIT_CREW_DEFAULT_STOCK_IDS, ...customIds])]);
+    setSaveMessage("Besprochener Backyard-Grundstock aktiviert. Zusätzliche Basics bleiben optional.");
+  }
+
+  function addCustomStockItem(event) {
+    event.preventDefault();
+    const id = `custom-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const product = buildPitCrewCustomProduct(stockItemDraft, id);
+    if (!product) {
+      setSaveMessage("Bitte einen Namen für das neue Vorrats-Produkt eintragen.");
+      return;
+    }
+    setCustomProducts((current) => [...current, product]);
+    setStockIds((current) => [...new Set([...current, product.id])]);
+    setStockItemDraft(EMPTY_STOCK_ITEM);
+    setShowStockForm(false);
+    setStockCategory(product.category);
+    setSaveMessage(`${product.label} zum Vorrat hinzugefügt · Nährwerte werden als eigene Schätzung markiert.`);
+  }
+
+  function removeCustomStockItem(productId) {
+    const id = String(productId);
+    setCustomProducts((current) => current.filter((product) => String(product.id) !== id));
+    setStockIds((current) => current.filter((item) => String(item) !== id));
+    setSelection((current) => current.filter((entry) => String(entry.productId) !== id));
+    setSaveMessage("Eigenes Vorrats-Produkt entfernt.");
+  }
+
   function savePit() {
     if (loopMustClose) {
       setSaveMessage(`Bitte Loop ${pendingLoopNumber} zuerst abschließen. Danach kann die nächste Loop mit den echten Werten bereitgemacht werden.`);
@@ -341,8 +407,8 @@ export default function PitCrewLive({ race, onClose }) {
     const existing = history.find((item) => Number(item.round) === Number(saveRound));
     const consumedSelection = activeSelection.filter((entry) => entry.timing !== "carry").map(({ productId, portionId, quantity: count }) => ({ productId, portionId, quantity: quantity({ quantity: count }) }));
     const carrySelection = activeSelection.filter((entry) => entry.timing === "carry").map(({ productId, portionId, quantity: count }) => ({ productId, portionId, quantity: quantity({ quantity: count }) }));
-    const summary = summarizePitSelection(consumedSelection);
-    const provisionalSummary = summarizePitSelection([...consumedSelection, ...carrySelection]);
+    const summary = summarizePitSelection(consumedSelection, productCatalog);
+    const provisionalSummary = summarizePitSelection([...consumedSelection, ...carrySelection], productCatalog);
     const record = {
       round: saveRound,
       recordedAt: new Date().toISOString(),
@@ -391,7 +457,7 @@ export default function PitCrewLive({ race, onClose }) {
     setHistory((current) => current.map((record) => {
       if (Number(record.round) !== Number(pendingCarry.round)) return record;
       const merged = [...(record.selection || []), ...consumedCarry];
-      const summary = summarizePitSelection(merged);
+      const summary = summarizePitSelection(merged, productCatalog);
       return {
         ...record,
         selection: merged,
@@ -427,10 +493,12 @@ export default function PitCrewLive({ race, onClose }) {
         carryAdjust,
         editingRound,
         saveMessage,
+        stockIds,
+        customProducts,
       };
     }
     if (typeof window !== "undefined") {
-      if (!demoActive) window.localStorage.setItem(baseStorageKey, JSON.stringify({ anchorAt, history, flags, weather, arrivalRound, arrivalAt }));
+      if (!demoActive) window.localStorage.setItem(baseStorageKey, JSON.stringify({ anchorAt, history, flags, weather, arrivalRound, arrivalAt, stockIds, customProducts }));
       window.localStorage.removeItem(`${baseStorageKey}:demo`);
     }
     setDemoActive(true);
@@ -460,6 +528,8 @@ export default function PitCrewLive({ race, onClose }) {
     setAnchorAt(liveStored?.anchorAt || plannedAnchor(race)?.toISOString() || "");
     setArrivalRound(Math.max(0, Number(liveStored?.arrivalRound || transient.arrivalRound || 0)));
     setArrivalAt(String(liveStored?.arrivalAt || transient.arrivalAt || ""));
+    setCustomProducts(Array.isArray(liveStored?.customProducts) ? liveStored.customProducts : (Array.isArray(transient.customProducts) ? transient.customProducts : []));
+    setStockIds(Array.isArray(liveStored?.stockIds) ? liveStored.stockIds : (Array.isArray(transient.stockIds) ? transient.stockIds : PIT_CREW_DEFAULT_STOCK_IDS));
     setSelection(Array.isArray(transient.selection) ? transient.selection : []);
     setSelectionMode(transient.selectionMode || "suggestion");
     setSelectionDirty(Boolean(transient.selectionDirty));
@@ -493,10 +563,56 @@ export default function PitCrewLive({ race, onClose }) {
     updateSelection((current) => current.filter((entry) => (entry.timing || "now") !== timingMode));
   }
 
+  function renderStockSection() {
+    const categoryProducts = productCatalog.filter((product) => product.category === stockCategory);
+    return (
+      <details className="pit-live-collapse pit-live-stock">
+        <summary><span>VORRAT</span><b>{activeStockIds.length} verfügbar{customProducts.length ? ` · ${customProducts.length} eigene` : ""}</b><i>›</i></summary>
+        <div className="pit-live-collapse-body">
+          <p className="pit-live-help">Nur aktivierte Sachen tauchen im Fueling und im Idealvorschlag auf. Zusätzliche Basics bleiben fern, bis du sie antippst.</p>
+          <div className="pit-live-stock-actions">
+            <button type="button" className="pit-live-secondary" onClick={selectStarterStock}>Besprochenen Grundstock wählen</button>
+            <button type="button" className="pit-live-primary" onClick={() => setShowStockForm((value) => !value)}>＋ Eigenes Produkt</button>
+          </div>
+          <div className="pit-live-category-tabs">
+            {CATEGORIES.map(([key, label]) => <button type="button" key={key} className={stockCategory === key ? "active" : ""} onClick={() => setStockCategory(key)}>{label}</button>)}
+          </div>
+          <div className="pit-live-stock-grid">
+            {categoryProducts.map((product) => {
+              const active = activeStockIds.includes(String(product.id));
+              const portion = product.portions?.find((item) => !item.hidden) || product.portions?.[0];
+              return <article key={product.id} className={active ? "active" : ""}>
+                <button type="button" className="pit-live-stock-toggle" onClick={() => toggleStockProduct(product.id)}>
+                  <span>{active ? "✓" : "+"}</span><b>{product.icon} {product.label}</b>
+                  <small>{portion ? `${portion.label} · ${formatNumber(portion.carbs)} g KH` : "Portion offen"}{product.estimated ? " · ≈" : ""}</small>
+                </button>
+                {product.custom && <button type="button" className="pit-live-stock-remove" onClick={() => removeCustomStockItem(product.id)}>Entfernen</button>}
+              </article>;
+            })}
+          </div>
+          {showStockForm && <form className="pit-live-stock-form" onSubmit={addCustomStockItem}>
+            <div className="pit-live-stock-form-head"><b>Eigenes Produkt hinzufügen</b><span>Für Restaurant-/Hausmannskost reichen praxisnahe Werte. Sie werden bewusst als ≈ Schätzung gespeichert.</span></div>
+            <label className="wide"><span>Name</span><input value={stockItemDraft.label} onChange={(event) => setStockItemDraft((current) => ({ ...current, label: event.target.value }))} placeholder="z. B. Pizza vom Lieferdienst" /></label>
+            <label><span>Kategorie</span><select value={stockItemDraft.category} onChange={(event) => setStockItemDraft((current) => ({ ...current, category: event.target.value }))}><option value="food">Essen</option><option value="drink">Getränk</option><option value="gel">Gel</option><option value="refresh">Refresh</option></select></label>
+            <label><span>Portion</span><input value={stockItemDraft.portionLabel} onChange={(event) => setStockItemDraft((current) => ({ ...current, portionLabel: event.target.value }))} placeholder="1 Stück" /></label>
+            <label><span>KH pro Portion · g</span><input type="number" min="0" step="0.1" value={stockItemDraft.carbs} onChange={(event) => setStockItemDraft((current) => ({ ...current, carbs: event.target.value }))} /></label>
+            <label><span>Flüssigkeit · ml</span><input type="number" min="0" step="1" value={stockItemDraft.fluidMl} onChange={(event) => setStockItemDraft((current) => ({ ...current, fluidMl: event.target.value }))} /></label>
+            <label><span>Natrium · mg</span><input type="number" min="0" step="1" value={stockItemDraft.sodiumMg} onChange={(event) => setStockItemDraft((current) => ({ ...current, sodiumMg: event.target.value }))} /></label>
+            <label><span>Koffein · mg</span><input type="number" min="0" step="0.1" value={stockItemDraft.caffeineMg} onChange={(event) => setStockItemDraft((current) => ({ ...current, caffeineMg: event.target.value }))} /></label>
+            <label><span>Geschmack</span><select value={stockItemDraft.taste} onChange={(event) => setStockItemDraft((current) => ({ ...current, taste: event.target.value }))}><option value="neutral">neutral</option><option value="sweet">süß</option><option value="savory">salzig/herzhaft</option></select></label>
+            <label><span>Magenlast</span><select value={stockItemDraft.digestion} onChange={(event) => setStockItemDraft((current) => ({ ...current, digestion: event.target.value }))}><option value="light">leicht</option><option value="normal">normal</option><option value="heavy">eher schwer</option></select></label>
+            <p className="wide">KH sind die Pflicht-Rechengröße. Flüssigkeit, Natrium und Koffein nur eintragen, wenn sie sinnvoll bekannt sind. Fett/Protein/Kalorien müssen die Crew im Rennen nicht pflegen.</p>
+            <div className="pit-live-stock-form-actions wide"><button type="button" className="pit-live-secondary" onClick={() => setShowStockForm(false)}>Abbrechen</button><button type="submit" className="pit-live-primary">Zum Vorrat hinzufügen</button></div>
+          </form>}
+        </div>
+      </details>
+    );
+  }
+
   function renderPitFuelingSection() {
     const selected = activeSelection.filter((entry) => (entry.timing || "now") === "now");
-    const summary = summarizePitSelection(selected);
-    const products = PIT_CREW_PRODUCTS.filter((product) => product.category === pitCategory);
+    const summary = summarizePitSelection(selected, productCatalog);
+    const products = availableProducts.filter((product) => product.category === pitCategory);
     return (
       <details className="pit-live-collapse">
         <summary>
@@ -510,6 +626,7 @@ export default function PitCrewLive({ race, onClose }) {
           <div className="pit-live-category-tabs">
             {CATEGORIES.map(([key, label]) => <button type="button" key={key} className={pitCategory === key ? "active" : ""} onClick={() => setPitCategory(key)}>{label}</button>)}
           </div>
+          {!products.length && <p className="pit-live-loop-empty">In dieser Kategorie ist aktuell nichts im Vorrat aktiviert. Unter „Vorrat“ kannst du es jederzeit hinzufügen.</p>}
           <div className="pit-live-product-grid">
             {products.map((product) => {
               const selectedInMode = activeSelection.find((item) => item.productId === product.id && (item.timing || "now") === "now");
@@ -528,7 +645,7 @@ export default function PitCrewLive({ race, onClose }) {
                       <button type="button" onClick={() => changeQuantity(product.id, "now", -1)}>−</button>
                       <b>{quantity(selectedInMode)}</b>
                       <button type="button" onClick={() => changeQuantity(product.id, "now", 1)}>+</button>
-                      <span>{formatNumber(summarizePitSelection([selectedInMode]).carbs)} g KH gesamt</span>
+                      <span>{formatNumber(summarizePitSelection([selectedInMode], productCatalog).carbs)} g KH gesamt</span>
                     </div>
                   )}
                 </article>
@@ -543,7 +660,7 @@ export default function PitCrewLive({ race, onClose }) {
 
   function renderLoopFuelingSection({ priority = false } = {}) {
     const planned = activeSelection.filter((entry) => (entry.timing || "now") === "carry");
-    const plannedSummary = summarizePitSelection(planned);
+    const plannedSummary = summarizePitSelection(planned, productCatalog);
     const activePending = loopReadyToClose ? pendingCarry : null;
     const awaitingReturn = loopMustClose && !arrivalState.arrived ? pendingCarry : null;
     const preparedPending = !loopMustClose && pendingCarry && Number(pendingCarry.round) === Number(pitRound)
@@ -590,13 +707,13 @@ export default function PitCrewLive({ race, onClose }) {
                 {pendingItems.map((entry, index) => {
                   const key = carryResultKey(entry, index);
                   const selectedFactor = carryAdjust[key];
-                  const product = PIT_CREW_PRODUCTS.find((item) => item.id === entry.productId);
+                  const product = productCatalog.find((item) => item.id === entry.productId);
                   const options = product?.category === "drink"
                     ? [[1, "✓ gut / leer"], [0.5, "½ teilweise"], [0, "0 nicht"]]
                     : [[1, "✓ genommen"], [0, "nicht genommen"]];
                   return (
                     <div className="pit-live-loop-item" key={key}>
-                      <b>{selectionLabel(entry)}</b>
+                      <b>{selectionLabel(entry, productCatalog)}</b>
                       <div>
                         {options.map(([factor, label]) => (
                           <button type="button" key={factor} className={Number(selectedFactor) === factor ? "active" : ""} onClick={() => setCarryResult(entry, index, factor)}>{label}</button>
@@ -614,12 +731,12 @@ export default function PitCrewLive({ race, onClose }) {
           ) : awaitingReturn ? (
             <div className="pit-live-loop-plan pit-live-loop-running-copy">
               <p className="pit-live-help">Loop {loopNumber} läuft. Bei der Rückkehr einmal „Athlet zurück“ tippen – erst dann wird die tatsächliche Aufnahme abgefragt.</p>
-              {runningItems.length ? <div className="pit-live-loop-plan-items">{runningItems.map((entry) => <span key={`${entry.productId}:${entry.portionId}`}>{selectionLabel(entry)}</span>)}</div> : <p className="pit-live-loop-empty">Für diese Loop wurde kein zusätzliches Loop-Fueling mitgegeben.</p>}
+              {runningItems.length ? <div className="pit-live-loop-plan-items">{runningItems.map((entry) => <span key={`${entry.productId}:${entry.portionId}`}>{selectionLabel(entry, productCatalog)}</span>)}</div> : <p className="pit-live-loop-empty">Für diese Loop wurde kein zusätzliches Loop-Fueling mitgegeben.</p>}
             </div>
           ) : preparedPending ? (
             <div className="pit-live-loop-plan pit-live-loop-prepared">
               <p className="pit-live-help">Loop {loopNumber} ist vorbereitet. Das hier wurde mitgegeben:</p>
-              {preparedItems.length ? <div className="pit-live-loop-plan-items">{preparedItems.map((entry) => <span key={`${entry.productId}:${entry.portionId}`}>{selectionLabel(entry)}</span>)}</div> : <p className="pit-live-loop-empty">Kein zusätzliches Loop-Fueling mitgegeben.</p>}
+              {preparedItems.length ? <div className="pit-live-loop-plan-items">{preparedItems.map((entry) => <span key={`${entry.productId}:${entry.portionId}`}>{selectionLabel(entry, productCatalog)}</span>)}</div> : <p className="pit-live-loop-empty">Kein zusätzliches Loop-Fueling mitgegeben.</p>}
               <p className="pit-live-loop-ready-note">✓ Beim nächsten Pit nur kurz bestätigen, was tatsächlich genommen wurde.</p>
             </div>
           ) : (
@@ -627,7 +744,7 @@ export default function PitCrewLive({ race, onClose }) {
               <p className="pit-live-help">Hier wird nur gezeigt, was für Loop {loopNumber} mitgegeben wird. Der Idealvorschlag oben legt das automatisch fest.</p>
               {planned.length ? (
                 <>
-                  <div className="pit-live-loop-plan-items">{planned.map((entry) => <span key={`${entry.productId}:${entry.portionId}`}>{selectionLabel(entry)}</span>)}</div>
+                  <div className="pit-live-loop-plan-items">{planned.map((entry) => <span key={`${entry.productId}:${entry.portionId}`}>{selectionLabel(entry, productCatalog)}</span>)}</div>
                   <button type="button" className="pit-live-secondary pit-live-clear" onClick={() => clearTimingSelection("carry")}>Loop-Fueling leeren</button>
                 </>
               ) : <p className="pit-live-loop-empty">Für diese Loop ist aktuell kein zusätzliches Loop-Fueling vorgesehen.</p>}
@@ -681,6 +798,8 @@ export default function PitCrewLive({ race, onClose }) {
     setWeather([]);
     setArrivalRound(0);
     setArrivalAt("");
+    setCustomProducts([]);
+    setStockIds(PIT_CREW_DEFAULT_STOCK_IDS);
     setSelection([]);
     setSelectionMode("suggestion");
     setSelectionDirty(false);
@@ -766,8 +885,9 @@ export default function PitCrewLive({ race, onClose }) {
             <div><small>IDEALVORSCHLAG · KEINE ESSENSPFLICHT</small><h3>{timing.started ? `Pit nach Loop ${timing.currentRound} vorbereiten` : "Startversorgung vorbereiten"}</h3></div>
             <div className="pit-live-suggestion-total"><b>{Math.round(suggestionSummary.carbs)} g KH</b><span>{suggestionSummary.fluidMl} ml</span></div>
           </div>
-          {suggestionPit.length > 0 && <div className="pit-live-suggestion-group"><small>IM PIT ANBIETEN</small><div>{suggestionPit.map((entry) => <span key={`pit:${entry.productId}:${entry.portionId}`}>{selectionLabel(entry)}</span>)}</div></div>}
-          {suggestionLoop.length > 0 && <div className="pit-live-suggestion-group"><small>FÜR NÄCHSTE LOOP BEREITLEGEN</small><div>{suggestionLoop.map((entry) => <span key={`loop:${entry.productId}:${entry.portionId}`}>{selectionLabel(entry)}</span>)}</div></div>}
+          {suggestionPit.length > 0 && <div className="pit-live-suggestion-group"><small>IM PIT ANBIETEN</small><div>{suggestionPit.map((entry) => <span key={`pit:${entry.productId}:${entry.portionId}`}>{selectionLabel(entry, productCatalog)}</span>)}</div></div>}
+          {suggestionLoop.length > 0 && <div className="pit-live-suggestion-group"><small>FÜR NÄCHSTE LOOP BEREITLEGEN</small><div>{suggestionLoop.map((entry) => <span key={`loop:${entry.productId}:${entry.portionId}`}>{selectionLabel(entry, productCatalog)}</span>)}</div></div>}
+          {!recommendation.selection.length && <div className="pit-live-stock-warning">⚠️ Kein passendes Fuel im Vorrat aktiv. Vorrat öffnen und verfügbare Sachen auswählen.</div>}
           <p><b>Warum?</b> {recommendation.why}</p>
           <div className="pit-live-auto-plan-note">✓ Der Idealvorschlag ist automatisch vorausgewählt. Nur ändern, wenn es im Pit tatsächlich anders läuft.</div>
         </section>
@@ -786,6 +906,7 @@ export default function PitCrewLive({ race, onClose }) {
 
         {!careNeedsAttention && renderAthleteCareSection()}
 
+        {renderStockSection()}
         {renderPitFuelingSection()}
         {!loopReadyToClose && renderLoopFuelingSection()}
 
@@ -801,7 +922,7 @@ export default function PitCrewLive({ race, onClose }) {
                     ? ` · Loop ${Number(record.round) + 1} abschließen`
                     : ` · Loop ${Number(record.round) + 1} startklar`
                   : "";
-                return <div key={record.round} className={`tone-${tone}`}><em aria-hidden="true" /><b>{carried ? `Pit ${record.round} → Loop ${Number(record.round) + 1}` : `Pit ${record.round}`}</b><span>{formatNumber(record.summary?.carbs ?? summarizePitSelection(record.selection).carbs)} g KH{pendingText}</span></div>;
+                return <div key={record.round} className={`tone-${tone}`}><em aria-hidden="true" /><b>{carried ? `Pit ${record.round} → Loop ${Number(record.round) + 1}` : `Pit ${record.round}`}</b><span>{formatNumber(record.summary?.carbs ?? summarizePitSelection(record.selection, productCatalog).carbs)} g KH{pendingText}</span></div>;
               })}</div>
               <button type="button" className="pit-live-secondary pit-live-wide" onClick={editLastPit}>Letzten Pit korrigieren</button>
             </div>

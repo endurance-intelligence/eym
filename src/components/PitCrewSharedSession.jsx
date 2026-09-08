@@ -18,6 +18,8 @@ function normalizedSnapshot(value = {}) {
     weather: Array.isArray(value?.weather) ? value.weather : [],
     arrivalRound: Math.max(0, Number(value?.arrivalRound || 0)),
     arrivalAt: String(value?.arrivalAt || ""),
+    stockIds: Array.isArray(value?.stockIds) ? value.stockIds.map(String) : null,
+    customProducts: Array.isArray(value?.customProducts) ? value.customProducts : [],
   };
 }
 

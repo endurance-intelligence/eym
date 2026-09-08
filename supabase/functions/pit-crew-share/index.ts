@@ -8,6 +8,7 @@ const corsHeaders = {
 const jsonHeaders = { ...corsHeaders, "Content-Type": "application/json; charset=utf-8" };
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]{32,90}$/;
 const MAX_JSON_BYTES = 180_000;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: jsonHeaders });
@@ -59,6 +60,22 @@ function expired(value: unknown) {
   return Number.isFinite(time) && time < Date.now();
 }
 
+function eventExpiryFloor(race: Record<string, unknown>) {
+  const date = String(race?.date || "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return 0;
+  const eventEnd = new Date(`${date}T23:59:59Z`).getTime();
+  return Number.isFinite(eventEnd) ? eventEnd + 14 * DAY_MS : 0;
+}
+
+function initialExpiry(race: Record<string, unknown>, now = Date.now()) {
+  return Math.max(now + 45 * DAY_MS, eventExpiryFloor(race));
+}
+
+function refreshedExpiry(row: { race?: Record<string, unknown>; expires_at?: unknown }, now = Date.now()) {
+  const current = new Date(String(row?.expires_at || "")).getTime();
+  return new Date(Math.max(Number.isFinite(current) ? current : 0, now + 7 * DAY_MS, eventExpiryFloor(row?.race || {}))).toISOString();
+}
+
 async function shareByToken(admin: ReturnType<typeof adminClient>, token: string) {
   if (!TOKEN_PATTERN.test(token)) return null;
   const hash = await tokenHash(token);
@@ -90,7 +107,7 @@ Deno.serve(async (request) => {
       const hash = await tokenHash(token);
       const race = safeJsonObject(payload?.race);
       const state = safeJsonObject(payload?.state);
-      const expiresAt = new Date(Date.now() + 45 * 24 * 60 * 60 * 1000).toISOString();
+      const expiresAt = new Date(initialExpiry(race)).toISOString();
       const { data, error } = await admin
         .from("pit_crew_shares")
         .upsert({
@@ -121,9 +138,10 @@ Deno.serve(async (request) => {
       if (!row) return json({ ok: false, message: "Crew-Link ist ungültig oder abgelaufen." }, 404);
       const state = safeJsonObject(payload?.state);
       const revision = Number(row.revision || 0) + 1;
+      const expiresAt = refreshedExpiry(row);
       const { data, error } = await admin
         .from("pit_crew_shares")
-        .update({ state, revision, updated_at: new Date().toISOString() })
+        .update({ state, revision, expires_at: expiresAt, updated_at: new Date().toISOString() })
         .eq("id", row.id)
         .select("state,revision,expires_at")
         .single();

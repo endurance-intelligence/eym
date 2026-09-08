@@ -145,28 +145,115 @@ export const PIT_CREW_PRODUCTS = [
     icon: "☕",
     category: "refresh",
     traits: ["savory", "salty", "warm", "refresh"],
+    digestion: "light",
     portions: [
       { id: "100", label: "100 ml", carbs: 0, fluidMl: 100, caffeineMg: 0 },
       { id: "150", label: "150 ml", carbs: 0, fluidMl: 150, caffeineMg: 0 },
     ],
   },
+  {
+    id: "potatoes",
+    label: "Kartoffeln gekocht",
+    icon: "🥔",
+    category: "food",
+    traits: ["real-food", "savory", "salty", "soft"],
+    digestion: "normal",
+    estimated: true,
+    starterExtra: true,
+    portions: [{ id: "100", label: "100 g", carbs: 17, fluidMl: 0, caffeineMg: 0 }],
+  },
+  {
+    id: "toast",
+    label: "Toast / Weißbrot",
+    icon: "🍞",
+    category: "food",
+    traits: ["real-food", "neutral", "soft"],
+    digestion: "light",
+    estimated: true,
+    starterExtra: true,
+    portions: [{ id: "slice", label: "1 Scheibe", carbs: 14, fluidMl: 0, caffeineMg: 0 }],
+  },
+  {
+    id: "pretzel",
+    label: "Laugenbrezel",
+    icon: "🥨",
+    category: "food",
+    traits: ["real-food", "savory", "salty"],
+    digestion: "normal",
+    estimated: true,
+    starterExtra: true,
+    portions: [{ id: "1", label: "1 Stück", carbs: 45, fluidMl: 0, caffeineMg: 0 }],
+  },
+  {
+    id: "rice-pudding",
+    label: "Milchreis / Reis",
+    icon: "🍚",
+    category: "food",
+    traits: ["real-food", "soft", "neutral"],
+    digestion: "normal",
+    estimated: true,
+    starterExtra: true,
+    portions: [{ id: "150", label: "150 g", carbs: 30, fluidMl: 0, caffeineMg: 0 }],
+  },
+  {
+    id: "pizza",
+    label: "Pizza Margherita",
+    icon: "🍕",
+    category: "food",
+    traits: ["real-food", "savory", "salty"],
+    digestion: "heavy",
+    estimated: true,
+    starterExtra: true,
+    portions: [{ id: "slice", label: "1 Stück", carbs: 30, fluidMl: 0, caffeineMg: 0 }],
+  },
 ];
 
-const productMap = new Map(PIT_CREW_PRODUCTS.map((product) => [product.id, product]));
+export const PIT_CREW_DEFAULT_STOCK_IDS = PIT_CREW_PRODUCTS.filter((product) => !product.starterExtra).map((product) => product.id);
 
-export function pitProduct(productId) {
-  return productMap.get(String(productId || "")) || null;
+const CUSTOM_ICONS = { drink: "🥤", gel: "⚡", food: "🍽️", refresh: "🥒" };
+
+export function buildPitCrewCustomProduct(input = {}, id = "") {
+  const category = ["drink", "gel", "food", "refresh"].includes(String(input.category || "")) ? String(input.category) : "food";
+  const label = String(input.label || "").trim().slice(0, 80);
+  const portionLabel = String(input.portionLabel || "1 Portion").trim().slice(0, 40) || "1 Portion";
+  const carbs = Math.max(0, round1(input.carbs));
+  const fluidMl = Math.max(0, Math.round(Number(input.fluidMl || 0)));
+  const sodiumMg = Math.max(0, Math.round(Number(input.sodiumMg || 0)));
+  const caffeineMg = Math.max(0, round1(input.caffeineMg));
+  const taste = ["sweet", "savory", "neutral"].includes(String(input.taste || "")) ? String(input.taste) : "neutral";
+  const digestion = ["light", "normal", "heavy"].includes(String(input.digestion || "")) ? String(input.digestion) : "normal";
+  if (!label) return null;
+  return {
+    id: String(id || input.id || `custom-${Date.now()}`).replace(/[^A-Za-z0-9_-]/g, "").slice(0, 80),
+    label,
+    icon: String(input.icon || CUSTOM_ICONS[category] || "🍽️").slice(0, 4),
+    category,
+    traits: [...new Set(["custom", taste, ...(category === "food" ? ["real-food"] : [])])],
+    digestion,
+    estimated: true,
+    custom: true,
+    nutritionSource: "manual",
+    portions: [{ id: "1", label: portionLabel, carbs, fluidMl, sodiumMg, caffeineMg }],
+  };
 }
 
-export function pitPortion(productId, portionId) {
-  const product = pitProduct(productId);
+function productMap(products = PIT_CREW_PRODUCTS) {
+  return new Map((Array.isArray(products) ? products : PIT_CREW_PRODUCTS).map((product) => [String(product.id), product]));
+}
+
+export function pitProduct(productId, products = PIT_CREW_PRODUCTS) {
+  return productMap(products).get(String(productId || "")) || null;
+}
+
+export function pitPortion(productId, portionId, products = PIT_CREW_PRODUCTS) {
+  const product = pitProduct(productId, products);
   if (!product) return null;
-  return product.portions.find((portion) => String(portion.id) === String(portionId)) || product.portions[0] || null;
+  return (product.portions || []).find((portion) => String(portion.id) === String(portionId)) || product.portions?.[0] || null;
 }
 
-export function pitSelectionItem(productId, portionId, quantity = 1, intakeFactor = 1) {
-  const product = pitProduct(productId);
-  const portion = pitPortion(productId, portionId);
+export function pitSelectionItem(productId, portionId, quantity = 1, intakeFactor = 1, products = PIT_CREW_PRODUCTS) {
+  const product = pitProduct(productId, products);
+  const portion = pitPortion(productId, portionId, products);
   if (!product || !portion) return null;
   const count = Math.max(1, Math.min(20, Math.round(Number(quantity || 1))));
   const factorNumber = Number(intakeFactor);
@@ -178,6 +265,9 @@ export function pitSelectionItem(productId, portionId, quantity = 1, intakeFacto
     icon: product.icon,
     category: product.category,
     estimated: Boolean(product.estimated),
+    custom: Boolean(product.custom),
+    nutritionSource: product.nutritionSource || (product.estimated ? "estimate" : "catalog"),
+    digestion: product.digestion || "normal",
     traits: product.traits || [],
     quantity: count,
     intakeFactor: factor,
@@ -189,9 +279,9 @@ export function pitSelectionItem(productId, portionId, quantity = 1, intakeFacto
   };
 }
 
-export function summarizePitSelection(selection = []) {
+export function summarizePitSelection(selection = [], products = PIT_CREW_PRODUCTS) {
   const items = (Array.isArray(selection) ? selection : [])
-    .map((entry) => pitSelectionItem(entry.productId, entry.portionId, entry.quantity, entry.intakeFactor))
+    .map((entry) => pitSelectionItem(entry.productId, entry.portionId, entry.quantity, entry.intakeFactor, products))
     .filter(Boolean);
   return {
     items,
@@ -203,15 +293,15 @@ export function summarizePitSelection(selection = []) {
   };
 }
 
-function summaryFromRecord(record = {}) {
+function summaryFromRecord(record = {}, products = PIT_CREW_PRODUCTS) {
   if (record.summary) return record.summary;
-  return summarizePitSelection(record.selection || []);
+  return summarizePitSelection(record.selection || [], products);
 }
 
-export function rollingPitAverage(history = [], currentSelection = null, lookback = 3) {
+export function rollingPitAverage(history = [], currentSelection = null, lookback = 3, products = PIT_CREW_PRODUCTS) {
   const records = (Array.isArray(history) ? history : []).slice(-Math.max(0, lookback - (currentSelection ? 1 : 0)));
-  const summaries = records.map(summaryFromRecord);
-  if (currentSelection) summaries.push(summarizePitSelection(currentSelection));
+  const summaries = records.map((record) => summaryFromRecord(record, products));
+  if (currentSelection) summaries.push(summarizePitSelection(currentSelection, products));
   if (!summaries.length) return { hours: 0, carbsPerHour: 0, fluidPerHour: 0, caffeineMg: 0 };
   return {
     hours: summaries.length,
@@ -337,22 +427,73 @@ function normalSuggestion({ round = 1, history = [], flags = [], weather = [] } 
   };
 }
 
-export function recommendPitCrew({ round = 1, minutesToStart = 10, history = [], flags = [], weather = [] } = {}) {
+function closestPortion(product, targetCarbs = 0) {
+  const portions = (product?.portions || []).filter((portion) => !portion.hidden);
+  if (!portions.length) return null;
+  return [...portions].sort((left, right) => Math.abs(Number(left.carbs || 0) - targetCarbs) - Math.abs(Number(right.carbs || 0) - targetCarbs))[0];
+}
+
+function fallbackProduct(missing, products, availableIds, usedIds) {
+  const desired = pitProduct(missing.productId, products) || pitProduct(missing.productId);
+  const candidates = products.filter((product) => availableIds.has(String(product.id)) && !usedIds.has(String(product.id)));
+  if (!candidates.length) return null;
+  const sameCategory = candidates.filter((product) => product.category === desired?.category);
+  const desiredTraits = new Set(desired?.traits || []);
+  const ranked = (sameCategory.length ? sameCategory : candidates).map((product) => ({
+    product,
+    score: (product.traits || []).reduce((sum, trait) => sum + (desiredTraits.has(trait) ? 2 : 0), 0)
+      + (product.category === desired?.category ? 5 : 0),
+  })).sort((left, right) => right.score - left.score);
+  return ranked[0]?.product || null;
+}
+
+function fitRecommendationToStock(selection, products, availableProductIds) {
+  if (!Array.isArray(availableProductIds)) return { selection, adjusted: false };
+  const availableIds = new Set(availableProductIds.map(String));
+  const usedIds = new Set();
+  let adjusted = false;
+  const fitted = [];
+  for (const entry of selection || []) {
+    const current = pitProduct(entry.productId, products);
+    if (current && availableIds.has(String(current.id)) && !usedIds.has(String(current.id))) {
+      fitted.push(entry);
+      usedIds.add(String(current.id));
+      continue;
+    }
+    adjusted = true;
+    const fallback = fallbackProduct(entry, products, availableIds, usedIds);
+    if (!fallback) continue;
+    const sourcePortion = pitPortion(entry.productId, entry.portionId, products) || pitPortion(entry.productId, entry.portionId);
+    const portion = closestPortion(fallback, Number(sourcePortion?.carbs || 0));
+    if (!portion) continue;
+    fitted.push(choice(fallback.id, portion.id));
+    usedIds.add(String(fallback.id));
+  }
+  return { selection: fitted, adjusted };
+}
+
+export function recommendPitCrew({ round = 1, minutesToStart = 10, history = [], flags = [], weather = [], products = PIT_CREW_PRODUCTS, availableProductIds = null } = {}) {
   const mode = pitTimeMode(minutesToStart);
   const recommendation = mode === "go" || mode === "quick"
     ? quickSuggestion(history, mode)
     : normalSuggestion({ round, history, flags, weather });
-  const summary = summarizePitSelection(recommendation.selection);
+  const fitted = fitRecommendationToStock(recommendation.selection, products, availableProductIds);
+  const summary = summarizePitSelection(fitted.selection, products);
+  const why = fitted.selection.length
+    ? `${recommendation.why}${fitted.adjusted ? " · An deinen Vorrat angepasst." : ""}`
+    : "Im Vorrat ist aktuell keine passende Versorgung aktiviert. Vorrat öffnen und verfügbare Sachen auswählen.";
   return {
     mode,
     ...recommendation,
+    selection: fitted.selection,
+    why,
     summary,
   };
 }
 
-export function assessPitSelection(selection = [], history = [], { weather = [] } = {}) {
-  const summary = summarizePitSelection(selection);
-  const rolling = rollingPitAverage(history, selection, 3);
+export function assessPitSelection(selection = [], history = [], { weather = [], products = PIT_CREW_PRODUCTS } = {}) {
+  const summary = summarizePitSelection(selection, products);
+  const rolling = rollingPitAverage(history, selection, 3, products);
   const weatherSet = new Set(weather || []);
   const fluidFloor = weatherSet.has("hot") ? 450 : weatherSet.has("cold") ? 250 : 300;
 

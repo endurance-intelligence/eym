@@ -9,7 +9,7 @@ export function pitCrewStorageKey(race = {}) {
 }
 
 export function readPitCrewLocalSnapshot(race = {}, storage = globalThis.window?.localStorage) {
-  if (!storage) return { anchorAt: "", history: [], flags: [], weather: [], arrivalRound: 0, arrivalAt: "" };
+  if (!storage) return { anchorAt: "", history: [], flags: [], weather: [], arrivalRound: 0, arrivalAt: "", stockIds: null, customProducts: [] };
   try {
     const parsed = JSON.parse(storage.getItem(pitCrewStorageKey(race)) || "null");
     return {
@@ -19,9 +19,11 @@ export function readPitCrewLocalSnapshot(race = {}, storage = globalThis.window?
       weather: Array.isArray(parsed?.weather) ? parsed.weather : [],
       arrivalRound: Math.max(0, Number(parsed?.arrivalRound || 0)),
       arrivalAt: String(parsed?.arrivalAt || ""),
+      stockIds: Array.isArray(parsed?.stockIds) ? parsed.stockIds.map(String) : null,
+      customProducts: Array.isArray(parsed?.customProducts) ? parsed.customProducts : [],
     };
   } catch {
-    return { anchorAt: "", history: [], flags: [], weather: [], arrivalRound: 0, arrivalAt: "" };
+    return { anchorAt: "", history: [], flags: [], weather: [], arrivalRound: 0, arrivalAt: "", stockIds: null, customProducts: [] };
   }
 }
 
@@ -34,6 +36,8 @@ export function writePitCrewLocalSnapshot(race = {}, snapshot = {}, storage = gl
     weather: Array.isArray(snapshot?.weather) ? snapshot.weather : [],
     arrivalRound: Math.max(0, Number(snapshot?.arrivalRound || 0)),
     arrivalAt: String(snapshot?.arrivalAt || ""),
+    stockIds: Array.isArray(snapshot?.stockIds) ? snapshot.stockIds.map(String) : null,
+    customProducts: Array.isArray(snapshot?.customProducts) ? snapshot.customProducts : [],
   }));
 }
 
