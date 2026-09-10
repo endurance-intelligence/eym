@@ -37,12 +37,29 @@ function number(value) {
   return Math.round(Number(value || 0));
 }
 
-function sectionWeatherLabel(section) {
-  const parts = [`${section.temperature} °C`];
-  if (section.precipitationProbability >= 25) parts.push(`${section.precipitationProbability} % Regen`);
-  parts.push(`${section.windSpeed} km/h ${compassLabel(section.windDirection)}`);
-  if (section.windGusts >= section.windSpeed + 8) parts.push(`Böen ${section.windGusts}`);
-  return parts.join(" · ");
+function decimalLabel(value, digits = 1) {
+  return Number(value || 0).toLocaleString("de-DE", { maximumFractionDigits: digits });
+}
+
+function sectionImpact(section) {
+  const rain = section.precipitationProbability >= 55 || section.precipitation >= 0.2;
+  const hardWind = section.windSpeed >= 25 || section.windGusts >= 40 || section.maxHeadwindKmh >= 15;
+  const relevantWind = section.windSpeed >= 18 || section.windGusts >= 30 || section.maxHeadwindKmh >= 8 || section.crosswindKmh >= 14;
+  const temperatureStress = section.temperature >= 25 || section.temperature <= 5;
+  if ((rain && hardWind) || temperatureStress) {
+    return { tone: "hard", label: "🔴 hoch", text: "Wetter aktiv in Pace, Bekleidung und Versorgung einplanen." };
+  }
+  if (rain || relevantWind || section.temperature >= 22 || section.temperature <= 9) {
+    return { tone: "warn", label: "🟠 relevant", text: "Bedingungen mitdenken, aber die Rennstrategie nicht unnötig übersteuern." };
+  }
+  return { tone: "good", label: "🟢 gering", text: "Gute Bedingungen. Kein wetterbedingter Pace-Umbau nötig." };
+}
+
+function routeWindSummary(section) {
+  if (section.maxHeadwindKmh >= 8) return `Gegenwindpassagen relevant · Spitze ca. ${number(section.maxHeadwindKmh)} km/h. Effort halten, Pace nicht erzwingen.`;
+  if (section.headwindKmh <= -8) return `Überwiegend Rückenwindwirkung · ca. ${number(Math.abs(section.headwindKmh))} km/h. Mitnehmen, ohne unbewusst zu überziehen.`;
+  if (section.crosswindKmh >= 10) return `Überwiegend Seitenwind · bis ca. ${number(section.crosswindKmh)} km/h quer. Stabil laufen und Linie halten.`;
+  return "Geringe Windwirkung auf der Strecke · kein taktischer Eingriff nötig.";
 }
 
 function windAdvice(trackSection) {
@@ -234,17 +251,39 @@ export default function RaceWeatherStrategy({
         </div>
       )}
 
-      <div className="race-weather-sections">
-        {strategy.sections.map((section, index) => (
-          <article key={`${section.title}:${index}`}>
-            <div className="race-weather-section-head">
-              <b>{section.icon}</b>
-              <div><strong>{section.title}</strong><span>{section.timeLabel}</span></div>
-            </div>
-            <p>{sectionWeatherLabel(section)}</p>
-            {section.advice.length > 0 && <ul>{section.advice.map((item) => <li key={item}>{item}</li>)}</ul>}
-          </article>
-        ))}
+      <div className={`race-weather-sections${strategy.sections.length === 1 ? " is-single" : ""}`}>
+        {strategy.sections.map((section, index) => {
+          const impact = sectionImpact(section);
+          const hasRouteGeometry = Array.isArray(routeProfile?.profilePoints) && routeProfile.profilePoints.length > 1;
+          return (
+            <article key={`${section.title}:${index}`} className={`race-weather-section-card tone-${impact.tone}`}>
+              <div className="race-weather-section-head">
+                <b>{section.icon}</b>
+                <div><strong>{section.title}</strong><span>{section.timeLabel}</span></div>
+                <em className={`race-weather-impact tone-${impact.tone}`}>{impact.label}</em>
+              </div>
+              <div className="race-weather-section-metrics">
+                <span><small>Temperatur</small><b>{section.temperature} °C</b></span>
+                <span><small>Gefühlt</small><b>{section.feelsLike} °C</b></span>
+                <span><small>Regen</small><b>{section.precipitationProbability} % · {decimalLabel(section.precipitation)} mm</b></span>
+                <span><small>Wind</small><b>{section.windSpeed} km/h {compassLabel(section.windDirection)}</b></span>
+                <span><small>Böen</small><b>{section.windGusts} km/h</b></span>
+                <span><small>Luftfeuchte</small><b>{section.humidity} %</b></span>
+              </div>
+              {hasRouteGeometry && (
+                <div className="race-weather-route-wind">
+                  <small>WIND AUF DER STRECKE</small>
+                  <strong>{routeWindSummary(section)}</strong>
+                </div>
+              )}
+              <div className={`race-weather-coach tone-${impact.tone}`}>
+                <small>RACE COACH</small>
+                <strong>{impact.text}</strong>
+              </div>
+              {section.advice.length > 0 && <ul>{section.advice.map((item) => <li key={item}>{item}</li>)}</ul>}
+            </article>
+          );
+        })}
       </div>
 
       {strategy.windHotspot?.headwindKmh >= 8 && !trackPlan && (

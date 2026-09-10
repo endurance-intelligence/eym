@@ -17,6 +17,7 @@ function hourlyRow(time, overrides = {}) {
     epoch: Date.parse(`${time}:00Z`),
     temperature: 14,
     feelsLike: 13,
+    humidity: 68,
     precipitationProbability: 10,
     precipitation: 0,
     weatherCode: 2,
@@ -139,4 +140,24 @@ test("race week hint selects the next active event inside the current Monday-to-
   const selected = raceWeekEvent(mission, new Date("2026-09-07T09:00:00"));
   assert.equal(selected?.id, "friday");
   assert.equal(raceWeekEvent({ milestones: [{ id: "next", date: "2026-09-14" }] }, new Date("2026-09-07T09:00:00")), null);
+});
+
+test("race weather sections keep feels-like temperature and humidity for the detailed race card", () => {
+  const forecasts = [{
+    fraction: 0.5,
+    timezone: "Europe/Berlin",
+    rows: [hourlyRow("2026-09-11T18:00", { temperature: 16, feelsLike: 15, humidity: 72, precipitationProbability: 5, windSpeed: 8, windGusts: 17 })],
+  }];
+  const strategy = buildRaceWeatherStrategy({
+    race: { date: "2026-09-11", time: "18:20" },
+    routeProfile,
+    raceDistanceKm: 5,
+    targetDurationMinutes: 20,
+    forecasts,
+    confidence: { key: "final" },
+  });
+  assert.equal(strategy.sections.length, 1);
+  assert.equal(strategy.sections[0].feelsLike, 15);
+  assert.equal(strategy.sections[0].humidity, 72);
+  assert.equal(strategy.sections[0].precipitationProbability, 5);
 });

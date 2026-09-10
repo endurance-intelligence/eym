@@ -250,6 +250,7 @@ function hourlyRows(hourly = {}) {
     epoch: pseudoEpoch(String(time).slice(0, 10), String(time).slice(11, 16)),
     temperature: numeric(hourly.temperature_2m?.[index], 0),
     feelsLike: numeric(hourly.apparent_temperature?.[index], 0),
+    humidity: numeric(hourly.relative_humidity_2m?.[index], 0),
     precipitationProbability: numeric(hourly.precipitation_probability?.[index], 0),
     precipitation: numeric(hourly.precipitation?.[index], 0),
     weatherCode: numeric(hourly.weather_code?.[index], 0),
@@ -268,6 +269,7 @@ async function fetchAnchorForecast(anchor, startDate, endDate) {
     hourly: [
       "temperature_2m",
       "apparent_temperature",
+      "relative_humidity_2m",
       "precipitation_probability",
       "precipitation",
       "weather_code",
@@ -380,6 +382,8 @@ function sampleSection({ forecasts, routeProfile, raceDistanceKm, startEpoch, ta
   if (!samples.length) return null;
   const midpoint = samples[Math.floor(samples.length / 2)];
   const temperatures = samples.map((sample) => sample.weather.temperature);
+  const feelsLikeValues = samples.map((sample) => sample.weather.feelsLike);
+  const humidities = samples.map((sample) => sample.weather.humidity);
   const precipitationProbabilities = samples.map((sample) => sample.weather.precipitationProbability);
   const precipitations = samples.map((sample) => sample.weather.precipitation);
   const winds = samples.map((sample) => sample.weather.windSpeed);
@@ -394,6 +398,8 @@ function sampleSection({ forecasts, routeProfile, raceDistanceKm, startEpoch, ta
     startEpoch: startEpoch + targetDurationMinutes * 60000 * startFraction,
     endEpoch: startEpoch + targetDurationMinutes * 60000 * endFraction,
     temperature: round(temperatures.reduce((sum, value) => sum + value, 0) / temperatures.length),
+    feelsLike: round(feelsLikeValues.reduce((sum, value) => sum + value, 0) / feelsLikeValues.length),
+    humidity: Math.round(humidities.reduce((sum, value) => sum + value, 0) / humidities.length),
     minTemperature: Math.round(Math.min(...temperatures)),
     maxTemperature: Math.round(Math.max(...temperatures)),
     precipitationProbability: Math.round(Math.max(...precipitationProbabilities)),
