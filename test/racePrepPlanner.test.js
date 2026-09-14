@@ -369,3 +369,39 @@ test("mission track metadata is preserved for Race Strategy even when Race Prep 
   assert.equal(profile.courseType, "loop");
   assert.equal(profile.loopMode, "free");
 });
+
+test("Race Prep respects learned taste fatigue instead of planning the same gel indefinitely", () => {
+  const tasteState = {
+    fuel: [{ ...gel, quantity: 20 }],
+    activities: [{ id: "taste-run", type: "Run", distance: 30, duration: 240, date: "2026-08-30" }],
+    reviews: {
+      "taste-run": {
+        stomach: 9,
+        stomachSymptoms: [],
+        nutritionItems: [1, 2, 3, 4, 5].map((round) => ({
+          fuelItemId: "gel-160",
+          quantity: "1",
+          unit: "Stück",
+          intakeTimingMode: "round",
+          intakeTimingValue: String(round),
+          intakeTolerance: "good",
+          tasteRating: round === 5 ? "tired" : "good",
+          tasteAfterAmount: round === 5 ? "no" : "yes",
+        })),
+      },
+    },
+  };
+
+  const plan = buildRacePrepPlan({
+    profile: { ...racePrepProfileFromPreset("backyard"), durationMinutes: 12 * 60, rounds: 12, distanceKm: 80.4, fuelItemIds: ["gel-160"] },
+    state: tasteState,
+  });
+  const evidence = plan.evidenceCatalog.find((entry) => entry.id === "gel-160");
+  const gelPlan = plan.recommendation.consume.find((entry) => entry.fuelItemId === "gel-160");
+
+  assert.equal(evidence.evidence.preferredMaxQuantity, 5);
+  assert.match(evidence.detail, /Rotation ab ca\. 5 Portionen/);
+  assert.ok(gelPlan.quantity <= 5);
+  assert.equal(plan.warnings.some((warning) => /Geschmacks-\/Mengenmüdigkeit/.test(warning)), true);
+  assert.equal(plan.warnings.some((warning) => /KH-Bilanz noch offen/.test(warning)), true);
+});

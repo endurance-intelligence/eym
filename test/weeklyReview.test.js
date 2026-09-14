@@ -47,6 +47,7 @@ test("weekly review highlights GI signals without turning one hard session into 
       energy: 6,
       overallFeeling: 6,
       rpe: 8,
+      usedNutrition: true,
       stomach: 5,
       stomachSymptoms: ["Völlegefühl"],
       nutritionItems: [{ intakeTolerance: "watch", intakeSymptoms: ["Aufstoßen"] }],
@@ -119,4 +120,17 @@ test("unplanned endurance load only changes the consequence when its review is s
   });
   assert.match(strained.consequence, /auffälligen Review-Signale/);
   assert.match(strained.consequence, /keine automatische Kilometerverrechnung/);
+});
+
+
+test("weekly review treats GI feedback as fueling feedback only", () => {
+  const result = weeklyReviewSummary({
+    weekStart: "2026-09-07",
+    plan: [],
+    activities: [{ id: "plain-run", type: "Run", date: "2026-09-08", distance: 8, duration: 48 }],
+    reviews: {
+      "plain-run": { legs: 7, energy: 7, overallFeeling: 7, rpe: 5, usedNutrition: false, stomach: 3, stomachSymptoms: ["Übelkeit"] },
+    },
+  });
+  assert.doesNotMatch(result.watchouts.join(" "), /Magen-\/GI-Auffälligkeiten/);
 });

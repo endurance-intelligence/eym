@@ -45,7 +45,13 @@ function reviewRows(activities, reviews, allActivities) {
     .map((review) => ({ activity, review })));
 }
 
+function hasFuelingFeedback(review = {}) {
+  return review.usedNutrition === true
+    || (review.usedNutrition == null && Array.isArray(review.nutritionItems) && review.nutritionItems.length > 0);
+}
+
 function symptomValues(review = {}) {
+  if (!hasFuelingFeedback(review)) return [];
   const general = [
     ...(Array.isArray(review.stomachSymptoms) ? review.stomachSymptoms : []),
   ].filter((value) => value && !String(value).startsWith("Keine"));
@@ -120,7 +126,7 @@ export function weeklyReviewSummary({
     || number(review.energy || 10) <= 4
     || number(review.overallFeeling || 10) <= 4
   ));
-  const giRows = rows.filter(({ review }) => number(review.stomach || 10) <= 5 || symptomValues(review).length > 0);
+  const giRows = rows.filter(({ review }) => hasFuelingFeedback(review) && (number(review.stomach || 10) <= 5 || symptomValues(review).length > 0));
   const strongThirstRows = rows.filter(({ review }) => review.hydrationThirst === "stark");
   const stableRows = rows.filter(({ review }) => (
     number(review.legs) >= 6

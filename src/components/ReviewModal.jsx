@@ -26,6 +26,22 @@ const FUEL_TIMING_OPTIONS = [
   { value: "free", label: "Freitext" },
 ];
 
+const FUEL_TASTE_OPTIONS = [
+  { value: "unknown", label: "Nicht bewertet" },
+  { value: "great", label: "Sehr lecker" },
+  { value: "good", label: "Schmeckt gut" },
+  { value: "okay", label: "Okay" },
+  { value: "tired", label: "Wird mir zu viel" },
+  { value: "bad", label: "Mag ich nicht" },
+];
+
+const FUEL_AFTER_AMOUNT_OPTIONS = [
+  { value: "unknown", label: "Nicht bewertet" },
+  { value: "yes", label: "Ja, gerne weiter" },
+  { value: "limited", label: "Nur noch wenig" },
+  { value: "no", label: "Nein, jetzt wechseln" },
+];
+
 function fuelTimingFieldLabel(mode) {
   return {
     round: "Runde",
@@ -43,6 +59,38 @@ function fuelTimingPlaceholder(mode) {
 }
 import "./ReviewModal.css";
 
+function fuelTimingLabel(item = {}, index = 0) {
+  const value = String(item.intakeTimingValue || "").trim();
+  const mode = item.intakeTimingMode || "minute";
+  if (!value) return `Aufnahme ${index + 1}`;
+  if (mode === "round") return `Runde ${value}`;
+  if (mode === "km") return `km ${value}`;
+  if (mode === "minute") return `Min ${value}`;
+  return value;
+}
+
+function fuelProductIdentity(item = {}) {
+  if (item.fuelItemId) return `fuel:${item.fuelItemId}`;
+  const manual = [item.manufacturer, item.product, item.type]
+    .map((value) => String(value || "").trim().toLowerCase())
+    .filter(Boolean)
+    .join("|");
+  return manual ? `manual:${manual}` : `row:${item.id || "unknown"}`;
+}
+
+function fuelAmountLabel(items = [], index = 0) {
+  const current = items[index] || {};
+  const unit = current.unit || "Portion(en)";
+  const identity = fuelProductIdentity(current);
+  const quantity = items.slice(0, index + 1).reduce((sum, item) => {
+    if (fuelProductIdentity(item) !== identity || (item.unit || "Portion(en)") !== unit) return sum;
+    return sum + Number(item.quantity || 0);
+  }, 0);
+  if (!(quantity > 0)) return "dieser Menge";
+  const formatted = quantity.toLocaleString("de-DE", { maximumFractionDigits: 2 });
+  return `${formatted} ${unit}`;
+}
+
 const emptyNutritionItem = (mode = "catalog") => ({
   id: crypto.randomUUID(),
   mode,
@@ -55,6 +103,8 @@ const emptyNutritionItem = (mode = "catalog") => ({
   intakeTolerance: "unknown",
   intakeSymptoms: [],
   intakeReactionNote: "",
+  tasteRating: "unknown",
+  tasteAfterAmount: "unknown",
   carbohydratesPerUnit: "",
   sodiumPerUnit: "",
   caffeinePerUnit: "",
@@ -334,7 +384,7 @@ export default function ReviewModal({ activity, onClose }) {
   const summaryFacts = activitySummaryFacts(activity, weather);
   const summarySymptoms = [
     ...activeSymptoms(review.legSymptoms),
-    ...activeSymptoms(review.stomachSymptoms),
+    ...(review.usedNutrition ? activeSymptoms(review.stomachSymptoms) : []),
   ];
   const summaryScores = kind === "endurance"
     ? [
@@ -342,7 +392,7 @@ export default function ReviewModal({ activity, onClose }) {
       ["Gesamtgefühl", review.overallFeeling],
       ["Beine", review.legs],
       ["Energie", review.energy],
-      ["Magen", review.stomach],
+      ...(review.usedNutrition ? [["Fuel-Magen", review.stomach]] : []),
     ]
     : [
       ["Belastung", review.rpe],
@@ -652,13 +702,11 @@ export default function ReviewModal({ activity, onClose }) {
             <div className="scores review-score-grid">
               <ReviewScore label="Beine" value={review.legs} onChange={(value) => set("legs", value)} low="Sehr schlecht · schwer / schmerzhaft" high="Sehr gut · frisch / beschwerdefrei" description="10 bedeutet: Die Beine fühlen sich frisch, locker und ohne Auffälligkeiten an." />
               <ReviewScore label="Energie" value={review.energy} onChange={(value) => set("energy", value)} low="Völlig leer" high="Sehr energiegeladen" description="10 bedeutet: Du fühlst dich körperlich und mental sehr energiegeladen." />
-              <ReviewScore label="Magenverträglichkeit" value={review.stomach} onChange={(value) => set("stomach", value)} low="Starke Beschwerden" high="Keine Beschwerden" description="10 bedeutet: Getränke und Verpflegung wurden ohne Magen-Darm-Beschwerden vertragen." />
               <ReviewScore label="Wahrgenommene Belastung" value={review.rpe} onChange={(value) => set("rpe", value)} low="Sehr locker" high="Maximal anstrengend" description="Hier beschreibt eine hohe Zahl nicht die Qualität, sondern wie anstrengend die Einheit war." variant="effort" />
               <ReviewScore label="Gesamtgefühl" value={review.overallFeeling} onChange={(value) => set("overallFeeling", value)} low="Sehr schlecht" high="Sehr gut" description="Wie zufrieden bist du insgesamt mit der Einheit und deinem Zustand danach?" wide />
             </div>
             <div className="review-symptom-grid">
               <SymptomPicker title="Auffälligkeiten Beine" selected={review.legSymptoms} onChange={(value) => set("legSymptoms", value)} options={["Keine Auffälligkeiten", "Schwere Beine", "Muskelkater", "Schmerzen", "Krämpfe"]} />
-              <SymptomPicker title="Auffälligkeiten Magen" selected={review.stomachSymptoms} onChange={(value) => set("stomachSymptoms", value)} options={["Keine Beschwerden", "Aufstoßen", "Blähungen", "Übelkeit", "Völlegefühl", "Seitenstechen", "Toilettendrang"]} />
             </div>
             <div className="form-grid">
               <label>PRE · vorher getrunken (ml)<input type="number" min="0" value={review.drinkBeforeMl} onChange={(event) => set("drinkBeforeMl", event.target.value)} /></label>
@@ -720,7 +768,7 @@ export default function ReviewModal({ activity, onClose }) {
               <details><summary>Berücksichtigte Daten</summary><div className="coach-activity-factors">{coachAssessment.factors.map((factor) => <span key={factor}>{factor}</span>)}</div><p>{coachAssessment.confidence.text} Der interne Belastungswert dient nur dem persönlichen Vergleich und ist weder eine medizinische Bewertung noch eine Kopie der Garmin-Kennzahl. Bei Müdigkeit, Schmerzen oder ungewöhnlich schlechtem Gefühl hat deine Rückmeldung immer Vorrang.</p></details>
             </section>
 
-            <section className={`review-feature-box ${review.usedNutrition ? "active" : ""}`}>
+            <section className={`review-feature-box fuel-review-board ${review.usedNutrition ? "active" : ""}`}>
               {plannedFuelRecommendation && (
                 <div className="review-fuel-prefill">
                   <div>
@@ -730,109 +778,108 @@ export default function ReviewModal({ activity, onClose }) {
                   <small>Geplante Produkte und Trinkmenge sind vorausgefüllt. Bitte auf den tatsächlichen Verbrauch korrigieren; erst beim Speichern wird Bestand reduziert.</small>
                 </div>
               )}
-              <label className="review-toggle-row">
-                <span><b>Verpflegung</b><small>Produkte aus dem Fuel Lab übernehmen oder einmalig manuell erfassen.</small></span>
+              <label className="review-toggle-row fuel-review-toggle">
+                <span><b>Fueling Review</b><small>Wie beim Backyard: Zeitpunkt, Produkt, Menge und deine echte Race-Day-Erfahrung in einem Ablauf.</small></span>
                 <input type="checkbox" checked={review.usedNutrition} onChange={(event) => toggleNutrition(event.target.checked)} />
               </label>
               {review.usedNutrition && (
-                <div className="nutrition-review-list">
-                  <div className="nutrition-add-toolbar">
-                    <button type="button" onClick={() => setReview((current) => ({ ...current, nutritionItems: [...current.nutritionItems, emptyNutritionItem("catalog")] }))}>+ Aus Fuel Lab</button>
-                    <button type="button" className="secondary" onClick={() => setReview((current) => ({ ...current, nutritionItems: [...current.nutritionItems, emptyNutritionItem("manual")] }))}>+ Manuell</button>
+                <div className="nutrition-review-list fuel-review-flow">
+                  <div className="fuel-review-overall">
+                    <div className="fuel-review-overall-copy">
+                      <span>Fueling insgesamt</span>
+                      <strong>Einmal Magen bewerten – Produktgeschmack direkt an der jeweiligen Aufnahme</strong>
+                      <small>Die Magenfrage erscheint nur, wenn du tatsächlich Verpflegung erfasst. Geschmack und „noch Lust darauf?“ helfen dem Race Planner später bei Rotation statt Einheits-Fueling.</small>
+                    </div>
+                    <ReviewScore label="Magenverträglichkeit" value={review.stomach} onChange={(value) => set("stomach", value)} low="Starke Beschwerden" high="Keine Beschwerden" description="Bewerte die gesamte Verpflegung dieser Einheit. 10 bedeutet: ohne Magen-Darm-Beschwerden vertragen." wide />
+                    <SymptomPicker title="Magen / GI auffällig?" selected={review.stomachSymptoms} onChange={(value) => set("stomachSymptoms", value)} options={["Keine Beschwerden", "Aufstoßen", "Blähungen", "Übelkeit", "Völlegefühl", "Seitenstechen", "Toilettendrang"]} />
                   </div>
-                  {review.nutritionItems.some((item) => item.fuelItemId && item.affectsInventory === false) && <div className="nutrition-inventory-note"><b>Bestand bleibt unverändert</b><span>Mindestens ein historischer oder bereits verbrauchter Artikel ist ohne Bestandsabzug markiert. Dieser Hinweis gilt für alle entsprechend markierten Einträge.</span></div>}
-                  {review.nutritionItems.map((item, index) => {
-                    const selectedFuel = item.fuelItemId ? state.fuel.find((fuel) => fuel.id === item.fuelItemId) : null;
-                    const mixedDrink = usesMixedDrinkTracking(selectedFuel);
-                    const totals = nutritionForConsumption(item, selectedFuel);
-                    return <div className={`nutrition-review-item ${item.mode === "manual" ? "manual" : "catalog"}`} key={item.id}>
-                      <div className="nutrition-review-heading"><div><b>Verpflegung {index + 1}</b><small>{item.mode === "manual" ? "Manuelle Eingabe" : "Fuel Lab"}</small></div><button type="button" className="text-danger" onClick={() => removeNutritionItem(item.id)}>Entfernen</button></div>
-                      {item.mode !== "manual" ? <>
-                        {!selectedFuel && <label className="nutrition-catalog-select">Produkt aus Fuel Lab
-                          <select value={item.fuelItemId || ""} onChange={(event) => selectFuelItem(item.id, event.target.value)}>
-                            <option value="">Produkt auswählen …</option>
-                      <div className="nutrition-timing-fields">
-                        <label>Wann genommen?
-                          <select value={item.intakeTimingMode || "minute"} onChange={(event) => updateNutritionItem(item.id, "intakeTimingMode", event.target.value)}>
-                            {FUEL_TIMING_OPTIONS.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
-                          </select>
-                        </label>
-                        <label>{fuelTimingFieldLabel(item.intakeTimingMode || "minute")}
-                          <input
-                            type={(item.intakeTimingMode || "minute") === "free" ? "text" : "number"}
-                            min={(item.intakeTimingMode || "minute") === "round" ? "1" : "0"}
-                            step={(item.intakeTimingMode || "minute") === "km" ? "0.1" : "1"}
-                            value={item.intakeTimingValue || ""}
-                            onChange={(event) => updateNutritionItem(item.id, "intakeTimingValue", event.target.value)}
-                            placeholder={fuelTimingPlaceholder(item.intakeTimingMode || "minute")}
-                          />
-                        </label>
-                        <label className="nutrition-timing-note">Kurze Notiz
-                          <input value={item.intakeNote || ""} onChange={(event) => updateNutritionItem(item.id, "intakeNote", event.target.value)} placeholder="z. B. mit Wasser · im Zelt · halbe Portion" />
-                        </label>
-                      </div>
-                      {(selectedFuel || item.mode === "manual") && (
-                        <div className="nutrition-intake-tolerance">
-                          <label>Magenverträglichkeit dieser Aufnahme
-                            <select value={item.intakeTolerance || "unknown"} onChange={(event) => updateNutritionItem(item.id, "intakeTolerance", event.target.value)}>
-                              {[{ value: "unknown", label: "Nicht bewertet" }, { value: "good", label: "Gut vertragen" }, { value: "watch", label: "Auffällig" }, { value: "bad", label: "Problematisch" }].map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
-                            </select>
-                          </label>
-                          {(item.intakeTolerance || "unknown") !== "unknown" && (
-                            <>
-                              <SymptomPicker
-                                title="Reaktion auf diese Aufnahme"
-                                options={["Aufstoßen", "Blähungen", "Übelkeit", "Völlegefühl", "Seitenstechen", "Toilettendrang"]}
-                                selected={Array.isArray(item.intakeSymptoms) ? item.intakeSymptoms : []}
-                                onChange={(value) => updateNutritionItem(item.id, "intakeSymptoms", value)}
-                              />
-                              <label>Beobachtung
-                                <input value={item.intakeReactionNote || ""} onChange={(event) => updateNutritionItem(item.id, "intakeReactionNote", event.target.value)} placeholder="z. B. 20 min später schwerer Magen · danach wieder okay" />
-                              </label>
-                            </>
-                          )}
-                        </div>
-                      )}
-                            {state.fuel.filter((fuel) => !fuel.archived).map((fuel) => <option key={fuel.id} value={fuel.id}>{fuelDisplayName(fuel)} · {fuel.quantity} {fuel.stockUnit || "Stück"}</option>)}
-                          </select>
-                        </label>}
-                        {selectedFuel && <div className="nutrition-catalog-card">
-                          <div className="nutrition-catalog-copy">
-                            <span>{selectedFuel.category}</span>
-                            <b>{fuelDisplayName(selectedFuel)}</b>
-                            {mixedDrink
-                              ? <small>{Number(selectedFuel.carbs || 0).toFixed(1).replace(".0", "")} g Kohlenhydrate pro Portion{selectedFuel.sodium ? ` · ${Math.round(Number(selectedFuel.sodium))} mg Natrium` : ""}. Mischvorschlag des Produkts: {selectedFuel.preparedVolumeMl} ml.</small>
-                              : selectedFuel.servingQuantity && <small>{selectedFuel.servingQuantity} {selectedFuel.servingUnit || "g"} pro Portion.</small>}
-                            <button type="button" className="nutrition-change-product" onClick={() => selectFuelItem(item.id, "")}>Produkt wechseln</button>
+
+                  <div className="nutrition-add-toolbar fuel-review-toolbar">
+                    <div><b>{review.nutritionItems.length} {review.nutritionItems.length === 1 ? "Aufnahme" : "Aufnahmen"}</b><span>Tatsächlichen Verlauf von früh nach spät erfassen.</span></div>
+                    <div><button type="button" onClick={() => setReview((current) => ({ ...current, nutritionItems: [...current.nutritionItems, emptyNutritionItem("catalog")] }))}>+ Aus Fuel Lab</button><button type="button" className="secondary" onClick={() => setReview((current) => ({ ...current, nutritionItems: [...current.nutritionItems, emptyNutritionItem("manual")] }))}>+ Manuell</button></div>
+                  </div>
+                  {review.nutritionItems.some((item) => item.fuelItemId && item.affectsInventory === false) && <div className="nutrition-inventory-note"><b>Bestand bleibt unverändert</b><span>Mindestens ein historischer oder bereits verbrauchter Artikel ist ohne Bestandsabzug markiert.</span></div>}
+
+                  <div className="fuel-review-timeline">
+                    {review.nutritionItems.map((item, index) => {
+                      const selectedFuel = item.fuelItemId ? state.fuel.find((fuel) => fuel.id === item.fuelItemId) : null;
+                      const mixedDrink = usesMixedDrinkTracking(selectedFuel);
+                      const totals = nutritionForConsumption(item, selectedFuel);
+                      const productName = selectedFuel
+                        ? fuelDisplayName(selectedFuel)
+                        : [item.manufacturer, item.product].filter(Boolean).join(" ") || `Verpflegung ${index + 1}`;
+                      return <article className={`nutrition-review-item fuel-review-stop ${item.mode === "manual" ? "manual" : "catalog"}`} key={item.id}>
+                        <div className="fuel-review-stop-marker"><span>{index + 1}</span><b>{fuelTimingLabel(item, index)}</b></div>
+                        <div className="fuel-review-stop-body">
+                          <div className="nutrition-review-heading fuel-review-stop-heading">
+                            <div><small>{item.mode === "manual" ? "Manuell" : selectedFuel?.category || "Fuel Lab"}</small><b>{productName}</b></div>
+                            <button type="button" className="text-danger" onClick={() => removeNutritionItem(item.id)}>Entfernen</button>
                           </div>
-                          {mixedDrink ? (
-                            <div className="nutrition-mix-fields">
-                              <label>Portionen<input type="number" min="0" step="0.25" value={item.quantity} onChange={(event) => updateMixedPortions(item.id, event.target.value)} /></label>
-                              <label>Flasche je Portion (ml)<input type="number" min="0" step="10" value={Number(item.quantity || 0) > 0 ? Math.round(Number(item.mixedVolumeMl || 0) / Number(item.quantity)) : ""} onChange={(event) => updateBottleVolume(item.id, event.target.value)} /></label>
-                              <label>Insgesamt getrunken (ml)<input type="number" min="0" max={item.mixedVolumeMl || undefined} step="10" value={item.consumedVolumeMl || ""} onChange={(event) => updateNutritionItem(item.id, "consumedVolumeMl", event.target.value)} /></label>
-                              <div className="nutrition-bottle-presets"><span>Flaschengröße je Portion</span>{[500, 650].map((volume) => <button type="button" className={Number(item.quantity || 0) > 0 && Math.round(Number(item.mixedVolumeMl || 0) / Number(item.quantity)) === volume ? "selected" : ""} onClick={() => updateBottleVolume(item.id, volume)} key={volume}>{volume} ml</button>)}</div>
-                            </div>
+
+                          {item.mode !== "manual" ? (
+                            <>
+                              {!selectedFuel && <label className="nutrition-catalog-select">Produkt aus Fuel Lab
+                                <select value={item.fuelItemId || ""} onChange={(event) => selectFuelItem(item.id, event.target.value)}>
+                                  <option value="">Produkt auswählen …</option>
+                                  {state.fuel.filter((fuel) => !fuel.archived).map((fuel) => <option key={fuel.id} value={fuel.id}>{fuelDisplayName(fuel)} · {fuel.quantity} {fuel.stockUnit || "Stück"}</option>)}
+                                </select>
+                              </label>}
+                              {selectedFuel && <div className="nutrition-catalog-card">
+                                <div className="nutrition-catalog-copy">
+                                  <span>{selectedFuel.category}</span>
+                                  <b>{fuelDisplayName(selectedFuel)}</b>
+                                  {mixedDrink
+                                    ? <small>{Number(selectedFuel.carbs || 0).toFixed(1).replace(".0", "")} g Kohlenhydrate pro Portion{selectedFuel.sodium ? ` · ${Math.round(Number(selectedFuel.sodium))} mg Natrium` : ""}. Mischvorschlag: {selectedFuel.preparedVolumeMl} ml.</small>
+                                    : selectedFuel.servingQuantity && <small>{selectedFuel.servingQuantity} {selectedFuel.servingUnit || "g"} pro Portion.</small>}
+                                  <button type="button" className="nutrition-change-product" onClick={() => selectFuelItem(item.id, "")}>Produkt wechseln</button>
+                                </div>
+                                {mixedDrink ? (
+                                  <div className="nutrition-mix-fields">
+                                    <label>Portionen<input type="number" min="0" step="0.25" value={item.quantity} onChange={(event) => updateMixedPortions(item.id, event.target.value)} /></label>
+                                    <label>Flasche je Portion (ml)<input type="number" min="0" step="10" value={Number(item.quantity || 0) > 0 ? Math.round(Number(item.mixedVolumeMl || 0) / Number(item.quantity)) : ""} onChange={(event) => updateBottleVolume(item.id, event.target.value)} /></label>
+                                    <label>Insgesamt getrunken (ml)<input type="number" min="0" max={item.mixedVolumeMl || undefined} step="10" value={item.consumedVolumeMl || ""} onChange={(event) => updateNutritionItem(item.id, "consumedVolumeMl", event.target.value)} /></label>
+                                    <div className="nutrition-bottle-presets"><span>Flaschengröße je Portion</span>{[500, 650].map((volume) => <button type="button" className={Number(item.quantity || 0) > 0 && Math.round(Number(item.mixedVolumeMl || 0) / Number(item.quantity)) === volume ? "selected" : ""} onClick={() => updateBottleVolume(item.id, volume)} key={volume}>{volume} ml</button>)}</div>
+                                  </div>
+                                ) : (
+                                  <div className="nutrition-consumption-fields">
+                                    <label>Menge<input type="number" min="0" step={item.unit === "ml" ? "10" : "0.1"} value={item.quantity} onChange={(event) => updateNutritionItem(item.id, "quantity", event.target.value)} /></label>
+                                    <label>Einheit<select value={item.unit} onChange={(event) => updateNutritionItem(item.id, "unit", event.target.value)}>{consumptionUnitsForFuel(selectedFuel).map((unit) => <option key={unit}>{unit}</option>)}</select></label>
+                                  </div>
+                                )}
+                                <div className="nutrition-live-values">{consumptionSummary(item, selectedFuel).map((part) => <span key={part}>{part}</span>)}{!consumptionSummary(item, selectedFuel).length && <span>Nährwerte im Fuel Lab noch nicht vollständig.</span>}</div>
+                                <label className="inventory-impact-toggle"><input type="checkbox" checked={item.affectsInventory !== false} onChange={(event) => updateNutritionItem(item.id, "affectsInventory", event.target.checked)} /><span>Aktuellen Bestand reduzieren{item.affectsInventory !== false && totals.inventoryUnits > 0 ? ` · ${totals.inventoryUnits.toFixed(1).replace(".0", "")} ${selectedFuel.stockUnit || "Einheiten"}` : ""}</span></label>
+                              </div>}
+                            </>
                           ) : (
-                            <div className="nutrition-consumption-fields">
-                              <label>Menge<input type="number" min="0" step={item.unit === "ml" ? "10" : "0.1"} value={item.quantity} onChange={(event) => updateNutritionItem(item.id, "quantity", event.target.value)} /></label>
-                              <label>Einheit<select value={item.unit} onChange={(event) => updateNutritionItem(item.id, "unit", event.target.value)}>{consumptionUnitsForFuel(selectedFuel).map((unit) => <option key={unit}>{unit}</option>)}</select></label>
+                            <div className="nutrition-manual-grid">
+                              <label>Art<select value={item.type} onChange={(event) => updateNutritionItem(item.id, "type", event.target.value)}><option>Gel</option><option>Elektrolyte</option><option>Drink Mix</option><option>Riegel</option><option>Salz</option><option>Sonstiges</option></select></label>
+                              <label>Hersteller<input value={item.manufacturer} onChange={(event) => updateNutritionItem(item.id, "manufacturer", event.target.value)} placeholder="z. B. Maurten" /></label>
+                              <label>Produkt<input value={item.product} onChange={(event) => updateNutritionItem(item.id, "product", event.target.value)} placeholder="z. B. Gel 100" /></label>
+                              <label>Menge<input type="number" min="0" step="0.1" value={item.quantity} onChange={(event) => updateNutritionItem(item.id, "quantity", event.target.value)} /></label>
+                              <label>Einheit<select value={item.unit} onChange={(event) => updateNutritionItem(item.id, "unit", event.target.value)}><option>Stück</option><option>Portionen</option><option>ml</option><option>g</option><option>Tabletten</option><option>Beutel</option></select></label>
+                              <label>{item.unit === "ml" || item.unit === "g" ? `Carbs pro 100 ${item.unit} (g)` : "Carbs pro Einheit (g)"}<input type="number" min="0" step="0.1" value={item.carbohydratesPerUnit ?? ""} onChange={(event) => updateNutritionItem(item.id, "carbohydratesPerUnit", event.target.value)} /></label>
+                              <label>{item.unit === "ml" || item.unit === "g" ? `Natrium pro 100 ${item.unit} (mg)` : "Natrium pro Einheit (mg)"}<input type="number" min="0" step="1" value={item.sodiumPerUnit ?? ""} onChange={(event) => updateNutritionItem(item.id, "sodiumPerUnit", event.target.value)} /></label>
+                              <label>{item.unit === "ml" || item.unit === "g" ? `Koffein pro 100 ${item.unit} (mg)` : "Koffein pro Einheit (mg)"}<input type="number" min="0" step="1" value={item.caffeinePerUnit ?? ""} onChange={(event) => updateNutritionItem(item.id, "caffeinePerUnit", event.target.value)} /></label>
                             </div>
                           )}
-                          <div className="nutrition-live-values">{consumptionSummary(item, selectedFuel).map((part) => <span key={part}>{part}</span>)}{!consumptionSummary(item, selectedFuel).length && <span>Nährwerte im Fuel Lab noch nicht vollständig.</span>}</div>
-                          <label className="inventory-impact-toggle"><input type="checkbox" checked={item.affectsInventory !== false} onChange={(event) => updateNutritionItem(item.id, "affectsInventory", event.target.checked)} /><span>Aktuellen Bestand reduzieren{item.affectsInventory !== false && totals.inventoryUnits > 0 ? ` · ${totals.inventoryUnits.toFixed(1).replace(".0", "")} ${selectedFuel.stockUnit || "Einheiten"}` : ""}</span></label>
-                        </div>}
-                      </> : <div className="nutrition-manual-grid">
-                        <label>Art<select value={item.type} onChange={(event) => updateNutritionItem(item.id, "type", event.target.value)}><option>Gel</option><option>Elektrolyte</option><option>Drink Mix</option><option>Riegel</option><option>Salz</option><option>Sonstiges</option></select></label>
-                        <label>Hersteller<input value={item.manufacturer} onChange={(event) => updateNutritionItem(item.id, "manufacturer", event.target.value)} placeholder="z. B. Maurten" /></label>
-                        <label>Produkt<input value={item.product} onChange={(event) => updateNutritionItem(item.id, "product", event.target.value)} placeholder="z. B. Gel 100" /></label>
-                        <label>Menge<input type="number" min="0" step="0.1" value={item.quantity} onChange={(event) => updateNutritionItem(item.id, "quantity", event.target.value)} /></label>
-                        <label>Einheit<select value={item.unit} onChange={(event) => updateNutritionItem(item.id, "unit", event.target.value)}><option>Stück</option><option>Portionen</option><option>ml</option><option>g</option><option>Tabletten</option><option>Beutel</option></select></label>
-                        <label>{item.unit === "ml" || item.unit === "g" ? `Carbs pro 100 ${item.unit} (g)` : "Carbs pro Einheit (g)"}<input type="number" min="0" step="0.1" value={item.carbohydratesPerUnit ?? ""} onChange={(event) => updateNutritionItem(item.id, "carbohydratesPerUnit", event.target.value)} /></label>
-                        <label>{item.unit === "ml" || item.unit === "g" ? `Natrium pro 100 ${item.unit} (mg)` : "Natrium pro Einheit (mg)"}<input type="number" min="0" step="1" value={item.sodiumPerUnit ?? ""} onChange={(event) => updateNutritionItem(item.id, "sodiumPerUnit", event.target.value)} /></label>
-                        <label>{item.unit === "ml" || item.unit === "g" ? `Koffein pro 100 ${item.unit} (mg)` : "Koffein pro Einheit (mg)"}<input type="number" min="0" step="1" value={item.caffeinePerUnit ?? ""} onChange={(event) => updateNutritionItem(item.id, "caffeinePerUnit", event.target.value)} /></label>
-                      </div>}
-                    </div>;
-                  })}
+
+                          <div className="nutrition-timing-fields fuel-review-timing">
+                            <label>Wann genommen?<select value={item.intakeTimingMode || "minute"} onChange={(event) => updateNutritionItem(item.id, "intakeTimingMode", event.target.value)}>{FUEL_TIMING_OPTIONS.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>
+                            <label>{fuelTimingFieldLabel(item.intakeTimingMode || "minute")}<input type={(item.intakeTimingMode || "minute") === "free" ? "text" : "number"} min={(item.intakeTimingMode || "minute") === "round" ? "1" : "0"} step={(item.intakeTimingMode || "minute") === "km" ? "0.1" : "1"} value={item.intakeTimingValue || ""} onChange={(event) => updateNutritionItem(item.id, "intakeTimingValue", event.target.value)} placeholder={fuelTimingPlaceholder(item.intakeTimingMode || "minute")} /></label>
+                            <label className="nutrition-timing-note">Kurze Notiz<input value={item.intakeNote || ""} onChange={(event) => updateNutritionItem(item.id, "intakeNote", event.target.value)} placeholder="z. B. mit Wasser · im Zelt · halbe Portion" /></label>
+                          </div>
+
+                          <div className="fuel-product-feedback">
+                            <label>Geschmack<select value={item.tasteRating || "unknown"} onChange={(event) => updateNutritionItem(item.id, "tasteRating", event.target.value)}>{FUEL_TASTE_OPTIONS.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>
+                            <label>Nach insgesamt {fuelAmountLabel(review.nutritionItems, index)} noch Lust darauf?<select value={item.tasteAfterAmount || "unknown"} onChange={(event) => updateNutritionItem(item.id, "tasteAfterAmount", event.target.value)}>{FUEL_AFTER_AMOUNT_OPTIONS.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>
+                            <label>Produktreaktion <small>optional · nur wenn du etwas zuordnen kannst</small><select value={item.intakeTolerance || "unknown"} onChange={(event) => updateNutritionItem(item.id, "intakeTolerance", event.target.value)}><option value="unknown">Nicht zugeordnet</option><option value="good">Unauffällig / gut</option><option value="watch">Auffällig</option><option value="bad">Problematisch</option></select></label>
+                          </div>
+                          {["watch", "bad"].includes(item.intakeTolerance) && <div className="fuel-product-reaction"><SymptomPicker title="Reaktion auf dieses Produkt" options={["Aufstoßen", "Blähungen", "Übelkeit", "Völlegefühl", "Seitenstechen", "Toilettendrang"]} selected={Array.isArray(item.intakeSymptoms) ? item.intakeSymptoms : []} onChange={(value) => updateNutritionItem(item.id, "intakeSymptoms", value)} /><label>Beobachtung<input value={item.intakeReactionNote || ""} onChange={(event) => updateNutritionItem(item.id, "intakeReactionNote", event.target.value)} placeholder="z. B. nach Runde 4 zu süß · Magen danach wieder okay" /></label></div>}
+                        </div>
+                      </article>;
+                    })}
+                  </div>
+
                   {review.nutritionItems.length === 0 && <div className="nutrition-empty-state"><b>Noch keine Verpflegung eingetragen</b><span>Wähle „Aus Fuel Lab“ oder „Manuell“.</span></div>}
                   <div className={`fuel-review-analysis ${nutritionSummary.status}`}>
                     <div className="fuel-review-metrics">
@@ -840,11 +887,10 @@ export default function ReviewModal({ activity, onClose }) {
                       <span><small>Kohlenhydrate pro Stunde</small><strong>{nutritionSummary.durationHours > 0 ? `${nutritionSummary.carbsPerHour.toFixed(0)} g/h` : "–"}</strong></span>
                       <span><small>Produktgetränk</small><strong>{nutritionSummary.totalFluidMl > 0 ? `${Math.round(nutritionSummary.totalFluidMl)} ml` : "nicht erfasst"}</strong></span>
                       <span><small>Natrium gesamt</small><strong>{nutritionSummary.totalSodium > 0 ? `${Math.round(nutritionSummary.totalSodium)} mg` : "nicht erfasst"}</strong></span>
-                      <span><small>Natrium pro Stunde</small><strong>{nutritionSummary.totalSodium > 0 && nutritionSummary.durationHours > 0 ? `${Math.round(nutritionSummary.sodiumPerHour)} mg/h` : "–"}</strong></span>
                       <span><small>Koffein gesamt</small><strong>{nutritionSummary.totalCaffeine > 0 ? `${Math.round(nutritionSummary.totalCaffeine)} mg` : "nicht erfasst"}</strong></span>
                       <span><small>Carb-Orientierung</small><strong>{nutritionSummary.targetLow}–{nutritionSummary.targetHigh} g/h</strong></span>
                     </div>
-                    <div className="fuel-review-feedback"><b>{nutritionSummary.status === "good" ? "Gut getroffen" : nutritionSummary.status === "low" ? "Eher wenig" : nutritionSummary.status === "high" ? "Über Orientierung" : "Noch keine Bewertung"}</b><p>{nutritionSummary.feedback}</p>{nutritionSummary.totalSodium > 0 && <small>Natrium wird erfasst, aber nicht pauschal als gut oder schlecht bewertet. Ein persönlicher Zielbereich hängt unter anderem von Schweißrate, Hitze und Salzverlust ab.</small>}</div>
+                    <div className="fuel-review-feedback"><b>{nutritionSummary.status === "good" ? "Gut getroffen" : nutritionSummary.status === "low" ? "Eher wenig" : nutritionSummary.status === "high" ? "Über Orientierung" : "Noch keine Bewertung"}</b><p>{nutritionSummary.feedback}</p><small>Geschmack und Mengen-Akzeptanz werden produktbezogen gelernt und fließen in spätere Race-Day-Rotation ein.</small></div>
                   </div>
                 </div>
               )}

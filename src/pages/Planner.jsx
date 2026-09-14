@@ -83,6 +83,7 @@ import {
 } from "../services/trackWorkout";
 import {
   canManuallyCompleteWorkout,
+  isPassiveRecoveryWorkout,
   isSpontaneousWorkout,
   normalizeWorkoutTiming,
   workoutSortTime,
@@ -644,7 +645,7 @@ export default function Planner() {
   const footballEditable = mondayDate >= todayKey && !footballSlot?.completed;
   const orcRunEditable = wednesdayDate >= todayKey && !orcRunSlot?.completed;
   const saturdayEditable = saturdayDate >= todayKey && !saturdaySlot?.completed;
-  const missed = weekPlan.filter((item) => item.date < todayKey && !item.completed && !matches.has(item.id) && !item.missedReason);
+  const missed = weekPlan.filter((item) => item.date < todayKey && !item.completed && !matches.has(item.id) && !item.missedReason && !isPassiveRecoveryWorkout(item));
   const actualRunningKm = weekActivities.filter(isRunningActivity).reduce((sum, activity) => sum + Number(activity.distance || 0), 0);
   const plannedKm = weekPlan
     .filter((item) => !item.completed && !item.missedReason && normalizedType(`${item.type || ""} ${item.title || ""}`) === "running")
@@ -2846,8 +2847,9 @@ export default function Planner() {
               ) : entries.map((item) => {
                 const matched = matches.get(item.id) || (item.matchedActivityId ? activityById.get(item.matchedActivityId) : null);
                 const isCancelled = Boolean(item.plannedCancellation);
-                const isMissed = !isCancelled && item.date < todayKey && !item.completed && !matched;
-                const completed = Boolean(item.completed || matched);
+                const passiveRecoveryDone = !isCancelled && isPassiveRecoveryWorkout(item) && item.date < todayKey;
+                const isMissed = !isCancelled && !passiveRecoveryDone && item.date < todayKey && !item.completed && !matched;
+                const completed = Boolean(item.completed || matched || passiveRecoveryDone);
                 const linkedCompletion = Boolean(matched || item.matchedActivityId);
                 const reviewDestination = completed && matched && reviewKind(matched)
                   ? completedActivityDestination(matched.id)
@@ -2877,7 +2879,7 @@ export default function Planner() {
                   loopLabel,
                 ].filter(Boolean).join(" · ");
                 const compactStatus = completed
-                  ? "Erledigt"
+                  ? passiveRecoveryDone ? "Planmäßig" : "Erledigt"
                   : isCancelled
                     ? "Ausgefallen"
                     : isMissed
@@ -2913,8 +2915,9 @@ export default function Planner() {
                     onClick={reviewDestination ? (event) => openCompletedReview(reviewDestination, event) : opensDetail ? (event) => openWorkoutFromRow(item, event) : undefined}
                     onKeyDown={reviewDestination ? (event) => openCompletedReviewFromKeyboard(reviewDestination, event) : opensDetail ? (event) => openWorkoutFromKeyboard(item, event) : undefined}
                   >
-                    {completed && linkedCompletion && <div className="planner-check completed" title="Erledigt" aria-label="Erledigt">✓</div>}
-                    {completed && !linkedCompletion && (
+                    {completed && passiveRecoveryDone && <div className="planner-check completed" title="Planmäßiger Recovery-Tag" aria-label="Planmäßiger Recovery-Tag">✓</div>}
+                    {completed && !passiveRecoveryDone && linkedCompletion && <div className="planner-check completed" title="Erledigt" aria-label="Erledigt">✓</div>}
+                    {completed && !passiveRecoveryDone && !linkedCompletion && (
                       <button
                         className="planner-check completed"
                         title="Erledigt zurücknehmen"
@@ -2971,9 +2974,10 @@ export default function Planner() {
 
       {detailWorkout && (() => {
         const matched = matches.get(detailWorkout.id) || (detailWorkout.matchedActivityId ? activityById.get(detailWorkout.matchedActivityId) : null);
-        const completed = Boolean(detailWorkout.completed || matched);
         const isCancelled = Boolean(detailWorkout.plannedCancellation);
-        const isMissed = !isCancelled && detailWorkout.date < todayKey && !completed;
+        const passiveRecoveryDone = !isCancelled && isPassiveRecoveryWorkout(detailWorkout) && detailWorkout.date < todayKey;
+        const completed = Boolean(detailWorkout.completed || matched || passiveRecoveryDone);
+        const isMissed = !isCancelled && !passiveRecoveryDone && detailWorkout.date < todayKey && !completed;
         const fuelRecommendation = fuelRecommendations.get(detailWorkout.id);
         const trackTemplate = trackWorkoutTemplateLabel(detailWorkout.structuredWorkout);
         const paceLabel = loopWorkoutPaceLabel(detailWorkout) || workoutPaceLabel(detailWorkout, { includeSource: true });
@@ -3031,8 +3035,8 @@ export default function Planner() {
                 </section>
                 <section>
                   <span>Status</span>
-                  <strong>{completed ? "Erledigt" : isCancelled ? "Ausgefallen" : isMissed ? "Rückmeldung offen" : "Geplant"}</strong>
-                  <small>{matched ? matched.name || "Aktivität zugeordnet" : detailWorkout.optional ? "kann ausgelassen werden" : "Teil des Wochenplans"}</small>
+                  <strong>{completed ? passiveRecoveryDone ? "Planmäßig" : "Erledigt" : isCancelled ? "Ausgefallen" : isMissed ? "Rückmeldung offen" : "Geplant"}</strong>
+                  <small>{passiveRecoveryDone ? "Coach-geplanter Regenerationstag · keine Aktivität oder Review nötig" : matched ? matched.name || "Aktivität zugeordnet" : detailWorkout.optional ? "kann ausgelassen werden" : "Teil des Wochenplans"}</small>
                 </section>
               </div>
 

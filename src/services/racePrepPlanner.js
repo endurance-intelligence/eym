@@ -186,15 +186,23 @@ export function racePrepFuelEvidence(state = {}) {
     const activity = activities.get(String(activityId));
     const durationMinutes = activityDurationMinutes(activity);
     const reviewSuccessful = numeric(review?.stomach) >= 7 && cleanSymptoms(review).length === 0;
+    const cumulativeProductQuantity = new Map();
     (Array.isArray(review?.nutritionItems) ? review.nutritionItems : []).forEach((item) => {
       if (!item?.fuelItemId) return;
       const id = String(item.fuelItemId);
-      const current = stats.get(id) || { uses: 0, good: 0, watch: 0, bad: 0, longestGoodMinutes: 0, lastGoodTiming: "" };
+      const reviewedQuantity = numeric(item.quantity);
+      const cumulativeQuantity = (cumulativeProductQuantity.get(id) || 0) + reviewedQuantity;
+      cumulativeProductQuantity.set(id, cumulativeQuantity);
+      const current = stats.get(id) || {
+        uses: 0, good: 0, watch: 0, bad: 0, longestGoodMinutes: 0, lastGoodTiming: "",
+        tasteGreat: 0, tasteGood: 0, tasteOkay: 0, tasteTired: 0, tasteBad: 0,
+        tasteContinue: 0, tasteLimited: 0, tasteStop: 0, preferredMaxQuantity: null,
+      };
       current.uses += 1;
       const explicitGood = item.intakeTolerance === "good";
       const explicitWatch = item.intakeTolerance === "watch";
       const explicitBad = item.intakeTolerance === "bad";
-      const inferredGood = !item.intakeTolerance && reviewSuccessful;
+      const inferredGood = (!item.intakeTolerance || item.intakeTolerance === "unknown") && reviewSuccessful;
       if (explicitGood || inferredGood) {
         current.good += 1;
         current.longestGoodMinutes = Math.max(current.longestGoodMinutes, durationMinutes);
@@ -206,6 +214,19 @@ export function racePrepFuelEvidence(state = {}) {
       }
       if (explicitWatch) current.watch += 1;
       if (explicitBad) current.bad += 1;
+      if (item.tasteRating === "great") current.tasteGreat += 1;
+      if (item.tasteRating === "good") current.tasteGood += 1;
+      if (item.tasteRating === "okay") current.tasteOkay += 1;
+      if (item.tasteRating === "tired") current.tasteTired += 1;
+      if (item.tasteRating === "bad") current.tasteBad += 1;
+      if (item.tasteAfterAmount === "yes") current.tasteContinue += 1;
+      if (item.tasteAfterAmount === "limited") current.tasteLimited += 1;
+      if (item.tasteAfterAmount === "no") current.tasteStop += 1;
+      if (["limited", "no"].includes(item.tasteAfterAmount) && cumulativeQuantity > 0) {
+        current.preferredMaxQuantity = current.preferredMaxQuantity == null
+          ? cumulativeQuantity
+          : Math.min(current.preferredMaxQuantity, cumulativeQuantity);
+      }
       stats.set(id, current);
     });
   });
@@ -213,13 +234,17 @@ export function racePrepFuelEvidence(state = {}) {
   return (Array.isArray(state.fuel) ? state.fuel : [])
     .filter((item) => !item.archived)
     .map((item) => {
-      const evidence = stats.get(String(item.id)) || { uses: 0, good: 0, watch: 0, bad: 0, longestGoodMinutes: 0, lastGoodTiming: "" };
+      const evidence = stats.get(String(item.id)) || {
+        uses: 0, good: 0, watch: 0, bad: 0, longestGoodMinutes: 0, lastGoodTiming: "",
+        tasteGreat: 0, tasteGood: 0, tasteOkay: 0, tasteTired: 0, tasteBad: 0,
+        tasteContinue: 0, tasteLimited: 0, tasteStop: 0, preferredMaxQuantity: null,
+      };
       const tone = evidence.bad > 0 ? "bad" : evidence.watch > 0 && evidence.good === 0 ? "watch" : evidence.good > 0 ? "good" : evidence.uses > 0 ? "used" : "untested";
-      const recommended = evidence.good > 0 && evidence.bad === 0;
+      const recommended = evidence.good > 0 && evidence.bad === 0 && evidence.tasteBad === 0;
       const durationLabel = evidence.longestGoodMinutes >= 60
         ? `${(evidence.longestGoodMinutes / 60).toLocaleString("de-DE", { maximumFractionDigits: 1 })} h`
         : evidence.longestGoodMinutes > 0 ? `${Math.round(evidence.longestGoodMinutes)} min` : "";
-      const detail = evidence.good > 0
+      const giDetail = evidence.good > 0
         ? `${evidence.good}× gut vertragen${durationLabel ? ` · längster guter Test ${durationLabel}` : ""}${evidence.lastGoodTiming ? ` · zuletzt ${evidence.lastGoodTiming}` : ""}`
         : evidence.bad > 0
           ? `${evidence.bad}× problematisch${evidence.watch ? ` · ${evidence.watch}× auffällig` : ""}`
@@ -228,6 +253,16 @@ export function racePrepFuelEvidence(state = {}) {
             : evidence.uses > 0
               ? `${evidence.uses}× eingesetzt · noch ohne positive Einzelbewertung`
               : "Noch nicht im Training dokumentiert";
+      const tastePositive = evidence.tasteGreat + evidence.tasteGood;
+      const tasteNegative = evidence.tasteTired + evidence.tasteBad;
+      const tasteDetail = evidence.preferredMaxQuantity != null
+        ? `Geschmack: Rotation ab ca. ${Number(evidence.preferredMaxQuantity).toLocaleString("de-DE", { maximumFractionDigits: 1 })} Portion${Number(evidence.preferredMaxQuantity) === 1 ? "" : "en"}`
+        : tasteNegative > 0
+          ? `Geschmack ${tasteNegative}× kritisch`
+          : tastePositive > 0
+            ? `Geschmack ${tastePositive}× positiv`
+            : "";
+      const detail = [giDetail, tasteDetail].filter(Boolean).join(" · ");
       return {
         id: String(item.id),
         name: fuelDisplayName(item),
@@ -244,7 +279,15 @@ export function racePrepFuelEvidence(state = {}) {
       };
     })
     .sort((left, right) => {
-      const score = (entry) => entry.evidence.good * 100 + entry.evidence.uses * 8 - entry.evidence.watch * 50 - entry.evidence.bad * 250;
+      const score = (entry) => entry.evidence.good * 100
+        + entry.evidence.uses * 8
+        + (entry.evidence.tasteGreat || 0) * 22
+        + (entry.evidence.tasteGood || 0) * 12
+        - entry.evidence.watch * 50
+        - entry.evidence.bad * 250
+        - (entry.evidence.tasteTired || 0) * 35
+        - (entry.evidence.tasteBad || 0) * 90
+        - (entry.evidence.tasteStop || 0) * 60;
       return score(right) - score(left) || left.name.localeCompare(right.name);
     });
 }
@@ -360,7 +403,12 @@ function hydrationEntryFromCatalog(entry, fluidTotal) {
 
 function buildEvidenceConsumption(targetCarbs, selectedCatalog, manualItems) {
   const sources = [
-    ...selectedCatalog.filter((entry) => entry.carbs > 0).map((entry) => ({ ...entry, source: "catalog", unitCarbs: numeric(entry.carbs) })),
+    ...selectedCatalog.filter((entry) => entry.carbs > 0).map((entry) => ({
+      ...entry,
+      source: "catalog",
+      unitCarbs: numeric(entry.carbs),
+      maxCount: numeric(entry.evidence?.preferredMaxQuantity) > 0 ? Math.max(1, Math.floor(numeric(entry.evidence.preferredMaxQuantity))) : Infinity,
+    })),
     ...manualItems.filter((entry) => numeric(entry.carbs) > 0).map((entry) => ({ ...entry, source: "manual", unitCarbs: numeric(entry.carbs) })),
   ];
   if (!(targetCarbs > 0) || !sources.length) return [];
@@ -378,8 +426,10 @@ function buildEvidenceConsumption(targetCarbs, selectedCatalog, manualItems) {
 
   while (planned < targetLow && index < safetyLimit) {
     const remaining = Math.max(0, targetCarbs - planned);
-    const rotationSource = sources[index % sources.length];
-    const bestFit = [...sources]
+    const availableSources = sources.filter((entry) => (counts.get(entry.id) || 0) < (entry.maxCount ?? Infinity));
+    if (!availableSources.length) break;
+    const rotationSource = availableSources[index % availableSources.length];
+    const bestFit = [...availableSources]
       .sort((left, right) => {
         const leftDelta = Math.abs(remaining - left.unitCarbs);
         const rightDelta = Math.abs(remaining - right.unitCarbs);
@@ -471,6 +521,7 @@ export function buildRacePrepPlan({ profile: inputProfile, state = {} } = {}) {
   if (profile.durationEstimated) warnings.push(`Renndauer ist aktuell geschätzt (${formatDuration(profile.durationMinutes)}). Für den finalen Plan bitte die erwartete Dauer anpassen.`);
   selectedCatalog.filter((entry) => entry.tone === "bad").forEach((entry) => warnings.push(`${entry.name}: im Training bereits problematisch bewertet. Nur bewusst und nicht automatisch als sichere Race-Basis verwenden.`));
   selectedCatalog.filter((entry) => entry.tone === "watch").forEach((entry) => warnings.push(`${entry.name}: bisher nur auffällige Aufnahme dokumentiert.`));
+  selectedCatalog.filter((entry) => numeric(entry.evidence?.preferredMaxQuantity) > 0).forEach((entry) => warnings.push(`${entry.name}: deine Reviews zeigen ab etwa ${Math.floor(numeric(entry.evidence.preferredMaxQuantity))} Portion${Math.floor(numeric(entry.evidence.preferredMaxQuantity)) === 1 ? "" : "en"} Geschmacks-/Mengenmüdigkeit. Für längere Rennen Rotation mit einer zweiten getesteten Fuel-Quelle einplanen.`));
   selectedCatalog.filter((entry) => numeric(entry.item?.quantity) <= 0).forEach((entry) => warnings.push(`${entry.name}: aktuell nicht im Bestand. Die Auswahl bleibt erlaubt, damit du das Produkt bewusst einplanen oder vorher besorgen kannst.`));
   if (baseRecommendation.target.carbsTotal > 0 && fuelConsume.length === 0 && numeric(hydrationEntry?.carbs) < baseRecommendation.target.carbsTotal * 0.8) warnings.push("Für dieses Rennen ist DURING-Fuel sinnvoll, aber es ist noch keine geeignete Fuel-Quelle ausgewählt oder der gewählte Drink deckt das KH-Ziel nicht ausreichend. Wähle ein Gel, einen Riegel oder ein anderes Fuel-Produkt dazu.");
   if (baseRecommendation.target.carbsTotal > 0 && carbBudget.coveragePercent < 80) warnings.push(`KH-Bilanz noch offen: geplant sind ca. ${Math.round(carbBudget.plannedTotal)} von ${Math.round(carbBudget.targetTotal)} g. Getränk und Fuel werden gemeinsam gegen dasselbe DURING-Ziel gerechnet.`);

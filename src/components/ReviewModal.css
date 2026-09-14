@@ -501,3 +501,276 @@
     font-size: 8px;
   }
 }
+
+/* v3.9.112 – Backyard-inspired fueling review */
+.fuel-review-board {
+  overflow: hidden;
+}
+
+.fuel-review-board.active {
+  border-color: color-mix(in srgb, var(--accent) 54%, var(--border));
+  background: linear-gradient(145deg, color-mix(in srgb, var(--accent) 8%, var(--bg-card-alt)), var(--bg-card-alt));
+}
+
+.fuel-review-toggle {
+  padding-bottom: 12px;
+}
+
+.fuel-review-flow {
+  display: grid;
+  gap: 16px;
+}
+
+.fuel-review-overall {
+  display: grid;
+  gap: 13px;
+  padding: 15px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-input));
+}
+
+.fuel-review-overall-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.fuel-review-overall-copy > span,
+.fuel-review-stop-heading small {
+  color: var(--accent-bright);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.fuel-review-overall-copy > strong {
+  font-size: 16px;
+}
+
+.fuel-review-overall-copy > small {
+  max-width: 760px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.fuel-review-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.fuel-review-toolbar > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.fuel-review-toolbar > div:first-child span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.fuel-review-toolbar > div:last-child {
+  display: flex;
+  gap: 8px;
+}
+
+.fuel-review-timeline {
+  position: relative;
+  display: grid;
+  gap: 12px;
+}
+
+.fuel-review-timeline::before {
+  position: absolute;
+  top: 18px;
+  bottom: 18px;
+  left: 28px;
+  width: 2px;
+  border-radius: 999px;
+  background: linear-gradient(var(--accent), color-mix(in srgb, var(--accent) 18%, transparent));
+  content: "";
+  opacity: .62;
+}
+
+.fuel-review-stop {
+  position: relative;
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  gap: 12px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.fuel-review-stop-marker {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  align-content: start;
+  justify-items: center;
+  gap: 7px;
+  padding-top: 12px;
+}
+
+.fuel-review-stop-marker > span {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 72%, white 10%);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 28%, var(--bg-card-alt));
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 900;
+  box-shadow: 0 0 0 5px var(--bg-card-alt);
+}
+
+.fuel-review-stop-marker > b {
+  max-width: 58px;
+  color: var(--muted-bright);
+  font-size: 10px;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.fuel-review-stop-body {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--bg-input) 86%, transparent);
+}
+
+.fuel-review-stop-body:hover {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+
+.fuel-review-stop-heading {
+  align-items: flex-start;
+}
+
+.fuel-review-stop-heading > div {
+  display: grid;
+  gap: 3px;
+}
+
+.fuel-review-stop-heading b {
+  font-size: 16px;
+}
+
+.fuel-product-feedback {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
+}
+
+.fuel-product-feedback label,
+.fuel-product-reaction label {
+  min-width: 0;
+}
+
+.fuel-product-feedback label > small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.fuel-product-feedback select,
+.fuel-product-reaction input {
+  width: 100%;
+}
+
+.fuel-product-reaction {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-left: 3px solid var(--warning);
+  border-radius: 0 12px 12px 0;
+  background: color-mix(in srgb, var(--warning) 8%, var(--bg-input));
+}
+
+.fuel-review-analysis {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--bg-input);
+}
+
+.fuel-review-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.fuel-review-metrics > span {
+  display: grid;
+  gap: 3px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+}
+
+.fuel-review-metrics small,
+.fuel-review-feedback small {
+  color: var(--muted);
+}
+
+.fuel-review-feedback {
+  display: grid;
+  gap: 5px;
+}
+
+.fuel-review-feedback p {
+  margin: 0;
+  color: var(--text-soft);
+  line-height: 1.45;
+}
+
+@media (max-width: 760px) {
+  .fuel-product-feedback,
+  .fuel-review-metrics {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .fuel-review-toolbar,
+  .fuel-review-toolbar > div:last-child {
+    display: grid;
+  }
+
+  .fuel-review-stop {
+    grid-template-columns: 44px minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .fuel-review-timeline::before {
+    left: 21px;
+  }
+
+  .fuel-review-stop-marker > span {
+    width: 27px;
+    height: 27px;
+  }
+
+  .fuel-review-stop-marker > b {
+    display: none;
+  }
+
+  .fuel-product-feedback,
+  .fuel-review-metrics {
+    grid-template-columns: 1fr;
+  }
+}

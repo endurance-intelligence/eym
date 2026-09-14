@@ -75,6 +75,7 @@ test("activity coach calls out selected stomach symptoms instead of claiming goo
     energy: 8,
     overallFeeling: 8,
     rpe: 9,
+    usedNutrition: true,
     stomachSymptoms: ["Aufstoßen", "Blähungen"],
   });
 
@@ -249,4 +250,13 @@ test("coach does not invent a fixed bpm heat correction when personal comparison
   assert.equal(result.heat.confidenceLabel, "Erste Tendenz");
   assert.match(result.summary, /fehlen noch genügend vergleichbare Läufe/i);
   assert.doesNotMatch(result.summary, /\+10 bpm|\+15 bpm/);
+});
+
+
+test("activity coach ignores legacy stomach fields when no fueling was used", () => {
+  const state = { activities: [], reviews: {}, plan: [], profile: {} };
+  const activity = { id: "no-fuel", type: "Run", distance: 8, duration: 48, avgHr: 140, date: "2026-09-01" };
+  const review = { legs: 7, energy: 7, overallFeeling: 7, rpe: 5, usedNutrition: false, stomach: 3, stomachSymptoms: ["Übelkeit"] };
+  const result = activityCoachAssessment(state, activity, review, null);
+  assert.doesNotMatch(result.comparison, /Magenauffälligkeiten|Gel-Timing|Produktkombination/);
 });

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   canManuallyCompleteWorkout,
+  isPassiveRecoveryWorkout,
   isSpontaneousWorkout,
   normalizeWorkoutTiming,
   workoutTimingLabel,
@@ -63,4 +64,21 @@ test("past and spontaneous same-day sessions remain manually completable", () =>
   assert.equal(canManuallyCompleteWorkout({ date: "2026-07-29", spontaneous: true }, now), true);
   assert.equal(canManuallyCompleteWorkout({ date: "2026-07-29", spontaneous: true, completed: true }, now), false);
   assert.equal(canManuallyCompleteWorkout({ date: "2026-07-29", spontaneous: true, plannedCancellation: true }, now), false);
+});
+
+
+test("coach-planned passive recovery days never require a completion or missed-session response", () => {
+  const recoveryDay = {
+    date: "2026-09-12",
+    title: "Erholung nach 22. Westenholzer Abendlauf",
+    type: "Ruhetag",
+    distance: 0,
+    duration: 0,
+  };
+  const now = new Date(2026, 8, 14, 9, 0);
+
+  assert.equal(isPassiveRecoveryWorkout(recoveryDay), true);
+  assert.equal(workoutTimingLabel(recoveryDay), "Ganztägig");
+  assert.equal(canManuallyCompleteWorkout(recoveryDay, now), false);
+  assert.equal(isPassiveRecoveryWorkout({ ...recoveryDay, type: "Easy Run", title: "5 km Recovery optional", distance: 5, duration: 35 }), false);
 });

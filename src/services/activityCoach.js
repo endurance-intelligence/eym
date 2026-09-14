@@ -391,8 +391,12 @@ function subjectiveComparison(load, review, heat) {
   }
   const withEventText = (text) => [eventText, text].filter(Boolean).join(" ");
   if (!subjective.hasReview) return withEventText("Noch kein subjektives Signal hinterlegt; die Einordnung bleibt deshalb bewusst vorsichtig.");
-  const stomachSymptoms = (Array.isArray(review.stomachSymptoms) ? review.stomachSymptoms : [])
-    .filter((symptom) => !String(symptom).startsWith("Keine"));
+  const hasFuelingFeedback = review?.usedNutrition === true
+    || (review?.usedNutrition == null && Array.isArray(review?.nutritionItems) && review.nutritionItems.length > 0);
+  const stomachSymptoms = hasFuelingFeedback
+    ? (Array.isArray(review.stomachSymptoms) ? review.stomachSymptoms : [])
+      .filter((symptom) => !String(symptom).startsWith("Keine"))
+    : [];
   if (stomachSymptoms.length > 0) {
     return withEventText(`Magenauffälligkeiten (${stomachSymptoms.join(", ")}) sind relevanter als eine ansonsten unauffällige Belastungszahl. Bei ähnlichen Einheiten Gel-Timing, Trinkmenge und Produktkombination prüfen.`);
   }

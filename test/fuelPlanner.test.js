@@ -402,3 +402,41 @@ test("normal hydration can still auto-select an explicitly prepared zero-carb el
   assert.equal(result.consume.some((item) => item.fuelItemId === "zero-carb-drink" && item.unit === "ml"), true);
   assert.equal(result.pack.some((item) => item.generic), false);
 });
+
+test("taste fatigue caps one product and rotates long-race fueling to another tested option", () => {
+  const maurten = { ...gel160, id: "maurten-100", name: "Gel 100", carbs: 25, quantity: 20 };
+  const beta = { ...gel160, id: "beta-40", brand: "SIS", name: "Beta Fuel", carbs: 40, quantity: 20 };
+  const activity = { id: "taste-test", type: "Run", date: "2026-08-30", duration: 240, distance: 32 };
+  const reviews = {
+    "taste-test": {
+      stomach: 9,
+      energy: 8,
+      carbohydratesPerHour: 55,
+      stomachSymptoms: [],
+      nutritionItems: [1, 2, 3, 4, 5].map((round) => ({
+        fuelItemId: "maurten-100",
+        quantity: "1",
+        unit: "Stück",
+        intakeTimingMode: "round",
+        intakeTimingValue: String(round),
+        intakeTolerance: "good",
+        tasteRating: round === 5 ? "tired" : "good",
+        tasteAfterAmount: round === 5 ? "no" : "yes",
+      })),
+    },
+  };
+
+  const result = fuelRecommendationForWorkout({
+    workout: { id: "ultra", date: "2026-09-26", title: "Ultra", type: "Race", distance: 60, duration: 360, raceEvent: true },
+    fuel: [maurten, beta, hydrate],
+    activities: [activity],
+    reviews,
+    mode: "race",
+  });
+
+  const maurtenPlan = result.consume.find((item) => item.fuelItemId === "maurten-100");
+  assert.ok(maurtenPlan);
+  assert.ok(maurtenPlan.quantity <= 5);
+  assert.equal(result.consume.some((item) => item.fuelItemId === "beta-40"), true);
+  assert.equal(result.warnings.some((warning) => /Geschmackswechsel/.test(warning)), true);
+});

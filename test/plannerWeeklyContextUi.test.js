@@ -84,3 +84,10 @@ test("weekly planner surfaces live mission races even when the stored week is st
   assert.match(plannerSource, /weekMissionEvents\.length > 0/);
   assert.match(plannerSource, /Wettkampf zuerst einplanen/);
 });
+
+test("coach-planned recovery days are auto-fulfilled instead of becoming open feedback", () => {
+  assert.match(plannerSource, /!isPassiveRecoveryWorkout\(item\)/);
+  assert.match(plannerSource, /passiveRecoveryDone = !isCancelled && isPassiveRecoveryWorkout\(item\) && item\.date < todayKey/);
+  assert.match(plannerSource, /Planmäßiger Recovery-Tag/);
+  assert.match(plannerSource, /keine Aktivität oder Review nötig/);
+});

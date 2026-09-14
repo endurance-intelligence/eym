@@ -27,10 +27,19 @@ export function normalizeWorkoutTiming(item = {}, fallbackTime = "18:00") {
   };
 }
 
+
+export function isPassiveRecoveryWorkout(item = {}) {
+  const type = String(item.type || "").trim().toLowerCase();
+  if (["ruhetag", "rest", "rest day", "recovery day", "erholungstag"].includes(type)) return true;
+
+  const noTrainingLoad = Number(item.distance || 0) <= 0 && Number(item.duration || 0) <= 0;
+  const title = String(item.title || "").trim().toLowerCase();
+  return noTrainingLoad && /^(erholung nach|ruhetag vor|rest day|recovery day|erholungstag)/.test(title);
+}
+
 export function workoutTimingLabel(item = {}) {
   if (isSpontaneousWorkout(item)) {
-    const text = `${item.type || ""} ${item.title || ""}`.toLowerCase();
-    return /ruhetag|rest|erholungstag/.test(text) ? "Ganztägig" : "Spontan";
+    return isPassiveRecoveryWorkout(item) ? "Ganztägig" : "Spontan";
   }
   return validWorkoutTime(item.time) ? `${item.time} Uhr` : "Uhrzeit offen";
 }
@@ -48,7 +57,7 @@ function localDateKey(date) {
 }
 
 export function canManuallyCompleteWorkout(item = {}, now = new Date()) {
-  if (item.completed || item.matchedActivityId || item.plannedCancellation) return false;
+  if (item.completed || item.matchedActivityId || item.plannedCancellation || isPassiveRecoveryWorkout(item)) return false;
 
   const workoutDate = String(item.date || "").slice(0, 10);
   if (!workoutDate || Number.isNaN(now.getTime())) return false;

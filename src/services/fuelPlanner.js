@@ -177,8 +177,12 @@ function fuelExperience(activities = [], reviews = {}) {
       measuredHydration.push(hydrationResult);
     }
 
+    const cumulativeProductQuantity = new Map();
     (Array.isArray(review?.nutritionItems) ? review.nutritionItems : []).forEach((item) => {
       if (!item?.fuelItemId) return;
+      const reviewedQuantity = numeric(item.quantity);
+      const cumulativeQuantity = (cumulativeProductQuantity.get(item.fuelItemId) || 0) + reviewedQuantity;
+      cumulativeProductQuantity.set(item.fuelItemId, cumulativeQuantity);
       const current = productStats.get(item.fuelItemId) || {
         uses: 0,
         successes: 0,
@@ -186,11 +190,33 @@ function fuelExperience(activities = [], reviews = {}) {
         explicitGood: 0,
         explicitWatch: 0,
         explicitBad: 0,
+        tasteGreat: 0,
+        tasteGood: 0,
+        tasteOkay: 0,
+        tasteTired: 0,
+        tasteBad: 0,
+        tasteContinue: 0,
+        tasteLimited: 0,
+        tasteStop: 0,
+        preferredMaxQuantity: null,
       };
       current.uses += 1;
       if (item.intakeTolerance === "good") current.explicitGood += 1;
       if (item.intakeTolerance === "watch") current.explicitWatch += 1;
       if (item.intakeTolerance === "bad") current.explicitBad += 1;
+      if (item.tasteRating === "great") current.tasteGreat += 1;
+      if (item.tasteRating === "good") current.tasteGood += 1;
+      if (item.tasteRating === "okay") current.tasteOkay += 1;
+      if (item.tasteRating === "tired") current.tasteTired += 1;
+      if (item.tasteRating === "bad") current.tasteBad += 1;
+      if (item.tasteAfterAmount === "yes") current.tasteContinue += 1;
+      if (item.tasteAfterAmount === "limited") current.tasteLimited += 1;
+      if (item.tasteAfterAmount === "no") current.tasteStop += 1;
+      if (["limited", "no"].includes(item.tasteAfterAmount) && cumulativeQuantity > 0) {
+        current.preferredMaxQuantity = current.preferredMaxQuantity == null
+          ? cumulativeQuantity
+          : Math.min(current.preferredMaxQuantity, cumulativeQuantity);
+      }
       const explicitlyNegative = item.intakeTolerance === "watch" || item.intakeTolerance === "bad";
       const itemSuccessful = item.intakeTolerance === "good" || (!explicitlyNegative && successful);
       if (itemSuccessful) current.successes += 1;
@@ -258,7 +284,16 @@ function productHistoryScore(item, experience) {
     + history.eventSuccesses * 18
     + history.explicitGood * 18
     - history.explicitWatch * 24
-    - history.explicitBad * 60;
+    - history.explicitBad * 60
+    + (history.tasteGreat || 0) * 12
+    + (history.tasteGood || 0) * 7
+    + (history.tasteOkay || 0) * 1
+    // Taste fatigue is primarily a quantity ceiling, not a reason to discard an
+    // otherwise well tolerated product from the first part of a long race.
+    - (history.tasteTired || 0) * 2
+    - (history.tasteBad || 0) * 40
+    + (history.tasteContinue || 0) * 5
+    - (history.tasteLimited || 0) * 2;
 }
 
 function isPreparedDrink(item) {
@@ -325,6 +360,18 @@ function mergeConsumption(items, next) {
   existing.inventoryUnits += next.inventoryUnits;
 }
 
+function preferredProductQuantity(item, experience) {
+  const limit = numeric(experience.productStats.get(item.id)?.preferredMaxQuantity);
+  return limit > 0 ? Math.max(1, Math.floor(limit)) : null;
+}
+
+function availableProductUnits(item, experience, alreadyUsed = 0) {
+  const stock = Math.max(0, Math.floor(numeric(item.quantity)));
+  const preferred = preferredProductQuantity(item, experience);
+  const ceiling = preferred == null ? stock : Math.min(stock, preferred);
+  return Math.max(0, ceiling - alreadyUsed);
+}
+
 function chooseConsumption({
   fuel,
   experience,
@@ -370,31 +417,43 @@ function chooseConsumption({
   const drinkCarbs = selectedDrink?.carbs || 0;
   let remainingCarbs = Math.max(0, targetCarbs - drinkCarbs);
   const usedCandidates = new Set();
+  const consumedUnits = new Map();
+  const tasteRotationWarnings = new Set();
 
   for (const product of carbCandidates) {
     if (remainingCarbs <= 1) break;
     const carbsPerUnit = numeric(product.carbs);
     if (!carbsPerUnit) continue;
     const needed = Math.ceil(remainingCarbs / carbsPerUnit);
-    const available = Math.max(0, Math.floor(numeric(product.quantity)));
+    const preferred = preferredProductQuantity(product, experience);
+    const available = availableProductUnits(product, experience, consumedUnits.get(product.id) || 0);
     const units = Math.min(needed, available);
     if (!units) continue;
     const consumption = productConsumption(product, units, defaultConsumptionUnit(product));
     mergeConsumption(consume, consumption);
+    consumedUnits.set(product.id, (consumedUnits.get(product.id) || 0) + units);
     remainingCarbs = Math.max(0, remainingCarbs - consumption.carbs);
     usedCandidates.add(product.id);
-    if (usedCandidates.size >= 2) break;
+    if (preferred != null && needed > available) {
+      tasteRotationWarnings.add(`${fuelDisplayName(product)}: nach deinen Reviews ab etwa ${preferred} Portion${preferred === 1 ? "" : "en"} Geschmackswechsel einplanen.`);
+    }
+    if (usedCandidates.size >= 2 && remainingCarbs <= 1) break;
   }
 
   if (remainingCarbs > 1 && carbCandidates.length) {
-    const fallback = carbCandidates.find((item) => !usedCandidates.has(item.id)) || carbCandidates[0];
-    const carbsPerUnit = numeric(fallback.carbs);
-    if (carbsPerUnit > 0) {
-      const units = Math.ceil(remainingCarbs / carbsPerUnit);
-      const consumption = productConsumption(fallback, units, defaultConsumptionUnit(fallback));
-      mergeConsumption(consume, consumption);
+    const fallback = carbCandidates.find((item) => availableProductUnits(item, experience, consumedUnits.get(item.id) || 0) > 0);
+    const carbsPerUnit = numeric(fallback?.carbs);
+    if (fallback && carbsPerUnit > 0) {
+      const needed = Math.ceil(remainingCarbs / carbsPerUnit);
+      const available = availableProductUnits(fallback, experience, consumedUnits.get(fallback.id) || 0);
+      const units = Math.min(needed, available);
+      if (units > 0) {
+        const consumption = productConsumption(fallback, units, defaultConsumptionUnit(fallback));
+        mergeConsumption(consume, consumption);
+      }
     }
   }
+  warnings.push(...tasteRotationWarnings);
 
   if (fluidTotal > 0 && !selectedDrink) {
     const carbDrinkWasSkipped = targetCarbs <= 0
@@ -581,6 +640,11 @@ function reviewItemsFor(consumption, workoutId) {
     caffeinePerUnit: entry.item?.caffeine ?? "",
     affectsInventory: true,
     hydrationLinked: false,
+    intakeTolerance: "unknown",
+    intakeSymptoms: [],
+    intakeReactionNote: "",
+    tasteRating: "unknown",
+    tasteAfterAmount: "unknown",
     plannedFuel: true,
     plannedWorkoutId: workoutId || null,
   }));
@@ -620,7 +684,7 @@ function recommendationRationale({
     learning.push(`${fluid.samples} verlässliche Hydration-Messung${fluid.samples === 1 ? "" : "en"} beeinflussen die Trinkorientierung.`);
   }
   if (!learning.length) {
-    learning.push("Nach dem Lauf werden tatsächliche Aufnahme, Energie, Magenverträglichkeit und Hydration zur persönlichen Anpassung genutzt.");
+    learning.push("Nach dem Lauf werden tatsächliche Aufnahme, Magenverträglichkeit, Geschmack, Mengen-Akzeptanz und Hydration zur persönlichen Anpassung genutzt.");
   }
   const optional = range.optional ? " Die Kohlenhydrate sind für diese Einheit optional." : "";
   return `${parts.join(" · ")}. ${learning.join(" ")}${optional}`;
