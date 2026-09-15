@@ -321,10 +321,19 @@ export function pitTimeMode(minutesToStart) {
   return "normal";
 }
 
-function recentProductIds(history = [], count = 2) {
-  return new Set((Array.isArray(history) ? history : []).slice(-count).flatMap((record) =>
-    (record.selection || []).map((entry) => entry.productId),
-  ));
+function recordProductIds(record = {}) {
+  return [
+    ...(record.selection || []),
+    ...(record.carrySelection || []),
+    ...(record.carriedSelection || []),
+  ].map((entry) => String(entry.productId || "")).filter(Boolean);
+}
+
+function recentProductCount(history = [], productId, count = 4) {
+  return (Array.isArray(history) ? history : []).slice(-count)
+    .flatMap(recordProductIds)
+    .filter((id) => id === String(productId || ""))
+    .length;
 }
 
 function recentCaffeine(history = [], count = 3) {
@@ -349,97 +358,116 @@ function quickSuggestion(history, mode) {
   };
 }
 
-function normalSuggestion({ round = 1, history = [], flags = [], weather = [] } = {}) {
-  const active = new Set([...(flags || []), ...(weather || [])]);
-  const recent = recentProductIds(history);
-  const caffeineLast3 = recentCaffeine(history, 3);
+const STABLE_FUEL_OPTIONS = [
+  {
+    key: "banana",
+    selection: [choice("banana", "whole", "now"), choice("isostar", "500", "carry")],
+    why: "Alles stabil: echte Nahrung plus ein klares Hauptgetränk für die Runde.",
+  },
+  {
+    key: "milk-roll",
+    selection: [choice("milk-roll", "1", "now"), choice("isostar", "500", "carry")],
+    why: "Alles stabil: einfache feste Kohlenhydrate plus bewährtes Hauptgetränk.",
+  },
+  {
+    key: "fusilli",
+    selection: [choice("fusilli", "100", "now"), choice("isostar", "500", "carry")],
+    why: "Herzhafte Abwechslung im Pit, Flüssigkeit und Kohlenhydrate für die Runde bleiben klar.",
+  },
+  {
+    key: "sis-beta",
+    selection: [choice("sis-beta", "1", "now"), choice("isostar", "300", "carry")],
+    why: "Kompakte Fuel-Stunde als Abwechslung zu fester Nahrung.",
+  },
+];
 
-  if (active.has("stomach")) {
-    return {
+function stableSuggestion(round = 1, history = []) {
+  const startIndex = Math.max(0, (Math.max(1, Number(round || 1)) - 1) % STABLE_FUEL_OPTIONS.length);
+  for (let offset = 0; offset < STABLE_FUEL_OPTIONS.length; offset += 1) {
+    const candidate = STABLE_FUEL_OPTIONS[(startIndex + offset) % STABLE_FUEL_OPTIONS.length];
+    if (recentProductCount(history, candidate.key, 2) === 0) return candidate;
+  }
+  return STABLE_FUEL_OPTIONS[startIndex];
+}
+
+function hasSelection(selection = [], productId, timing = null) {
+  return selection.some((entry) => entry.productId === productId && (timing == null || (entry.timing || "now") === timing));
+}
+
+function addUnique(selection = [], entry) {
+  if (!entry || hasSelection(selection, entry.productId, entry.timing || "now")) return selection;
+  return [...selection, entry];
+}
+
+function normalSuggestion({ round = 1, history = [], flags = [], weather = [] } = {}) {
+  const athlete = new Set(flags || []);
+  const conditions = new Set(weather || []);
+  const caffeineLast3 = recentCaffeine(history, 3);
+  let recommendation = stableSuggestion(round, history);
+
+  // Athlete feedback changes only the dimension it actually describes. Food/appetite
+  // signals may replace the solid fuel; thirst/temperature must not randomly reshuffle it.
+  if (athlete.has("stomach")) {
+    recommendation = {
       selection: [choice("water", "200", "now"), choice("isostar", "400", "carry"), choice("maurten100", "1", "carry")],
       why: "Magen gemeldet: im Pit erst neutral trinken, für die Runde nur bewährte, einfache Versorgung mitgeben.",
     };
-  }
-
-  if (active.has("no-salty")) {
-    return {
+  } else if (athlete.has("no-salty")) {
+    recommendation = {
       selection: [choice("banana", "whole", "now"), choice("isostar", "500", "carry")],
       why: "Aktuell kein Appetit auf Salziges: herzhafte Snacks rausnehmen, KH und Flüssigkeit neutral weiterdecken.",
     };
-  }
-
-  if (active.has("sweet-fatigue")) {
-    return {
-      selection: [choice("cucumber", "50", "now"), choice("broth", "150", "now"), choice("dryll", "150", "carry")],
-      why: "Süß satt: im Pit neutral/herzhaft anbieten und für die Runde eine weniger süße Elektrolyt-Option mitgeben.",
+  } else if (athlete.has("sweet-fatigue")) {
+    const savoryRefresh = recentProductCount(history, "cucumber", 2) > 0
+      ? choice("salt-sticks", "10g", "now")
+      : choice("cucumber", "50", "now");
+    recommendation = {
+      selection: [savoryRefresh, choice("broth", "150", "now"), choice("dryll", "150", "carry")],
+      why: "Süß satt: im Pit neutral/herzhaft rotieren und für die Runde eine weniger süße Elektrolyt-Option mitgeben.",
     };
-  }
-
-  if (active.has("wants-salty")) {
-    return {
+  } else if (athlete.has("wants-salty")) {
+    recommendation = {
       selection: [choice("broth", "150", "now"), choice("salt-sticks", "10g", "now"), choice("dryll", "150", "carry")],
       why: "Salzig gewünscht: im Pit herzhaft anbieten und für die Runde eine passende Elektrolyt-Option mitgeben.",
     };
-  }
-
-  if (active.has("cold") || active.has("too-cold")) {
-    return {
-      selection: [choice("broth", "150", "now"), choice("fusilli", "100", "now"), choice("isostar", "400", "carry")],
-      why: "Kühl/nass: warmes Getränk und herzhafte Nahrung im Pit, bewährtes Hauptgetränk für die Runde.",
-    };
-  }
-
-  if (active.has("thirsty")) {
-    return {
-      selection: [choice("water", "200", "now"), choice("banana", "whole", "now"), choice("isostar", "500", "carry")],
-      why: "Durst gemeldet: jetzt direkt trinken lassen und die nächste Runde mit einer klaren vollen Flasche vorbereiten.",
-    };
-  }
-
-  if (active.has("hungry")) {
-    return {
+  } else if (athlete.has("hungry")) {
+    recommendation = {
       selection: [choice("fusilli", "100", "now"), choice("isostar", "500", "carry")],
-      why: "Hunger gemeldet: echte Nahrung im Pit, dazu ein klares Hauptgetränk für die nächste Runde.",
+      why: "Hunger gemeldet: echte, substanzielle Nahrung im Pit; Refresh allein zählt nicht als Hunger-Lösung.",
     };
   }
 
-  if (active.has("tired") && caffeineLast3 < 45) {
-    return {
-      selection: [choice("cola", "150", "now"), choice("fusilli", "100", "now"), choice("isostar", "400", "carry")],
-      why: "Müdigkeit gemeldet und zuletzt wenig Koffein: kleine Cola-Portion im Pit, Hauptgetränk bleibt für die Runde stabil.",
-    };
+  let selection = [...recommendation.selection];
+  const reasons = [recommendation.why];
+
+  if (athlete.has("tired") && caffeineLast3 < 45 && !hasSelection(selection, "cola", "now")) {
+    selection = addUnique(selection, choice("cola", "150", "now"));
+    reasons.push("Müdigkeit gemeldet: kleine Cola-Portion ergänzen, ohne die restliche Fuel-Auswahl neu zu würfeln.");
   }
 
-  if (active.has("hot") || active.has("too-warm")) {
-    return {
-      selection: [choice("water", "200", "now"), choice("cucumber", "50", "now"), choice("isostar", "500", "carry")],
-      why: "Warm: im Pit direkt etwas zusätzliche Flüssigkeit/Refresh anbieten, für die Runde eine klare volle Flasche vorbereiten.",
-    };
+  if (athlete.has("thirsty")) {
+    selection = addUnique(selection, choice("water", "200", "now"));
+    if (!hasSelection(selection, "dryll", "carry") && !hasSelection(selection, "isostar", "carry")) selection = addUnique(selection, choice("isostar", "500", "carry"));
+    reasons.push("Durst gemeldet: sofort Flüssigkeit anbieten; die feste Nahrung bleibt nach der normalen Rotation bestehen.");
   }
 
-  const cycle = Math.max(1, Number(round || 1)) % 4;
-  if (cycle === 0) {
-    return {
-      selection: [choice("fusilli", "100", "now"), choice("isostar", "500", "carry")],
-      why: "Herzhafte Gel-Pause, ohne die Kohlenhydrate aus dem Blick zu verlieren.",
-    };
+  if ((athlete.has("too-warm") || conditions.has("hot")) && !athlete.has("stomach")) {
+    selection = addUnique(selection, choice("water", "200", "now"));
+    if (!hasSelection(selection, "dryll", "carry") && !hasSelection(selection, "isostar", "carry")) selection = addUnique(selection, choice("isostar", "500", "carry"));
+    const cucumberRecently = recentProductCount(history, "cucumber", 2) > 0;
+    const allowRefresh = Math.max(1, Number(round || 1)) % 3 === 0 && !cucumberRecently;
+    if (allowRefresh) selection = addUnique(selection, choice("cucumber", "50", "now"));
+    reasons.push(allowRefresh
+      ? "Warm: Flüssigkeit priorisieren; Gurke nur als gelegentlicher Refresh, nicht als wiederkehrende Fuel-Hauptkomponente."
+      : "Warm: Flüssigkeit priorisieren; die feste Nahrung rotiert unabhängig vom Wetter weiter.");
   }
-  if (cycle === 1 && !recent.has("banana")) {
-    return {
-      selection: [choice("banana", "whole", "now"), choice("isostar", "500", "carry")],
-      why: "Alles stabil: früh/normal echte Nahrung nutzen und den funktionierenden Plan nicht überoptimieren.",
-    };
+
+  if ((athlete.has("too-cold") || conditions.has("cold")) && !athlete.has("stomach")) {
+    selection = addUnique(selection, choice("broth", "150", "now"));
+    reasons.push("Kühl: warmes Getränk ergänzen, ohne die übrige Fuel-Rotation unnötig zu verändern.");
   }
-  if (cycle === 2 && !recent.has("milk-roll")) {
-    return {
-      selection: [choice("milk-roll", "1", "now"), choice("isostar", "500", "carry")],
-      why: "Alles stabil: einfache feste KH und Basisgetränk, ohne Joker zu verbrennen.",
-    };
-  }
-  return {
-    selection: [choice("sis-beta", "1", "now"), choice("isostar", "400", "carry")],
-    why: "Kompakte Gel-Stunde als Abwechslung zu fester Nahrung.",
-  };
+
+  return { selection, why: reasons.filter(Boolean).join(" ") };
 }
 
 function closestPortion(product, targetCarbs = 0) {

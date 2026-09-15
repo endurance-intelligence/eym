@@ -37,3 +37,13 @@ test("Pit Crew headline names the upcoming loop weather and actual intake bar us
   assert.match(source, /IST KH/);
   assert.match(source, /IST 💧/);
 });
+
+
+test("Athlet zurück combines status and loop intake in one return sheet", () => {
+  assert.match(source, /VERPFLEGUNG AUF LOOP/);
+  assert.match(source, /Alles wie geplant/);
+  assert.match(source, /½ Teilweise/);
+  assert.match(source, /○ Nichts/);
+  assert.match(source, /RÜCKKEHR ÜBERNEHMEN/);
+  assert.match(source, /Die Crew muss den Status nicht erneut eingeben/);
+});

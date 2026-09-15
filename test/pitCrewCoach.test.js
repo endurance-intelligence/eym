@@ -64,7 +64,7 @@ test("hunger prioritizes real food now and one clear loop drink", () => {
   assert.equal(recommendation.summary.fluidMl, 500);
 });
 
-test("thirst creates a drink in the pit instead of splitting every normal loop into Isostar plus water", () => {
+test("thirst adds hydration without randomly changing the solid fuel", () => {
   const normal = recommendPitCrew({ round: 5, minutesToStart: 10, flags: [] });
   const normalDrinks = normal.selection.filter((item) => ["water", "isostar", "dryll", "cola", "redbull"].includes(item.productId));
   assert.equal(normalDrinks.length, 1);
@@ -74,6 +74,30 @@ test("thirst creates a drink in the pit instead of splitting every normal loop i
   const thirsty = recommendPitCrew({ round: 5, minutesToStart: 10, flags: ["thirsty"] });
   assert.equal(thirsty.selection.find((item) => item.productId === "water")?.timing, "now");
   assert.equal(thirsty.selection.find((item) => item.productId === "isostar")?.timing, "carry");
+  const normalSolid = normal.selection.filter((item) => !["water", "isostar", "dryll", "cola", "redbull", "broth"].includes(item.productId)).map((item) => item.productId);
+  const thirstySolid = thirsty.selection.filter((item) => !["water", "isostar", "dryll", "cola", "redbull", "broth"].includes(item.productId)).map((item) => item.productId);
+  assert.deepEqual(thirstySolid, normalSolid);
+});
+
+test("hot weather does not turn cucumber into the default food every loop", () => {
+  const history = [
+    { round: 5, selection: [{ productId: "cucumber", portionId: "50" }], carryStatus: "confirmed" },
+    { round: 6, selection: [{ productId: "banana", portionId: "whole" }], carryStatus: "confirmed" },
+  ];
+  const recommendation = recommendPitCrew({ round: 7, minutesToStart: 10, history, weather: ["hot"] });
+  assert.equal(recommendation.selection.some((item) => item.productId === "cucumber"), false);
+  assert.ok(recommendation.selection.some((item) => ["banana", "milk-roll", "fusilli", "sis-beta"].includes(item.productId)));
+});
+
+test("stable food rotation avoids repeating the same solid option on consecutive pits", () => {
+  const first = recommendPitCrew({ round: 5, minutesToStart: 10, history: [], weather: ["hot"] });
+  const firstSolid = first.selection.find((item) => ["banana", "milk-roll", "fusilli", "sis-beta"].includes(item.productId));
+  const history = [{ round: 5, selection: first.selection.filter((item) => (item.timing || "now") === "now"), carrySelection: first.selection.filter((item) => item.timing === "carry"), carryStatus: "pending", provisionalSummary: first.summary }];
+  const next = recommendPitCrew({ round: 6, minutesToStart: 10, history, weather: ["hot"] });
+  const nextSolid = next.selection.find((item) => ["banana", "milk-roll", "fusilli", "sis-beta"].includes(item.productId));
+  assert.ok(firstSolid);
+  assert.ok(nextSolid);
+  assert.notEqual(nextSolid.productId, firstSolid.productId);
 });
 
 test("no salty removes savory pit food without disabling electrolyte drink", () => {

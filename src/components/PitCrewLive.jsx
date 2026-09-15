@@ -166,6 +166,7 @@ export default function PitCrewLive({ race, onClose }) {
   const [incomingRound, setIncomingRound] = useState(() => Math.max(0, Number(stored?.incomingRound || 0)));
   const [signalDraft, setSignalDraft] = useState([]);
   const [checkInOpen, setCheckInOpen] = useState(false);
+  const [arrivalIntakeMode, setArrivalIntakeMode] = useState("planned");
   const [athleteFeedback, setAthleteFeedback] = useState(() => stored?.athleteFeedback && typeof stored.athleteFeedback === "object" ? stored.athleteFeedback : null);
   const [weather, setWeather] = useState(() => Array.isArray(stored?.weather) ? stored.weather : []);
   const [anchorAt, setAnchorAt] = useState(() => stored?.anchorAt || plannedAnchor(race)?.toISOString() || "");
@@ -269,6 +270,12 @@ export default function PitCrewLive({ race, onClose }) {
   }));
   const pendingCarry = [...history].reverse().find((record) => record.carryStatus === "pending" && Array.isArray(record.carrySelection) && record.carrySelection.length);
   const pendingLoopNumber = pendingCarry ? Number(pendingCarry.round) + 1 : null;
+  const arrivalPendingItems = pendingCarry && Number(pendingLoopNumber) === Number(timing.currentRound)
+    ? pendingCarry.carrySelection || []
+    : [];
+  const arrivalPartialRated = arrivalPendingItems.length > 0 && arrivalPendingItems.every((entry, index) =>
+    Object.prototype.hasOwnProperty.call(carryAdjust, `${pendingCarry?.round ?? "loop"}:${entry.productId}:${entry.portionId}:${index}`),
+  );
   const loopMustClose = false;
   const arrivalState = pitCrewArrivalState({
     started: timing.started,
@@ -381,11 +388,15 @@ export default function PitCrewLive({ race, onClose }) {
     const returnedAt = new Date().toISOString();
     setArrivalRound(round);
     setArrivalAt(returnedAt);
+    setArrivalIntakeMode("planned");
+    setCarryAdjust({});
     if (incomingApplies) {
       const reportedFlags = [...incomingFlags];
       setFlags(reportedFlags);
       setAthleteFeedback({ round, flags: reportedFlags, at: incomingAt || returnedAt, source: "athlete" });
-      setCheckInOpen(false);
+      // Athlete status is already known. Open the return sheet only when the
+      // just-finished loop still has carried fuel that should be confirmed.
+      setCheckInOpen(Boolean(pendingCarry && Number(pendingLoopNumber) === round));
       setIncomingFlags([]);
       setIncomingAt("");
       setIncomingRound(0);
@@ -410,16 +421,24 @@ export default function PitCrewLive({ race, onClose }) {
     setSaveMessage(signalDraft.length ? `Athletenmeldung für Loop ${round} gesendet · Crew kann vorbereiten.` : `Athletenmeldung für Loop ${round}: alles okay.`);
   }
 
-  function finishAthleteCheckIn(clear = false) {
+  function finishAthleteCheckIn() {
     const round = Math.max(1, Number(timing.currentRound || 1));
-    const acceptedFlags = clear ? [] : [...flags];
-    if (clear) setFlags([]);
-    setAthleteFeedback({ round, flags: acceptedFlags, at: new Date().toISOString(), source: "crew" });
+    const athleteAlreadyReported = athleteFeedbackApplies && athleteFeedback?.source === "athlete";
+    if (!athleteAlreadyReported) {
+      setAthleteFeedback({ round, flags: [...flags], at: new Date().toISOString(), source: "crew" });
+    }
+    if (pendingCarry && Number(pendingLoopNumber) === round) {
+      if (arrivalIntakeMode === "partial") confirmPendingCarry("rated");
+      else if (arrivalIntakeMode === "none") confirmPendingCarry("none");
+      else confirmPendingCarry("planned");
+    }
     setCheckInOpen(false);
+    setArrivalIntakeMode("planned");
     setIncomingFlags([]);
     setIncomingAt("");
     setIncomingRound(0);
     setSignalDraft([]);
+    setSaveMessage(`Loop ${round}: Rückkehr übernommen · Status und Versorgung sind aktualisiert.`);
   }
 
   function toggleStockProduct(productId) {
@@ -1107,10 +1126,44 @@ export default function PitCrewLive({ race, onClose }) {
       </main>
 
       {checkInOpen && <div className="pit-live-checkin-backdrop" role="presentation">
-        <section className="pit-live-checkin" role="dialog" aria-modal="true" aria-label="Athletenstatus nach Rückkehr">
-          <div className="pit-live-checkin-head"><div><small>ATHLET ZURÜCK · LOOP {timing.currentRound}</small><h3>Wie kommt der Athlet rein?</h3><p>Ein Tap reicht. Die Crew-Empfehlung reagiert sofort auf den Status.</p></div></div>
-          <div className="pit-live-status-grid">{STATUS_OPTIONS.map(([key, icon, label]) => <button type="button" key={key} className={flags.includes(key) ? "active" : ""} onClick={() => setFlags((current) => toggleValue(current, key))}><b>{icon}</b><span>{label}</span></button>)}</div>
-          <div className="pit-live-checkin-actions"><button type="button" className="pit-live-secondary" onClick={() => finishAthleteCheckIn(true)}>✓ Alles okay</button><button type="button" className="pit-live-primary" onClick={() => finishAthleteCheckIn(false)}>STATUS ÜBERNEHMEN</button></div>
+        <section className="pit-live-checkin" role="dialog" aria-modal="true" aria-label="Athletenstatus und Loop-Verpflegung nach Rückkehr">
+          <div className="pit-live-checkin-head"><div><small>ATHLET ZURÜCK · LOOP {timing.currentRound}</small><h3>Rückkehr kurz übernehmen</h3><p>Status und Versorgung in einem Schritt. Nur Abweichungen brauchen Details.</p></div></div>
+
+          {athleteFeedbackApplies && athleteFeedback?.source === "athlete" ? (
+            <div className="pit-live-checkin-athlete-report">
+              <small>RÜCKMELDUNG ATHLET</small>
+              <strong>{compactStatus(athleteFeedback.flags || [])}</strong>
+              <span>{(athleteFeedback.flags || []).length ? "Der Pit-Vorschlag wurde bereits darauf angepasst. Die Crew muss den Status nicht erneut eingeben." : "Alles okay · keine Änderung am vorbereiteten Plan nötig."}</span>
+            </div>
+          ) : (
+            <>
+              <div className="pit-live-checkin-subhead"><small>ATHLETENSTATUS</small><span>Alles okay ist der Standard. Nur Änderungen antippen.</span></div>
+              <button type="button" className={`pit-live-checkin-ok${flags.length === 0 ? " active" : ""}`} onClick={() => setFlags([])}>✓ Alles okay</button>
+              <div className="pit-live-status-grid">{STATUS_OPTIONS.map(([key, icon, label]) => <button type="button" key={key} className={flags.includes(key) ? "active" : ""} onClick={() => setFlags((current) => toggleValue(current, key))}><b>{icon}</b><span>{label}</span></button>)}</div>
+            </>
+          )}
+
+          {arrivalPendingItems.length > 0 && (
+            <div className="pit-live-checkin-intake">
+              <div className="pit-live-checkin-subhead"><small>VERPFLEGUNG AUF LOOP {timing.currentRound}</small><span>Was davon wurde tatsächlich genommen?</span></div>
+              <div className="pit-live-checkin-intake-modes">
+                <button type="button" className={arrivalIntakeMode === "planned" ? "active" : ""} onClick={() => { setArrivalIntakeMode("planned"); setCarryAdjust({}); }}>✓ Alles wie geplant</button>
+                <button type="button" className={arrivalIntakeMode === "partial" ? "active" : ""} onClick={() => setArrivalIntakeMode("partial")}>½ Teilweise</button>
+                <button type="button" className={arrivalIntakeMode === "none" ? "active" : ""} onClick={() => { setArrivalIntakeMode("none"); setCarryAdjust({}); }}>○ Nichts</button>
+              </div>
+              {arrivalIntakeMode === "partial" && <div className="pit-live-loop-items pit-live-checkin-intake-items">
+                {arrivalPendingItems.map((entry, index) => {
+                  const key = carryResultKey(entry, index);
+                  const selectedFactor = carryAdjust[key];
+                  return <div className="pit-live-loop-item" key={key}><b>{selectionLabel(entry, productCatalog)}</b><div>{[[1, "✓ alles"], [0.5, "½ etwa halb"], [0, "nicht"]].map(([factor, label]) => <button type="button" key={factor} className={Number(selectedFactor) === factor ? "active" : ""} onClick={() => setCarryResult(entry, index, factor)}>{label}</button>)}</div></div>;
+                })}
+              </div>}
+            </div>
+          )}
+
+          <div className="pit-live-checkin-actions">
+            <button type="button" className="pit-live-primary pit-live-wide" disabled={arrivalIntakeMode === "partial" && !arrivalPartialRated} onClick={finishAthleteCheckIn}>RÜCKKEHR ÜBERNEHMEN</button>
+          </div>
         </section>
       </div>}
     </div>
