@@ -63,3 +63,7 @@ test("Pit Crew sanitizes legacy live state before rendering the KH audit", () =>
   assert.match(source, /normalizedLiveSelection/);
   assert.doesNotMatch(source, /activeSelection\.map\(\(entry, index\) => \{/);
 });
+
+test("Pit Crew never treats missing athlete feedback as current-round feedback", () => {
+  assert.match(source, /const athleteFeedbackApplies = Boolean\(athleteFeedback\) && Number\(athleteFeedback\.round \|\| 0\) === Number\(timing\.currentRound \|\| 0\);/);
+});

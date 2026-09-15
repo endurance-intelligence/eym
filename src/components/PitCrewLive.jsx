@@ -284,7 +284,7 @@ export default function PitCrewLive({ race, onClose }) {
   // These values are cheap render-time derivations. Let the React Compiler decide
   // whether to memoize them instead of maintaining dependency arrays manually.
   const incomingApplies = Number(incomingRound || 0) === Number(timing.currentRound || 0) && Boolean(incomingAt);
-  const athleteFeedbackApplies = Number(athleteFeedback?.round || 0) === Number(timing.currentRound || 0);
+  const athleteFeedbackApplies = Boolean(athleteFeedback) && Number(athleteFeedback.round || 0) === Number(timing.currentRound || 0);
   const effectiveAthleteFlags = [...new Set([...(flags || []), ...(incomingApplies ? incomingFlags : [])])];
   const nextLoopWeather = pitWeatherForecastForLoops({
     observation: autoWeather || {},
