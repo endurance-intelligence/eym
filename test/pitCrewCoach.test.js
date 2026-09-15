@@ -45,21 +45,41 @@ test("go mode suggests only portable Isostar plus gel", () => {
   assert.equal(recommendation.summary.carbs, 61);
 });
 
-test("sweet fatigue steers the pit savory without losing the carb budget", () => {
+test("sweet fatigue moves the pit away from sweet fuel and keeps a separate loop drink", () => {
   const recommendation = recommendPitCrew({ round: 10, minutesToStart: 11, flags: ["sweet-fatigue"] });
   const ids = recommendation.selection.map((item) => item.productId);
-  assert.ok(ids.includes("fusilli"));
-  assert.ok(ids.includes("salt-sticks"));
+  assert.ok(ids.includes("broth"));
   assert.ok(ids.includes("cucumber"));
   assert.ok(ids.includes("dryll"));
   assert.equal(ids.includes("sis-beta"), false);
-  assert.ok(recommendation.summary.carbs >= 49);
+  assert.equal(recommendation.selection.find((item) => item.productId === "broth")?.timing, "now");
+  assert.equal(recommendation.selection.find((item) => item.productId === "dryll")?.timing, "carry");
 });
 
-test("hunger prioritizes real food instead of automatic gel", () => {
+test("hunger prioritizes real food now and one clear loop drink", () => {
   const recommendation = recommendPitCrew({ round: 7, minutesToStart: 12, flags: ["hungry"] });
-  assert.deepEqual(recommendation.selection.map((item) => item.productId), ["isostar", "fusilli"]);
-  assert.equal(recommendation.summary.carbs, 55);
+  assert.deepEqual(recommendation.selection.map((item) => item.productId), ["fusilli", "isostar"]);
+  assert.equal(recommendation.selection[0].timing, "now");
+  assert.equal(recommendation.selection[1].timing, "carry");
+  assert.equal(recommendation.summary.fluidMl, 500);
+});
+
+test("thirst creates a drink in the pit instead of splitting every normal loop into Isostar plus water", () => {
+  const normal = recommendPitCrew({ round: 5, minutesToStart: 10, flags: [] });
+  const normalDrinks = normal.selection.filter((item) => ["water", "isostar", "dryll", "cola", "redbull"].includes(item.productId));
+  assert.equal(normalDrinks.length, 1);
+  assert.equal(normalDrinks[0].productId, "isostar");
+  assert.equal(normalDrinks[0].timing, "carry");
+
+  const thirsty = recommendPitCrew({ round: 5, minutesToStart: 10, flags: ["thirsty"] });
+  assert.equal(thirsty.selection.find((item) => item.productId === "water")?.timing, "now");
+  assert.equal(thirsty.selection.find((item) => item.productId === "isostar")?.timing, "carry");
+});
+
+test("no salty removes savory pit food without disabling electrolyte drink", () => {
+  const recommendation = recommendPitCrew({ round: 8, minutesToStart: 10, flags: ["no-salty"] });
+  assert.deepEqual(recommendation.selection.map((item) => item.productId), ["banana", "isostar"]);
+  assert.equal(recommendation.selection.find((item) => item.productId === "isostar")?.timing, "carry");
 });
 
 test("caffeine is dynamic only when tired and recent caffeine is low", () => {

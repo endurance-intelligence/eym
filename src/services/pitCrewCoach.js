@@ -331,8 +331,8 @@ function recentCaffeine(history = [], count = 3) {
     .reduce((sum, record) => sum + Number(summaryFromRecord(record).caffeineMg || 0), 0));
 }
 
-function choice(productId, portionId) {
-  return { productId, portionId: String(portionId) };
+function choice(productId, portionId, timing = "") {
+  return { productId, portionId: String(portionId), ...(timing ? { timing } : {}) };
 }
 
 function quickSuggestion(history, mode) {
@@ -355,74 +355,88 @@ function normalSuggestion({ round = 1, history = [], flags = [], weather = [] } 
 
   if (active.has("stomach")) {
     return {
-      selection: [choice("water", "200"), choice("isostar", "200"), choice("maurten100", "1")],
-      why: "Magen gemeldet: klein, einfach und ohne Nachstopfen. Verlauf danach neu bewerten.",
+      selection: [choice("water", "200", "now"), choice("isostar", "400", "carry"), choice("maurten100", "1", "carry")],
+      why: "Magen gemeldet: im Pit erst neutral trinken, für die Runde nur bewährte, einfache Versorgung mitgeben.",
     };
   }
 
-  if (active.has("sweet-fatigue") || active.has("wants-salty")) {
+  if (active.has("no-salty")) {
     return {
-      selection: [choice("dryll", "150"), choice("water", "200"), choice("fusilli", "100"), choice("salt-sticks", "30g"), choice("cucumber", "50")],
-      why: "Süß rausnehmen: herzhaft + Refresh. Gurke zählt dabei nicht als eigentliche KH-Quelle.",
+      selection: [choice("banana", "whole", "now"), choice("isostar", "500", "carry")],
+      why: "Aktuell kein Appetit auf Salziges: herzhafte Snacks rausnehmen, KH und Flüssigkeit neutral weiterdecken.",
+    };
+  }
+
+  if (active.has("sweet-fatigue")) {
+    return {
+      selection: [choice("cucumber", "50", "now"), choice("broth", "150", "now"), choice("dryll", "150", "carry")],
+      why: "Süß satt: im Pit neutral/herzhaft anbieten und für die Runde eine weniger süße Elektrolyt-Option mitgeben.",
+    };
+  }
+
+  if (active.has("wants-salty")) {
+    return {
+      selection: [choice("broth", "150", "now"), choice("salt-sticks", "10g", "now"), choice("dryll", "150", "carry")],
+      why: "Salzig gewünscht: im Pit herzhaft anbieten und für die Runde eine passende Elektrolyt-Option mitgeben.",
     };
   }
 
   if (active.has("cold") || active.has("too-cold")) {
     return {
-      selection: [choice("isostar", "300"), choice("fusilli", "100"), choice("salt-sticks", "10g"), choice("broth", "100")],
-      why: "Kühl/nass: warme, herzhafte Nahrung priorisieren; KH-Budget bleibt trotzdem im Blick.",
+      selection: [choice("broth", "150", "now"), choice("fusilli", "100", "now"), choice("isostar", "400", "carry")],
+      why: "Kühl/nass: warmes Getränk und herzhafte Nahrung im Pit, bewährtes Hauptgetränk für die Runde.",
     };
   }
 
   if (active.has("thirsty")) {
     return {
-      selection: [choice("isostar", "400"), choice("water", "200"), choice("banana", "whole")],
-      why: "Durst gemeldet: Flüssigkeit zuerst absichern, KH dabei nicht aus Versehen verlieren.",
+      selection: [choice("water", "200", "now"), choice("banana", "whole", "now"), choice("isostar", "500", "carry")],
+      why: "Durst gemeldet: jetzt direkt trinken lassen und die nächste Runde mit einer klaren vollen Flasche vorbereiten.",
     };
   }
 
   if (active.has("hungry")) {
     return {
-      selection: [choice("isostar", "400"), choice("fusilli", "100")],
-      why: "Hunger gemeldet: echte Nahrung statt noch eines Gels.",
+      selection: [choice("fusilli", "100", "now"), choice("isostar", "500", "carry")],
+      why: "Hunger gemeldet: echte Nahrung im Pit, dazu ein klares Hauptgetränk für die nächste Runde.",
     };
   }
 
   if (active.has("tired") && caffeineLast3 < 45) {
     return {
-      selection: [choice("cola", "150"), choice("water", "200"), choice("fusilli", "100"), choice("salt-sticks", "10g")],
-      why: "Müdigkeit gemeldet und zuletzt wenig Koffein: kleine Cola-Portion dynamisch eingebaut.",
+      selection: [choice("cola", "150", "now"), choice("fusilli", "100", "now"), choice("isostar", "400", "carry")],
+      why: "Müdigkeit gemeldet und zuletzt wenig Koffein: kleine Cola-Portion im Pit, Hauptgetränk bleibt für die Runde stabil.",
     };
   }
 
   if (active.has("hot") || active.has("too-warm")) {
     return {
-      selection: [choice("isostar", "300"), choice("water", "200"), choice("banana", "whole"), choice("cucumber", "50")],
-      why: "Warm: Flüssigkeit höher priorisieren; Gurke als Refresh, KH weiter normal decken.",
+      selection: [choice("water", "200", "now"), choice("cucumber", "50", "now"), choice("isostar", "500", "carry")],
+      why: "Warm: im Pit direkt etwas zusätzliche Flüssigkeit/Refresh anbieten, für die Runde eine klare volle Flasche vorbereiten.",
     };
   }
 
   const cycle = Math.max(1, Number(round || 1)) % 4;
   if (cycle === 0) {
     return {
-      selection: [choice("isostar", "400"), choice("fusilli", "100")],
+      selection: [choice("fusilli", "100", "now"), choice("isostar", "500", "carry")],
       why: "Herzhafte Gel-Pause, ohne die Kohlenhydrate aus dem Blick zu verlieren.",
     };
   }
   if (cycle === 1 && !recent.has("banana")) {
     return {
-      selection: [choice("isostar", "400"), choice("banana", "whole")],
+      selection: [choice("banana", "whole", "now"), choice("isostar", "500", "carry")],
       why: "Alles stabil: früh/normal echte Nahrung nutzen und den funktionierenden Plan nicht überoptimieren.",
     };
   }
   if (cycle === 2 && !recent.has("milk-roll")) {
     return {
-      selection: [choice("isostar", "400"), choice("milk-roll", "1")],
+      selection: [choice("milk-roll", "1", "now"), choice("isostar", "500", "carry")],
       why: "Alles stabil: einfache feste KH und Basisgetränk, ohne Joker zu verbrennen.",
     };
   }
   return {
-    selection: [choice("isostar", "200"), choice("sis-beta", "1")],
+    selection: [choice("sis-beta", "1", "now"), choice("isostar", "400", "carry")],
     why: "Kompakte Gel-Stunde als Abwechslung zu fester Nahrung.",
   };
 }
@@ -466,7 +480,7 @@ function fitRecommendationToStock(selection, products, availableProductIds) {
     const sourcePortion = pitPortion(entry.productId, entry.portionId, products) || pitPortion(entry.productId, entry.portionId);
     const portion = closestPortion(fallback, Number(sourcePortion?.carbs || 0));
     if (!portion) continue;
-    fitted.push(choice(fallback.id, portion.id));
+    fitted.push(choice(fallback.id, portion.id, entry.timing));
     usedIds.add(String(fallback.id));
   }
   return { selection: fitted, adjusted };

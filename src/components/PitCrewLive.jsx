@@ -28,6 +28,7 @@ const STATUS_OPTIONS = [
   ["stomach", "🤢", "Magen"],
   ["sweet-fatigue", "🍬", "Süß satt"],
   ["wants-salty", "🥨", "Will salzig"],
+  ["no-salty", "🚫", "Kein salzig"],
   ["too-warm", "🥵", "Zu warm"],
   ["too-cold", "🥶", "Zu kalt"],
   ["tired", "😴", "Müde"],
@@ -177,6 +178,7 @@ export default function PitCrewLive({ race, onClose }) {
   const [selectionMode, setSelectionMode] = useState("suggestion");
   const [selectionDirty, setSelectionDirty] = useState(false);
   const [carryAdjust, setCarryAdjust] = useState({});
+  const [carryDeviationOpen, setCarryDeviationOpen] = useState(false);
   const [pitCategory, setPitCategory] = useState("drink");
   const [saveMessage, setSaveMessage] = useState("");
   const [editingRound, setEditingRound] = useState(null);
@@ -263,15 +265,15 @@ export default function PitCrewLive({ race, onClose }) {
   }));
   const pendingCarry = [...history].reverse().find((record) => record.carryStatus === "pending" && Array.isArray(record.carrySelection) && record.carrySelection.length);
   const pendingLoopNumber = pendingCarry ? Number(pendingCarry.round) + 1 : null;
-  const loopMustClose = Boolean(pendingCarry && Number(pendingCarry.round) < Number(pitRound) && editingRound == null);
+  const loopMustClose = false;
   const arrivalState = pitCrewArrivalState({
     started: timing.started,
     currentRound: timing.currentRound,
     arrivalRound,
-    loopMustClose,
+    loopMustClose: false,
   });
   const athleteNeedsArrival = Boolean(arrivalState.awaitingArrival && editingRound == null);
-  const loopReadyToClose = Boolean(arrivalState.loopReadyToClose && editingRound == null);
+  const loopReadyToClose = Boolean(pendingCarry && pendingLoopNumber === Number(timing.currentRound) && arrivalState.arrived && editingRound == null);
   const productCatalog = [...PIT_CREW_PRODUCTS, ...customProducts];
   const knownStockIds = new Set(productCatalog.map((product) => String(product.id)));
   const activeStockIds = stockIds.filter((id) => knownStockIds.has(String(id)));
@@ -290,16 +292,13 @@ export default function PitCrewLive({ race, onClose }) {
   const suggestionSummary = recommendation.summary;
   const modeTitle = modeLabel(timing.mode);
   const portableMode = recommendation.mode === "go" || recommendation.mode === "quick";
-  const suggestionPit = recommendation.selection.filter((entry) => {
-    const product = productCatalog.find((item) => item.id === entry.productId);
-    return !portableMode && product?.category !== "drink";
-  });
-  const suggestionLoop = recommendation.selection.filter((entry) => !suggestionPit.includes(entry));
   const suggestedSelection = recommendation.selection.map((item) => {
     const product = productCatalog.find((entry) => entry.id === item.productId);
-    const carry = portableMode || product?.category === "drink";
-    return { ...item, timing: carry ? "carry" : "now", quantity: quantity(item) };
+    const inferredTiming = portableMode || product?.category === "drink" ? "carry" : "now";
+    return { ...item, timing: item.timing || inferredTiming, quantity: quantity(item) };
   });
+  const suggestionPit = suggestedSelection.filter((entry) => (entry.timing || "now") === "now");
+  const suggestionLoop = suggestedSelection.filter((entry) => (entry.timing || "now") === "carry");
   const activeSelection = selectionMode === "suggestion" && editingRound == null ? suggestedSelection : selection;
   const readyLoopNumber = Math.max(1, Number(saveRound || 0) + 1);
   const savedCurrentPit = editingRound == null
@@ -438,10 +437,6 @@ export default function PitCrewLive({ race, onClose }) {
   }
 
   function savePit() {
-    if (loopMustClose) {
-      setSaveMessage(`Bitte Loop ${pendingLoopNumber} zuerst abschließen. Danach kann die nächste Loop mit den echten Werten bereitgemacht werden.`);
-      return;
-    }
     if (!activeSelection.length) {
       setSaveMessage("Noch nichts vorgesehen. Bitte Fueling Pit bzw. Loop prüfen.");
       return;
@@ -463,8 +458,26 @@ export default function PitCrewLive({ race, onClose }) {
       flags: editingRound != null && existing ? [...(existing.flags || [])] : [...flags],
       weather: editingRound != null && existing ? [...(existing.weather || [])] : [...effectiveWeather],
     };
-    setHistory((current) => [...current.filter((item) => Number(item.round) !== Number(saveRound)), record]
-      .sort((left, right) => Number(left.round) - Number(right.round)));
+    setHistory((current) => {
+      const finalized = current.map((item) => {
+        if (item.carryStatus !== "pending" || Number(item.round) >= Number(saveRound)) return item;
+        const merged = [...(item.selection || []), ...(item.carrySelection || [])];
+        const confirmedSummary = summarizePitSelection(merged, productCatalog);
+        return {
+          ...item,
+          selection: merged,
+          carriedSelection: (item.carrySelection || []).map((entry) => ({ ...entry })),
+          carrySelection: [],
+          summary: confirmedSummary,
+          provisionalSummary: confirmedSummary,
+          carryStatus: "confirmed",
+          carryConfirmedAt: new Date().toISOString(),
+          carryAssumption: "planned",
+        };
+      });
+      return [...finalized.filter((item) => Number(item.round) !== Number(saveRound)), record]
+        .sort((left, right) => Number(left.round) - Number(right.round));
+    });
     setSaveMessage(editingRound != null
       ? `Pit ${saveRound} korrigiert.`
       : `Loop ${readyLoopNumber} startklar · ${formatNumber(summary.carbs)} g im Pit bestätigt${carrySelection.length ? ` · ${formatNumber(provisionalSummary.carbs - summary.carbs)} g mitgegeben` : ""}.`);
@@ -512,7 +525,8 @@ export default function PitCrewLive({ race, onClose }) {
       };
     }));
     setCarryAdjust({});
-    setSaveMessage(`Loop ${Number(pendingCarry.round) + 1} abgeschlossen · tatsächliche Aufnahme übernommen.`);
+    setCarryDeviationOpen(false);
+    setSaveMessage(`Loop ${Number(pendingCarry.round) + 1}: Abweichung übernommen · Engine rechnet mit der Realität weiter.`);
   }
 
   function editLastPit() {
@@ -733,7 +747,7 @@ export default function PitCrewLive({ race, onClose }) {
     const preparedItems = preparedPending?.carrySelection || [];
     const allRated = pendingItems.length > 0 && pendingItems.every((entry, index) => Object.prototype.hasOwnProperty.call(carryAdjust, carryResultKey(entry, index)));
     const summary = activePending
-      ? `⚠️ Loop ${loopNumber} abschließen`
+      ? `✓ Loop ${loopNumber} · wie geplant`
       : awaitingReturn
         ? `Loop ${loopNumber} läuft`
         : preparedPending
@@ -745,43 +759,48 @@ export default function PitCrewLive({ race, onClose }) {
     return (
       <details
         ref={loopFuelingRef}
-        className={`pit-live-collapse pit-live-loop ${activePending ? "loop-open" : awaitingReturn ? "loop-running" : preparedPending ? "loop-ready" : ""}${priority ? " priority" : ""}`}
-        open={activePending ? true : undefined}
+        className={`pit-live-collapse pit-live-loop ${activePending ? (carryDeviationOpen ? "loop-open" : "loop-ready") : awaitingReturn ? "loop-running" : preparedPending ? "loop-ready" : ""}${priority ? " priority" : ""}`}
+        open={carryDeviationOpen ? true : undefined}
       >
         <summary><span>FUELING LOOP</span><b>{summary}</b><i>›</i></summary>
         <div className="pit-live-collapse-body">
           {activePending ? (
-            <div className="pit-live-loop-confirm">
+            <div className="pit-live-loop-confirm pit-live-loop-confirm-simple">
               <div className="pit-live-loop-confirm-head">
-                <small>RÜCKKEHR · LOOP {loopNumber}</small>
-                <strong>Was wurde wirklich genommen?</strong>
-                <span>Flasche entgegennehmen, Gel kurz abfragen – kleine Abweichungen sind kein Problem. Die Engine rechnet danach einfach mit der Realität weiter.</span>
+                <small>LOOP {loopNumber} · STANDARD = WIE GEPLANT</small>
+                <strong>✓ Keine Bestätigung nötig</strong>
+                <span>Wenn nichts gemeldet wird, übernimmt EI die geplante Versorgung automatisch beim nächsten Pit. Nur Abweichungen erfassen.</span>
               </div>
-              <button type="button" className="pit-live-primary pit-live-wide" onClick={() => confirmPendingCarry("planned")}>✓ Alles wie geplant genommen</button>
-              <div className="pit-live-loop-items">
-                {pendingItems.map((entry, index) => {
-                  const key = carryResultKey(entry, index);
-                  const selectedFactor = carryAdjust[key];
-                  const product = productCatalog.find((item) => item.id === entry.productId);
-                  const options = product?.category === "drink"
-                    ? [[1, "✓ gut / leer"], [0.5, "½ teilweise"], [0, "0 nicht"]]
-                    : [[1, "✓ genommen"], [0, "nicht genommen"]];
-                  return (
-                    <div className="pit-live-loop-item" key={key}>
-                      <b>{selectionLabel(entry, productCatalog)}</b>
-                      <div>
-                        {options.map(([factor, label]) => (
-                          <button type="button" key={factor} className={Number(selectedFactor) === factor ? "active" : ""} onClick={() => setCarryResult(entry, index, factor)}>{label}</button>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="pit-live-loop-finish">
-                <button type="button" className="pit-live-secondary" onClick={() => confirmPendingCarry("none")}>Nichts davon genommen</button>
-                <button type="button" className="pit-live-primary" disabled={!allRated} onClick={() => confirmPendingCarry("rated")}>Loop {loopNumber} abschließen</button>
-              </div>
+              {!carryDeviationOpen ? (
+                <button type="button" className="pit-live-secondary pit-live-wide" onClick={() => setCarryDeviationOpen(true)}>Abweichung melden</button>
+              ) : (
+                <>
+                  <div className="pit-live-loop-items">
+                    {pendingItems.map((entry, index) => {
+                      const key = carryResultKey(entry, index);
+                      const selectedFactor = carryAdjust[key];
+                      const product = productCatalog.find((item) => item.id === entry.productId);
+                      const options = product?.category === "drink"
+                        ? [[1, "✓ komplett"], [0.5, "½ teilweise"], [0, "nicht"]]
+                        : [[1, "✓ genommen"], [0, "nicht"]];
+                      return (
+                        <div className="pit-live-loop-item" key={key}>
+                          <b>{selectionLabel(entry, productCatalog)}</b>
+                          <div>
+                            {options.map(([factor, label]) => (
+                              <button type="button" key={factor} className={Number(selectedFactor) === factor ? "active" : ""} onClick={() => setCarryResult(entry, index, factor)}>{label}</button>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="pit-live-loop-finish">
+                    <button type="button" className="pit-live-secondary" onClick={() => { setCarryDeviationOpen(false); setCarryAdjust({}); }}>Abbrechen</button>
+                    <button type="button" className="pit-live-primary" disabled={!allRated} onClick={() => confirmPendingCarry("rated")}>Abweichung übernehmen</button>
+                  </div>
+                </>
+              )}
             </div>
           ) : awaitingReturn ? (
             <div className="pit-live-loop-plan pit-live-loop-running-copy">
@@ -792,7 +811,7 @@ export default function PitCrewLive({ race, onClose }) {
             <div className="pit-live-loop-plan pit-live-loop-prepared">
               <p className="pit-live-help">Loop {loopNumber} ist vorbereitet. Das hier wurde mitgegeben:</p>
               {preparedItems.length ? <div className="pit-live-loop-plan-items">{preparedItems.map((entry) => <span key={`${entry.productId}:${entry.portionId}`}>{selectionLabel(entry, productCatalog)}</span>)}</div> : <p className="pit-live-loop-empty">Kein zusätzliches Loop-Fueling mitgegeben.</p>}
-              <p className="pit-live-loop-ready-note">✓ Beim nächsten Pit nur kurz bestätigen, was tatsächlich genommen wurde.</p>
+              <p className="pit-live-loop-ready-note">✓ Standardmäßig wird „wie geplant“ übernommen. Nur eine Abweichung muss die Crew melden.</p>
             </div>
           ) : (
             <div className="pit-live-loop-plan">
@@ -831,13 +850,6 @@ export default function PitCrewLive({ race, onClose }) {
     );
   }
 
-  function focusPendingLoop() {
-    if (!loopMustClose) return;
-    const target = loopFuelingRef.current;
-    if (!target) return;
-    target.open = true;
-    target.scrollIntoView({ behavior: "smooth", block: "center" });
-  }
 
   function resetSession() {
     if (demoActive) {
@@ -864,6 +876,7 @@ export default function PitCrewLive({ race, onClose }) {
     setSelectionMode("suggestion");
     setSelectionDirty(false);
     setCarryAdjust({});
+    setCarryDeviationOpen(false);
     setEditingRound(null);
     setAnchorAt(plannedAnchor(race)?.toISOString() || "");
     setSaveMessage("Live-Session zurückgesetzt.");
@@ -872,7 +885,7 @@ export default function PitCrewLive({ race, onClose }) {
   return (
     <div className="pit-live-shell" role="dialog" aria-modal="true" aria-label="Pit Crew Live">
       <header className="pit-live-topbar">
-        <div><small>PIT CREW LIVE{demoActive ? " · DEMO" : ""}</small><strong>{race?.name || "Backyard"}</strong></div>
+        <div><small>PIT CREW LIVE{demoActive ? " · TESTMODUS" : ""}</small><strong>{race?.name || "Backyard"}</strong></div>
         <button type="button" onClick={onClose} aria-label="Pit Crew schließen">Schließen</button>
       </header>
 
@@ -887,15 +900,19 @@ export default function PitCrewLive({ race, onClose }) {
                 <div className="pit-live-weather-next-head"><small>NÄCHSTE LOOPS</small><strong>{nextWeatherAlert?.label || "Wettertrend"}</strong></div>
                 <div className="pit-live-weather-loop-grid">{nextLoopWeather.map((forecast) => {
                   const alert = pitWeatherAlert(forecast);
-                  return <article key={forecast.round} className={`tone-${alert?.tone || "good"}`}><div><span>LOOP {forecast.round}</span><b>{hhmm(forecast.startAt)}–{hhmm(forecast.endAt)}</b></div><strong>{pitWeatherIcon(forecast.weatherCode, forecast.isDay)} {forecast.temperature} °C</strong><small>Regen {forecast.precipitationProbability} % · Wind {forecast.windSpeed} km/h · Böen {forecast.windGusts}</small></article>;
+                  const loopActions = pitWeatherCrewActions(forecast, effectiveAthleteFlags);
+                  return <article key={forecast.round} className={`tone-${alert?.tone || "good"}`}><div><span>LOOP {forecast.round}</span><b>{hhmm(forecast.startAt)}–{hhmm(forecast.endAt)}</b></div><strong>{pitWeatherIcon(forecast.weatherCode, forecast.isDay)} {forecast.temperature} °C <em>· gefühlt {forecast.feelsLike} °C</em></strong><small>Regen {forecast.precipitationProbability} % · {formatNumber(forecast.precipitation)} mm · Feuchte {forecast.humidity} %<br />Wind {forecast.windSpeed} km/h · Böen {forecast.windGusts} km/h</small>{loopActions.length > 0 && <div className="pit-live-weather-loop-actions">{loopActions.slice(0, 3).map((action) => <span key={action}>{action}</span>)}</div>}</article>;
                 })}</div>
               </div>}
               {weatherCrewActions.length > 0 && <div className="pit-live-weather-actions"><small>CREW VORBEREITEN</small><div>{weatherCrewActions.map((action) => <span key={action}>{action}</span>)}</div></div>}
             </> : <p className="pit-live-help">{weatherError || "Wetter wird geladen …"}</p>}
-            <p className="pit-live-help">Forecast und Athletenstatus werden gemeinsam bewertet. Nur antippen, wenn die Situation vor Ort deutlich anders ist.</p>
-            <div className="pit-live-weather-grid">
-              {WEATHER_OPTIONS.map(([key, icon, label]) => <button type="button" key={key} className={weather.includes(key) ? "active" : ""} onClick={() => setWeather((current) => toggleValue(current, key))}>{icon} {label}</button>)}
-            </div>
+            <details className="pit-live-weather-override">
+              <summary>Wetter vor Ort weicht deutlich ab</summary>
+              <p className="pit-live-help">Nur hier korrigieren, wenn die reale Situation sichtbar anders ist als der Forecast.</p>
+              <div className="pit-live-weather-grid">
+                {WEATHER_OPTIONS.map(([key, icon, label]) => <button type="button" key={key} className={weather.includes(key) ? "active" : ""} onClick={() => setWeather((current) => toggleValue(current, key))}>{icon} {label}</button>)}
+              </div>
+            </details>
           </div>
         </details>
 
@@ -909,24 +926,6 @@ export default function PitCrewLive({ race, onClose }) {
           <section className="pit-live-incoming">
             <div><small>ATHLET IM ANFLUG · LOOP {timing.currentRound}</small><strong>{compactStatus(incomingFlags)}</strong><span>Vorabmeldung synchronisiert{incomingAt ? ` · ${hhmm(new Date(incomingAt))}` : ""}. Crew-Hinweise und Fueling reagieren bereits darauf.</span></div>
             <b>→ vorbereiten</b>
-          </section>
-        )}
-
-        {demoActive && (
-          <section className="pit-live-demo-panel">
-            <div className="pit-live-demo-head">
-              <div><small>DEMO-MODUS · LIVE-DATEN UNVERÄNDERT</small><strong>Loop {timing.currentRound} simulieren</strong></div>
-              <button type="button" className="pit-live-secondary" onClick={endDemo}>Demo beenden</button>
-            </div>
-            <div className="pit-live-demo-loop">
-              <button type="button" className="pit-live-secondary" disabled={demoRound <= 1} onClick={() => moveDemoLoop(-1)}>← Loop</button>
-              <button type="button" className="pit-live-primary" onClick={() => moveDemoLoop(1)}>Nächste Loop →</button>
-            </div>
-            <div className="pit-live-demo-times" aria-label="Demo Pit-Zeit">
-              {[[10, "STANDARD"], [6, "KOMPAKT"], [4, "QUICK"], [2, "GO"]].map(([minutes, label]) => (
-                <button type="button" key={minutes} className={demoMinutesToStart === minutes ? "active" : ""} onClick={() => setDemoMinutesToStart(minutes)}><b>{minutes} min</b><span>{label}</span></button>
-              ))}
-            </div>
           </section>
         )}
 
@@ -960,13 +959,6 @@ export default function PitCrewLive({ race, onClose }) {
           </section>
         )}
 
-        {loopReadyToClose && (
-          <>
-            <div className="pit-live-loop-gate">⚠️ Loop {pendingLoopNumber} zuerst abschließen – danach plant die Engine mit den tatsächlichen Werten weiter.</div>
-            {renderLoopFuelingSection({ priority: true })}
-          </>
-        )}
-
         {careNeedsAttention && renderAthleteCareSection({ priority: true })}
 
         <section className="pit-live-recommendation">
@@ -974,7 +966,8 @@ export default function PitCrewLive({ race, onClose }) {
             <div><small>IDEALVORSCHLAG · KEINE ESSENSPFLICHT</small><h3>{timing.started ? `Pit nach Loop ${timing.currentRound} vorbereiten` : "Startversorgung vorbereiten"}</h3></div>
             <div className="pit-live-suggestion-total"><b>{Math.round(suggestionSummary.carbs)} g KH</b><span>{suggestionSummary.fluidMl} ml</span></div>
           </div>
-          {suggestionPit.length > 0 && <div className="pit-live-suggestion-group"><small>IM PIT ANBIETEN</small><div>{suggestionPit.map((entry) => <span key={`pit:${entry.productId}:${entry.portionId}`}>{selectionLabel(entry, productCatalog)}</span>)}</div></div>}
+          {effectiveAthleteFlags.length > 0 && <div className="pit-live-plan-adjusted"><b>↻ PLAN LIVE ANGEPASST</b><span>{compactStatus(effectiveAthleteFlags)}</span></div>}
+          {suggestionPit.length > 0 && <div className="pit-live-suggestion-group"><small>IM PIT JETZT ANBIETEN</small><div>{suggestionPit.map((entry) => <span key={`pit:${entry.productId}:${entry.portionId}`}>{selectionLabel(entry, productCatalog)}</span>)}</div></div>}
           {suggestionLoop.length > 0 && <div className="pit-live-suggestion-group"><small>FÜR NÄCHSTE LOOP BEREITLEGEN</small><div>{suggestionLoop.map((entry) => <span key={`loop:${entry.productId}:${entry.portionId}`}>{selectionLabel(entry, productCatalog)}</span>)}</div></div>}
           {!recommendation.selection.length && <div className="pit-live-stock-warning">⚠️ Kein passendes Fuel im Vorrat aktiv. Vorrat öffnen und verfügbare Sachen auswählen.</div>}
           {weatherCrewActions.length > 0 && <div className="pit-live-crew-prep"><small>LIVE · CREW JETZT</small><div>{weatherCrewActions.slice(0, 4).map((action) => <span key={action}>{action}</span>)}</div></div>}
@@ -998,7 +991,7 @@ export default function PitCrewLive({ race, onClose }) {
 
         {renderStockSection()}
         {renderPitFuelingSection()}
-        {!loopReadyToClose && renderLoopFuelingSection()}
+        {renderLoopFuelingSection()}
 
         {history.length > 0 && (
           <details className="pit-live-collapse">
@@ -1020,20 +1013,29 @@ export default function PitCrewLive({ race, onClose }) {
         )}
 
         <details className="pit-live-collapse pit-live-tools">
-          <summary><span>WERKZEUGE</span><b>{demoActive ? "Demo läuft" : "Demo / Korrektur"}</b><i>›</i></summary>
+          <summary><span>WERKZEUGE</span><b>{demoActive ? "Testmodus aktiv" : "Korrektur / Test"}</b><i>›</i></summary>
           <div className="pit-live-collapse-body">
             {!demoActive ? (
               <>
-                <p className="pit-live-help">Demo startet eine getrennte Simulation. Du kannst mehrere Loops, Fueling, Status und alle Zeitmodi in Minuten zeigen – die echte Session bleibt unangetastet.</p>
-                <button type="button" className="pit-live-primary pit-live-wide" onClick={beginDemo}>Demo-Modus starten</button>
+                <p className="pit-live-help">Der Testmodus liegt bewusst nur hier unter Werkzeuge. Die normale Pit-Ansicht zeigt ausschließlich den Live-Workflow; echte Session-Daten bleiben unangetastet.</p>
+                <button type="button" className="pit-live-primary pit-live-wide" onClick={beginDemo}>Testmodus starten</button>
                 {!race?.time && <button type="button" className="pit-live-secondary pit-live-wide" onClick={() => setAnchorAt(new Date().toISOString())}>Startzeit = jetzt</button>}
                 <button type="button" className="pit-live-danger pit-live-wide" onClick={resetSession}>Gesamte Live-Session zurücksetzen</button>
               </>
             ) : (
               <>
-                <p className="pit-live-help">Demo-Daten liegen separat. „Demo neu starten“ löscht nur die Simulation; „Demo beenden“ holt die echte Live-Session zurück.</p>
-                <button type="button" className="pit-live-secondary pit-live-wide" onClick={beginDemo}>Demo neu starten</button>
-                <button type="button" className="pit-live-primary pit-live-wide" onClick={endDemo}>Demo beenden</button>
+                <p className="pit-live-help">Testdaten liegen separat. Die Steuerung bleibt bewusst hier unter Werkzeuge und taucht nicht mehr in der Live-Ansicht auf.</p>
+                <div className="pit-live-demo-loop">
+                  <button type="button" className="pit-live-secondary" disabled={demoRound <= 1} onClick={() => moveDemoLoop(-1)}>← Loop</button>
+                  <button type="button" className="pit-live-primary" onClick={() => moveDemoLoop(1)}>Nächste Loop →</button>
+                </div>
+                <div className="pit-live-demo-times" aria-label="Test Pit-Zeit">
+                  {[[10, "STANDARD"], [6, "KOMPAKT"], [4, "QUICK"], [2, "GO"]].map(([minutes, label]) => (
+                    <button type="button" key={minutes} className={demoMinutesToStart === minutes ? "active" : ""} onClick={() => setDemoMinutesToStart(minutes)}><b>{minutes} min</b><span>{label}</span></button>
+                  ))}
+                </div>
+                <button type="button" className="pit-live-secondary pit-live-wide" onClick={beginDemo}>Testmodus neu starten</button>
+                <button type="button" className="pit-live-primary pit-live-wide" onClick={endDemo}>Testmodus beenden</button>
               </>
             )}
           </div>
@@ -1049,21 +1051,17 @@ export default function PitCrewLive({ race, onClose }) {
           {assessment.summary.caffeineMg > 0 && <div className="tone-neutral"><small>☕</small><b>{Math.round(assessment.summary.caffeineMg)} mg</b></div>}
           <button
             type="button"
-            className={`pit-live-main-action${athleteNeedsArrival ? " needs-arrival" : loopReadyToClose ? " needs-close" : savedLoopReady ? " is-ready" : ""}`}
-            disabled={athleteNeedsArrival || loopReadyToClose ? false : savedLoopReady || !activeSelection.length}
-            onClick={athleteNeedsArrival ? markAthleteReturned : loopReadyToClose ? focusPendingLoop : savePit}
+            className={`pit-live-main-action${athleteNeedsArrival ? " needs-arrival" : savedLoopReady ? " is-ready" : ""}`}
+            disabled={athleteNeedsArrival ? false : savedLoopReady || !activeSelection.length}
+            onClick={athleteNeedsArrival ? markAthleteReturned : savePit}
           >
             {athleteNeedsArrival
               ? `ATHLET ZURÜCK · LOOP ${timing.currentRound}`
-              : loopReadyToClose
-                ? `LOOP ${pendingLoopNumber} ABSCHLIESSEN`
-                : editingRound != null
-                  ? `PIT ${saveRound} KORRIGIEREN`
-                  : savedLoopReady
-                    ? `✓ LOOP ${readyLoopNumber} STARTKLAR`
-                    : demoActive
-                      ? `DEMO · LOOP ${readyLoopNumber} STARTKLAR MACHEN`
-                      : `LOOP ${readyLoopNumber} STARTKLAR MACHEN`}
+              : editingRound != null
+                ? `PIT ${saveRound} KORRIGIEREN`
+                : savedLoopReady
+                  ? `✓ LOOP ${readyLoopNumber} STARTKLAR`
+                  : `LOOP ${readyLoopNumber} STARTKLAR MACHEN`}
           </button>
         </section>
       </main>
