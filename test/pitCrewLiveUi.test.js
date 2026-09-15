@@ -56,3 +56,10 @@ test("shared Pit Crew route is protected by the application error boundary and e
   assert.match(pitSource, /KH-BILANZ/);
   assert.match(pitSource, /PIT_CARB_TARGET\.center/);
 });
+
+
+test("Pit Crew sanitizes legacy live state before rendering the KH audit", () => {
+  assert.match(source, /normalizePitCrewSnapshot/);
+  assert.match(source, /normalizedLiveSelection/);
+  assert.doesNotMatch(source, /activeSelection\.map\(\(entry, index\) => \{/);
+});

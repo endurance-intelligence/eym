@@ -1,4 +1,85 @@
+
 const TOKEN_STORAGE_PREFIX = "endurance-pit-crew-share-token:";
+
+function normalizeSelection(value) {
+  return (Array.isArray(value) ? value : [])
+    .filter((entry) => entry && typeof entry === "object" && entry.productId != null && entry.portionId != null)
+    .map((entry) => ({
+      ...entry,
+      productId: String(entry.productId),
+      portionId: String(entry.portionId),
+      quantity: Math.max(1, Math.min(20, Math.round(Number(entry.quantity || 1)))),
+      ...(entry.intakeFactor == null ? {} : { intakeFactor: Math.max(0, Math.min(1, Number(entry.intakeFactor) || 0)) }),
+    }));
+}
+
+function normalizeSummary(value) {
+  if (!value || typeof value !== "object") return null;
+  return {
+    ...value,
+    carbs: Math.max(0, Number(value.carbs || 0)),
+    fluidMl: Math.max(0, Math.round(Number(value.fluidMl || 0))),
+    caffeineMg: Math.max(0, Number(value.caffeineMg || 0)),
+    sodiumMg: Math.max(0, Math.round(Number(value.sodiumMg || 0))),
+  };
+}
+
+function normalizeHistory(value) {
+  return (Array.isArray(value) ? value : [])
+    .filter((record) => record && typeof record === "object")
+    .map((record) => ({
+      ...record,
+      round: Math.max(0, Number(record.round || 0)),
+      selection: normalizeSelection(record.selection),
+      carrySelection: normalizeSelection(record.carrySelection),
+      carriedSelection: normalizeSelection(record.carriedSelection),
+      ...(normalizeSummary(record.summary) ? { summary: normalizeSummary(record.summary) } : {}),
+      ...(normalizeSummary(record.provisionalSummary) ? { provisionalSummary: normalizeSummary(record.provisionalSummary) } : {}),
+      flags: Array.isArray(record.flags) ? record.flags.map(String) : [],
+      weather: Array.isArray(record.weather) ? record.weather.map(String) : [],
+    }));
+}
+
+function normalizeCustomProducts(value) {
+  return (Array.isArray(value) ? value : [])
+    .filter((product) => product && typeof product === "object" && product.id != null && Array.isArray(product.portions) && product.portions.length > 0)
+    .map((product) => ({
+      ...product,
+      id: String(product.id),
+      portions: product.portions
+        .filter((portion) => portion && typeof portion === "object" && portion.id != null)
+        .map((portion) => ({ ...portion, id: String(portion.id) })),
+    }))
+    .filter((product) => product.portions.length > 0);
+}
+
+function normalizeAthleteFeedback(value) {
+  if (!value || typeof value !== "object") return null;
+  return {
+    ...value,
+    round: Math.max(0, Number(value.round || 0)),
+    flags: Array.isArray(value.flags) ? value.flags.map(String) : [],
+    at: String(value.at || ""),
+    source: value.source === "athlete" ? "athlete" : "crew",
+  };
+}
+
+export function normalizePitCrewSnapshot(value = {}) {
+  return {
+    anchorAt: String(value?.anchorAt || ""),
+    history: normalizeHistory(value?.history),
+    flags: Array.isArray(value?.flags) ? value.flags.map(String) : [],
+    incomingFlags: Array.isArray(value?.incomingFlags) ? value.incomingFlags.map(String) : [],
+    incomingAt: String(value?.incomingAt || ""),
+    incomingRound: Math.max(0, Number(value?.incomingRound || 0)),
+    athleteFeedback: normalizeAthleteFeedback(value?.athleteFeedback),
+    weather: Array.isArray(value?.weather) ? value.weather.map(String) : [],
+    arrivalRound: Math.max(0, Number(value?.arrivalRound || 0)),
+    arrivalAt: String(value?.arrivalAt || ""),
+    stockIds: Array.isArray(value?.stockIds) ? value.stockIds.map(String) : null,
+    customProducts: normalizeCustomProducts(value?.customProducts),
+  };
+}
 
 export function cleanRaceKey(value) {
   return String(value || "").trim().slice(0, 240);
@@ -9,44 +90,18 @@ export function pitCrewStorageKey(race = {}) {
 }
 
 export function readPitCrewLocalSnapshot(race = {}, storage = globalThis.window?.localStorage) {
-  if (!storage) return { anchorAt: "", history: [], flags: [], incomingFlags: [], incomingAt: "", incomingRound: 0, athleteFeedback: null, weather: [], arrivalRound: 0, arrivalAt: "", stockIds: null, customProducts: [] };
+  if (!storage) return normalizePitCrewSnapshot();
   try {
     const parsed = JSON.parse(storage.getItem(pitCrewStorageKey(race)) || "null");
-    return {
-      anchorAt: String(parsed?.anchorAt || ""),
-      history: Array.isArray(parsed?.history) ? parsed.history : [],
-      flags: Array.isArray(parsed?.flags) ? parsed.flags : [],
-      incomingFlags: Array.isArray(parsed?.incomingFlags) ? parsed.incomingFlags : [],
-      incomingAt: String(parsed?.incomingAt || ""),
-      incomingRound: Math.max(0, Number(parsed?.incomingRound || 0)),
-      athleteFeedback: parsed?.athleteFeedback && typeof parsed.athleteFeedback === "object" ? parsed.athleteFeedback : null,
-      weather: Array.isArray(parsed?.weather) ? parsed.weather : [],
-      arrivalRound: Math.max(0, Number(parsed?.arrivalRound || 0)),
-      arrivalAt: String(parsed?.arrivalAt || ""),
-      stockIds: Array.isArray(parsed?.stockIds) ? parsed.stockIds.map(String) : null,
-      customProducts: Array.isArray(parsed?.customProducts) ? parsed.customProducts : [],
-    };
+    return normalizePitCrewSnapshot(parsed || {});
   } catch {
-    return { anchorAt: "", history: [], flags: [], incomingFlags: [], incomingAt: "", incomingRound: 0, athleteFeedback: null, weather: [], arrivalRound: 0, arrivalAt: "", stockIds: null, customProducts: [] };
+    return normalizePitCrewSnapshot();
   }
 }
 
 export function writePitCrewLocalSnapshot(race = {}, snapshot = {}, storage = globalThis.window?.localStorage) {
   if (!storage) return;
-  storage.setItem(pitCrewStorageKey(race), JSON.stringify({
-    anchorAt: String(snapshot?.anchorAt || ""),
-    history: Array.isArray(snapshot?.history) ? snapshot.history : [],
-    flags: Array.isArray(snapshot?.flags) ? snapshot.flags : [],
-    incomingFlags: Array.isArray(snapshot?.incomingFlags) ? snapshot.incomingFlags : [],
-    incomingAt: String(snapshot?.incomingAt || ""),
-    incomingRound: Math.max(0, Number(snapshot?.incomingRound || 0)),
-    athleteFeedback: snapshot?.athleteFeedback && typeof snapshot.athleteFeedback === "object" ? snapshot.athleteFeedback : null,
-    weather: Array.isArray(snapshot?.weather) ? snapshot.weather : [],
-    arrivalRound: Math.max(0, Number(snapshot?.arrivalRound || 0)),
-    arrivalAt: String(snapshot?.arrivalAt || ""),
-    stockIds: Array.isArray(snapshot?.stockIds) ? snapshot.stockIds.map(String) : null,
-    customProducts: Array.isArray(snapshot?.customProducts) ? snapshot.customProducts : [],
-  }));
+  storage.setItem(pitCrewStorageKey(race), JSON.stringify(normalizePitCrewSnapshot(snapshot)));
 }
 
 export function storedPitCrewShareToken(raceKey, storage = globalThis.window?.localStorage) {

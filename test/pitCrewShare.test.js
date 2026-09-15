@@ -7,6 +7,7 @@ import {
   rememberPitCrewShareToken,
   storedPitCrewShareToken,
   writePitCrewLocalSnapshot,
+  normalizePitCrewSnapshot,
 } from "../src/services/pitCrewShareCore.js";
 
 function memoryStorage() {
@@ -57,20 +58,7 @@ test("shared pit snapshot preserves only race-operation state", () => {
   };
   writePitCrewLocalSnapshot(race, snapshot, storage);
   assert.equal(pitCrewStorageKey(race), "endurance-pit-crew:backyard-2026:2026-09-26");
-  assert.deepEqual(readPitCrewLocalSnapshot(race, storage), {
-    anchorAt: snapshot.anchorAt,
-    history: snapshot.history,
-    flags: snapshot.flags,
-    incomingFlags: snapshot.incomingFlags,
-    incomingAt: snapshot.incomingAt,
-    incomingRound: snapshot.incomingRound,
-    athleteFeedback: snapshot.athleteFeedback,
-    weather: snapshot.weather,
-    arrivalRound: snapshot.arrivalRound,
-    arrivalAt: snapshot.arrivalAt,
-    stockIds: snapshot.stockIds,
-    customProducts: snapshot.customProducts,
-  });
+  assert.deepEqual(readPitCrewLocalSnapshot(race, storage), normalizePitCrewSnapshot(snapshot));
 });
 
 test("old crew snapshots without a stockroom keep stockIds unset so the UI can apply its defaults", () => {
@@ -80,4 +68,20 @@ test("old crew snapshots without a stockroom keep stockIds unset so the UI can a
   const snapshot = readPitCrewLocalSnapshot(race, storage);
   assert.equal(snapshot.stockIds, null);
   assert.deepEqual(snapshot.customProducts, []);
+});
+
+
+test("legacy malformed Pit Crew state is sanitized instead of crashing live view", () => {
+  const normalized = normalizePitCrewSnapshot({
+    history: [null, { round: 3, selection: [null, { productId: "isostar", portionId: 500 }], carrySelection: "bad" }],
+    customProducts: [null, { id: "broken" }, { id: "ok", portions: [{ id: 1, carbs: 25 }] }],
+    athleteFeedback: { round: "3", flags: "bad", source: "athlete" },
+  });
+  assert.equal(normalized.history.length, 1);
+  assert.deepEqual(normalized.history[0].selection, [{ productId: "isostar", portionId: "500", quantity: 1 }]);
+  assert.deepEqual(normalized.history[0].carrySelection, []);
+  assert.equal(normalized.customProducts.length, 1);
+  assert.equal(normalized.customProducts[0].id, "ok");
+  assert.equal(normalized.customProducts[0].portions[0].id, "1");
+  assert.deepEqual(normalized.athleteFeedback.flags, []);
 });

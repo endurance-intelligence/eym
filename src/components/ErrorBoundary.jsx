@@ -48,6 +48,10 @@ export default class ErrorBoundary extends Component {
           <button type="button" disabled={this.state.recovering} onClick={() => this.recover("#/")}>Zum Briefing</button>
         </div>
         {this.state.recoveryError && <p className="bad">{this.state.recoveryError}</p>}
+        <details className="route-error-details">
+          <summary>Technische Details</summary>
+          <code>{String(this.state.error?.message || this.state.error || "Unbekannter Laufzeitfehler")}</code>
+        </details>
       </section>
     </main>;
   }

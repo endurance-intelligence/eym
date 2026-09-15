@@ -22,6 +22,7 @@ import {
   pitWeatherLoopBrief,
 } from "../services/pitCrewWeather.js";
 import { athleteCareHints } from "../services/pitCrewCare.js";
+import { normalizePitCrewSnapshot } from "../services/pitCrewShareCore.js";
 import "./PitCrewLive.css";
 
 const STATUS_OPTIONS = [
@@ -67,10 +68,41 @@ function safeStoredSession(key) {
   if (typeof window === "undefined") return null;
   try {
     const parsed = JSON.parse(window.localStorage.getItem(key) || "null");
-    return parsed && typeof parsed === "object" ? parsed : null;
+    return parsed && typeof parsed === "object" ? normalizePitCrewSnapshot(parsed) : normalizePitCrewSnapshot();
   } catch {
-    return null;
+    return normalizePitCrewSnapshot();
   }
+}
+
+
+function normalizedLiveSelection(value) {
+  return (Array.isArray(value) ? value : [])
+    .filter((entry) => entry && typeof entry === "object" && entry.productId != null && entry.portionId != null)
+    .map((entry) => ({
+      ...entry,
+      productId: String(entry.productId),
+      portionId: String(entry.portionId),
+      quantity: Math.max(1, Math.min(20, Math.round(Number(entry.quantity || 1)))),
+    }));
+}
+
+function normalizedLiveHistory(value) {
+  return (Array.isArray(value) ? value : [])
+    .filter((record) => record && typeof record === "object")
+    .map((record) => ({
+      ...record,
+      selection: normalizedLiveSelection(record.selection),
+      carrySelection: normalizedLiveSelection(record.carrySelection),
+      carriedSelection: normalizedLiveSelection(record.carriedSelection),
+      flags: Array.isArray(record.flags) ? record.flags.map(String) : [],
+      weather: Array.isArray(record.weather) ? record.weather.map(String) : [],
+    }));
+}
+
+function normalizedCustomProducts(value) {
+  return (Array.isArray(value) ? value : []).filter((product) =>
+    product && typeof product === "object" && product.id != null && Array.isArray(product.portions) && product.portions.length > 0,
+  );
 }
 
 function plannedAnchor(race) {
@@ -161,7 +193,7 @@ export default function PitCrewLive({ race, onClose }) {
   const [demoMinutesToStart, setDemoMinutesToStart] = useState(10);
   const storageKey = demoActive ? `${baseStorageKey}:demo` : baseStorageKey;
   const [now, setNow] = useState(() => new Date());
-  const [history, setHistory] = useState(() => Array.isArray(stored?.history) ? stored.history : []);
+  const [history, setHistory] = useState(() => normalizedLiveHistory(stored?.history));
   const [flags, setFlags] = useState(() => Array.isArray(stored?.flags) ? stored.flags : []);
   const [incomingFlags, setIncomingFlags] = useState(() => Array.isArray(stored?.incomingFlags) ? stored.incomingFlags : []);
   const [incomingAt, setIncomingAt] = useState(() => String(stored?.incomingAt || ""));
@@ -174,7 +206,7 @@ export default function PitCrewLive({ race, onClose }) {
   const [anchorAt, setAnchorAt] = useState(() => stored?.anchorAt || plannedAnchor(race)?.toISOString() || "");
   const [arrivalRound, setArrivalRound] = useState(() => Math.max(0, Number(stored?.arrivalRound || 0)));
   const [arrivalAt, setArrivalAt] = useState(() => String(stored?.arrivalAt || ""));
-  const [customProducts, setCustomProducts] = useState(() => Array.isArray(stored?.customProducts) ? stored.customProducts : []);
+  const [customProducts, setCustomProducts] = useState(() => normalizedCustomProducts(stored?.customProducts));
   const [stockIds, setStockIds] = useState(() => Array.isArray(stored?.stockIds) ? stored.stockIds : PIT_CREW_DEFAULT_STOCK_IDS);
   const [stockCategory, setStockCategory] = useState("drink");
   const [showStockForm, setShowStockForm] = useState(false);
@@ -287,7 +319,7 @@ export default function PitCrewLive({ race, onClose }) {
   });
   const athleteNeedsArrival = Boolean(arrivalState.awaitingArrival && editingRound == null);
   const loopReadyToClose = Boolean(pendingCarry && pendingLoopNumber === Number(timing.currentRound) && arrivalState.arrived && editingRound == null);
-  const productCatalog = [...PIT_CREW_PRODUCTS, ...customProducts];
+  const productCatalog = [...PIT_CREW_PRODUCTS, ...normalizedCustomProducts(customProducts)];
   const knownStockIds = new Set(productCatalog.map((product) => String(product.id)));
   const activeStockIds = stockIds.filter((id) => knownStockIds.has(String(id)));
   const availableProducts = productCatalog.filter((product) => activeStockIds.includes(String(product.id)));
@@ -306,13 +338,13 @@ export default function PitCrewLive({ race, onClose }) {
   const modeTitle = modeLabel(timing.mode);
   const portableMode = recommendation.mode === "go" || recommendation.mode === "quick";
   const suggestedSelection = recommendation.selection.map((item) => {
-    const product = productCatalog.find((entry) => entry.id === item.productId);
+    const product = productCatalog.find((entry) => String(entry?.id) === String(item?.productId));
     const inferredTiming = portableMode || product?.category === "drink" ? "carry" : "now";
     return { ...item, timing: item.timing || inferredTiming, quantity: quantity(item) };
   });
   const suggestionPit = suggestedSelection.filter((entry) => (entry.timing || "now") === "now");
   const suggestionLoop = suggestedSelection.filter((entry) => (entry.timing || "now") === "carry");
-  const activeSelection = selectionMode === "suggestion" && editingRound == null ? suggestedSelection : selection;
+  const activeSelection = normalizedLiveSelection(selectionMode === "suggestion" && editingRound == null ? suggestedSelection : selection);
   const readyLoopNumber = Math.max(1, Number(saveRound || 0) + 1);
   const savedCurrentPit = editingRound == null
     ? history.find((record) => Number(record.round) === Number(saveRound))
@@ -1058,12 +1090,7 @@ export default function PitCrewLive({ race, onClose }) {
               <div><em aria-hidden="true" /><b>Zuletzt tatsächlich</b><span>{formatNumber(lastActualSummary.carbs)} g KH · {lastActualSummary.fluidMl} ml</span></div>
               <div><em aria-hidden="true" /><b>Ø letzte {historyRolling.hours || 0} h</b><span>{historyRolling.hours ? `${formatNumber(historyRolling.carbsPerHour)} g KH/h · ${historyRolling.fluidPerHour} ml/h` : "noch keine belastbare Historie"}</span></div>
             </div>
-            <div className="pit-live-loop-plan-items">
-              {activeSelection.map((entry, index) => {
-                const item = summarizePitSelection([entry], productCatalog);
-                return <span key={`audit:${entry.productId}:${entry.portionId}:${index}`}>{selectionLabel(entry, productCatalog)} · {formatNumber(item.carbs)} g KH</span>;
-              })}
-            </div>
+            <p className="pit-live-help">Details zu einzelnen Produkten bleiben im Pit-Vorschlag sichtbar. Die Bilanz selbst rendert bewusst nur robuste Summen, damit ältere Crew-Sessions die Live-Ansicht nicht blockieren können.</p>
           </div>
         </details>
 
