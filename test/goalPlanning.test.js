@@ -77,6 +77,8 @@ test("course profiles keep explicit route and aid-station data while migrating k
     aidStationMode: "every_loop",
     loopMode: "fixed_interval",
     loopIntervalMinutes: 60,
+    eventLimitMode: "open",
+    planningHorizonHours: 0,
     eventTimeLimit: "",
     eventTimeLimitMinutes: 0,
     plannedStopMinutes: 0,
@@ -92,6 +94,8 @@ test("course profiles keep explicit route and aid-station data while migrating k
     aidStationMode: "every_loop",
     loopMode: "time_limit",
     loopIntervalMinutes: 0,
+    eventLimitMode: "limited",
+    planningHorizonHours: 0,
     eventTimeLimit: "14:00:00",
     eventTimeLimitMinutes: 840,
     plannedStopMinutes: 3,
@@ -108,6 +112,8 @@ test("course profiles keep explicit route and aid-station data while migrating k
     aidStationMode: "fixed_stations",
     loopMode: "free",
     loopIntervalMinutes: 0,
+    eventLimitMode: "",
+    planningHorizonHours: 0,
     eventTimeLimit: "",
     eventTimeLimitMinutes: 0,
     plannedStopMinutes: 0,
@@ -124,8 +130,23 @@ test("course profiles keep explicit route and aid-station data while migrating k
     aidStationMode: "self_supported",
     loopMode: "free",
     loopIntervalMinutes: 0,
+    eventLimitMode: "",
+    planningHorizonHours: 0,
     eventTimeLimit: "",
     eventTimeLimitMinutes: 0,
     plannedStopMinutes: 0,
   });
+});
+
+
+test("Backyard course profile separates open-end planning horizon from a true event limit", () => {
+  const open = eventCourseProfile({ name: "1. Backyard OWL", courseType: "loop", loopKm: 6.7, loopMode: "fixed_interval", loopIntervalMinutes: 60, eventLimitMode: "open", planningHorizonHours: 36, targetKm: 100 });
+  assert.equal(open.eventLimitMode, "open");
+  assert.equal(open.planningHorizonHours, 36);
+  assert.equal(open.eventTimeLimitMinutes, 0);
+
+  const limited = eventCourseProfile({ name: "36h Backyard", courseType: "loop", loopKm: 6.7, loopMode: "fixed_interval", loopIntervalMinutes: 60, eventLimitMode: "limited", eventTimeLimit: "36:00:00" });
+  assert.equal(limited.eventLimitMode, "limited");
+  assert.equal(limited.planningHorizonHours, 0);
+  assert.equal(limited.eventTimeLimitMinutes, 2160);
 });

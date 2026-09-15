@@ -88,6 +88,8 @@ export default function RaceWeatherStrategy({
   const eventLoopMode = String(race?.loopMode || "");
   const eventLoopKm = Number(race?.loopKm || 0);
   const eventLoopIntervalMinutes = Number(race?.loopIntervalMinutes || 0);
+  const eventLimitMode = String(race?.eventLimitMode || "");
+  const planningHorizonHours = Number(race?.planningHorizonHours || 0);
   const eventTimeLimit = String(race?.eventTimeLimit || "");
   const raceInput = useMemo(() => ({
     name: raceName,
@@ -101,12 +103,16 @@ export default function RaceWeatherStrategy({
     loopMode: eventLoopMode,
     loopKm: eventLoopKm,
     loopIntervalMinutes: eventLoopIntervalMinutes,
+    eventLimitMode,
+    planningHorizonHours,
     eventTimeLimit,
   }), [
     eventGoalType,
+    eventLimitMode,
     eventLoopIntervalMinutes,
     eventLoopKm,
     eventLoopMode,
+    planningHorizonHours,
     eventTargetKm,
     eventTargetTime,
     eventTimeLimit,
@@ -122,15 +128,20 @@ export default function RaceWeatherStrategy({
     () => resolveRaceWeatherDuration({ race: raceInput, targetDurationMinutes }),
     [raceInput, targetDurationMinutes],
   );
+  const weatherDistanceKm = useMemo(() => {
+    if (eventLoopMode !== "fixed_interval" || !(eventLoopKm > 0) || !(eventLoopIntervalMinutes > 0) || !(durationInfo.minutes > 0)) return Number(raceDistanceKm || 0);
+    const plannedRounds = Math.max(1, Math.ceil(durationInfo.minutes / eventLoopIntervalMinutes));
+    return Number((plannedRounds * eventLoopKm).toFixed(1));
+  }, [durationInfo.minutes, eventLoopIntervalMinutes, eventLoopKm, eventLoopMode, raceDistanceKm]);
   const [forecastResult, setForecastResult] = useState({ requestKey: "", status: "idle", data: null, error: "" });
   const key = useMemo(() => storageKey(raceInput), [raceInput]);
   const forecastEligible = Boolean(raceDate && raceTime && !["too-early", "missing"].includes(confidence.key));
   const requestKey = useMemo(() => JSON.stringify({
     race: raceInput,
-    raceDistanceKm: Number(raceDistanceKm || 0),
+    raceDistanceKm: weatherDistanceKm,
     durationMinutes: durationInfo.minutes,
     routeProfile,
-  }), [durationInfo.minutes, raceDistanceKm, raceInput, routeProfile]);
+  }), [durationInfo.minutes, raceInput, routeProfile, weatherDistanceKm]);
   const forecastState = !forecastEligible
     ? { status: confidence.key, data: null, error: "" }
     : forecastResult.requestKey === requestKey
@@ -140,7 +151,7 @@ export default function RaceWeatherStrategy({
   useEffect(() => {
     if (!forecastEligible) return undefined;
     let active = true;
-    fetchRaceWeatherForecast({ race: raceInput, routeProfile, raceDistanceKm, targetDurationMinutes: durationInfo.minutes })
+    fetchRaceWeatherForecast({ race: raceInput, routeProfile, raceDistanceKm: weatherDistanceKm, targetDurationMinutes: durationInfo.minutes })
       .then((data) => {
         if (!active) return;
         setForecastResult({ requestKey, status: data.status, data, error: "" });
@@ -150,19 +161,19 @@ export default function RaceWeatherStrategy({
         setForecastResult({ requestKey, status: "error", data: null, error: error?.message || "Race-Wetter konnte nicht geladen werden." });
       });
     return () => { active = false; };
-  }, [durationInfo.minutes, forecastEligible, raceDistanceKm, raceInput, requestKey, routeProfile]);
+  }, [durationInfo.minutes, forecastEligible, raceInput, requestKey, routeProfile, weatherDistanceKm]);
 
   const strategy = useMemo(() => {
     if (forecastState.status !== "ready" || !forecastState.data?.forecasts?.length) return null;
     return buildRaceWeatherStrategy({
       race: raceInput,
       routeProfile: routeProfile || {},
-      raceDistanceKm,
+      raceDistanceKm: weatherDistanceKm,
       targetDurationMinutes: durationInfo.minutes,
       forecasts: forecastState.data.forecasts,
       confidence: forecastState.data.confidence,
     });
-  }, [durationInfo.minutes, forecastState.data, forecastState.status, raceDistanceKm, raceInput, routeProfile]);
+  }, [durationInfo.minutes, forecastState.data, forecastState.status, raceInput, routeProfile, weatherDistanceKm]);
 
   const trackWind = useMemo(() => {
     if (!strategy || !trackPlan || !forecastState.data?.forecasts?.length) return [];

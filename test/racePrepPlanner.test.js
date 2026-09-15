@@ -154,6 +154,24 @@ test("Backyard Race Prep uses the planning horizon as round horizon", () => {
   assert.equal(plan.strategy.rows.length, 4);
 });
 
+test("open Backyard mission uses the operational planning horizon instead of the personal distance goal", () => {
+  const profile = racePrepProfileFromEvent({
+    id: "backyard-open",
+    name: "1. Backyard OWL",
+    targetKm: 100,
+    loopKm: 6.7,
+    loopMode: "fixed_interval",
+    loopIntervalMinutes: 60,
+    eventLimitMode: "open",
+    planningHorizonHours: 36,
+  });
+  assert.equal(profile.performanceTargetKm, 100);
+  assert.equal(profile.planningHorizonHours, 36);
+  assert.equal(profile.rounds, 36);
+  assert.equal(profile.durationMinutes, 2160);
+  assert.equal(profile.distanceKm, 241.2);
+});
+
 test("mission loop events can seed Race Prep without a special Backyard-only model", () => {
   const profile = racePrepProfileFromEvent({
     id: "heartbeat",

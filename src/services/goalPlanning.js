@@ -91,10 +91,19 @@ export function eventCourseProfile(event = {}) {
   const loopIntervalMinutes = loopMode === LOOP_MODES.FIXED_INTERVAL
     ? Math.max(10, Number(input.loopIntervalMinutes || 60))
     : 0;
-  const eventTimeLimit = loopMode === LOOP_MODES.TIME_LIMIT
+  const storedLimitMode = String(input.eventLimitMode || "").toLowerCase();
+  const eventLimitMode = loopMode === LOOP_MODES.FIXED_INTERVAL
+    ? (storedLimitMode === "limited" || (!storedLimitMode && input.eventTimeLimit) ? "limited" : "open")
+    : loopMode === LOOP_MODES.TIME_LIMIT
+      ? "limited"
+      : "";
+  const eventTimeLimit = loopMode === LOOP_MODES.TIME_LIMIT || (loopMode === LOOP_MODES.FIXED_INTERVAL && eventLimitMode === "limited")
     ? String(input.eventTimeLimit || (legacyHeartbeat ? "14:00:00" : ""))
     : "";
   const eventTimeLimitMinutes = parseLoopDurationMinutes(eventTimeLimit);
+  const planningHorizonHours = loopMode === LOOP_MODES.FIXED_INTERVAL && eventLimitMode === "open"
+    ? Math.max(0, Number(input.planningHorizonHours || 0))
+    : 0;
   const plannedStopMinutes = loopMode === LOOP_MODES.TIME_LIMIT
     ? Math.max(0, Number(input.plannedStopMinutes ?? 3))
     : 0;
@@ -105,6 +114,8 @@ export function eventCourseProfile(event = {}) {
     aidStationMode,
     loopMode,
     loopIntervalMinutes,
+    eventLimitMode,
+    planningHorizonHours,
     eventTimeLimit,
     eventTimeLimitMinutes,
     plannedStopMinutes,

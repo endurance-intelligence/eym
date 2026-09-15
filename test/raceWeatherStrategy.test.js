@@ -122,6 +122,12 @@ test("race weather duration uses exact event timing first and marks distance-onl
   const backyard = resolveRaceWeatherDuration({ race: { loopMode: "fixed_interval", loopKm: 6.7, loopIntervalMinutes: 60, targetKm: 100 } });
   assert.equal(backyard.minutes, 900);
   assert.equal(backyard.estimated, false);
+  const openBackyard = resolveRaceWeatherDuration({ race: { loopMode: "fixed_interval", eventLimitMode: "open", planningHorizonHours: 36, loopKm: 6.7, loopIntervalMinutes: 60, targetKm: 100 } });
+  assert.equal(openBackyard.minutes, 2160);
+  assert.equal(openBackyard.source, "planning-horizon");
+  const limitedBackyard = resolveRaceWeatherDuration({ race: { loopMode: "fixed_interval", eventLimitMode: "limited", eventTimeLimit: "36:00:00", loopKm: 6.7, loopIntervalMinutes: 60, targetKm: 100 } });
+  assert.equal(limitedBackyard.minutes, 2160);
+  assert.equal(limitedBackyard.source, "event-time-limit");
   const estimated = resolveRaceWeatherDuration({ race: { targetKm: 42.195 } });
   assert.equal(estimated.estimated, true);
   assert.ok(estimated.minutes > 240);

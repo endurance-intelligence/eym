@@ -9,13 +9,16 @@ export function pitCrewStorageKey(race = {}) {
 }
 
 export function readPitCrewLocalSnapshot(race = {}, storage = globalThis.window?.localStorage) {
-  if (!storage) return { anchorAt: "", history: [], flags: [], weather: [], arrivalRound: 0, arrivalAt: "", stockIds: null, customProducts: [] };
+  if (!storage) return { anchorAt: "", history: [], flags: [], incomingFlags: [], incomingAt: "", incomingRound: 0, weather: [], arrivalRound: 0, arrivalAt: "", stockIds: null, customProducts: [] };
   try {
     const parsed = JSON.parse(storage.getItem(pitCrewStorageKey(race)) || "null");
     return {
       anchorAt: String(parsed?.anchorAt || ""),
       history: Array.isArray(parsed?.history) ? parsed.history : [],
       flags: Array.isArray(parsed?.flags) ? parsed.flags : [],
+      incomingFlags: Array.isArray(parsed?.incomingFlags) ? parsed.incomingFlags : [],
+      incomingAt: String(parsed?.incomingAt || ""),
+      incomingRound: Math.max(0, Number(parsed?.incomingRound || 0)),
       weather: Array.isArray(parsed?.weather) ? parsed.weather : [],
       arrivalRound: Math.max(0, Number(parsed?.arrivalRound || 0)),
       arrivalAt: String(parsed?.arrivalAt || ""),
@@ -23,7 +26,7 @@ export function readPitCrewLocalSnapshot(race = {}, storage = globalThis.window?
       customProducts: Array.isArray(parsed?.customProducts) ? parsed.customProducts : [],
     };
   } catch {
-    return { anchorAt: "", history: [], flags: [], weather: [], arrivalRound: 0, arrivalAt: "", stockIds: null, customProducts: [] };
+    return { anchorAt: "", history: [], flags: [], incomingFlags: [], incomingAt: "", incomingRound: 0, weather: [], arrivalRound: 0, arrivalAt: "", stockIds: null, customProducts: [] };
   }
 }
 
@@ -33,6 +36,9 @@ export function writePitCrewLocalSnapshot(race = {}, snapshot = {}, storage = gl
     anchorAt: String(snapshot?.anchorAt || ""),
     history: Array.isArray(snapshot?.history) ? snapshot.history : [],
     flags: Array.isArray(snapshot?.flags) ? snapshot.flags : [],
+    incomingFlags: Array.isArray(snapshot?.incomingFlags) ? snapshot.incomingFlags : [],
+    incomingAt: String(snapshot?.incomingAt || ""),
+    incomingRound: Math.max(0, Number(snapshot?.incomingRound || 0)),
     weather: Array.isArray(snapshot?.weather) ? snapshot.weather : [],
     arrivalRound: Math.max(0, Number(snapshot?.arrivalRound || 0)),
     arrivalAt: String(snapshot?.arrivalAt || ""),

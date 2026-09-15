@@ -12,7 +12,13 @@ import {
   rollingPitAverage,
   summarizePitSelection,
 } from "../services/pitCrewCoach.js";
-import { fetchPitCrewWeather, pitWeatherIcon } from "../services/pitCrewWeather.js";
+import {
+  fetchPitCrewWeather,
+  pitWeatherAlert,
+  pitWeatherCrewActions,
+  pitWeatherForecastForLoops,
+  pitWeatherIcon,
+} from "../services/pitCrewWeather.js";
 import { athleteCareHints } from "../services/pitCrewCare.js";
 import "./PitCrewLive.css";
 
@@ -153,6 +159,11 @@ export default function PitCrewLive({ race, onClose }) {
   const [now, setNow] = useState(() => new Date());
   const [history, setHistory] = useState(() => Array.isArray(stored?.history) ? stored.history : []);
   const [flags, setFlags] = useState(() => Array.isArray(stored?.flags) ? stored.flags : []);
+  const [incomingFlags, setIncomingFlags] = useState(() => Array.isArray(stored?.incomingFlags) ? stored.incomingFlags : []);
+  const [incomingAt, setIncomingAt] = useState(() => String(stored?.incomingAt || ""));
+  const [incomingRound, setIncomingRound] = useState(() => Math.max(0, Number(stored?.incomingRound || 0)));
+  const [signalDraft, setSignalDraft] = useState([]);
+  const [checkInOpen, setCheckInOpen] = useState(false);
   const [weather, setWeather] = useState(() => Array.isArray(stored?.weather) ? stored.weather : []);
   const [anchorAt, setAnchorAt] = useState(() => stored?.anchorAt || plannedAnchor(race)?.toISOString() || "");
   const [arrivalRound, setArrivalRound] = useState(() => Math.max(0, Number(stored?.arrivalRound || 0)));
@@ -197,8 +208,8 @@ export default function PitCrewLive({ race, onClose }) {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    window.localStorage.setItem(storageKey, JSON.stringify({ anchorAt, history, flags, weather, arrivalRound, arrivalAt, stockIds, customProducts }));
-  }, [anchorAt, arrivalAt, arrivalRound, customProducts, flags, history, stockIds, storageKey, weather]);
+    window.localStorage.setItem(storageKey, JSON.stringify({ anchorAt, history, flags, incomingFlags, incomingAt, incomingRound, weather, arrivalRound, arrivalAt, stockIds, customProducts }));
+  }, [anchorAt, arrivalAt, arrivalRound, customProducts, flags, history, incomingAt, incomingFlags, incomingRound, stockIds, storageKey, weather]);
 
   useEffect(() => {
     if (loadedPitRound.current === pitRound || editingRound != null) return;
@@ -233,7 +244,18 @@ export default function PitCrewLive({ race, onClose }) {
 
   // These values are cheap render-time derivations. Let the React Compiler decide
   // whether to memoize them instead of maintaining dependency arrays manually.
-  const effectiveWeather = [...new Set([...(autoWeather?.flags || []), ...weather])];
+  const incomingApplies = Number(incomingRound || 0) === Number(timing.currentRound || 0) && Boolean(incomingAt);
+  const effectiveAthleteFlags = [...new Set([...(flags || []), ...(incomingApplies ? incomingFlags : [])])];
+  const nextLoopWeather = pitWeatherForecastForLoops({
+    observation: autoWeather || {},
+    nextStart: timing.nextStart,
+    intervalMinutes,
+    nextRound: Math.max(1, Number(timing.currentRound || 0) + 1),
+    count: 3,
+  });
+  const nextWeatherAlert = pitWeatherAlert(nextLoopWeather[0]);
+  const weatherCrewActions = pitWeatherCrewActions(nextLoopWeather[0], effectiveAthleteFlags);
+  const effectiveWeather = [...new Set([...(autoWeather?.flags || []), ...weather, ...(nextLoopWeather[0]?.flags || [])])];
   const previousHistory = history.filter((record) => Number(record.round) !== Number(saveRound));
   const planningHistory = previousHistory.map((record) => ({
     ...record,
@@ -259,7 +281,7 @@ export default function PitCrewLive({ race, onClose }) {
     round: Math.max(1, timing.currentRound || 1),
     minutesToStart: timing.minutesToStart,
     history: planningHistory,
-    flags,
+    flags: effectiveAthleteFlags,
     weather: effectiveWeather,
     products: productCatalog,
     availableProductIds: activeStockIds,
@@ -299,7 +321,7 @@ export default function PitCrewLive({ race, onClose }) {
     elapsedMinutes,
     minutesToStart: timing.minutesToStart,
     mode: timing.mode,
-    flags,
+    flags: effectiveAthleteFlags,
     weather: effectiveWeather,
     recentWeather: planningHistory.slice(-3).map((record) => record.weather || []),
     observation: autoWeather,
@@ -351,7 +373,27 @@ export default function PitCrewLive({ race, onClose }) {
     const round = Math.max(1, Number(timing.currentRound));
     setArrivalRound(round);
     setArrivalAt(new Date().toISOString());
-    setSaveMessage(`Loop ${round}: Athlet zurück · noch ${pitCountdownLabel(timing.minutesToStart)} bis zum nächsten Start.`);
+    setFlags(incomingApplies ? [...incomingFlags] : []);
+    setCheckInOpen(true);
+    setSaveMessage(`Loop ${round}: Athlet zurück · Countdown bis Start ${pitCountdownLabel(timing.minutesToStart)}.`);
+  }
+
+  function sendIncomingSignal() {
+    if (!timing.started || !(Number(timing.currentRound) > 0)) return;
+    const round = Math.max(1, Number(timing.currentRound));
+    setIncomingFlags([...signalDraft]);
+    setIncomingRound(round);
+    setIncomingAt(new Date().toISOString());
+    setSaveMessage(signalDraft.length ? `Athletenmeldung für Loop ${round} gesendet · Crew kann vorbereiten.` : `Athletenmeldung für Loop ${round}: alles okay.`);
+  }
+
+  function finishAthleteCheckIn(clear = false) {
+    if (clear) setFlags([]);
+    setCheckInOpen(false);
+    setIncomingFlags([]);
+    setIncomingAt("");
+    setIncomingRound(0);
+    setSignalDraft([]);
   }
 
   function toggleStockProduct(productId) {
@@ -490,6 +532,9 @@ export default function PitCrewLive({ race, onClose }) {
         selectionDirty,
         arrivalRound,
         arrivalAt,
+        incomingFlags,
+        incomingAt,
+        incomingRound,
         carryAdjust,
         editingRound,
         saveMessage,
@@ -498,7 +543,7 @@ export default function PitCrewLive({ race, onClose }) {
       };
     }
     if (typeof window !== "undefined") {
-      if (!demoActive) window.localStorage.setItem(baseStorageKey, JSON.stringify({ anchorAt, history, flags, weather, arrivalRound, arrivalAt, stockIds, customProducts }));
+      if (!demoActive) window.localStorage.setItem(baseStorageKey, JSON.stringify({ anchorAt, history, flags, incomingFlags, incomingAt, incomingRound, weather, arrivalRound, arrivalAt, stockIds, customProducts }));
       window.localStorage.removeItem(`${baseStorageKey}:demo`);
     }
     setDemoActive(true);
@@ -506,6 +551,11 @@ export default function PitCrewLive({ race, onClose }) {
     setDemoMinutesToStart(10);
     setHistory([]);
     setFlags([]);
+    setIncomingFlags([]);
+    setIncomingAt("");
+    setIncomingRound(0);
+    setSignalDraft([]);
+    setCheckInOpen(false);
     setWeather([]);
     setArrivalRound(0);
     setArrivalAt("");
@@ -524,6 +574,11 @@ export default function PitCrewLive({ race, onClose }) {
     setDemoActive(false);
     setHistory(Array.isArray(liveStored?.history) ? liveStored.history : []);
     setFlags(Array.isArray(liveStored?.flags) ? liveStored.flags : []);
+    setIncomingFlags(Array.isArray(liveStored?.incomingFlags) ? liveStored.incomingFlags : (Array.isArray(transient.incomingFlags) ? transient.incomingFlags : []));
+    setIncomingAt(String(liveStored?.incomingAt || transient.incomingAt || ""));
+    setIncomingRound(Math.max(0, Number(liveStored?.incomingRound || transient.incomingRound || 0)));
+    setSignalDraft([]);
+    setCheckInOpen(false);
     setWeather(Array.isArray(liveStored?.weather) ? liveStored.weather : []);
     setAnchorAt(liveStored?.anchorAt || plannedAnchor(race)?.toISOString() || "");
     setArrivalRound(Math.max(0, Number(liveStored?.arrivalRound || transient.arrivalRound || 0)));
@@ -795,6 +850,11 @@ export default function PitCrewLive({ race, onClose }) {
     if (typeof window !== "undefined") window.localStorage.removeItem(storageKey);
     setHistory([]);
     setFlags([]);
+    setIncomingFlags([]);
+    setIncomingAt("");
+    setIncomingRound(0);
+    setSignalDraft([]);
+    setCheckInOpen(false);
     setWeather([]);
     setArrivalRound(0);
     setArrivalAt("");
@@ -818,10 +878,21 @@ export default function PitCrewLive({ race, onClose }) {
 
       <main className="pit-live-main">
         <details className="pit-live-collapse pit-live-weather-top">
-          <summary><span>WETTER</span><b>{autoWeather ? `${pitWeatherIcon(autoWeather.weatherCode, autoWeather.isDay)} ${autoWeather.temperature} °C · ${autoWeather.windSpeed} km/h` : weatherError ? "Auto nicht verfügbar" : "wird automatisch geladen …"}</b><i>›</i></summary>
+          <summary><span>WETTER</span><b>{autoWeather ? `${pitWeatherIcon(autoWeather.weatherCode, autoWeather.isDay)} ${autoWeather.temperature} °C · ${autoWeather.windSpeed} km/h${nextWeatherAlert && nextWeatherAlert.tone !== "good" ? ` · ${nextWeatherAlert.icon} ${nextWeatherAlert.label}` : ""}` : weatherError ? "Auto nicht verfügbar" : "wird automatisch geladen …"}</b><i>›</i></summary>
           <div className="pit-live-collapse-body">
-            {autoWeather ? <div className="pit-live-weather-facts"><span><b>{autoWeather.feelsLike} °C</b> gefühlt</span><span><b>{autoWeather.humidity} %</b> Feuchte</span><span><b>{formatNumber(autoWeather.precipitation)} mm</b> Regen</span><span><b>{autoWeather.windGusts} km/h</b> Böen</span></div> : <p className="pit-live-help">{weatherError || "Wetter wird geladen …"}</p>}
-            <p className="pit-live-help">Automatisch erkannt. Nur antippen, wenn die Situation vor Ort deutlich anders ist.</p>
+            {autoWeather ? <>
+              <div className="pit-live-weather-facts"><span><b>{autoWeather.feelsLike} °C</b> gefühlt</span><span><b>{autoWeather.humidity} %</b> Feuchte</span><span><b>{formatNumber(autoWeather.precipitation)} mm</b> Regen</span><span><b>{autoWeather.windGusts} km/h</b> Böen</span></div>
+              <div className="pit-live-weather-horizon"><span>PLANUNG</span><b>{Math.round(Number(autoWeather.horizonMinutes || 0) / 60)} h</b><small>{race?.eventLimitMode === "open" ? "Open End · Einsatzhorizont, kein Rennende" : "Eventhorizont"}</small></div>
+              {nextLoopWeather.length > 0 && <div className="pit-live-weather-next">
+                <div className="pit-live-weather-next-head"><small>NÄCHSTE LOOPS</small><strong>{nextWeatherAlert?.label || "Wettertrend"}</strong></div>
+                <div className="pit-live-weather-loop-grid">{nextLoopWeather.map((forecast) => {
+                  const alert = pitWeatherAlert(forecast);
+                  return <article key={forecast.round} className={`tone-${alert?.tone || "good"}`}><div><span>LOOP {forecast.round}</span><b>{hhmm(forecast.startAt)}–{hhmm(forecast.endAt)}</b></div><strong>{pitWeatherIcon(forecast.weatherCode, forecast.isDay)} {forecast.temperature} °C</strong><small>Regen {forecast.precipitationProbability} % · Wind {forecast.windSpeed} km/h · Böen {forecast.windGusts}</small></article>;
+                })}</div>
+              </div>}
+              {weatherCrewActions.length > 0 && <div className="pit-live-weather-actions"><small>CREW VORBEREITEN</small><div>{weatherCrewActions.map((action) => <span key={action}>{action}</span>)}</div></div>}
+            </> : <p className="pit-live-help">{weatherError || "Wetter wird geladen …"}</p>}
+            <p className="pit-live-help">Forecast und Athletenstatus werden gemeinsam bewertet. Nur antippen, wenn die Situation vor Ort deutlich anders ist.</p>
             <div className="pit-live-weather-grid">
               {WEATHER_OPTIONS.map(([key, icon, label]) => <button type="button" key={key} className={weather.includes(key) ? "active" : ""} onClick={() => setWeather((current) => toggleValue(current, key))}>{icon} {label}</button>)}
             </div>
@@ -830,9 +901,16 @@ export default function PitCrewLive({ race, onClose }) {
 
         <section className={`pit-live-clock mode-${timing.mode} ${timing.started ? "" : "prestart"}`}>
           <b>{timing.started ? `RUNDE ${timing.currentRound}` : "VOR START"}</b>
-          <span>Nächster Start <strong>{hhmm(timing.nextStart)}</strong>{timing.started && arrivalState.arrived && <small>Noch {pitCountdownLabel(timing.minutesToStart)}</small>}</span>
+          <span>Nächster Start <strong>{hhmm(timing.nextStart)}</strong>{timing.started && arrivalState.arrived && <small>Countdown bis Start: {pitCountdownLabel(timing.minutesToStart)}</small>}</span>
           {timing.started && <em><span>Pit Modus:</span><strong>{arrivalState.arrived ? modeTitle : "WARTET AUF ATHLET"}</strong></em>}
         </section>
+
+        {incomingApplies && (
+          <section className="pit-live-incoming">
+            <div><small>ATHLET IM ANFLUG · LOOP {timing.currentRound}</small><strong>{compactStatus(incomingFlags)}</strong><span>Vorabmeldung synchronisiert{incomingAt ? ` · ${hhmm(new Date(incomingAt))}` : ""}. Crew-Hinweise und Fueling reagieren bereits darauf.</span></div>
+            <b>→ vorbereiten</b>
+          </section>
+        )}
 
         {demoActive && (
           <section className="pit-live-demo-panel">
@@ -858,6 +936,17 @@ export default function PitCrewLive({ race, onClose }) {
             <p>Einmal die echte Startzeit setzen. Danach leitet die Uhr alle Loops und Quick-Pit-Fenster automatisch ab.</p>
             <button type="button" onClick={() => setAnchorAt(new Date().toISOString())}>Rennen jetzt starten</button>
           </section>
+        )}
+
+        {athleteNeedsArrival && (
+          <details className="pit-live-collapse pit-live-athlete-signal">
+            <summary><span>ATHLETENMELDUNG</span><b>{incomingApplies ? compactStatus(incomingFlags) : "Status vor Rückkehr senden"}</b><i>›</i></summary>
+            <div className="pit-live-collapse-body">
+              <p className="pit-live-help">Auf dem Athleten-Handy oder durch Begleitung antippen. Die Meldung wird über den gemeinsamen Crew-Link synchronisiert und passt die Vorbereitung schon vor der Rückkehr an.</p>
+              <div className="pit-live-status-grid">{STATUS_OPTIONS.map(([key, icon, label]) => <button type="button" key={key} className={signalDraft.includes(key) ? "active" : ""} onClick={() => setSignalDraft((current) => toggleValue(current, key))}><b>{icon}</b><span>{label}</span></button>)}</div>
+              <button type="button" className="pit-live-primary pit-live-wide" onClick={sendIncomingSignal}>{signalDraft.length ? "ATHLETENMELDUNG SENDEN" : "ALLES OKAY SENDEN"}</button>
+            </div>
+          </details>
         )}
 
         {athleteNeedsArrival && (
@@ -888,12 +977,13 @@ export default function PitCrewLive({ race, onClose }) {
           {suggestionPit.length > 0 && <div className="pit-live-suggestion-group"><small>IM PIT ANBIETEN</small><div>{suggestionPit.map((entry) => <span key={`pit:${entry.productId}:${entry.portionId}`}>{selectionLabel(entry, productCatalog)}</span>)}</div></div>}
           {suggestionLoop.length > 0 && <div className="pit-live-suggestion-group"><small>FÜR NÄCHSTE LOOP BEREITLEGEN</small><div>{suggestionLoop.map((entry) => <span key={`loop:${entry.productId}:${entry.portionId}`}>{selectionLabel(entry, productCatalog)}</span>)}</div></div>}
           {!recommendation.selection.length && <div className="pit-live-stock-warning">⚠️ Kein passendes Fuel im Vorrat aktiv. Vorrat öffnen und verfügbare Sachen auswählen.</div>}
+          {weatherCrewActions.length > 0 && <div className="pit-live-crew-prep"><small>LIVE · CREW JETZT</small><div>{weatherCrewActions.slice(0, 4).map((action) => <span key={action}>{action}</span>)}</div></div>}
           <p><b>Warum?</b> {recommendation.why}</p>
           <div className="pit-live-auto-plan-note">✓ Der Idealvorschlag ist automatisch vorausgewählt. Nur ändern, wenn es im Pit tatsächlich anders läuft.</div>
         </section>
 
         <details className="pit-live-collapse">
-          <summary><span>ATHLET</span><b>{compactStatus(flags)}</b><i>›</i></summary>
+          <summary><span>ATHLET</span><b>{compactStatus(effectiveAthleteFlags)}</b><i>›</i></summary>
           <div className="pit-live-collapse-body">
             <p className="pit-live-help">Nur Änderungen melden. Wenn alles gut ist, muss hier nichts angefasst werden.</p>
             <div className="pit-live-status-grid">
@@ -977,6 +1067,14 @@ export default function PitCrewLive({ race, onClose }) {
           </button>
         </section>
       </main>
+
+      {checkInOpen && <div className="pit-live-checkin-backdrop" role="presentation">
+        <section className="pit-live-checkin" role="dialog" aria-modal="true" aria-label="Athletenstatus nach Rückkehr">
+          <div className="pit-live-checkin-head"><div><small>ATHLET ZURÜCK · LOOP {timing.currentRound}</small><h3>Wie kommt der Athlet rein?</h3><p>Ein Tap reicht. Die Crew-Empfehlung reagiert sofort auf den Status.</p></div></div>
+          <div className="pit-live-status-grid">{STATUS_OPTIONS.map(([key, icon, label]) => <button type="button" key={key} className={flags.includes(key) ? "active" : ""} onClick={() => setFlags((current) => toggleValue(current, key))}><b>{icon}</b><span>{label}</span></button>)}</div>
+          <div className="pit-live-checkin-actions"><button type="button" className="pit-live-secondary" onClick={() => finishAthleteCheckIn(true)}>✓ Alles okay</button><button type="button" className="pit-live-primary" onClick={() => finishAthleteCheckIn(false)}>STATUS ÜBERNEHMEN</button></div>
+        </section>
+      </div>}
     </div>
   );
 }

@@ -81,11 +81,26 @@ function exactNumberLabel(value, digits = 2) {
 function sourceProfileWithEventContext(profile = {}, event = null) {
   if (!event) return profile;
   const eventDistanceKm = Number(event.targetKm || event.targetMaxKm || event.targetMinKm || 0);
+  const eventProfile = racePrepProfileFromEvent(event);
+  const fixedLoopPlanning = String(event.loopMode || profile.loopMode || "") === "fixed_interval"
+    && (Number(event.planningHorizonHours || 0) > 0 || String(event.eventLimitMode || "") === "limited");
   return {
     ...profile,
+    ...(fixedLoopPlanning ? {
+      format: eventProfile.format,
+      rounds: eventProfile.rounds,
+      durationMinutes: eventProfile.durationMinutes,
+      distanceKm: eventProfile.distanceKm,
+      durationEstimated: false,
+    } : {}),
     eventDistanceKm: eventDistanceKm > 0 ? eventDistanceKm : Number(profile.eventDistanceKm || 0),
     courseType: event.courseType || profile.courseType || "",
     loopMode: event.loopMode || profile.loopMode || "",
+    loopKm: Number(event.loopKm || profile.loopKm || 0),
+    loopIntervalMinutes: Number(event.loopIntervalMinutes || profile.loopIntervalMinutes || 0),
+    eventLimitMode: event.eventLimitMode || profile.eventLimitMode || "",
+    planningHorizonHours: Number(event.planningHorizonHours || profile.planningHorizonHours || 0),
+    performanceTargetKm: eventDistanceKm > 0 ? eventDistanceKm : Number(profile.performanceTargetKm || 0),
     eventTimeLimit: event.eventTimeLimit || profile.eventTimeLimit || "",
     location: event.location || profile.location || "",
     place: event.place || profile.place || null,
@@ -242,6 +257,11 @@ export default function RaceCoach() {
     location: source?.profile?.location || "",
     place: source?.profile?.place || null,
     loopIntervalMinutes: plan?.profile?.loopIntervalMinutes || 60,
+    loopKm: Number(plan?.profile?.loopKm || 0),
+    targetKm: Number(source?.profile?.performanceTargetKm || source?.profile?.eventDistanceKm || 0),
+    eventLimitMode: source?.profile?.eventLimitMode || "",
+    planningHorizonHours: Number(source?.profile?.planningHorizonHours || 0),
+    eventTimeLimit: source?.profile?.eventTimeLimit || "",
   } : null;
   const pitCrewShareToken = sourceKey
     ? (pitCrewShareTokens[sourceKey] || storedPitCrewShareToken(sourceKey))
@@ -627,6 +647,8 @@ export default function RaceCoach() {
           loopMode: source?.profile?.loopMode || "",
           loopKm: Number(source?.profile?.loopKm || 0),
           loopIntervalMinutes: Number(source?.profile?.loopIntervalMinutes || 0),
+          eventLimitMode: source?.profile?.eventLimitMode || "",
+          planningHorizonHours: Number(source?.profile?.planningHorizonHours || 0),
           eventTimeLimit: source?.profile?.eventTimeLimit || "",
         }}
         routeProfile={setup.routeProfile}

@@ -14,6 +14,8 @@ export const mission = {
   loopKm: 0,
   loopMode: "free",
   loopIntervalMinutes: 0,
+  eventLimitMode: "",
+  planningHorizonHours: 0,
   eventTimeLimit: "",
   plannedStopMinutes: 0,
   aidStationMode: "unspecified",

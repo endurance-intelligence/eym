@@ -96,6 +96,9 @@ export function emptyRacePrepProfile() {
     loopKm: 6.7,
     loopIntervalMinutes: 60,
     rounds: 10,
+    eventLimitMode: "",
+    planningHorizonHours: 0,
+    performanceTargetKm: 0,
     source: "custom",
     originEventId: "",
     routeGpxUrl: "",
@@ -113,10 +116,21 @@ export function racePrepProfileFromEvent(event = {}) {
   const text = `${event.name || ""} ${event.courseType || ""} ${event.loopMode || ""}`.toLowerCase();
   const loopKm = numeric(event.loopKm);
   const targetDistance = numeric(event.targetKm || event.targetMaxKm || event.targetMinKm);
-  const eventDuration = parseDuration(event.eventTimeLimit) || parseDuration(event.targetTime);
   const isLoop = loopKm > 0 && (/backyard|loop|runde|heartbeat/.test(text) || event.loopMode && event.loopMode !== "free");
-  const rounds = isLoop && targetDistance > 0 ? Math.max(1, Math.round(targetDistance / loopKm)) : 0;
   const loopIntervalMinutes = numeric(event.loopIntervalMinutes) || (isLoop && /backyard/.test(text) ? 60 : 0);
+  const eventLimitMode = String(event.eventLimitMode || "").toLowerCase() || (event.loopMode === "fixed_interval" ? (event.eventTimeLimit ? "limited" : "open") : "");
+  const planningHorizonHours = numeric(event.planningHorizonHours);
+  const fixedLoopDuration = isLoop && event.loopMode === "fixed_interval"
+    ? eventLimitMode === "limited"
+      ? parseDuration(event.eventTimeLimit)
+      : planningHorizonHours > 0
+        ? planningHorizonHours * 60
+        : 0
+    : 0;
+  const eventDuration = fixedLoopDuration || parseDuration(event.eventTimeLimit) || parseDuration(event.targetTime);
+  const horizonRounds = isLoop && loopIntervalMinutes > 0 && eventDuration > 0 ? Math.ceil(eventDuration / loopIntervalMinutes) : 0;
+  const targetRounds = isLoop && targetDistance > 0 ? Math.max(1, Math.round(targetDistance / loopKm)) : 0;
+  const rounds = horizonRounds || targetRounds;
   const format = isLoop ? "loop" : targetDistance > 0 ? "distance" : "time";
 
   return normalizeRacePrepProfile({
@@ -129,6 +143,9 @@ export function racePrepProfileFromEvent(event = {}) {
     loopKm: loopKm || 6.7,
     loopIntervalMinutes: loopIntervalMinutes || 60,
     rounds: rounds || 10,
+    eventLimitMode,
+    planningHorizonHours,
+    performanceTargetKm: targetDistance,
     source: "mission",
     originEventId: event.id || "",
     routeGpxUrl: event.routeGpxUrl || event.gpxUrl || "",

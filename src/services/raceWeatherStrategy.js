@@ -99,6 +99,17 @@ function estimatedDurationFromDistance(distanceKm = 0) {
 }
 
 export function resolveRaceWeatherDuration({ race = {}, targetDurationMinutes = 0 } = {}) {
+  const loopMode = String(race?.loopMode || "").toLowerCase();
+  const eventLimitMode = String(race?.eventLimitMode || "").toLowerCase();
+  const planningHorizonHours = Number(race?.planningHorizonHours || 0);
+  if (loopMode === "fixed_interval" && eventLimitMode === "open" && planningHorizonHours > 0) {
+    return { minutes: planningHorizonHours * 60, estimated: false, source: "planning-horizon", label: "Crew-/Wetter-Planungshorizont" };
+  }
+  if (loopMode === "fixed_interval" && eventLimitMode === "limited") {
+    const limitedDuration = durationInputMinutes(race?.eventTimeLimit);
+    if (limitedDuration > 0) return { minutes: limitedDuration, estimated: false, source: "event-time-limit", label: "Rennfenster aus Eventlimit" };
+  }
+
   const explicit = Number(targetDurationMinutes || 0);
   if (explicit > 0) return { minutes: explicit, estimated: false, source: "race-strategy", label: "Rennfenster" };
 
@@ -330,7 +341,8 @@ function sectionCountForDuration(durationMinutes) {
   if (duration <= 45) return 1;
   if (duration <= 360) return 3;
   if (duration <= 720) return 4;
-  return 6;
+  if (duration <= 1440) return 6;
+  return 8;
 }
 
 function clockLabel(epoch) {

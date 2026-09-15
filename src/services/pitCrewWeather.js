@@ -1,3 +1,5 @@
+import { resolveRaceWeatherDuration } from "./raceWeatherStrategy.js";
+
 const FORECAST_URL = "https://api.open-meteo.com/v1/forecast";
 const GEOCODE_URL = "https://geocoding-api.open-meteo.com/v1/search";
 
@@ -46,13 +48,14 @@ function browserPosition() {
 export function pitWeatherSignals(observation = {}) {
   const temperature = Number(observation.temperature);
   const precipitation = Number(observation.precipitation || 0);
+  const precipitationProbability = Number(observation.precipitationProbability || 0);
   const weatherCode = Number(observation.weatherCode || 0);
   const windSpeed = Number(observation.windSpeed || 0);
   const windGusts = Number(observation.windGusts || 0);
   const flags = [];
   if (Number.isFinite(temperature) && temperature >= 24) flags.push("hot");
   if (Number.isFinite(temperature) && temperature <= 9) flags.push("cold");
-  if (precipitation >= 0.1 || (weatherCode >= 51 && weatherCode <= 82) || weatherCode >= 95) flags.push("rain");
+  if (precipitation >= 0.1 || precipitationProbability >= 45 || (weatherCode >= 51 && weatherCode <= 82) || weatherCode >= 95) flags.push("rain");
   if (windSpeed >= 25 || windGusts >= 40) flags.push("wind");
   return flags;
 }
@@ -67,8 +70,95 @@ export function pitWeatherIcon(weatherCode = 0, isDay = true) {
   return isDay ? "☀️" : "🌙";
 }
 
+function hourlyRows(hourly = {}) {
+  return (Array.isArray(hourly.time) ? hourly.time : []).map((time, index) => ({
+    time,
+    epoch: new Date(time).getTime(),
+    temperature: Math.round(Number(hourly.temperature_2m?.[index] || 0)),
+    feelsLike: Math.round(Number(hourly.apparent_temperature?.[index] || 0)),
+    humidity: Math.round(Number(hourly.relative_humidity_2m?.[index] || 0)),
+    precipitationProbability: Math.round(Number(hourly.precipitation_probability?.[index] || 0)),
+    precipitation: Number(hourly.precipitation?.[index] || 0),
+    weatherCode: Number(hourly.weather_code?.[index] || 0),
+    windSpeed: Math.round(Number(hourly.wind_speed_10m?.[index] || 0)),
+    windGusts: Math.round(Number(hourly.wind_gusts_10m?.[index] || 0)),
+    isDay: Boolean(hourly.is_day?.[index]),
+  })).filter((row) => Number.isFinite(row.epoch));
+}
+
+function average(values = []) {
+  return values.length ? values.reduce((sum, value) => sum + Number(value || 0), 0) / values.length : 0;
+}
+
+export function pitWeatherWindow(rows = [], startAt, endAt) {
+  const start = startAt instanceof Date ? startAt.getTime() : new Date(startAt).getTime();
+  const end = endAt instanceof Date ? endAt.getTime() : new Date(endAt).getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
+  const candidates = (Array.isArray(rows) ? rows : []).filter((row) => row.epoch >= start - 30 * 60000 && row.epoch <= end + 30 * 60000);
+  if (!candidates.length) return null;
+  const midpoint = candidates[Math.floor(candidates.length / 2)];
+  const result = {
+    startAt: new Date(start),
+    endAt: new Date(end),
+    temperature: Math.round(average(candidates.map((row) => row.temperature))),
+    feelsLike: Math.round(average(candidates.map((row) => row.feelsLike))),
+    humidity: Math.round(average(candidates.map((row) => row.humidity))),
+    precipitationProbability: Math.max(...candidates.map((row) => row.precipitationProbability)),
+    precipitation: Math.max(...candidates.map((row) => row.precipitation)),
+    weatherCode: midpoint.weatherCode,
+    isDay: midpoint.isDay,
+    windSpeed: Math.max(...candidates.map((row) => row.windSpeed)),
+    windGusts: Math.max(...candidates.map((row) => row.windGusts)),
+  };
+  return { ...result, flags: pitWeatherSignals(result) };
+}
+
+export function pitWeatherForecastForLoops({ observation = {}, nextStart = null, intervalMinutes = 60, nextRound = 1, count = 3 } = {}) {
+  if (!nextStart || !Array.isArray(observation?.hourly) || !observation.hourly.length) return [];
+  const start = nextStart instanceof Date ? nextStart : new Date(nextStart);
+  if (Number.isNaN(start.getTime())) return [];
+  const intervalMs = Math.max(10, Number(intervalMinutes || 60)) * 60000;
+  return Array.from({ length: Math.max(1, count) }, (_, index) => {
+    const loopStart = new Date(start.getTime() + index * intervalMs);
+    const loopEnd = new Date(loopStart.getTime() + intervalMs);
+    const forecast = pitWeatherWindow(observation.hourly, loopStart, loopEnd);
+    return forecast ? { ...forecast, round: Math.max(1, Number(nextRound || 1)) + index } : null;
+  }).filter(Boolean);
+}
+
+export function pitWeatherAlert(forecast = null) {
+  if (!forecast) return null;
+  const flags = forecast.flags || pitWeatherSignals(forecast);
+  if (flags.includes("rain")) return { tone: "rain", icon: "🌧️", label: `Loop ${forecast.round}: Regen/Nässe erwartet` };
+  if (flags.includes("hot")) return { tone: "hot", icon: "☀️", label: `Loop ${forecast.round}: Wärme erwartet` };
+  if (flags.includes("cold")) return { tone: "cold", icon: "🥶", label: `Loop ${forecast.round}: kühl` };
+  if (flags.includes("wind")) return { tone: "wind", icon: "💨", label: `Loop ${forecast.round}: Wind beachten` };
+  return { tone: "good", icon: pitWeatherIcon(forecast.weatherCode, forecast.isDay), label: `Loop ${forecast.round}: Bedingungen ruhig` };
+}
+
+export function pitWeatherCrewActions(forecast = null, athleteFlags = []) {
+  const actions = [];
+  const weatherFlags = forecast?.flags || pitWeatherSignals(forecast || {});
+  const athlete = new Set(Array.isArray(athleteFlags) ? athleteFlags : []);
+  if (weatherFlags.includes("rain")) actions.push("🧥 Regenjacke bereitlegen", "🧦 trockene Socken", "🧻 Handtuch");
+  if (weatherFlags.includes("hot") || athlete.has("too-warm")) actions.push("🧊 Kühlung", "💧 kaltes Getränk", "🧂 Elektrolyte im Blick");
+  if (weatherFlags.includes("cold") || athlete.has("too-cold")) actions.push("🧥 trockene Wärmeschicht", "☕ warmes Getränk optional");
+  if (weatherFlags.includes("wind")) actions.push("🌬️ Windschutz");
+  if (athlete.has("thirsty")) actions.unshift("💧 Getränk zuerst");
+  if (athlete.has("hungry")) actions.push("🍽️ Essen griffbereit");
+  if (athlete.has("wants-salty")) actions.push("🥨 salzige Option");
+  if (athlete.has("sweet-fatigue")) actions.push("🥨 nicht-süße Alternative");
+  if (athlete.has("stomach")) actions.push("🤢 magenruhige, bewährte Option");
+  if (athlete.has("heavy-legs")) actions.push("🦵 Beine kurz hoch / locker halten");
+  if (athlete.has("tired")) actions.push("😴 Müdigkeit beobachten");
+  return [...new Set(actions)].slice(0, 6);
+}
+
 export async function fetchPitCrewWeather(race = {}) {
   const coordinates = raceCoordinates(race) || await geocodeRaceLocation(race) || await browserPosition();
+  const duration = resolveRaceWeatherDuration({ race });
+  const horizonMinutes = Math.max(120, Number(duration.minutes || 0));
+  const forecastDays = Math.min(16, Math.max(2, Math.ceil(horizonMinutes / 1440) + 2));
   const params = new URLSearchParams({
     latitude: String(coordinates.latitude),
     longitude: String(coordinates.longitude),
@@ -82,8 +172,19 @@ export async function fetchPitCrewWeather(race = {}) {
       "wind_gusts_10m",
       "is_day",
     ].join(","),
+    hourly: [
+      "temperature_2m",
+      "apparent_temperature",
+      "relative_humidity_2m",
+      "precipitation_probability",
+      "precipitation",
+      "weather_code",
+      "wind_speed_10m",
+      "wind_gusts_10m",
+      "is_day",
+    ].join(","),
     timezone: "auto",
-    forecast_days: "1",
+    forecast_days: String(forecastDays),
   });
   const response = await fetch(`${FORECAST_URL}?${params}`);
   if (!response.ok) throw new Error("Wetter konnte gerade nicht geladen werden.");
@@ -94,12 +195,17 @@ export async function fetchPitCrewWeather(race = {}) {
     feelsLike: Math.round(Number(data.current.apparent_temperature || 0)),
     humidity: Math.round(Number(data.current.relative_humidity_2m || 0)),
     precipitation: Number(data.current.precipitation || 0),
+    precipitationProbability: 0,
     weatherCode: Number(data.current.weather_code || 0),
     windSpeed: Math.round(Number(data.current.wind_speed_10m || 0)),
     windGusts: Math.round(Number(data.current.wind_gusts_10m || 0)),
     isDay: Boolean(data.current.is_day),
     updatedAt: data.current.time || new Date().toISOString(),
     locationSource: coordinates.source,
+    hourly: hourlyRows(data.hourly || {}),
+    horizonMinutes,
+    horizonSource: duration.source,
+    horizonLabel: duration.label,
   };
   return { ...weather, flags: pitWeatherSignals(weather) };
 }
