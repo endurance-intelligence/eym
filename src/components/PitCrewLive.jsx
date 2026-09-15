@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   assessPitSelection,
   buildPitCrewCustomProduct,
+  PIT_CARB_TARGET,
   PIT_CREW_DEFAULT_STOCK_IDS,
   PIT_CREW_PRODUCTS,
   pitMetricStatus,
@@ -119,9 +120,10 @@ function formatNumber(value, digits = 1) {
 }
 
 function selectionLabel(entry, products = PIT_CREW_PRODUCTS) {
-  const product = products.find((item) => item.id === entry.productId);
-  const portion = product?.portions.find((item) => String(item.id) === String(entry.portionId));
-  if (!product || !portion) return entry.productId;
+  if (!entry || typeof entry !== "object") return "Versorgung unbekannt";
+  const product = (Array.isArray(products) ? products : PIT_CREW_PRODUCTS).find((item) => String(item?.id) === String(entry.productId));
+  const portion = product?.portions?.find((item) => String(item.id) === String(entry.portionId));
+  if (!product || !portion) return String(entry.productId || "Versorgung unbekannt");
   const count = quantity(entry);
   return `${product.icon} ${product.label} · ${portion.label}${count > 1 ? ` ×${count}` : ""}`;
 }
@@ -271,7 +273,7 @@ export default function PitCrewLive({ race, onClose }) {
   const pendingCarry = [...history].reverse().find((record) => record.carryStatus === "pending" && Array.isArray(record.carrySelection) && record.carrySelection.length);
   const pendingLoopNumber = pendingCarry ? Number(pendingCarry.round) + 1 : null;
   const arrivalPendingItems = pendingCarry && Number(pendingLoopNumber) === Number(timing.currentRound)
-    ? pendingCarry.carrySelection || []
+    ? (Array.isArray(pendingCarry.carrySelection) ? pendingCarry.carrySelection : []).filter((entry) => entry && typeof entry === "object" && entry.productId != null && entry.portionId != null)
     : [];
   const arrivalPartialRated = arrivalPendingItems.length > 0 && arrivalPendingItems.every((entry, index) =>
     Object.prototype.hasOwnProperty.call(carryAdjust, `${pendingCarry?.round ?? "loop"}:${entry.productId}:${entry.portionId}:${index}`),
@@ -533,7 +535,7 @@ export default function PitCrewLive({ race, onClose }) {
   }
 
   function carryResultKey(entry, index) {
-    return `${pendingCarry?.round ?? "loop"}:${entry.productId}:${entry.portionId}:${index}`;
+    return `${pendingCarry?.round ?? "loop"}:${String(entry?.productId || "unknown")}:${String(entry?.portionId || "unknown")}:${index}`;
   }
 
   function setCarryResult(entry, index, intakeFactor) {
@@ -1046,6 +1048,24 @@ export default function PitCrewLive({ race, onClose }) {
         </details>
 
         {!careNeedsAttention && renderAthleteCareSection()}
+
+        <details className="pit-live-collapse pit-live-carb-audit">
+          <summary><span>KH-BILANZ</span><b>Ziel {PIT_CARB_TARGET.center} g/h · {PIT_CARB_TARGET.min}–{PIT_CARB_TARGET.max}</b><i>›</i></summary>
+          <div className="pit-live-collapse-body">
+            <p className="pit-live-help">Backyard-Arbeitsziel, nicht Zwang: Einzelne leichtere Stunden sind okay, solange der Verlauf passt. Defizite werden nicht aggressiv in einer Runde nachgeholt.</p>
+            <div className="pit-live-history-rows">
+              <div><em aria-hidden="true" /><b>Aktueller Vorschlag</b><span>{formatNumber(assessment.summary.carbs)} g KH · {assessment.summary.fluidMl} ml</span></div>
+              <div><em aria-hidden="true" /><b>Zuletzt tatsächlich</b><span>{formatNumber(lastActualSummary.carbs)} g KH · {lastActualSummary.fluidMl} ml</span></div>
+              <div><em aria-hidden="true" /><b>Ø letzte {historyRolling.hours || 0} h</b><span>{historyRolling.hours ? `${formatNumber(historyRolling.carbsPerHour)} g KH/h · ${historyRolling.fluidPerHour} ml/h` : "noch keine belastbare Historie"}</span></div>
+            </div>
+            <div className="pit-live-loop-plan-items">
+              {activeSelection.map((entry, index) => {
+                const item = summarizePitSelection([entry], productCatalog);
+                return <span key={`audit:${entry.productId}:${entry.portionId}:${index}`}>{selectionLabel(entry, productCatalog)} · {formatNumber(item.carbs)} g KH</span>;
+              })}
+            </div>
+          </div>
+        </details>
 
         {renderStockSection()}
         {renderPitFuelingSection()}

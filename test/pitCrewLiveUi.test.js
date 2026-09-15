@@ -47,3 +47,12 @@ test("Athlet zurück combines status and loop intake in one return sheet", () =>
   assert.match(source, /RÜCKKEHR ÜBERNEHMEN/);
   assert.match(source, /Die Crew muss den Status nicht erneut eingeben/);
 });
+
+
+test("shared Pit Crew route is protected by the application error boundary and exposes the KH audit", () => {
+  const appSource = fs.readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");
+  const pitSource = fs.readFileSync(new URL("../src/components/PitCrewLive.jsx", import.meta.url), "utf8");
+  assert.match(appSource, /<ErrorBoundary><PitCrewSharedSession token=\{sharedPitCrewToken\} \/><\/ErrorBoundary>/);
+  assert.match(pitSource, /KH-BILANZ/);
+  assert.match(pitSource, /PIT_CARB_TARGET\.center/);
+});

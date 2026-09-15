@@ -1,6 +1,6 @@
 const round1 = (value, digits = 1) => Number(Number(value || 0).toFixed(digits));
 
-export const PIT_CARB_TARGET = { min: 50, max: 60, center: 55 };
+export const PIT_CARB_TARGET = { min: 60, max: 90, center: 70 };
 
 export const PIT_CREW_PRODUCTS = [
   {
@@ -281,6 +281,7 @@ export function pitSelectionItem(productId, portionId, quantity = 1, intakeFacto
 
 export function summarizePitSelection(selection = [], products = PIT_CREW_PRODUCTS) {
   const items = (Array.isArray(selection) ? selection : [])
+    .filter((entry) => entry && typeof entry === "object" && entry.productId != null && entry.portionId != null)
     .map((entry) => pitSelectionItem(entry.productId, entry.portionId, entry.quantity, entry.intakeFactor, products))
     .filter(Boolean);
   return {
@@ -322,11 +323,14 @@ export function pitTimeMode(minutesToStart) {
 }
 
 function recordProductIds(record = {}) {
+  const safe = (value) => Array.isArray(value) ? value : [];
   return [
-    ...(record.selection || []),
-    ...(record.carrySelection || []),
-    ...(record.carriedSelection || []),
-  ].map((entry) => String(entry.productId || "")).filter(Boolean);
+    ...safe(record.selection),
+    ...safe(record.carrySelection),
+    ...safe(record.carriedSelection),
+  ].filter((entry) => entry && typeof entry === "object")
+    .map((entry) => String(entry.productId || ""))
+    .filter(Boolean);
 }
 
 function recentProductCount(history = [], productId, count = 4) {
@@ -361,23 +365,23 @@ function quickSuggestion(history, mode) {
 const STABLE_FUEL_OPTIONS = [
   {
     key: "banana",
-    selection: [choice("banana", "whole", "now"), choice("isostar", "500", "carry")],
-    why: "Alles stabil: echte Nahrung plus ein klares Hauptgetränk für die Runde.",
+    selection: [choice("banana", "whole", "now"), choice("haribo", "10g", "now"), choice("isostar", "500", "carry")],
+    why: "Alles stabil: echte Nahrung plus kleiner KH-Baustein und ein klares Hauptgetränk für die Runde.",
   },
   {
     key: "milk-roll",
-    selection: [choice("milk-roll", "1", "now"), choice("isostar", "500", "carry")],
-    why: "Alles stabil: einfache feste Kohlenhydrate plus bewährtes Hauptgetränk.",
+    selection: [choice("milk-roll", "1", "now"), choice("haribo", "10g", "now"), choice("isostar", "500", "carry")],
+    why: "Alles stabil: feste Kohlenhydrate plus kleiner KH-Baustein und bewährtes Hauptgetränk.",
   },
   {
     key: "fusilli",
-    selection: [choice("fusilli", "100", "now"), choice("isostar", "500", "carry")],
-    why: "Herzhafte Abwechslung im Pit, Flüssigkeit und Kohlenhydrate für die Runde bleiben klar.",
+    selection: [choice("fusilli", "100", "now"), choice("salt-sticks", "10g", "now"), choice("isostar", "500", "carry")],
+    why: "Herzhafte Abwechslung im Pit plus ausreichend Kohlenhydrate und ein klares Hauptgetränk.",
   },
   {
     key: "sis-beta",
-    selection: [choice("sis-beta", "1", "now"), choice("isostar", "300", "carry")],
-    why: "Kompakte Fuel-Stunde als Abwechslung zu fester Nahrung.",
+    selection: [choice("sis-beta", "1", "now"), choice("isostar", "400", "carry")],
+    why: "Kompakte Fuel-Stunde nahe am Backyard-Arbeitsziel als Abwechslung zu fester Nahrung.",
   },
 ];
 
@@ -544,20 +548,20 @@ export function assessPitSelection(selection = [], history = [], { weather = [],
   let headline = "Versorgung passt";
   let detail = `${summary.carbs} g KH in dieser Stunde · ${rolling.hours > 1 ? `${rolling.hours}-h-Schnitt ${rolling.carbsPerHour} g/h` : "erste erfasste Stunde"}.`;
 
-  if (rolling.hours >= 2 && rolling.carbsPerHour < 45) {
+  if (rolling.hours >= 2 && rolling.carbsPerHour < PIT_CARB_TARGET.min) {
     tone = "warn";
-    headline = "KH-Trend ist niedrig";
-    detail = `${rolling.hours}-h-Schnitt ${rolling.carbsPerHour} g/h. Nicht jetzt stopfen – nächste Versorgung gezielt etwas höher planen.`;
-  } else if (summary.carbs < 40 && rolling.hours >= 2 && rolling.carbsPerHour >= 48) {
+    headline = "KH-Trend ist unter dem Backyard-Korridor";
+    detail = `${rolling.hours}-h-Schnitt ${rolling.carbsPerHour} g/h. Nicht stopfen – die nächsten Pits moderat Richtung ${PIT_CARB_TARGET.center} g/h ausrichten.`;
+  } else if (summary.carbs < PIT_CARB_TARGET.min && rolling.hours >= 2 && rolling.carbsPerHour >= PIT_CARB_TARGET.min) {
     tone = "good";
-    headline = "Leichte Stunde ist okay";
+    headline = "Leichtere Stunde ist im Verlauf okay";
     detail = `${summary.carbs} g jetzt, aber ${rolling.hours}-h-Schnitt ${rolling.carbsPerHour} g/h. Kein Zwangs-Nachfüllen.`;
-  } else if (summary.carbs > 75) {
+  } else if (summary.carbs > PIT_CARB_TARGET.max) {
     tone = "warn";
     headline = "Für diese Stunde schon reichlich KH";
     detail = `${summary.carbs} g gewählt. Nichts zusätzlich erzwingen; Magen und Verlauf beobachten.`;
-  } else if (summary.carbs >= PIT_CARB_TARGET.min && summary.carbs <= 70) {
-    headline = "KH im Zielbereich";
+  } else if (summary.carbs >= PIT_CARB_TARGET.min && summary.carbs <= PIT_CARB_TARGET.max) {
+    headline = "KH im Backyard-Zielkorridor";
   }
 
   const fluidNote = summary.fluidMl < fluidFloor
@@ -578,12 +582,12 @@ export function pitMetricStatus(summary = {}, rolling = {}, { weather = [] } = {
   const fluidCeiling = weatherSet.has("hot") ? 950 : weatherSet.has("cold") ? 700 : 800;
 
   let carbsTone = "good";
-  if (carbs < 40 && (!rollingHours || rollingCarbs < 48)) carbsTone = "low";
-  if (carbs > 75 && (!rollingHours || rollingCarbs > 62)) carbsTone = "high";
+  if (carbs < PIT_CARB_TARGET.min && (!rollingHours || rollingCarbs < PIT_CARB_TARGET.min)) carbsTone = "low";
+  if (carbs > PIT_CARB_TARGET.max && (!rollingHours || rollingCarbs > PIT_CARB_TARGET.max)) carbsTone = "high";
 
   let rollingTone = rollingHours ? "good" : "neutral";
-  if (rollingHours && rollingCarbs < 45) rollingTone = "low";
-  if (rollingHours && rollingCarbs > 70) rollingTone = "high";
+  if (rollingHours && rollingCarbs < PIT_CARB_TARGET.min) rollingTone = "low";
+  if (rollingHours && rollingCarbs > PIT_CARB_TARGET.max) rollingTone = "high";
 
   let fluidTone = fluidMl ? "good" : "neutral";
   if (fluidMl > 0 && fluidMl < fluidFloor) fluidTone = "low";

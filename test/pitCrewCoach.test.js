@@ -148,7 +148,7 @@ test("rolling average smooths a light hour instead of forcing immediate catch-up
   const rolling = rollingPitAverage(history, current, 3);
   const assessment = assessPitSelection(current, history);
   assert.equal(rolling.carbsPerHour, 47);
-  assert.notEqual(assessment.detail.includes("stopfen"), true);
+  assert.match(assessment.detail, /nicht.*aggressiv|moderat|nächsten Pits/i);
 });
 
 test("pit crew live mode is limited to fixed-interval loop races", () => {
@@ -168,9 +168,16 @@ test("pit quantities multiply nutrients without floating-point display garbage",
 
 test("mini status colors low intake orange and excessive intake red while rolling context can keep a light hour green", () => {
   assert.equal(pitMetricStatus({ carbs: 30, fluidMl: 200 }, { hours: 3, carbsPerHour: 42 }).carbs, "low");
-  assert.equal(pitMetricStatus({ carbs: 85, fluidMl: 500 }, { hours: 3, carbsPerHour: 74 }).carbs, "high");
-  assert.equal(pitMetricStatus({ carbs: 35, fluidMl: 400 }, { hours: 3, carbsPerHour: 52 }).carbs, "good");
+  assert.equal(pitMetricStatus({ carbs: 95, fluidMl: 500 }, { hours: 3, carbsPerHour: 94 }).carbs, "high");
+  assert.equal(pitMetricStatus({ carbs: 35, fluidMl: 400 }, { hours: 3, carbsPerHour: 52 }).carbs, "low");
   assert.equal(pitMetricStatus({ carbs: 55, fluidMl: 200 }, { hours: 3, carbsPerHour: 55 }, { weather: ["hot"] }).fluid, "low");
+});
+
+test("Backyard pit target uses a 60-90 g/h corridor with a 70 g/h working center", () => {
+  const recommendation = recommendPitCrew({ round: 2, minutesToStart: 10 });
+  assert.ok(recommendation.summary.carbs >= 60);
+  assert.ok(recommendation.summary.carbs <= 90);
+  assert.equal(pitMetricStatus({ carbs: 70, fluidMl: 500 }, { hours: 3, carbsPerHour: 70 }).carbs, "good");
 });
 
 test("partial loop drink scales actual carbs and fluid without treating it as a failure", () => {
