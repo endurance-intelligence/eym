@@ -18,6 +18,7 @@ import {
   pitWeatherCrewActions,
   pitWeatherForecastForLoops,
   pitWeatherIcon,
+  pitWeatherLoopBrief,
 } from "../services/pitCrewWeather.js";
 import { athleteCareHints } from "../services/pitCrewCare.js";
 import "./PitCrewLive.css";
@@ -165,6 +166,7 @@ export default function PitCrewLive({ race, onClose }) {
   const [incomingRound, setIncomingRound] = useState(() => Math.max(0, Number(stored?.incomingRound || 0)));
   const [signalDraft, setSignalDraft] = useState([]);
   const [checkInOpen, setCheckInOpen] = useState(false);
+  const [athleteFeedback, setAthleteFeedback] = useState(() => stored?.athleteFeedback && typeof stored.athleteFeedback === "object" ? stored.athleteFeedback : null);
   const [weather, setWeather] = useState(() => Array.isArray(stored?.weather) ? stored.weather : []);
   const [anchorAt, setAnchorAt] = useState(() => stored?.anchorAt || plannedAnchor(race)?.toISOString() || "");
   const [arrivalRound, setArrivalRound] = useState(() => Math.max(0, Number(stored?.arrivalRound || 0)));
@@ -210,8 +212,8 @@ export default function PitCrewLive({ race, onClose }) {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    window.localStorage.setItem(storageKey, JSON.stringify({ anchorAt, history, flags, incomingFlags, incomingAt, incomingRound, weather, arrivalRound, arrivalAt, stockIds, customProducts }));
-  }, [anchorAt, arrivalAt, arrivalRound, customProducts, flags, history, incomingAt, incomingFlags, incomingRound, stockIds, storageKey, weather]);
+    window.localStorage.setItem(storageKey, JSON.stringify({ anchorAt, history, flags, incomingFlags, incomingAt, incomingRound, athleteFeedback, weather, arrivalRound, arrivalAt, stockIds, customProducts }));
+  }, [anchorAt, arrivalAt, arrivalRound, athleteFeedback, customProducts, flags, history, incomingAt, incomingFlags, incomingRound, stockIds, storageKey, weather]);
 
   useEffect(() => {
     if (loadedPitRound.current === pitRound || editingRound != null) return;
@@ -247,6 +249,7 @@ export default function PitCrewLive({ race, onClose }) {
   // These values are cheap render-time derivations. Let the React Compiler decide
   // whether to memoize them instead of maintaining dependency arrays manually.
   const incomingApplies = Number(incomingRound || 0) === Number(timing.currentRound || 0) && Boolean(incomingAt);
+  const athleteFeedbackApplies = Number(athleteFeedback?.round || 0) === Number(timing.currentRound || 0);
   const effectiveAthleteFlags = [...new Set([...(flags || []), ...(incomingApplies ? incomingFlags : [])])];
   const nextLoopWeather = pitWeatherForecastForLoops({
     observation: autoWeather || {},
@@ -256,6 +259,7 @@ export default function PitCrewLive({ race, onClose }) {
     count: 3,
   });
   const nextWeatherAlert = pitWeatherAlert(nextLoopWeather[0]);
+  const nextLoopWeatherBrief = pitWeatherLoopBrief(nextLoopWeather[0]);
   const weatherCrewActions = pitWeatherCrewActions(nextLoopWeather[0], effectiveAthleteFlags);
   const effectiveWeather = [...new Set([...(autoWeather?.flags || []), ...weather, ...(nextLoopWeather[0]?.flags || [])])];
   const previousHistory = history.filter((record) => Number(record.round) !== Number(saveRound));
@@ -309,6 +313,10 @@ export default function PitCrewLive({ race, onClose }) {
   const historyRolling = rollingPitAverage(history, null, 3, productCatalog);
   const metricStatus = pitMetricStatus(assessment.summary, assessment.rolling, { weather: effectiveWeather });
   const lastRecord = history.length ? history[history.length - 1] : null;
+  const lastActualSummary = lastRecord
+    ? (lastRecord.carryStatus === "pending" && lastRecord.provisionalSummary ? lastRecord.provisionalSummary : lastRecord.summary || summarizePitSelection(lastRecord.selection || [], productCatalog))
+    : { carbs: 0, fluidMl: 0, caffeineMg: 0 };
+  const actualMetricStatus = pitMetricStatus(lastActualSummary, historyRolling, { weather: effectiveWeather });
   const alert = warningText(metricStatus, assessment);
   const elapsedMinutes = demoActive
     ? Math.max(0, timing.currentRound * intervalMinutes - timing.minutesToStart)
@@ -370,9 +378,25 @@ export default function PitCrewLive({ race, onClose }) {
   function markAthleteReturned() {
     if (!timing.started || !(Number(timing.currentRound) > 0)) return;
     const round = Math.max(1, Number(timing.currentRound));
+    const returnedAt = new Date().toISOString();
     setArrivalRound(round);
-    setArrivalAt(new Date().toISOString());
-    setFlags(incomingApplies ? [...incomingFlags] : []);
+    setArrivalAt(returnedAt);
+    if (incomingApplies) {
+      const reportedFlags = [...incomingFlags];
+      setFlags(reportedFlags);
+      setAthleteFeedback({ round, flags: reportedFlags, at: incomingAt || returnedAt, source: "athlete" });
+      setCheckInOpen(false);
+      setIncomingFlags([]);
+      setIncomingAt("");
+      setIncomingRound(0);
+      setSignalDraft([]);
+      setSaveMessage(reportedFlags.length
+        ? `Rückmeldung Athlet übernommen · ${compactStatus(reportedFlags)} · Pit-Vorschlag angepasst.`
+        : "Rückmeldung Athlet: Alles okay · keine Änderung am vorbereiteten Plan.");
+      return;
+    }
+    setFlags([]);
+    setAthleteFeedback(null);
     setCheckInOpen(true);
     setSaveMessage(`Loop ${round}: Athlet zurück · Countdown bis Start ${pitCountdownLabel(timing.minutesToStart)}.`);
   }
@@ -387,7 +411,10 @@ export default function PitCrewLive({ race, onClose }) {
   }
 
   function finishAthleteCheckIn(clear = false) {
+    const round = Math.max(1, Number(timing.currentRound || 1));
+    const acceptedFlags = clear ? [] : [...flags];
     if (clear) setFlags([]);
+    setAthleteFeedback({ round, flags: acceptedFlags, at: new Date().toISOString(), source: "crew" });
     setCheckInOpen(false);
     setIncomingFlags([]);
     setIncomingAt("");
@@ -549,6 +576,7 @@ export default function PitCrewLive({ race, onClose }) {
         incomingFlags,
         incomingAt,
         incomingRound,
+        athleteFeedback,
         carryAdjust,
         editingRound,
         saveMessage,
@@ -570,6 +598,7 @@ export default function PitCrewLive({ race, onClose }) {
     setIncomingRound(0);
     setSignalDraft([]);
     setCheckInOpen(false);
+    setAthleteFeedback(null);
     setWeather([]);
     setArrivalRound(0);
     setArrivalAt("");
@@ -593,6 +622,7 @@ export default function PitCrewLive({ race, onClose }) {
     setIncomingRound(Math.max(0, Number(liveStored?.incomingRound || transient.incomingRound || 0)));
     setSignalDraft([]);
     setCheckInOpen(false);
+    setAthleteFeedback(liveStored?.athleteFeedback && typeof liveStored.athleteFeedback === "object" ? liveStored.athleteFeedback : (transient.athleteFeedback || null));
     setWeather(Array.isArray(liveStored?.weather) ? liveStored.weather : []);
     setAnchorAt(liveStored?.anchorAt || plannedAnchor(race)?.toISOString() || "");
     setArrivalRound(Math.max(0, Number(liveStored?.arrivalRound || transient.arrivalRound || 0)));
@@ -767,9 +797,9 @@ export default function PitCrewLive({ race, onClose }) {
           {activePending ? (
             <div className="pit-live-loop-confirm pit-live-loop-confirm-simple">
               <div className="pit-live-loop-confirm-head">
-                <small>LOOP {loopNumber} · STANDARD = WIE GEPLANT</small>
-                <strong>✓ Keine Bestätigung nötig</strong>
-                <span>Wenn nichts gemeldet wird, übernimmt EI die geplante Versorgung automatisch beim nächsten Pit. Nur Abweichungen erfassen.</span>
+                <small>LOOP {loopNumber} · VORLÄUFIG WIE GEPLANT VERBUCHT</small>
+                <strong>✓ Aufnahme zählt bereits in den Live-Daten</strong>
+                <span>Keine Extra-Bestätigung nötig. Nur wenn real etwas anders war, kurz „Abweichung melden“ tippen.</span>
               </div>
               {!carryDeviationOpen ? (
                 <button type="button" className="pit-live-secondary pit-live-wide" onClick={() => setCarryDeviationOpen(true)}>Abweichung melden</button>
@@ -804,7 +834,7 @@ export default function PitCrewLive({ race, onClose }) {
             </div>
           ) : awaitingReturn ? (
             <div className="pit-live-loop-plan pit-live-loop-running-copy">
-              <p className="pit-live-help">Loop {loopNumber} läuft. Bei der Rückkehr einmal „Athlet zurück“ tippen – erst dann wird die tatsächliche Aufnahme abgefragt.</p>
+              <p className="pit-live-help">Loop {loopNumber} läuft. Die mitgegebene Versorgung wird vorläufig als planmäßig gerechnet. Bei Rückkehr nur eine Abweichung melden, falls real etwas anders war.</p>
               {runningItems.length ? <div className="pit-live-loop-plan-items">{runningItems.map((entry) => <span key={`${entry.productId}:${entry.portionId}`}>{selectionLabel(entry, productCatalog)}</span>)}</div> : <p className="pit-live-loop-empty">Für diese Loop wurde kein zusätzliches Loop-Fueling mitgegeben.</p>}
             </div>
           ) : preparedPending ? (
@@ -867,6 +897,7 @@ export default function PitCrewLive({ race, onClose }) {
     setIncomingRound(0);
     setSignalDraft([]);
     setCheckInOpen(false);
+    setAthleteFeedback(null);
     setWeather([]);
     setArrivalRound(0);
     setArrivalAt("");
@@ -891,9 +922,10 @@ export default function PitCrewLive({ race, onClose }) {
 
       <main className="pit-live-main">
         <details className="pit-live-collapse pit-live-weather-top">
-          <summary><span>WETTER</span><b>{autoWeather ? `${pitWeatherIcon(autoWeather.weatherCode, autoWeather.isDay)} ${autoWeather.temperature} °C · ${autoWeather.windSpeed} km/h${nextWeatherAlert && nextWeatherAlert.tone !== "good" ? ` · ${nextWeatherAlert.icon} ${nextWeatherAlert.label}` : ""}` : weatherError ? "Auto nicht verfügbar" : "wird automatisch geladen …"}</b><i>›</i></summary>
+          <summary><span>{nextLoopWeather[0] ? `WETTER FÜR LOOP ${nextLoopWeather[0].round}` : "WETTER"}</span><b>{nextLoopWeatherBrief ? nextLoopWeatherBrief.headline : autoWeather ? `${pitWeatherIcon(autoWeather.weatherCode, autoWeather.isDay)} ${autoWeather.temperature} °C · ${autoWeather.windSpeed} km/h` : weatherError ? "Auto nicht verfügbar" : "wird automatisch geladen …"}</b><i>›</i></summary>
           <div className="pit-live-collapse-body">
             {autoWeather ? <>
+              {nextLoopWeatherBrief && <div className={`pit-live-weather-brief tone-${nextLoopWeatherBrief.tone}`}><small>KOMMENDER LOOP</small><strong>{nextLoopWeatherBrief.headline}</strong><span>{nextLoopWeatherBrief.detail}</span></div>}
               <div className="pit-live-weather-facts"><span><b>{autoWeather.feelsLike} °C</b> gefühlt</span><span><b>{autoWeather.humidity} %</b> Feuchte</span><span><b>{formatNumber(autoWeather.precipitation)} mm</b> Regen</span><span><b>{autoWeather.windGusts} km/h</b> Böen</span></div>
               <div className="pit-live-weather-horizon"><span>PLANUNG</span><b>{Math.round(Number(autoWeather.horizonMinutes || 0) / 60)} h</b><small>{race?.eventLimitMode === "open" ? "Open End · Einsatzhorizont, kein Rennende" : "Eventhorizont"}</small></div>
               {nextLoopWeather.length > 0 && <div className="pit-live-weather-next">
@@ -926,6 +958,13 @@ export default function PitCrewLive({ race, onClose }) {
           <section className="pit-live-incoming">
             <div><small>ATHLET IM ANFLUG · LOOP {timing.currentRound}</small><strong>{compactStatus(incomingFlags)}</strong><span>Vorabmeldung synchronisiert{incomingAt ? ` · ${hhmm(new Date(incomingAt))}` : ""}. Crew-Hinweise und Fueling reagieren bereits darauf.</span></div>
             <b>→ vorbereiten</b>
+          </section>
+        )}
+
+        {athleteFeedbackApplies && !incomingApplies && (
+          <section className={`pit-live-athlete-feedback ${athleteFeedback.flags?.length ? "changed" : "okay"}`}>
+            <div><small>{athleteFeedback.source === "athlete" ? "RÜCKMELDUNG ATHLET" : "RÜCKMELDUNG CREW"}</small><strong>{athleteFeedback.flags?.length ? compactStatus(athleteFeedback.flags) : "✓ Alles okay"}</strong><span>{athleteFeedback.flags?.length ? "Änderungen am Pit-Vorschlag wurden übernommen." : "Keine Änderung am vorbereiteten Plan nötig."}</span></div>
+            <b>{athleteFeedback.flags?.length ? "↻ angepasst" : "✓ unverändert"}</b>
           </section>
         )}
 
@@ -1005,7 +1044,8 @@ export default function PitCrewLive({ race, onClose }) {
                     ? ` · Loop ${Number(record.round) + 1} abschließen`
                     : ` · Loop ${Number(record.round) + 1} startklar`
                   : "";
-                return <div key={record.round} className={`tone-${tone}`}><em aria-hidden="true" /><b>{carried ? `Pit ${record.round} → Loop ${Number(record.round) + 1}` : `Pit ${record.round}`}</b><span>{formatNumber(record.summary?.carbs ?? summarizePitSelection(record.selection, productCatalog).carbs)} g KH{pendingText}</span></div>;
+                const shownSummary = record.carryStatus === "pending" && record.provisionalSummary ? record.provisionalSummary : record.summary || summarizePitSelection(record.selection, productCatalog);
+                return <div key={record.round} className={`tone-${tone}`}><em aria-hidden="true" /><b>{carried ? `Pit ${record.round} → Loop ${Number(record.round) + 1}` : `Pit ${record.round}`}</b><span>{formatNumber(shownSummary.carbs)} g KH · {shownSummary.fluidMl} ml{record.carryStatus === "pending" ? " · wie geplant angenommen" : ""}{pendingText}</span></div>;
               })}</div>
               <button type="button" className="pit-live-secondary pit-live-wide" onClick={editLastPit}>Letzten Pit korrigieren</button>
             </div>
@@ -1045,10 +1085,10 @@ export default function PitCrewLive({ race, onClose }) {
         {(metricStatus.carbs !== "good" || metricStatus.fluid === "low" || metricStatus.fluid === "high" || metricStatus.rolling === "low" || metricStatus.rolling === "high") && <div className={`pit-live-alert tone-${metricStatus.carbs === "high" || metricStatus.fluid === "high" || metricStatus.rolling === "high" ? "high" : "low"}`}>{alert}</div>}
 
         <section className="pit-live-mini-bar" aria-label="Versorgungsstatus">
-          <div className={`tone-${metricStatus.carbs}`}><small>KH</small><b>{Math.round(assessment.summary.carbs)} g</b></div>
-          <div className={`tone-${metricStatus.fluid}`}><small>💧</small><b>{assessment.summary.fluidMl} ml</b></div>
-          <div className={`tone-${metricStatus.rolling}`}><small>Ø3h</small><b>{assessment.rolling.hours ? `${Math.round(assessment.rolling.carbsPerHour)} g/h` : "–"}</b></div>
-          {assessment.summary.caffeineMg > 0 && <div className="tone-neutral"><small>☕</small><b>{Math.round(assessment.summary.caffeineMg)} mg</b></div>}
+          <div className={`tone-${actualMetricStatus.carbs}`}><small>IST KH</small><b>{Math.round(lastActualSummary.carbs)} g</b></div>
+          <div className={`tone-${actualMetricStatus.fluid}`}><small>IST 💧</small><b>{lastActualSummary.fluidMl} ml</b></div>
+          <div className={`tone-${actualMetricStatus.rolling}`}><small>Ø3h</small><b>{historyRolling.hours ? `${Math.round(historyRolling.carbsPerHour)} g/h` : "–"}</b></div>
+          {lastActualSummary.caffeineMg > 0 && <div className="tone-neutral"><small>☕</small><b>{Math.round(lastActualSummary.caffeineMg)} mg</b></div>}
           <button
             type="button"
             className={`pit-live-main-action${athleteNeedsArrival ? " needs-arrival" : savedLoopReady ? " is-ready" : ""}`}

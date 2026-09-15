@@ -204,3 +204,17 @@ test("spontaneous custom food can contribute carbs, sodium and caffeine with an 
   assert.equal(summary.items[0].digestion, "heavy");
   assert.equal(summary.items[0].nutritionSource, "manual");
 });
+
+
+test("rolling pit average counts pending carry as provisionally taken until a deviation is reported", () => {
+  const history = [{
+    selection: [],
+    carrySelection: [{ productId: "isostar", portionId: "500" }],
+    carryStatus: "pending",
+    summary: { carbs: 0, fluidMl: 0, caffeineMg: 0 },
+    provisionalSummary: { carbs: 35, fluidMl: 500, caffeineMg: 0 },
+  }];
+  const rolling = rollingPitAverage(history, null, 3);
+  assert.equal(rolling.carbsPerHour, 35);
+  assert.equal(rolling.fluidPerHour, 500);
+});

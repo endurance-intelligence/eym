@@ -10,9 +10,10 @@ test("Pit Crew keeps test controls out of the normal live flow", () => {
   assert.match(source, /Testmodus starten/);
 });
 
-test("Pit Crew defaults loop intake to planned and asks only for deviations", () => {
-  assert.match(source, /Keine Bestätigung nötig/);
+test("Pit Crew counts planned loop intake immediately and asks only for deviations", () => {
+  assert.match(source, /Aufnahme zählt bereits in den Live-Daten/);
   assert.match(source, /Abweichung melden/);
+  assert.match(source, /wie geplant angenommen/);
   assert.doesNotMatch(source, /Was wurde wirklich genommen\?/);
 });
 
@@ -20,4 +21,19 @@ test("Pit weather hides manual overrides and shows per-loop operational details"
   assert.match(source, /Wetter vor Ort weicht deutlich ab/);
   assert.match(source, /gefühlt \{forecast\.feelsLike\}/);
   assert.match(source, /pit-live-weather-loop-actions/);
+});
+
+
+test("athlete pre-feedback suppresses duplicate crew check-in and stays visible as a status banner", () => {
+  assert.match(source, /if \(incomingApplies\)/);
+  assert.match(source, /setCheckInOpen\(false\)/);
+  assert.match(source, /RÜCKMELDUNG ATHLET/);
+  assert.match(source, /Keine Änderung am vorbereiteten Plan nötig/);
+});
+
+test("Pit Crew headline names the upcoming loop weather and actual intake bar uses recorded data", () => {
+  assert.match(source, /WETTER FÜR LOOP/);
+  assert.match(source, /KOMMENDER LOOP/);
+  assert.match(source, /IST KH/);
+  assert.match(source, /IST 💧/);
 });

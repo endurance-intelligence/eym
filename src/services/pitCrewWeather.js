@@ -136,6 +136,50 @@ export function pitWeatherAlert(forecast = null) {
   return { tone: "good", icon: pitWeatherIcon(forecast.weatherCode, forecast.isDay), label: `Loop ${forecast.round}: Bedingungen ruhig` };
 }
 
+export function pitWeatherLoopBrief(forecast = null) {
+  if (!forecast) return null;
+  const flags = forecast.flags || pitWeatherSignals(forecast);
+  const temperature = Math.round(Number(forecast.temperature || 0));
+  const icon = pitWeatherIcon(forecast.weatherCode, forecast.isDay);
+  if (flags.includes("rain")) {
+    return {
+      tone: "rain",
+      headline: `🌧️ Regen erwartet · ${temperature} °C`,
+      detail: "Nächste Loop: Regenjacke bereitlegen, trockene Socken und Handtuch griffbereit halten.",
+    };
+  }
+  if (flags.includes("hot")) {
+    return {
+      tone: "hot",
+      headline: `☀️ Warm · ${temperature} °C`,
+      detail: "Strecke könnte warm sein: T-Shirt/leichte Schicht, Kühlung und kaltes Getränk vorbereiten.",
+    };
+  }
+  if (flags.includes("cold")) {
+    return {
+      tone: "cold",
+      headline: `🥶 Kühl · ${temperature} °C`,
+      detail: "Nächste Loop: trockene Wärmeschicht bereitlegen; warmes Getränk optional vorbereiten.",
+    };
+  }
+  if (flags.includes("wind")) {
+    return {
+      tone: "wind",
+      headline: `💨 Windig · ${temperature} °C`,
+      detail: `Böen bis ${Math.round(Number(forecast.windGusts || 0))} km/h: Windschutz für die nächste Loop griffbereit halten.`,
+    };
+  }
+  const code = Number(forecast.weatherCode || 0);
+  const mostlyClear = [0, 1].includes(code);
+  return {
+    tone: "good",
+    headline: `${icon} ${mostlyClear ? "Sonnig" : "Ruhiges Wetter"} · ${temperature} °C`,
+    detail: temperature >= 18
+      ? "Strecke könnte warm wirken: T-Shirt/leichte Schicht passt, normale Kühlung bereithalten."
+      : "Keine besondere Wettermaßnahme nötig. Bewährte Schicht für die nächste Loop bereithalten.",
+  };
+}
+
 export function pitWeatherCrewActions(forecast = null, athleteFlags = []) {
   const actions = [];
   const weatherFlags = forecast?.flags || pitWeatherSignals(forecast || {});

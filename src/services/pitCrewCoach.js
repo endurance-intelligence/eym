@@ -294,6 +294,7 @@ export function summarizePitSelection(selection = [], products = PIT_CREW_PRODUC
 }
 
 function summaryFromRecord(record = {}, products = PIT_CREW_PRODUCTS) {
+  if (record.carryStatus === "pending" && record.provisionalSummary) return record.provisionalSummary;
   if (record.summary) return record.summary;
   return summarizePitSelection(record.selection || [], products);
 }

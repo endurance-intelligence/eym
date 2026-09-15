@@ -4,6 +4,7 @@ import {
   pitWeatherAlert,
   pitWeatherCrewActions,
   pitWeatherForecastForLoops,
+  pitWeatherLoopBrief,
   pitWeatherSignals,
   pitWeatherWindow,
 } from "../src/services/pitCrewWeather.js";
@@ -30,4 +31,15 @@ test("pit weather maps the next loops and turns rain plus athlete state into cre
   assert.ok(actions.some((item) => item.includes("Regenjacke")));
   assert.ok(actions.some((item) => item.includes("trockene Socken")));
   assert.ok(actions.some((item) => item.includes("Getränk zuerst")));
+});
+
+
+test("next-loop weather brief turns forecast into a crew-ready sentence", () => {
+  const rain = pitWeatherLoopBrief({ round: 8, temperature: 15, weatherCode: 61, isDay: true, windGusts: 24, flags: ["rain"] });
+  assert.match(rain.headline, /Regen erwartet/);
+  assert.match(rain.detail, /Regenjacke/);
+
+  const sunny = pitWeatherLoopBrief({ round: 9, temperature: 23, weatherCode: 1, isDay: true, windGusts: 12, flags: [] });
+  assert.match(sunny.headline, /Sonnig/);
+  assert.match(sunny.detail, /T-Shirt/);
 });
