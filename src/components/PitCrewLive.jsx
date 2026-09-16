@@ -978,7 +978,18 @@ export default function PitCrewLive({ race, onClose }) {
 
       <main className="pit-live-main">
         <details className="pit-live-collapse pit-live-weather-top">
-          <summary><span>{nextLoopWeather[0] ? `WETTER FÜR LOOP ${nextLoopWeather[0].round}` : "WETTER"}</span><b>{nextLoopWeatherBrief ? nextLoopWeatherBrief.headline : autoWeather ? `${pitWeatherIcon(autoWeather.weatherCode, autoWeather.isDay)} ${autoWeather.temperature} °C · ${autoWeather.windSpeed} km/h` : weatherError ? "Auto nicht verfügbar" : "wird automatisch geladen …"}</b><i>›</i></summary>
+          <summary className="pit-live-weather-summary">
+            <div className="pit-live-weather-summary-label">
+              <span>{nextLoopWeather[0] ? `WETTER FÜR LOOP ${nextLoopWeather[0].round}` : "WETTER"}</span>
+              {nextLoopWeather[0] && <small>{hhmm(nextLoopWeather[0].startAt)}–{hhmm(nextLoopWeather[0].endAt)}</small>}
+            </div>
+            <div className="pit-live-weather-summary-main">
+              <b>{nextLoopWeatherBrief ? nextLoopWeatherBrief.headline : autoWeather ? `${pitWeatherIcon(autoWeather.weatherCode, autoWeather.isDay)} ${autoWeather.temperature} °C · ${autoWeather.windSpeed} km/h` : weatherError ? "Auto nicht verfügbar" : "wird automatisch geladen …"}</b>
+              {nextLoopWeather[0] && <small>Gefühlt {nextLoopWeather[0].feelsLike} °C · Regen {nextLoopWeather[0].precipitationProbability} % · Wind {nextLoopWeather[0].windSpeed} km/h · Böen {nextLoopWeather[0].windGusts} km/h</small>}
+              {nextLoopWeatherBrief && <span className={`pit-live-weather-summary-advice tone-${nextLoopWeatherBrief.tone}`}>{nextLoopWeatherBrief.detail}</span>}
+            </div>
+            <i>›</i>
+          </summary>
           <div className="pit-live-collapse-body">
             {autoWeather ? <>
               {nextLoopWeatherBrief && <div className={`pit-live-weather-brief tone-${nextLoopWeatherBrief.tone}`}><small>KOMMENDER LOOP</small><strong>{nextLoopWeatherBrief.headline}</strong><span>{nextLoopWeatherBrief.detail}</span></div>}

@@ -34,6 +34,10 @@ test("athlete pre-feedback suppresses duplicate crew check-in and stays visible 
 test("Pit Crew headline names the upcoming loop weather and actual intake bar uses recorded data", () => {
   assert.match(source, /WETTER FÜR LOOP/);
   assert.match(source, /KOMMENDER LOOP/);
+  assert.match(source, /pit-live-weather-summary/);
+  assert.match(source, /Gefühlt \{nextLoopWeather\[0\]\.feelsLike\}/);
+  assert.match(source, /Regen \{nextLoopWeather\[0\]\.precipitationProbability\} %/);
+  assert.match(source, /nextLoopWeatherBrief\.detail/);
   assert.match(source, /IST KH/);
   assert.match(source, /IST 💧/);
 });
