@@ -2,6 +2,40 @@ const round1 = (value, digits = 1) => Number(Number(value || 0).toFixed(digits))
 
 export const PIT_CARB_TARGET = { min: 60, max: 90, center: 70 };
 
+const ISOSTAR_LONG_ENERGY_PER_500 = Object.freeze({
+  powderG: 38,
+  energyKcal: 131.9,
+  carbs: 30.8,
+  sugarG: 18.6,
+  proteinG: 0.7,
+  saltG: 1.44,
+  sodiumMg: 578,
+  potassiumMg: 334,
+  magnesiumMg: 87,
+  calciumMg: 190,
+  bcaaG: 0.99,
+});
+
+function longEnergyPortion(ml) {
+  const scale = Number(ml || 0) / 500;
+  return {
+    id: `${ml}`,
+    label: `${ml} ml`,
+    carbs: round1(ISOSTAR_LONG_ENERGY_PER_500.carbs * scale),
+    sugarG: round1(ISOSTAR_LONG_ENERGY_PER_500.sugarG * scale),
+    proteinG: round1(ISOSTAR_LONG_ENERGY_PER_500.proteinG * scale),
+    saltG: round1(ISOSTAR_LONG_ENERGY_PER_500.saltG * scale, 2),
+    sodiumMg: Math.round(ISOSTAR_LONG_ENERGY_PER_500.sodiumMg * scale),
+    potassiumMg: Math.round(ISOSTAR_LONG_ENERGY_PER_500.potassiumMg * scale),
+    magnesiumMg: Math.round(ISOSTAR_LONG_ENERGY_PER_500.magnesiumMg * scale),
+    calciumMg: Math.round(ISOSTAR_LONG_ENERGY_PER_500.calciumMg * scale),
+    bcaaG: round1(ISOSTAR_LONG_ENERGY_PER_500.bcaaG * scale, 2),
+    energyKcal: round1(ISOSTAR_LONG_ENERGY_PER_500.energyKcal * scale),
+    fluidMl: Number(ml || 0),
+    caffeineMg: 0,
+  };
+}
+
 export const PIT_CREW_PRODUCTS = [
   {
     id: "water",
@@ -22,13 +56,20 @@ export const PIT_CREW_PRODUCTS = [
   {
     id: "isostar-long",
     label: "Isostar Long Energy Plus Zitrone",
+    brand: "Isostar",
+    flavor: "Zitrone",
     icon: "🍋",
     category: "drink",
     traits: ["carb-drink", "electrolyte", "long-energy", "lemon", "quick"],
-    // 38 g powder per 500 ml. Published product databases list about 31 g KH/500 ml;
-    // keep this marked as estimated until the athlete confirms the label on the tub.
-    estimated: true,
-    portions: [150, 200, 250, 300, 400, 500].map((ml) => ({ id: `${ml}`, label: `${ml} ml`, carbs: round1(ml * 0.062), fluidMl: ml, caffeineMg: 0, sodiumMg: Math.round(ml * 1.12) })),
+    nutritionSource: "label",
+    referencePortionId: "500",
+    mixing: { powderG: 38, drinkMl: 500 },
+    manufacturerUse: { duringMl: 150, everyMinutes: 15 },
+    carbSources: ["Saccharose", "Maltodextrin", "Fruktose", "Dextrose"],
+    aminoAcids: ["L-Leucin", "L-Valin", "L-Isoleucin"],
+    stockNote: "38 g Pulver · 578 mg Na · 334 mg K · 87 mg Mg",
+    labelNutritionPer500: ISOSTAR_LONG_ENERGY_PER_500,
+    portions: [150, 200, 250, 300, 400, 500].map(longEnergyPortion),
   },
   {
     id: "dryll",
@@ -294,6 +335,14 @@ export function pitSelectionItem(productId, portionId, quantity = 1, intakeFacto
     fluidMl: Math.round(Number(portion.fluidMl || 0) * count * factor),
     caffeineMg: round1(Number(portion.caffeineMg || 0) * count * factor),
     sodiumMg: Math.round(Number(portion.sodiumMg || 0) * count * factor),
+    sugarG: round1(Number(portion.sugarG || 0) * count * factor),
+    proteinG: round1(Number(portion.proteinG || 0) * count * factor),
+    saltG: round1(Number(portion.saltG || 0) * count * factor, 2),
+    potassiumMg: Math.round(Number(portion.potassiumMg || 0) * count * factor),
+    magnesiumMg: Math.round(Number(portion.magnesiumMg || 0) * count * factor),
+    calciumMg: Math.round(Number(portion.calciumMg || 0) * count * factor),
+    bcaaG: round1(Number(portion.bcaaG || 0) * count * factor, 2),
+    energyKcal: round1(Number(portion.energyKcal || 0) * count * factor),
     portionLabel: portion.label,
   };
 }
@@ -309,6 +358,14 @@ export function summarizePitSelection(selection = [], products = PIT_CREW_PRODUC
     fluidMl: Math.round(items.reduce((sum, item) => sum + item.fluidMl, 0)),
     caffeineMg: round1(items.reduce((sum, item) => sum + item.caffeineMg, 0)),
     sodiumMg: Math.round(items.reduce((sum, item) => sum + item.sodiumMg, 0)),
+    sugarG: round1(items.reduce((sum, item) => sum + Number(item.sugarG || 0), 0)),
+    proteinG: round1(items.reduce((sum, item) => sum + Number(item.proteinG || 0), 0)),
+    saltG: round1(items.reduce((sum, item) => sum + Number(item.saltG || 0), 0), 2),
+    potassiumMg: Math.round(items.reduce((sum, item) => sum + Number(item.potassiumMg || 0), 0)),
+    magnesiumMg: Math.round(items.reduce((sum, item) => sum + Number(item.magnesiumMg || 0), 0)),
+    calciumMg: Math.round(items.reduce((sum, item) => sum + Number(item.calciumMg || 0), 0)),
+    bcaaG: round1(items.reduce((sum, item) => sum + Number(item.bcaaG || 0), 0), 2),
+    energyKcal: round1(items.reduce((sum, item) => sum + Number(item.energyKcal || 0), 0)),
     estimated: items.some((item) => item.estimated),
   };
 }

@@ -736,11 +736,13 @@ export default function PitCrewLive({ race, onClose }) {
           <div className="pit-live-stock-grid">
             {categoryProducts.map((product) => {
               const active = activeStockIds.includes(String(product.id));
-              const portion = product.portions?.find((item) => !item.hidden) || product.portions?.[0];
+              const portion = product.referencePortionId
+                ? product.portions?.find((item) => String(item.id) === String(product.referencePortionId))
+                : product.portions?.find((item) => !item.hidden) || product.portions?.[0];
               return <article key={product.id} className={active ? "active" : ""}>
                 <button type="button" className="pit-live-stock-toggle" onClick={() => toggleStockProduct(product.id)}>
                   <span>{active ? "✓" : "+"}</span><b>{product.icon} {product.label}</b>
-                  <small>{portion ? `${portion.label} · ${formatNumber(portion.carbs)} g KH` : "Portion offen"}{product.estimated ? " · ≈" : ""}</small>
+                  <small>{portion ? `${portion.label} · ${formatNumber(portion.carbs)} g KH` : "Portion offen"}{product.estimated ? " · ≈" : ""}{product.stockNote ? ` · ${product.stockNote}` : ""}</small>
                 </button>
                 {product.custom && <button type="button" className="pit-live-stock-remove" onClick={() => removeCustomStockItem(product.id)}>Entfernen</button>}
               </article>;

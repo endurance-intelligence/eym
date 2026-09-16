@@ -259,10 +259,37 @@ test("pit catalog distinguishes the athlete's two Isostar drinks and both 226ERS
   assert.equal(orange?.label, "Isostar Hydrate & Perform Orange");
   assert.equal(orange?.portions.find((portion) => portion.id === "500")?.carbs, 35);
   assert.equal(lemon?.label, "Isostar Long Energy Plus Zitrone");
-  assert.equal(lemon?.portions.find((portion) => portion.id === "500")?.carbs, 31);
+  assert.equal(lemon?.nutritionSource, "label");
+  assert.equal(lemon?.estimated, undefined);
+  assert.deepEqual(lemon?.mixing, { powderG: 38, drinkMl: 500 });
+  assert.deepEqual(lemon?.manufacturerUse, { duringMl: 150, everyMinutes: 15 });
+  const lemon500 = lemon?.portions.find((portion) => portion.id === "500");
+  assert.equal(lemon500?.carbs, 30.8);
+  assert.equal(lemon500?.sugarG, 18.6);
+  assert.equal(lemon500?.saltG, 1.44);
+  assert.equal(lemon500?.sodiumMg, 578);
+  assert.equal(lemon500?.potassiumMg, 334);
+  assert.equal(lemon500?.magnesiumMg, 87);
+  assert.equal(lemon500?.calciumMg, 190);
+  assert.equal(lemon500?.bcaaG, 0.99);
   assert.equal(neutral?.portions[0]?.carbs, 50);
   assert.equal(strawberry?.portions[0]?.carbs, 50);
   assert.equal(strawberry?.portions[0]?.sodiumMg, 250);
+});
+
+test("Long Energy label nutrients scale with actual intake instead of staying at a database estimate", () => {
+  const full = summarizePitSelection([{ productId: "isostar-long", portionId: "500" }]);
+  const half = summarizePitSelection([{ productId: "isostar-long", portionId: "500", intakeFactor: 0.5 }]);
+  assert.equal(full.carbs, 30.8);
+  assert.equal(full.sodiumMg, 578);
+  assert.equal(full.potassiumMg, 334);
+  assert.equal(full.magnesiumMg, 87);
+  assert.equal(full.calciumMg, 190);
+  assert.equal(full.saltG, 1.44);
+  assert.equal(full.estimated, false);
+  assert.equal(half.carbs, 15.4);
+  assert.equal(half.sodiumMg, 289);
+  assert.equal(half.saltG, 0.72);
 });
 
 test("stable Backyard rotation deliberately schedules gels instead of relying on food and Isostar forever", () => {
