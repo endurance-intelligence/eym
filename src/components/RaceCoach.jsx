@@ -26,6 +26,7 @@ import PitCrewSharedSession from "./PitCrewSharedSession";
 import RaceWeatherStrategy from "./RaceWeatherStrategy";
 import { pitCrewRaceEligible } from "../services/pitCrewCoach.js";
 import {
+  buildPitCrewShareUrl,
   createPitCrewShare,
   readPitCrewLocalSnapshot,
   rememberPitCrewShareToken,
@@ -269,8 +270,30 @@ export default function RaceCoach() {
 
   async function sharePitCrew() {
     if (!pitCrewRace || !sourceKey || pitCrewShareBusy) return;
-    setPitCrewShareBusy(true);
     setPitCrewShareMessage("");
+
+    // Web Share requires a live user gesture. If we already have a token,
+    // call navigator.share immediately from this click before any network await.
+    if (pitCrewShareToken) {
+      setPitCrewShareBusy(true);
+      try {
+        const result = await sharePitCrewUrl(buildPitCrewShareUrl(pitCrewShareToken), pitCrewRace.name);
+        setPitCrewShareMessage(result === "copied"
+          ? "Crew-Link kopiert ✓"
+          : result === "shared"
+            ? "Crew-Link geteilt ✓"
+            : "Teilen abgebrochen. Der Crew-Link bleibt gespeichert.");
+      } catch (error) {
+        setPitCrewShareMessage(error?.message || "Crew-Link konnte nicht geteilt werden.");
+      } finally {
+        setPitCrewShareBusy(false);
+      }
+      return;
+    }
+
+    // Creating the server token is asynchronous and consumes the browser's
+    // transient share gesture. Create it first; the next click can share it immediately.
+    setPitCrewShareBusy(true);
     try {
       const created = await createPitCrewShare({
         raceKey: sourceKey,
@@ -279,12 +302,7 @@ export default function RaceCoach() {
       });
       rememberPitCrewShareToken(sourceKey, created.token);
       setPitCrewShareTokens((current) => ({ ...current, [sourceKey]: created.token }));
-      const result = await sharePitCrewUrl(created.url, pitCrewRace.name);
-      setPitCrewShareMessage(result === "copied"
-        ? "Crew-Link kopiert ✓"
-        : result === "shared"
-          ? "Crew-Link geteilt ✓"
-          : "Crew-Link erstellt. Du kannst ihn jederzeit erneut teilen.");
+      setPitCrewShareMessage("Crew-Link erstellt ✓ · Jetzt erneut auf „Crew-Link teilen“ klicken.");
     } catch (error) {
       setPitCrewShareMessage(error?.message || "Crew-Link konnte nicht erstellt werden.");
     } finally {
@@ -546,7 +564,7 @@ export default function RaceCoach() {
           </div>
           <div className="pit-crew-launch-actions">
             <button type="button" onClick={() => setPitCrewOpen(true)}>Pit Crew Live öffnen</button>
-            <button type="button" className="secondary" disabled={pitCrewShareBusy} onClick={sharePitCrew}>{pitCrewShareBusy ? "Crew-Link wird erstellt …" : "Crew-Link teilen"}</button>
+            <button type="button" className="secondary" disabled={pitCrewShareBusy} onClick={sharePitCrew}>{pitCrewShareBusy ? "Crew-Link wird vorbereitet …" : pitCrewShareToken ? "Crew-Link teilen" : "Crew-Link erstellen"}</button>
           </div>
           {pitCrewShareMessage && <p className="pit-crew-share-message">{pitCrewShareMessage}</p>}
         </section>

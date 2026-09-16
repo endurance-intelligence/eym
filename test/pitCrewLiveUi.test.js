@@ -77,3 +77,15 @@ test("Pit Crew sanitizes legacy live state before rendering the KH audit", () =>
 test("Pit Crew never treats missing athlete feedback as current-round feedback", () => {
   assert.match(source, /const athleteFeedbackApplies = Boolean\(athleteFeedback\) && Number\(athleteFeedback\.round \|\| 0\) === Number\(timing\.currentRound \|\| 0\);/);
 });
+
+
+test("Crew sharing preserves the browser user gesture instead of awaiting token creation first", () => {
+  const raceCoachSource = fs.readFileSync(new URL("../src/components/RaceCoach.jsx", import.meta.url), "utf8");
+  const shareSource = fs.readFileSync(new URL("../src/services/pitCrewShare.js", import.meta.url), "utf8");
+  assert.match(raceCoachSource, /if \(pitCrewShareToken\)/);
+  assert.match(raceCoachSource, /sharePitCrewUrl\(buildPitCrewShareUrl\(pitCrewShareToken\), pitCrewRace\.name\)/);
+  assert.match(raceCoachSource, /Crew-Link erstellt ✓ · Jetzt erneut auf „Crew-Link teilen“ klicken/);
+  assert.match(raceCoachSource, /pitCrewShareToken \? "Crew-Link teilen" : "Crew-Link erstellen"/);
+  assert.match(shareSource, /NotAllowedError/);
+  assert.match(shareSource, /copyPitCrewUrl/);
+});

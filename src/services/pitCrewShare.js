@@ -76,6 +76,16 @@ export async function updatePitCrewShare(token, state) {
   };
 }
 
+async function copyPitCrewUrl(url) {
+  if (!globalThis.navigator?.clipboard?.writeText) return false;
+  try {
+    await globalThis.navigator.clipboard.writeText(url);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function sharePitCrewUrl(url, raceName = "Backyard") {
   if (globalThis.navigator?.share) {
     try {
@@ -86,11 +96,14 @@ export async function sharePitCrewUrl(url, raceName = "Backyard") {
       });
       return "shared";
     } catch (error) {
-      if (error?.name !== "AbortError") throw error;
-      return "cancelled";
+      if (error?.name === "AbortError") return "cancelled";
+      if (["NotAllowedError", "SecurityError"].includes(error?.name)) {
+        if (await copyPitCrewUrl(url)) return "copied";
+        throw new Error("Der Browser hat das Teilen blockiert. Bitte den Crew-Link erneut über den Teilen-Button öffnen.", { cause: error });
+      }
+      throw error;
     }
   }
-  if (!globalThis.navigator?.clipboard?.writeText) throw new Error("Der Crew-Link konnte nicht automatisch kopiert werden.");
-  await globalThis.navigator.clipboard.writeText(url);
-  return "copied";
+  if (await copyPitCrewUrl(url)) return "copied";
+  throw new Error("Der Crew-Link konnte nicht automatisch kopiert werden.");
 }
