@@ -307,9 +307,10 @@ export default function PitCrewLive({ race, onClose }) {
   const arrivalPendingItems = pendingCarry && Number(pendingLoopNumber) === Number(timing.currentRound)
     ? (Array.isArray(pendingCarry.carrySelection) ? pendingCarry.carrySelection : []).filter((entry) => entry && typeof entry === "object" && entry.productId != null && entry.portionId != null)
     : [];
-  const arrivalPartialRated = arrivalPendingItems.length > 0 && arrivalPendingItems.every((entry, index) =>
+  const singleArrivalItem = arrivalPendingItems.length === 1 ? arrivalPendingItems[0] : null;
+  const arrivalPartialRated = arrivalPendingItems.length === 1 || (arrivalPendingItems.length > 1 && arrivalPendingItems.every((entry, index) =>
     Object.prototype.hasOwnProperty.call(carryAdjust, `${pendingCarry?.round ?? "loop"}:${entry.productId}:${entry.portionId}:${index}`),
-  );
+  ));
   const loopMustClose = false;
   const arrivalState = pitCrewArrivalState({
     started: timing.started,
@@ -462,7 +463,7 @@ export default function PitCrewLive({ race, onClose }) {
       setAthleteFeedback({ round, flags: [...flags], at: new Date().toISOString(), source: "crew" });
     }
     if (pendingCarry && Number(pendingLoopNumber) === round) {
-      if (arrivalIntakeMode === "partial") confirmPendingCarry("rated");
+      if (arrivalIntakeMode === "partial") confirmPendingCarry(arrivalPendingItems.length === 1 ? "half" : "rated");
       else if (arrivalIntakeMode === "none") confirmPendingCarry("none");
       else confirmPendingCarry("planned");
     }
@@ -584,7 +585,9 @@ export default function PitCrewLive({ race, onClose }) {
         ? 1
         : mode === "none"
           ? 0
-          : Number(carryAdjust[key]);
+          : mode === "half"
+            ? 0.5
+            : Number(carryAdjust[key]);
       if (!Number.isFinite(factor) || factor <= 0) return [];
       return [{ ...entry, intakeFactor: Math.max(0, Math.min(1, factor)) }];
     });
@@ -1045,9 +1048,8 @@ export default function PitCrewLive({ race, onClose }) {
             <div>
               <small>LOOP {timing.currentRound} LÄUFT</small>
               <strong>Warten auf den Athleten</strong>
-              <span>Bei Rückkehr einmal tippen. Danach kennt die Crew die echte Restzeit bis zum nächsten festen Start und der passende Pit-Modus wird aktiv.</span>
+              <span>Bei Rückkehr unten einmal „Athlet zurück“ tippen. Danach kennt die Crew die echte Restzeit bis zum nächsten festen Start und der passende Pit-Modus wird aktiv.</span>
             </div>
-            <button type="button" onClick={markAthleteReturned}>ATHLET ZURÜCK · LOOP {timing.currentRound}</button>
           </section>
         )}
 
@@ -1192,13 +1194,13 @@ export default function PitCrewLive({ race, onClose }) {
 
           {arrivalPendingItems.length > 0 && (
             <div className="pit-live-checkin-intake">
-              <div className="pit-live-checkin-subhead"><small>VERPFLEGUNG AUF LOOP {timing.currentRound}</small><span>Was davon wurde tatsächlich genommen?</span></div>
+              <div className="pit-live-checkin-subhead"><small>VERPFLEGUNG AUF LOOP {timing.currentRound}</small><span>{singleArrivalItem ? selectionLabel(singleArrivalItem, productCatalog) : "Was davon wurde tatsächlich genommen?"}</span></div>
               <div className="pit-live-checkin-intake-modes">
-                <button type="button" className={arrivalIntakeMode === "planned" ? "active" : ""} onClick={() => { setArrivalIntakeMode("planned"); setCarryAdjust({}); }}>✓ Alles wie geplant</button>
-                <button type="button" className={arrivalIntakeMode === "partial" ? "active" : ""} onClick={() => setArrivalIntakeMode("partial")}>½ Teilweise</button>
+                <button type="button" className={arrivalIntakeMode === "planned" ? "active" : ""} onClick={() => { setArrivalIntakeMode("planned"); setCarryAdjust({}); }}>{singleArrivalItem ? "✓ Komplett" : "✓ Alles wie geplant"}</button>
+                <button type="button" className={arrivalIntakeMode === "partial" ? "active" : ""} onClick={() => { setArrivalIntakeMode("partial"); if (singleArrivalItem) setCarryAdjust({}); }}>½ Teilweise</button>
                 <button type="button" className={arrivalIntakeMode === "none" ? "active" : ""} onClick={() => { setArrivalIntakeMode("none"); setCarryAdjust({}); }}>○ Nichts</button>
               </div>
-              {arrivalIntakeMode === "partial" && <div className="pit-live-loop-items pit-live-checkin-intake-items">
+              {arrivalIntakeMode === "partial" && arrivalPendingItems.length > 1 && <div className="pit-live-loop-items pit-live-checkin-intake-items">
                 {arrivalPendingItems.map((entry, index) => {
                   const key = carryResultKey(entry, index);
                   const selectedFactor = carryAdjust[key];

@@ -48,6 +48,16 @@ test("Athlet zurück combines status and loop intake in one return sheet", () =>
   assert.match(source, /Die Crew muss den Status nicht erneut eingeben/);
 });
 
+test("Pit Crew uses one sticky return action and simplifies single-item intake", () => {
+  assert.match(source, /Bei Rückkehr unten einmal „Athlet zurück“ tippen/);
+  assert.doesNotMatch(source, /<button type="button" onClick=\{markAthleteReturned\}>ATHLET ZURÜCK/);
+  assert.match(source, /onClick=\{athleteNeedsArrival \? markAthleteReturned : savePit\}/);
+  assert.match(source, /const singleArrivalItem = arrivalPendingItems\.length === 1/);
+  assert.match(source, /singleArrivalItem \? "✓ Komplett" : "✓ Alles wie geplant"/);
+  assert.match(source, /arrivalPendingItems\.length > 1/);
+  assert.match(source, /confirmPendingCarry\(arrivalPendingItems\.length === 1 \? "half" : "rated"\)/);
+});
+
 
 test("shared Pit Crew route is protected by the application error boundary and exposes the KH audit", () => {
   const appSource = fs.readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");
