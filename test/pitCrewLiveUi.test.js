@@ -93,3 +93,8 @@ test("Crew sharing preserves the browser user gesture instead of awaiting token 
   assert.match(shareSource, /NotAllowedError/);
   assert.match(shareSource, /copyPitCrewUrl/);
 });
+
+
+test("athlete status offers an explicit Isostar fatigue signal", () => {
+  assert.match(source, /\["iso-fatigue", "🧃", "Iso satt"\]/);
+});

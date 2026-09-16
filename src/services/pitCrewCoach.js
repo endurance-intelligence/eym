@@ -13,11 +13,22 @@ export const PIT_CREW_PRODUCTS = [
   },
   {
     id: "isostar",
-    label: "Isostar",
+    label: "Isostar Hydrate & Perform Orange",
     icon: "🧃",
     category: "drink",
-    traits: ["carb-drink", "electrolyte", "quick"],
+    traits: ["carb-drink", "electrolyte", "orange", "quick"],
     portions: [150, 200, 250, 300, 400, 500].map((ml) => ({ id: `${ml}`, label: `${ml} ml`, carbs: round1(ml * 0.07), fluidMl: ml, caffeineMg: 0 })),
+  },
+  {
+    id: "isostar-long",
+    label: "Isostar Long Energy Plus Zitrone",
+    icon: "🍋",
+    category: "drink",
+    traits: ["carb-drink", "electrolyte", "long-energy", "lemon", "quick"],
+    // 38 g powder per 500 ml. Published product databases list about 31 g KH/500 ml;
+    // keep this marked as estimated until the athlete confirms the label on the tub.
+    estimated: true,
+    portions: [150, 200, 250, 300, 400, 500].map((ml) => ({ id: `${ml}`, label: `${ml} ml`, carbs: round1(ml * 0.062), fluidMl: ml, caffeineMg: 0, sodiumMg: Math.round(ml * 1.12) })),
   },
   {
     id: "dryll",
@@ -63,11 +74,19 @@ export const PIT_CREW_PRODUCTS = [
   },
   {
     id: "226ers-high",
-    label: "226ERS High Energy",
+    label: "226ERS High Energy Neutral",
     icon: "🟥",
     category: "gel",
-    traits: ["sweet", "quick", "portable"],
-    portions: [{ id: "1", label: "1 Gel", carbs: 50, fluidMl: 0, caffeineMg: 0 }],
+    traits: ["neutral", "quick", "portable"],
+    portions: [{ id: "1", label: "1 Gel · 76 g", carbs: 50, fluidMl: 0, caffeineMg: 0 }],
+  },
+  {
+    id: "226ers-high-strawberry",
+    label: "226ERS High Energy Salty Strawberry",
+    icon: "🍓",
+    category: "gel",
+    traits: ["salty", "sweet", "quick", "portable"],
+    portions: [{ id: "1", label: "1 Gel · 76 g", carbs: 50, fluidMl: 0, caffeineMg: 0, sodiumMg: 250 }],
   },
   {
     id: "banana",
@@ -366,22 +385,42 @@ const STABLE_FUEL_OPTIONS = [
   {
     key: "banana",
     selection: [choice("banana", "whole", "now"), choice("haribo", "10g", "now"), choice("isostar", "500", "carry")],
-    why: "Alles stabil: echte Nahrung plus kleiner KH-Baustein und ein klares Hauptgetränk für die Runde.",
+    why: "Alles stabil: echte Nahrung plus kleiner KH-Baustein und Hydrate & Perform Orange für die Runde.",
   },
   {
     key: "milk-roll",
-    selection: [choice("milk-roll", "1", "now"), choice("haribo", "10g", "now"), choice("isostar", "500", "carry")],
-    why: "Alles stabil: feste Kohlenhydrate plus kleiner KH-Baustein und bewährtes Hauptgetränk.",
+    selection: [choice("milk-roll", "1", "now"), choice("haribo", "10g", "now"), choice("isostar-long", "500", "carry")],
+    why: "Alles stabil: feste Kohlenhydrate plus kleiner KH-Baustein und Long Energy Zitrone als Getränke-Rotation.",
   },
   {
     key: "fusilli",
     selection: [choice("fusilli", "100", "now"), choice("salt-sticks", "10g", "now"), choice("isostar", "500", "carry")],
-    why: "Herzhafte Abwechslung im Pit plus ausreichend Kohlenhydrate und ein klares Hauptgetränk.",
+    why: "Herzhafte Abwechslung im Pit plus ausreichend Kohlenhydrate und Hydrate & Perform Orange.",
   },
   {
-    key: "sis-beta",
-    selection: [choice("sis-beta", "1", "now"), choice("isostar", "400", "carry")],
-    why: "Kompakte Fuel-Stunde nahe am Backyard-Arbeitsziel als Abwechslung zu fester Nahrung.",
+    key: "226ers-high",
+    selection: [choice("haribo", "20g", "now"), choice("226ers-high", "1", "carry"), choice("water", "500", "carry")],
+    why: "Gezielte Gel-Rotation: 226ERS Neutral liefert 50 g KH, Wasser hält Geschmack und Flüssigkeit getrennt steuerbar.",
+  },
+  {
+    key: "banana-long",
+    selection: [choice("banana", "whole", "now"), choice("haribo", "10g", "now"), choice("isostar-long", "500", "carry")],
+    why: "Echte Nahrung plus Long Energy Zitrone: Getränkegeschmack bewusst rotieren, ohne die KH-Zufuhr zu verlieren.",
+  },
+  {
+    key: "milk-roll-orange",
+    selection: [choice("milk-roll", "1", "now"), choice("haribo", "10g", "now"), choice("isostar", "500", "carry")],
+    why: "Feste Kohlenhydrate plus Hydrate & Perform Orange: bewährte Kombination nach der Getränke-Rotation.",
+  },
+  {
+    key: "226ers-high-strawberry",
+    selection: [choice("banana", "half", "now"), choice("226ers-high-strawberry", "1", "carry"), choice("water", "500", "carry")],
+    why: "Gel-Rotation mit Salty Strawberry: 50 g KH plus 250 mg Natrium; Wasser separat dazu, damit die Runde nicht nur süß bleibt.",
+  },
+  {
+    key: "fusilli-long",
+    selection: [choice("fusilli", "100", "now"), choice("salt-sticks", "10g", "now"), choice("isostar-long", "500", "carry")],
+    why: "Herzhafte Abwechslung plus Long Energy Zitrone als zweite Getränkeoption.",
   },
 ];
 
@@ -389,7 +428,11 @@ function stableSuggestion(round = 1, history = []) {
   const startIndex = Math.max(0, (Math.max(1, Number(round || 1)) - 1) % STABLE_FUEL_OPTIONS.length);
   for (let offset = 0; offset < STABLE_FUEL_OPTIONS.length; offset += 1) {
     const candidate = STABLE_FUEL_OPTIONS[(startIndex + offset) % STABLE_FUEL_OPTIONS.length];
-    if (recentProductCount(history, candidate.key, 2) === 0) return candidate;
+    const recentKey = candidate.key.startsWith("banana") ? "banana"
+      : candidate.key.startsWith("milk-roll") ? "milk-roll"
+        : candidate.key.startsWith("fusilli") ? "fusilli"
+          : candidate.key;
+    if (recentProductCount(history, recentKey, 2) === 0) return candidate;
   }
   return STABLE_FUEL_OPTIONS[startIndex];
 }
@@ -401,6 +444,16 @@ function hasSelection(selection = [], productId, timing = null) {
 function addUnique(selection = [], entry) {
   if (!entry || hasSelection(selection, entry.productId, entry.timing || "now")) return selection;
   return [...selection, entry];
+}
+
+function isIsostarDrink(productId = "") {
+  return ["isostar", "isostar-long"].includes(String(productId));
+}
+
+function preferred226Gel(history = []) {
+  const neutralCount = recentProductCount(history, "226ers-high", 4);
+  const strawberryCount = recentProductCount(history, "226ers-high-strawberry", 4);
+  return neutralCount <= strawberryCount ? "226ers-high" : "226ers-high-strawberry";
 }
 
 function normalSuggestion({ round = 1, history = [], flags = [], weather = [] } = {}) {
@@ -469,6 +522,14 @@ function normalSuggestion({ round = 1, history = [], flags = [], weather = [] } 
   if ((athlete.has("too-cold") || conditions.has("cold")) && !athlete.has("stomach")) {
     selection = addUnique(selection, choice("broth", "150", "now"));
     reasons.push("Kühl: warmes Getränk ergänzen, ohne die übrige Fuel-Rotation unnötig zu verändern.");
+  }
+
+  if (athlete.has("iso-fatigue") && !athlete.has("stomach")) {
+    selection = selection.filter((entry) => !isIsostarDrink(entry.productId));
+    if (!hasSelection(selection, "water", "carry")) selection = addUnique(selection, choice("water", "500", "carry"));
+    const hasGel = selection.some((entry) => ["maurten100", "sis-beta", "226ers-high", "226ers-high-strawberry"].includes(entry.productId));
+    if (!hasGel) selection = addUnique(selection, choice(preferred226Gel(history), "1", "carry"));
+    reasons.push("Iso satt: Isostar-Getränke pausieren. Wasser mitgeben und die fehlenden KH gezielt über ein Gel/andere Quellen decken.");
   }
 
   return { selection, why: reasons.filter(Boolean).join(" ") };

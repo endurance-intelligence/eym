@@ -32,6 +32,7 @@ const STATUS_OPTIONS = [
   ["sweet-fatigue", "🍬", "Süß satt"],
   ["wants-salty", "🥨", "Will salzig"],
   ["no-salty", "🚫", "Kein salzig"],
+  ["iso-fatigue", "🧃", "Iso satt"],
   ["too-warm", "🥵", "Zu warm"],
   ["too-cold", "🥶", "Zu kalt"],
   ["tired", "😴", "Müde"],

@@ -66,16 +66,16 @@ test("hunger prioritizes real food now and one clear loop drink", () => {
 
 test("thirst adds hydration without randomly changing the solid fuel", () => {
   const normal = recommendPitCrew({ round: 5, minutesToStart: 10, flags: [] });
-  const normalDrinks = normal.selection.filter((item) => ["water", "isostar", "dryll", "cola", "redbull"].includes(item.productId));
+  const normalDrinks = normal.selection.filter((item) => ["water", "isostar", "isostar-long", "dryll", "cola", "redbull"].includes(item.productId));
   assert.equal(normalDrinks.length, 1);
-  assert.equal(normalDrinks[0].productId, "isostar");
+  assert.ok(["isostar", "isostar-long"].includes(normalDrinks[0].productId));
   assert.equal(normalDrinks[0].timing, "carry");
 
   const thirsty = recommendPitCrew({ round: 5, minutesToStart: 10, flags: ["thirsty"] });
   assert.equal(thirsty.selection.find((item) => item.productId === "water")?.timing, "now");
   assert.equal(thirsty.selection.find((item) => item.productId === "isostar")?.timing, "carry");
-  const normalSolid = normal.selection.filter((item) => !["water", "isostar", "dryll", "cola", "redbull", "broth"].includes(item.productId)).map((item) => item.productId);
-  const thirstySolid = thirsty.selection.filter((item) => !["water", "isostar", "dryll", "cola", "redbull", "broth"].includes(item.productId)).map((item) => item.productId);
+  const normalSolid = normal.selection.filter((item) => !["water", "isostar", "isostar-long", "dryll", "cola", "redbull", "broth"].includes(item.productId)).map((item) => item.productId);
+  const thirstySolid = thirsty.selection.filter((item) => !["water", "isostar", "isostar-long", "dryll", "cola", "redbull", "broth"].includes(item.productId)).map((item) => item.productId);
   assert.deepEqual(thirstySolid, normalSolid);
 });
 
@@ -248,4 +248,39 @@ test("rolling pit average counts pending carry as provisionally taken until a de
   const rolling = rollingPitAverage(history, null, 3);
   assert.equal(rolling.carbsPerHour, 35);
   assert.equal(rolling.fluidPerHour, 500);
+});
+
+
+test("pit catalog distinguishes the athlete's two Isostar drinks and both 226ERS High Energy gels", () => {
+  const orange = PIT_CREW_PRODUCTS.find((product) => product.id === "isostar");
+  const lemon = PIT_CREW_PRODUCTS.find((product) => product.id === "isostar-long");
+  const neutral = PIT_CREW_PRODUCTS.find((product) => product.id === "226ers-high");
+  const strawberry = PIT_CREW_PRODUCTS.find((product) => product.id === "226ers-high-strawberry");
+  assert.equal(orange?.label, "Isostar Hydrate & Perform Orange");
+  assert.equal(orange?.portions.find((portion) => portion.id === "500")?.carbs, 35);
+  assert.equal(lemon?.label, "Isostar Long Energy Plus Zitrone");
+  assert.equal(lemon?.portions.find((portion) => portion.id === "500")?.carbs, 31);
+  assert.equal(neutral?.portions[0]?.carbs, 50);
+  assert.equal(strawberry?.portions[0]?.carbs, 50);
+  assert.equal(strawberry?.portions[0]?.sodiumMg, 250);
+});
+
+test("stable Backyard rotation deliberately schedules gels instead of relying on food and Isostar forever", () => {
+  const round4 = recommendPitCrew({ round: 4, minutesToStart: 10, history: [] });
+  const round7 = recommendPitCrew({ round: 7, minutesToStart: 10, history: [] });
+  assert.equal(round4.selection.some((item) => item.productId === "226ers-high"), true);
+  assert.equal(round7.selection.some((item) => item.productId === "226ers-high-strawberry"), true);
+  assert.ok(round4.summary.carbs >= 60);
+  assert.ok(round7.summary.carbs >= 60);
+});
+
+test("Iso fatigue pauses both Isostar drinks and replaces their carbs instead of simply deleting energy", () => {
+  const recommendation = recommendPitCrew({ round: 6, minutesToStart: 10, history: [], flags: ["iso-fatigue"] });
+  const ids = recommendation.selection.map((item) => item.productId);
+  assert.equal(ids.includes("isostar"), false);
+  assert.equal(ids.includes("isostar-long"), false);
+  assert.equal(ids.includes("water"), true);
+  assert.equal(ids.some((id) => ["226ers-high", "226ers-high-strawberry", "maurten100", "sis-beta"].includes(id)), true);
+  assert.ok(recommendation.summary.carbs >= 60);
+  assert.match(recommendation.why, /Iso satt/i);
 });
