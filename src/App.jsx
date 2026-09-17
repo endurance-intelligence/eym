@@ -26,12 +26,13 @@ function deferredPage(Component) {
 }
 
 export default function App() {
-  const { state, session, authLoading, cloudStatus } = useApp();
+  const { state, session, authLoading, cloudStatus, cloudError, reloadCloudState, logout } = useApp();
   const sharedPitCrewToken = new URLSearchParams(window.location.search).get("crew");
   if (sharedPitCrewToken) return <ErrorBoundary><PitCrewSharedSession token={sharedPitCrewToken} /></ErrorBoundary>;
   if (authLoading) return <main className="auth-shell"><section className="auth-card"><p className="eyebrow">Endurance Intelligence</p><h1>Cloud wird verbunden …</h1></section></main>;
   if (!session) return <Auth />;
   if (cloudStatus === "local" || cloudStatus === "loading") return <main className="auth-shell"><section className="auth-card"><p className="eyebrow">Endurance Intelligence</p><h1>Dein Profil wird geladen …</h1><p className="muted">Dein vorhandener Stand wird zuerst geprüft, damit nichts überschrieben wird.</p></section></main>;
+  if (cloudStatus === "error" && state.onboarding?.status !== "completed") return <main className="auth-shell"><section className="auth-card"><p className="eyebrow">Endurance Intelligence</p><h1>Dein Profil konnte nicht geladen werden</h1><p className="muted">Deine Anmeldung ist noch aktiv. Die App startet kein neues Onboarding, solange der bestehende Cloud-Stand nicht geprüft werden konnte.</p>{cloudError && <p className="connection-message cloud-error-message">{cloudError}</p>}<div className="button-row"><button onClick={reloadCloudState}>Cloud erneut laden</button><button className="secondary" onClick={logout}>Abmelden</button></div></section></main>;
   if (state.onboarding?.status !== "completed") return <ErrorBoundary><Onboarding /></ErrorBoundary>;
   return <ErrorBoundary><HashRouter useTransitions={false}><Routes><Route element={<Layout />}><Route index element={<Briefing />} /><Route path="mission" element={deferredPage(Mission)} /><Route path="training" element={deferredPage(Training)} /><Route path="planner" element={deferredPage(Planner)} /><Route path="coach" element={deferredPage(Coach)} /><Route path="coach/exercises" element={deferredPage(Exercises)} /><Route path="fuel" element={deferredPage(Fuel)} /><Route path="equipment" element={<Navigate to="/settings?section=equipment" replace />} /><Route path="analytics" element={deferredPage(Analytics)} /><Route path="settings" element={deferredPage(Settings)} /></Route></Routes></HashRouter></ErrorBoundary>;
 }

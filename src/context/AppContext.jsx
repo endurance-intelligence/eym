@@ -248,13 +248,17 @@ export function AppProvider({ children }) {
     let cancelled = false;
     async function hydrate() {
       const userId = session.user.id;
+      const hasAccountState = hasStoredState(userId);
+      const local = hasAccountState ? loadState(defaultState, userId) : mergeState(defaultState, {});
+      if (hasAccountState) {
+        localStateUserIdRef.current = userId;
+        setState(withAccountReviewTrackingStart(local, session.user.created_at));
+      }
       setCloudStatus("loading");
       setCloudError("");
       try {
         const cloud = await loadCloudState(userId);
         if (cancelled || sessionUserIdRef.current !== userId) return;
-        const hasAccountState = hasStoredState(userId);
-        const local = hasAccountState ? loadState(defaultState, userId) : mergeState(defaultState, {});
         let hydratedState;
         if (cloud?.app_data && Object.keys(cloud.app_data).length > 0) {
           hydratedState = withAccountReviewTrackingStart(
@@ -284,6 +288,11 @@ export function AppProvider({ children }) {
         setCloudStatus("synced");
       } catch (error) {
         console.error("Supabase hydration failed", error);
+        if (cancelled || sessionUserIdRef.current !== userId) return;
+        if (hasAccountState) {
+          localStateUserIdRef.current = userId;
+          setState(withAccountReviewTrackingStart(local, session.user.created_at));
+        }
         setCloudError(error instanceof Error ? error.message : String(error));
         setCloudStatus("error");
       }
