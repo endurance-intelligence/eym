@@ -77,6 +77,8 @@ export function normalizePitCrewSnapshot(value = {}) {
     arrivalRound: Math.max(0, Number(value?.arrivalRound || 0)),
     arrivalAt: String(value?.arrivalAt || ""),
     stockIds: Array.isArray(value?.stockIds) ? value.stockIds.map(String) : null,
+    gelPriority: Array.isArray(value?.gelPriority) ? value.gelPriority.map(String) : null,
+    fuelMode: value?.fuelMode === "liquid-only" ? "liquid-only" : "normal",
     customProducts: normalizeCustomProducts(value?.customProducts),
   };
 }

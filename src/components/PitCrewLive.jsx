@@ -3,8 +3,11 @@ import {
   assessPitSelection,
   buildPitCrewCustomProduct,
   PIT_CARB_TARGET,
+  PIT_CREW_DEFAULT_GEL_PRIORITY,
   PIT_CREW_DEFAULT_STOCK_IDS,
   PIT_CREW_PRODUCTS,
+  buildPitCrewStartStock,
+  normalizeGelPriority,
   pitMetricStatus,
   pitTimeMode,
   pitCrewArrivalState,
@@ -33,6 +36,7 @@ const STATUS_OPTIONS = [
   ["wants-salty", "🥨", "Will salzig"],
   ["no-salty", "🚫", "Kein salzig"],
   ["iso-fatigue", "🧃", "Iso satt"],
+  ["liquid-only", "🥤", "Nur flüssig"],
   ["too-warm", "🥵", "Zu warm"],
   ["too-cold", "🥶", "Zu kalt"],
   ["tired", "😴", "Müde"],
@@ -209,6 +213,8 @@ export default function PitCrewLive({ race, onClose }) {
   const [arrivalAt, setArrivalAt] = useState(() => String(stored?.arrivalAt || ""));
   const [customProducts, setCustomProducts] = useState(() => normalizedCustomProducts(stored?.customProducts));
   const [stockIds, setStockIds] = useState(() => Array.isArray(stored?.stockIds) ? stored.stockIds : PIT_CREW_DEFAULT_STOCK_IDS);
+  const [gelPriority, setGelPriority] = useState(() => normalizeGelPriority(stored?.gelPriority || PIT_CREW_DEFAULT_GEL_PRIORITY));
+  const [fuelMode, setFuelMode] = useState(() => stored?.fuelMode === "liquid-only" ? "liquid-only" : "normal");
   const [stockCategory, setStockCategory] = useState("drink");
   const [showStockForm, setShowStockForm] = useState(false);
   const [stockItemDraft, setStockItemDraft] = useState(EMPTY_STOCK_ITEM);
@@ -248,8 +254,8 @@ export default function PitCrewLive({ race, onClose }) {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    window.localStorage.setItem(storageKey, JSON.stringify({ anchorAt, history, flags, incomingFlags, incomingAt, incomingRound, athleteFeedback, weather, arrivalRound, arrivalAt, stockIds, customProducts }));
-  }, [anchorAt, arrivalAt, arrivalRound, athleteFeedback, customProducts, flags, history, incomingAt, incomingFlags, incomingRound, stockIds, storageKey, weather]);
+    window.localStorage.setItem(storageKey, JSON.stringify({ anchorAt, history, flags, incomingFlags, incomingAt, incomingRound, athleteFeedback, weather, arrivalRound, arrivalAt, stockIds, customProducts, gelPriority, fuelMode }));
+  }, [anchorAt, arrivalAt, arrivalRound, athleteFeedback, customProducts, flags, fuelMode, gelPriority, history, incomingAt, incomingFlags, incomingRound, stockIds, storageKey, weather]);
 
   useEffect(() => {
     if (loadedPitRound.current === pitRound || editingRound != null) return;
@@ -286,7 +292,7 @@ export default function PitCrewLive({ race, onClose }) {
   // whether to memoize them instead of maintaining dependency arrays manually.
   const incomingApplies = Number(incomingRound || 0) === Number(timing.currentRound || 0) && Boolean(incomingAt);
   const athleteFeedbackApplies = Boolean(athleteFeedback) && Number(athleteFeedback.round || 0) === Number(timing.currentRound || 0);
-  const effectiveAthleteFlags = [...new Set([...(flags || []), ...(incomingApplies ? incomingFlags : [])])];
+  const effectiveAthleteFlags = [...new Set([...(flags || []), ...(incomingApplies ? incomingFlags : []), ...(fuelMode === "liquid-only" ? ["liquid-only"] : [])])];
   const nextLoopWeather = pitWeatherForecastForLoops({
     observation: autoWeather || {},
     nextStart: timing.nextStart,
@@ -325,6 +331,7 @@ export default function PitCrewLive({ race, onClose }) {
   const knownStockIds = new Set(productCatalog.map((product) => String(product.id)));
   const activeStockIds = stockIds.filter((id) => knownStockIds.has(String(id)));
   const availableProducts = productCatalog.filter((product) => activeStockIds.includes(String(product.id)));
+  const startStockPlan = buildPitCrewStartStock(race || {}, gelPriority);
 
   const recommendation = recommendPitCrew({
     round: Math.max(1, timing.currentRound || 1),
@@ -334,6 +341,7 @@ export default function PitCrewLive({ race, onClose }) {
     weather: effectiveWeather,
     products: productCatalog,
     availableProductIds: activeStockIds,
+    gelPriority,
   });
 
   const suggestionSummary = recommendation.summary;
@@ -429,6 +437,7 @@ export default function PitCrewLive({ race, onClose }) {
     if (incomingApplies) {
       const reportedFlags = [...incomingFlags];
       setFlags(reportedFlags);
+      if (reportedFlags.includes("liquid-only")) setFuelMode("liquid-only");
       setAthleteFeedback({ round, flags: reportedFlags, at: incomingAt || returnedAt, source: "athlete" });
       // Athlete status is already known. Open the return sheet only when the
       // just-finished loop still has carried fuel that should be confirmed.
@@ -452,6 +461,7 @@ export default function PitCrewLive({ race, onClose }) {
     if (!timing.started || !(Number(timing.currentRound) > 0)) return;
     const round = Math.max(1, Number(timing.currentRound));
     setIncomingFlags([...signalDraft]);
+    if (signalDraft.includes("liquid-only")) setFuelMode("liquid-only");
     setIncomingRound(round);
     setIncomingAt(new Date().toISOString());
     setSaveMessage(signalDraft.length ? `Athletenmeldung für Loop ${round} gesendet · Crew kann vorbereiten.` : `Athletenmeldung für Loop ${round}: alles okay.`);
@@ -460,6 +470,7 @@ export default function PitCrewLive({ race, onClose }) {
   function finishAthleteCheckIn() {
     const round = Math.max(1, Number(timing.currentRound || 1));
     const athleteAlreadyReported = athleteFeedbackApplies && athleteFeedback?.source === "athlete";
+    if (flags.includes("liquid-only") || athleteFeedback?.flags?.includes("liquid-only")) setFuelMode("liquid-only");
     if (!athleteAlreadyReported) {
       setAthleteFeedback({ round, flags: [...flags], at: new Date().toISOString(), source: "crew" });
     }
@@ -639,10 +650,12 @@ export default function PitCrewLive({ race, onClose }) {
         saveMessage,
         stockIds,
         customProducts,
+        gelPriority,
+        fuelMode,
       };
     }
     if (typeof window !== "undefined") {
-      if (!demoActive) window.localStorage.setItem(baseStorageKey, JSON.stringify({ anchorAt, history, flags, incomingFlags, incomingAt, incomingRound, weather, arrivalRound, arrivalAt, stockIds, customProducts }));
+      if (!demoActive) window.localStorage.setItem(baseStorageKey, JSON.stringify({ anchorAt, history, flags, incomingFlags, incomingAt, incomingRound, weather, arrivalRound, arrivalAt, stockIds, customProducts, gelPriority, fuelMode }));
       window.localStorage.removeItem(`${baseStorageKey}:demo`);
     }
     setDemoActive(true);
@@ -686,6 +699,8 @@ export default function PitCrewLive({ race, onClose }) {
     setArrivalAt(String(liveStored?.arrivalAt || transient.arrivalAt || ""));
     setCustomProducts(Array.isArray(liveStored?.customProducts) ? liveStored.customProducts : (Array.isArray(transient.customProducts) ? transient.customProducts : []));
     setStockIds(Array.isArray(liveStored?.stockIds) ? liveStored.stockIds : (Array.isArray(transient.stockIds) ? transient.stockIds : PIT_CREW_DEFAULT_STOCK_IDS));
+    setGelPriority(normalizeGelPriority(liveStored?.gelPriority || transient.gelPriority || PIT_CREW_DEFAULT_GEL_PRIORITY));
+    setFuelMode((liveStored?.fuelMode || transient.fuelMode) === "liquid-only" ? "liquid-only" : "normal");
     setSelection(Array.isArray(transient.selection) ? transient.selection : []);
     setSelectionMode(transient.selectionMode || "suggestion");
     setSelectionDirty(Boolean(transient.selectionDirty));
@@ -717,6 +732,47 @@ export default function PitCrewLive({ race, onClose }) {
 
   function clearTimingSelection(timingMode) {
     updateSelection((current) => current.filter((entry) => (entry.timing || "now") !== timingMode));
+  }
+
+  function moveGelPriority(productId, direction) {
+    setGelPriority((current) => {
+      const next = normalizeGelPriority(current);
+      const index = next.indexOf(String(productId));
+      const target = index + direction;
+      if (index < 0 || target < 0 || target >= next.length) return next;
+      [next[index], next[target]] = [next[target], next[index]];
+      return [...next];
+    });
+  }
+
+  function renderGelPrioritySection() {
+    const gels = normalizeGelPriority(gelPriority).map((id) => productCatalog.find((product) => String(product.id) === id)).filter(Boolean);
+    return (
+      <details className="pit-live-collapse pit-live-gel-priority">
+        <summary><span>GEL-PRIORITÄT</span><b>{gels[0]?.label || "noch offen"}</b><i>›</i></summary>
+        <div className="pit-live-collapse-body">
+          <p className="pit-live-help">Oben = bevorzugt. EI rotiert zuerst innerhalb der oberen Plätze; Reserve-Produkte kommen erst später. Maurten ist standardmäßig Reserve.</p>
+          <div className="pit-live-gel-priority-list">
+            {gels.map((product, index) => <article key={product.id}><b>{index + 1}</b><span>{product.icon} {product.label}</span><div><button type="button" disabled={index === 0} onClick={() => moveGelPriority(product.id, -1)}>↑</button><button type="button" disabled={index === gels.length - 1} onClick={() => moveGelPriority(product.id, 1)}>↓</button></div></article>)}
+          </div>
+        </div>
+      </details>
+    );
+  }
+
+  function renderStartStockSection() {
+    return (
+      <details className="pit-live-collapse pit-live-start-stock">
+        <summary><span>STARTVORRAT</span><b>{startStockPlan.hours} h · +{startStockPlan.reservePercent}% Reserve</b><i>›</i></summary>
+        <div className="pit-live-collapse-body">
+          <div className="pit-live-start-stock-head"><b>≈ {startStockPlan.targetCarbs.toLocaleString("de-DE")} g KH Materialziel</b><span>Planungshorizont inkl. Reserve. Das ist Auswahl/Vorrat – nicht der Verzehrplan.</span></div>
+          <div className="pit-live-start-stock-grid">
+            {startStockPlan.items.map((item) => <article key={item.id}><span>{item.icon}</span><div><b>{item.label}</b>{item.priority ? <small>Gel-Prio {item.priority}</small> : null}</div><strong>{item.quantity} {item.unit}</strong></article>)}
+          </div>
+          <p className="pit-live-help">Pulver trocken portionieren. Bei Open-End ist das ein Einsatzhorizont, kein Rennende. Wird der Horizont verlängert, skaliert diese Liste mit.</p>
+        </div>
+      </details>
+    );
   }
 
   function renderStockSection() {
@@ -1031,6 +1087,13 @@ export default function PitCrewLive({ race, onClose }) {
           </section>
         )}
 
+        {fuelMode === "liquid-only" && (
+          <section className="pit-live-fuel-mode">
+            <div><small>FUEL-MODUS</small><strong>🥤 Nur flüssig aktiv</strong><span>Feste Nahrung bleibt aus dem Idealvorschlag, bis der Athlet wieder feste Nahrung freigibt.</span></div>
+            <button type="button" onClick={() => { setFuelMode("normal"); setFlags((current) => current.filter((flag) => flag !== "liquid-only")); setSaveMessage("Fuel-Modus: feste Nahrung wieder freigegeben."); }}>Fest geht wieder</button>
+          </section>
+        )}
+
         {athleteFeedbackApplies && !incomingApplies && (
           <section className={`pit-live-athlete-feedback ${athleteFeedback.flags?.length ? "changed" : "okay"}`}>
             <div><small>{athleteFeedback.source === "athlete" ? "RÜCKMELDUNG ATHLET" : "RÜCKMELDUNG CREW"}</small><strong>{athleteFeedback.flags?.length ? compactStatus(athleteFeedback.flags) : "✓ Alles okay"}</strong><span>{athleteFeedback.flags?.length ? "Änderungen am Pit-Vorschlag wurden übernommen." : "Keine Änderung am vorbereiteten Plan nötig."}</span></div>
@@ -1110,6 +1173,8 @@ export default function PitCrewLive({ race, onClose }) {
           </div>
         </details>
 
+        {renderStartStockSection()}
+        {renderGelPrioritySection()}
         {renderStockSection()}
         {renderPitFuelingSection()}
         {renderLoopFuelingSection()}

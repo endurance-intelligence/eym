@@ -2,6 +2,19 @@ const round1 = (value, digits = 1) => Number(Number(value || 0).toFixed(digits))
 
 export const PIT_CARB_TARGET = { min: 60, max: 90, center: 70 };
 
+export const PIT_CREW_DEFAULT_GEL_PRIORITY = [
+  "226ers-high",
+  "226ers-high-strawberry",
+  "sis-beta",
+  "maurten100",
+];
+
+export function normalizeGelPriority(value = []) {
+  const known = new Set(PIT_CREW_DEFAULT_GEL_PRIORITY);
+  const incoming = (Array.isArray(value) ? value : []).map(String).filter((id) => known.has(id));
+  return [...new Set([...incoming, ...PIT_CREW_DEFAULT_GEL_PRIORITY])];
+}
+
 const ISOSTAR_LONG_ENERGY_PER_500 = Object.freeze({
   powderG: 38,
   energyKcal: 131.9,
@@ -425,11 +438,8 @@ function choice(productId, portionId, timing = "") {
   return { productId, portionId: String(portionId), ...(timing ? { timing } : {}) };
 }
 
-function quickSuggestion(history, mode) {
-  const rolling = rollingPitAverage(history, null, 3);
-  const gel = rolling.hours >= 2 && rolling.carbsPerHour > 60
-    ? choice("maurten100", "1")
-    : choice("sis-beta", "1");
+function quickSuggestion(history, mode, gelPriority = PIT_CREW_DEFAULT_GEL_PRIORITY) {
+  const gel = choice(preferredGel(history, gelPriority), "1");
   return {
     selection: [choice("isostar", "300"), gel],
     why: mode === "go"
@@ -507,13 +517,31 @@ function isIsostarDrink(productId = "") {
   return ["isostar", "isostar-long"].includes(String(productId));
 }
 
-function preferred226Gel(history = []) {
-  const neutralCount = recentProductCount(history, "226ers-high", 4);
-  const strawberryCount = recentProductCount(history, "226ers-high-strawberry", 4);
-  return neutralCount <= strawberryCount ? "226ers-high" : "226ers-high-strawberry";
+function preferredGel(history = [], gelPriority = PIT_CREW_DEFAULT_GEL_PRIORITY) {
+  const priorities = normalizeGelPriority(gelPriority);
+  const ranked = priorities.map((productId, index) => ({
+    productId,
+    index,
+    recent: recentProductCount(history, productId, 4),
+  })).sort((left, right) => {
+    const leftScore = left.index * 3 + left.recent * 2;
+    const rightScore = right.index * 3 + right.recent * 2;
+    return leftScore - rightScore;
+  });
+  return ranked[0]?.productId || "226ers-high";
 }
 
-function normalSuggestion({ round = 1, history = [], flags = [], weather = [] } = {}) {
+function secondPreferredGel(history = [], gelPriority = PIT_CREW_DEFAULT_GEL_PRIORITY, firstId = "", currentCarbs = 0) {
+  const priorities = normalizeGelPriority(gelPriority).filter((id) => id !== firstId);
+  const fitting = priorities.find((id) => {
+    const product = pitProduct(id);
+    const carbs = Number(product?.portions?.[0]?.carbs || 0);
+    return carbs > 0 && Number(currentCarbs || 0) + carbs <= PIT_CARB_TARGET.max;
+  });
+  return fitting || preferredGel(history, priorities);
+}
+
+function normalSuggestion({ round = 1, history = [], flags = [], weather = [], gelPriority = PIT_CREW_DEFAULT_GEL_PRIORITY } = {}) {
   const athlete = new Set(flags || []);
   const conditions = new Set(weather || []);
   const caffeineLast3 = recentCaffeine(history, 3);
@@ -523,7 +551,7 @@ function normalSuggestion({ round = 1, history = [], flags = [], weather = [] } 
   // signals may replace the solid fuel; thirst/temperature must not randomly reshuffle it.
   if (athlete.has("stomach")) {
     recommendation = {
-      selection: [choice("water", "200", "now"), choice("isostar", "400", "carry"), choice("maurten100", "1", "carry")],
+      selection: [choice("water", "200", "now"), choice("isostar", "400", "carry"), choice(preferredGel(history, gelPriority), "1", "carry")],
       why: "Magen gemeldet: im Pit erst neutral trinken, für die Runde nur bewährte, einfache Versorgung mitgeben.",
     };
   } else if (athlete.has("no-salty")) {
@@ -585,8 +613,33 @@ function normalSuggestion({ round = 1, history = [], flags = [], weather = [] } 
     selection = selection.filter((entry) => !isIsostarDrink(entry.productId));
     if (!hasSelection(selection, "water", "carry")) selection = addUnique(selection, choice("water", "500", "carry"));
     const hasGel = selection.some((entry) => ["maurten100", "sis-beta", "226ers-high", "226ers-high-strawberry"].includes(entry.productId));
-    if (!hasGel) selection = addUnique(selection, choice(preferred226Gel(history), "1", "carry"));
+    if (!hasGel) selection = addUnique(selection, choice(preferredGel(history, gelPriority), "1", "carry"));
     reasons.push("Iso satt: Isostar-Getränke pausieren. Wasser mitgeben und die fehlenden KH gezielt über ein Gel/andere Quellen decken.");
+  }
+
+  if (athlete.has("liquid-only")) {
+    const liquidIds = new Set(["water", "isostar", "isostar-long", "dryll", "cola", "redbull", "broth", "maurten100", "sis-beta", "226ers-high", "226ers-high-strawberry"]);
+    selection = selection.filter((entry) => liquidIds.has(String(entry.productId)));
+    const gelIds = new Set(["maurten100", "sis-beta", "226ers-high", "226ers-high-strawberry"]);
+    let gels = selection.filter((entry) => gelIds.has(String(entry.productId)));
+    if (!gels.length) {
+      const firstGel = preferredGel(history, gelPriority);
+      selection = addUnique(selection, choice(firstGel, "1", "carry"));
+      gels = selection.filter((entry) => gelIds.has(String(entry.productId)));
+    }
+    const currentCarbs = summarizePitSelection(selection).carbs;
+    if (currentCarbs < PIT_CARB_TARGET.min) {
+      const firstGel = gels[0]?.productId || preferredGel(history, gelPriority);
+      const secondGel = secondPreferredGel(history, gelPriority, firstGel, currentCarbs);
+      selection = addUnique(selection, choice(secondGel, "1", "carry"));
+    }
+    if (athlete.has("iso-fatigue")) {
+      selection = selection.filter((entry) => !isIsostarDrink(entry.productId));
+      if (!hasSelection(selection, "water", "carry")) selection = addUnique(selection, choice("water", "500", "carry"));
+    }
+    reasons.push(athlete.has("iso-fatigue")
+      ? "Nur flüssig + Iso satt: feste Nahrung bleibt draußen; bevorzugte Gels rotieren und Wasser deckt die Flüssigkeit."
+      : "Nur flüssig: feste Nahrung pausieren. Kohlenhydrate kommen gezielt aus bevorzugten Gels und verträglichen Getränken.");
   }
 
   return { selection, why: reasons.filter(Boolean).join(" ") };
@@ -637,11 +690,11 @@ function fitRecommendationToStock(selection, products, availableProductIds) {
   return { selection: fitted, adjusted };
 }
 
-export function recommendPitCrew({ round = 1, minutesToStart = 10, history = [], flags = [], weather = [], products = PIT_CREW_PRODUCTS, availableProductIds = null } = {}) {
+export function recommendPitCrew({ round = 1, minutesToStart = 10, history = [], flags = [], weather = [], products = PIT_CREW_PRODUCTS, availableProductIds = null, gelPriority = PIT_CREW_DEFAULT_GEL_PRIORITY } = {}) {
   const mode = pitTimeMode(minutesToStart);
   const recommendation = mode === "go" || mode === "quick"
-    ? quickSuggestion(history, mode)
-    : normalSuggestion({ round, history, flags, weather });
+    ? quickSuggestion(history, mode, gelPriority)
+    : normalSuggestion({ round, history, flags, weather, gelPriority });
   const fitted = fitRecommendationToStock(recommendation.selection, products, availableProductIds);
   const summary = summarizePitSelection(fitted.selection, products);
   const why = fitted.selection.length
@@ -741,4 +794,40 @@ export function pitCrewRaceEligible(profile = {}) {
   const mode = String(profile.loopMode || "").toLowerCase();
   const name = String(profile.name || "").toLowerCase();
   return profile.format === "loop" && (mode === "fixed_interval" || /backyard/.test(name));
+}
+
+
+export function pitCrewPlanningHours(race = {}) {
+  const explicit = Number(race?.planningHorizonHours || 0);
+  if (String(race?.eventLimitMode || "") === "open" && explicit > 0) return Math.max(1, explicit);
+  const limitMinutes = Number(race?.eventTimeLimitMinutes || 0);
+  if (limitMinutes > 0) return Math.max(1, Math.ceil(limitMinutes / 60));
+  return explicit > 0 ? Math.max(1, explicit) : 24;
+}
+
+export function buildPitCrewStartStock(race = {}, gelPriority = PIT_CREW_DEFAULT_GEL_PRIORITY) {
+  const hours = pitCrewPlanningHours(race);
+  const reserveFactor = 1.15;
+  const targetCarbs = Math.round(PIT_CARB_TARGET.center * hours * reserveFactor);
+  const gels = normalizeGelPriority(gelPriority);
+  const gelQuantities = [0.22, 0.18, 0.13, 0.08].map((rate) => Math.max(2, Math.ceil(hours * rate)));
+  const gelItems = gels.map((id, index) => {
+    const product = pitProduct(id);
+    return { id, label: product?.label || id, icon: product?.icon || "⚡", quantity: gelQuantities[index] || 2, unit: "Gels", priority: index + 1 };
+  });
+  const items = [
+    { id: "water", label: "Wasser gesamt", icon: "💧", quantity: Math.max(12, Math.ceil(hours * 0.65)), unit: "l", category: "drink" },
+    { id: "isostar", label: "Hydrate & Perform Orange", icon: "🧃", quantity: Math.max(6, Math.ceil(hours * 0.28)), unit: "× 500 ml", category: "drink" },
+    { id: "isostar-long", label: "Long Energy Plus Zitrone", icon: "🍋", quantity: Math.max(5, Math.ceil(hours * 0.25)), unit: "× 500 ml", category: "drink" },
+    ...gelItems.map((item) => ({ ...item, category: "gel" })),
+    { id: "banana", label: "Bananen", icon: "🍌", quantity: Math.max(4, Math.ceil(hours * 0.2)), unit: "Stück", category: "food" },
+    { id: "milk-roll", label: "Milchbrötchen", icon: "🥛", quantity: Math.max(5, Math.ceil(hours * 0.25)), unit: "Stück", category: "food" },
+    { id: "fusilli", label: "Fusilli / Nudeln", icon: "🍝", quantity: Math.max(4, Math.ceil(hours * 0.18)), unit: "kleine Portionen", category: "food" },
+    { id: "salt-sticks", label: "Salzstangen / Brezeln", icon: "🥨", quantity: Math.max(2, Math.ceil(hours / 18)), unit: "Packungen", category: "food" },
+    { id: "broth", label: "Brühe", icon: "☕", quantity: Math.max(6, Math.ceil(hours * 0.25)), unit: "Tassen", category: "food" },
+    { id: "cucumber", label: "Gurke", icon: "🥒", quantity: Math.max(2, Math.ceil(hours / 24)), unit: "Stück", category: "food" },
+    { id: "cola", label: "Cola", icon: "🥤", quantity: Math.max(2, Math.ceil(hours * 0.07)), unit: "l", category: "drink" },
+    { id: "haribo", label: "Haribo / schnelle KH", icon: "🍬", quantity: Math.max(2, Math.ceil(hours / 15)), unit: "Packungen", category: "food" },
+  ];
+  return { hours, reservePercent: 15, targetCarbs, items };
 }

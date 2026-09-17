@@ -98,3 +98,16 @@ test("Crew sharing preserves the browser user gesture instead of awaiting token 
 test("athlete status offers an explicit Isostar fatigue signal", () => {
   assert.match(source, /\["iso-fatigue", "🧃", "Iso satt"\]/);
 });
+
+
+test("athlete status offers persistent liquid-only mode and crew can release solid food again", () => {
+  assert.match(source, /\["liquid-only", "🥤", "Nur flüssig"\]/);
+  assert.match(source, /FUEL-MODUS/);
+  assert.match(source, /Fest geht wieder/);
+});
+
+test("Pit Crew exposes gel priority and start stock planning in the live workspace", () => {
+  assert.match(source, /GEL-PRIORITÄT/);
+  assert.match(source, /STARTVORRAT/);
+  assert.match(source, /buildPitCrewStartStock/);
+});

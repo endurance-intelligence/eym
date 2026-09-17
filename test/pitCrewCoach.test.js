@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import {
   assessPitSelection,
   buildPitCrewCustomProduct,
+  buildPitCrewStartStock,
+  PIT_CREW_DEFAULT_GEL_PRIORITY,
   PIT_CREW_DEFAULT_STOCK_IDS,
   PIT_CREW_PRODUCTS,
   pitCrewRaceEligible,
@@ -41,8 +43,8 @@ test("arrival state keeps the athlete outside until the crew explicitly marks th
 test("go mode suggests only portable Isostar plus gel", () => {
   const recommendation = recommendPitCrew({ round: 9, minutesToStart: 2.4, history: [] });
   assert.equal(recommendation.mode, "go");
-  assert.deepEqual(recommendation.selection.map((item) => item.productId), ["isostar", "sis-beta"]);
-  assert.equal(recommendation.summary.carbs, 61);
+  assert.deepEqual(recommendation.selection.map((item) => item.productId), ["isostar", "226ers-high"]);
+  assert.equal(recommendation.summary.carbs, 71);
 });
 
 test("sweet fatigue moves the pit away from sweet fuel and keeps a separate loop drink", () => {
@@ -310,4 +312,48 @@ test("Iso fatigue pauses both Isostar drinks and replaces their carbs instead of
   assert.equal(ids.some((id) => ["226ers-high", "226ers-high-strawberry", "maurten100", "sis-beta"].includes(id)), true);
   assert.ok(recommendation.summary.carbs >= 60);
   assert.match(recommendation.why, /Iso satt/i);
+});
+
+
+test("liquid-only mode removes solid food and keeps carbs inside the Backyard corridor", () => {
+  const recommendation = recommendPitCrew({ round: 9, minutesToStart: 10, flags: ["liquid-only"] });
+  const ids = recommendation.selection.map((item) => item.productId);
+  assert.equal(ids.some((id) => ["banana", "milk-roll", "fusilli", "haribo", "salt-sticks", "cucumber"].includes(id)), false);
+  assert.equal(ids.some((id) => ["226ers-high", "226ers-high-strawberry", "sis-beta", "maurten100"].includes(id)), true);
+  assert.ok(recommendation.summary.carbs >= 60);
+  assert.ok(recommendation.summary.carbs <= 90);
+  assert.match(recommendation.why, /Nur flüssig/i);
+});
+
+test("liquid-only plus Iso fatigue uses preferred gels and water without Maurten by default", () => {
+  const recommendation = recommendPitCrew({ round: 10, minutesToStart: 10, flags: ["liquid-only", "iso-fatigue"] });
+  const ids = recommendation.selection.map((item) => item.productId);
+  assert.equal(ids.includes("isostar"), false);
+  assert.equal(ids.includes("isostar-long"), false);
+  assert.equal(ids.includes("water"), true);
+  assert.equal(ids.includes("maurten100"), false);
+  assert.equal(ids.includes("226ers-high"), true);
+  assert.ok(recommendation.summary.carbs >= 60);
+  assert.ok(recommendation.summary.carbs <= 90);
+});
+
+test("gel priority can be reordered while Maurten stays reserve by default", () => {
+  assert.deepEqual(PIT_CREW_DEFAULT_GEL_PRIORITY, ["226ers-high", "226ers-high-strawberry", "sis-beta", "maurten100"]);
+  const recommendation = recommendPitCrew({
+    round: 6,
+    minutesToStart: 10,
+    flags: ["iso-fatigue"],
+    gelPriority: ["sis-beta", "226ers-high-strawberry", "226ers-high", "maurten100"],
+  });
+  assert.equal(recommendation.selection.some((item) => item.productId === "sis-beta"), true);
+});
+
+test("36 hour open Backyard start stock scales supplies and preserves a reserve", () => {
+  const plan = buildPitCrewStartStock({ eventLimitMode: "open", planningHorizonHours: 36 });
+  assert.equal(plan.hours, 36);
+  assert.equal(plan.reservePercent, 15);
+  assert.equal(plan.targetCarbs, Math.round(70 * 36 * 1.15));
+  assert.ok(plan.items.find((item) => item.id === "water")?.quantity >= 20);
+  assert.ok(plan.items.find((item) => item.id === "226ers-high")?.priority === 1);
+  assert.ok(plan.items.find((item) => item.id === "maurten100")?.priority === 4);
 });
