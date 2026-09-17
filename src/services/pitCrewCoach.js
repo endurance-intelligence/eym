@@ -85,6 +85,27 @@ export const PIT_CREW_PRODUCTS = [
     portions: [150, 200, 250, 300, 400, 500].map(longEnergyPortion),
   },
   {
+    id: "waldmeister",
+    label: "REWE Waldmeister Getränkesirup",
+    brand: "REWE Beste Wahl",
+    flavor: "Waldmeister",
+    icon: "🌿",
+    category: "drink",
+    traits: ["carb-drink", "sweet", "waldmeister", "refresh", "quick"],
+    estimated: true,
+    nutritionSource: "estimated-mix",
+    stockNote: "nach Gefühl gemischt · ca. 45 g KH / 500 ml",
+    portions: [250, 300, 400, 500].map((ml) => ({
+      id: `${ml}`,
+      label: `${ml} ml`,
+      carbs: round1(ml * 0.09),
+      fluidMl: ml,
+      caffeineMg: 0,
+      sodiumMg: 0,
+      estimated: true,
+    })),
+  },
+  {
     id: "dryll",
     label: "DRYLL Salty Peach",
     icon: "🍑",
@@ -611,15 +632,20 @@ function normalSuggestion({ round = 1, history = [], flags = [], weather = [], g
 
   if (athlete.has("iso-fatigue") && !athlete.has("stomach")) {
     selection = selection.filter((entry) => !isIsostarDrink(entry.productId));
-    if (!hasSelection(selection, "water", "carry")) selection = addUnique(selection, choice("water", "500", "carry"));
+    if (!hasSelection(selection, "waldmeister", "carry")) selection = addUnique(selection, choice("waldmeister", athlete.has("liquid-only") ? "400" : "500", "carry"));
     const hasGel = selection.some((entry) => ["maurten100", "sis-beta", "226ers-high", "226ers-high-strawberry"].includes(entry.productId));
-    if (!hasGel) selection = addUnique(selection, choice(preferredGel(history, gelPriority), "1", "carry"));
-    reasons.push("Iso satt: Isostar-Getränke pausieren. Wasser mitgeben und die fehlenden KH gezielt über ein Gel/andere Quellen decken.");
+    const currentCarbs = summarizePitSelection(selection).carbs;
+    if (!hasGel && currentCarbs < PIT_CARB_TARGET.min) selection = addUnique(selection, choice(preferredGel(history, gelPriority), "1", "carry"));
+    reasons.push("Iso satt: Isostar pausieren. Waldmeister ist als grob geschätzte Carb-Drink-Alternative hinterlegt; fehlende KH kommen bei Bedarf über ein bevorzugtes Gel.");
   }
 
   if (athlete.has("liquid-only")) {
-    const liquidIds = new Set(["water", "isostar", "isostar-long", "dryll", "cola", "redbull", "broth", "maurten100", "sis-beta", "226ers-high", "226ers-high-strawberry"]);
+    const liquidIds = new Set(["water", "isostar", "isostar-long", "waldmeister", "dryll", "cola", "redbull", "broth", "maurten100", "sis-beta", "226ers-high", "226ers-high-strawberry"]);
     selection = selection.filter((entry) => liquidIds.has(String(entry.productId)));
+    if (athlete.has("iso-fatigue")) {
+      selection = selection.filter((entry) => !isIsostarDrink(entry.productId));
+      if (!hasSelection(selection, "waldmeister", "carry")) selection = addUnique(selection, choice("waldmeister", "400", "carry"));
+    }
     const gelIds = new Set(["maurten100", "sis-beta", "226ers-high", "226ers-high-strawberry"]);
     let gels = selection.filter((entry) => gelIds.has(String(entry.productId)));
     if (!gels.length) {
@@ -633,12 +659,8 @@ function normalSuggestion({ round = 1, history = [], flags = [], weather = [], g
       const secondGel = secondPreferredGel(history, gelPriority, firstGel, currentCarbs);
       selection = addUnique(selection, choice(secondGel, "1", "carry"));
     }
-    if (athlete.has("iso-fatigue")) {
-      selection = selection.filter((entry) => !isIsostarDrink(entry.productId));
-      if (!hasSelection(selection, "water", "carry")) selection = addUnique(selection, choice("water", "500", "carry"));
-    }
     reasons.push(athlete.has("iso-fatigue")
-      ? "Nur flüssig + Iso satt: feste Nahrung bleibt draußen; bevorzugte Gels rotieren und Wasser deckt die Flüssigkeit."
+      ? "Nur flüssig + Iso satt: feste Nahrung und Isostar bleiben draußen; Waldmeister liefert grob geschätzte flüssige KH, bevorzugte Gels ergänzen bis in den Zielkorridor."
       : "Nur flüssig: feste Nahrung pausieren. Kohlenhydrate kommen gezielt aus bevorzugten Gels und verträglichen Getränken.");
   }
 
@@ -819,6 +841,7 @@ export function buildPitCrewStartStock(race = {}, gelPriority = PIT_CREW_DEFAULT
     { id: "water", label: "Wasser gesamt", icon: "💧", quantity: Math.max(12, Math.ceil(hours * 0.65)), unit: "l", category: "drink" },
     { id: "isostar", label: "Hydrate & Perform Orange", icon: "🧃", quantity: Math.max(6, Math.ceil(hours * 0.28)), unit: "× 500 ml", category: "drink" },
     { id: "isostar-long", label: "Long Energy Plus Zitrone", icon: "🍋", quantity: Math.max(5, Math.ceil(hours * 0.25)), unit: "× 500 ml", category: "drink" },
+    { id: "waldmeister", label: "Waldmeister · nach Gefühl", icon: "🌿", quantity: Math.max(4, Math.ceil(hours * 0.18)), unit: "× 500 ml Mischungen", category: "drink" },
     ...gelItems.map((item) => ({ ...item, category: "gel" })),
     { id: "banana", label: "Bananen", icon: "🍌", quantity: Math.max(4, Math.ceil(hours * 0.2)), unit: "Stück", category: "food" },
     { id: "milk-roll", label: "Milchbrötchen", icon: "🥛", quantity: Math.max(5, Math.ceil(hours * 0.25)), unit: "Stück", category: "food" },

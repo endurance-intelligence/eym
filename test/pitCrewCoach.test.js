@@ -308,8 +308,7 @@ test("Iso fatigue pauses both Isostar drinks and replaces their carbs instead of
   const ids = recommendation.selection.map((item) => item.productId);
   assert.equal(ids.includes("isostar"), false);
   assert.equal(ids.includes("isostar-long"), false);
-  assert.equal(ids.includes("water"), true);
-  assert.equal(ids.some((id) => ["226ers-high", "226ers-high-strawberry", "maurten100", "sis-beta"].includes(id)), true);
+  assert.equal(ids.includes("waldmeister"), true);
   assert.ok(recommendation.summary.carbs >= 60);
   assert.match(recommendation.why, /Iso satt/i);
 });
@@ -325,12 +324,12 @@ test("liquid-only mode removes solid food and keeps carbs inside the Backyard co
   assert.match(recommendation.why, /Nur flüssig/i);
 });
 
-test("liquid-only plus Iso fatigue uses preferred gels and water without Maurten by default", () => {
+test("liquid-only plus Iso fatigue uses Waldmeister and preferred gels without Maurten by default", () => {
   const recommendation = recommendPitCrew({ round: 10, minutesToStart: 10, flags: ["liquid-only", "iso-fatigue"] });
   const ids = recommendation.selection.map((item) => item.productId);
   assert.equal(ids.includes("isostar"), false);
   assert.equal(ids.includes("isostar-long"), false);
-  assert.equal(ids.includes("water"), true);
+  assert.equal(ids.includes("waldmeister"), true);
   assert.equal(ids.includes("maurten100"), false);
   assert.equal(ids.includes("226ers-high"), true);
   assert.ok(recommendation.summary.carbs >= 60);
@@ -342,7 +341,7 @@ test("gel priority can be reordered while Maurten stays reserve by default", () 
   const recommendation = recommendPitCrew({
     round: 6,
     minutesToStart: 10,
-    flags: ["iso-fatigue"],
+    flags: ["liquid-only", "iso-fatigue"],
     gelPriority: ["sis-beta", "226ers-high-strawberry", "226ers-high", "maurten100"],
   });
   assert.equal(recommendation.selection.some((item) => item.productId === "sis-beta"), true);
@@ -356,4 +355,20 @@ test("36 hour open Backyard start stock scales supplies and preserves a reserve"
   assert.ok(plan.items.find((item) => item.id === "water")?.quantity >= 20);
   assert.ok(plan.items.find((item) => item.id === "226ers-high")?.priority === 1);
   assert.ok(plan.items.find((item) => item.id === "maurten100")?.priority === 4);
+});
+
+test("Waldmeister is an estimated 45 g carb drink per 500 ml and supports Iso fatigue", () => {
+  const product = PIT_CREW_PRODUCTS.find((candidate) => candidate.id === "waldmeister");
+  const portion = product?.portions.find((candidate) => candidate.id === "500");
+  assert.equal(product?.estimated, true);
+  assert.equal(product?.nutritionSource, "estimated-mix");
+  assert.equal(portion?.carbs, 45);
+  assert.equal(portion?.fluidMl, 500);
+
+  const recommendation = recommendPitCrew({ round: 8, minutesToStart: 10, flags: ["iso-fatigue"] });
+  const ids = recommendation.selection.map((item) => item.productId);
+  assert.equal(ids.includes("isostar"), false);
+  assert.equal(ids.includes("isostar-long"), false);
+  assert.equal(ids.includes("waldmeister"), true);
+  assert.ok(recommendation.summary.carbs >= 60);
 });
