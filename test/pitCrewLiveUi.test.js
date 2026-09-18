@@ -10,12 +10,20 @@ test("Pit Crew keeps test controls out of the normal live flow", () => {
   assert.match(source, /Testmodus starten/);
 });
 
-test("Pit Crew counts planned loop intake immediately and asks only for deviations", () => {
-  assert.match(source, /Aufnahme zählt bereits in den Live-Daten/);
-  assert.match(source, /Abweichung melden/);
-  assert.match(source, /wie geplant angenommen/);
-  assert.doesNotMatch(source, /Was wurde wirklich genommen\?/);
+test("Pit Crew only books loop intake after explicit return confirmation", () => {
+  assert.match(source, /zählt noch nicht als tatsächlich aufgenommen/);
+  assert.match(source, /„wie geplant“ ist vorausgewählt/);
+  assert.match(source, /Erst mit „Rückkehr übernehmen“ zählt die Versorgung als tatsächlich aufgenommen/);
+  assert.doesNotMatch(source, /wie geplant angenommen/);
 });
+
+test("Pit Crew never auto-confirms an older pending loop when the next pit is saved", () => {
+  assert.match(source, /const unresolvedCarry = \[\.\.\.history\]\.reverse\(\)\.find/);
+  assert.match(source, /zuerst bei Rückkehr bestätigen/);
+  assert.doesNotMatch(source, /carryAssumption: "planned"/);
+  assert.match(source, /const loopMustClose = Boolean\(pendingCarry/);
+});
+
 
 test("Pit weather hides manual overrides and shows per-loop operational details", () => {
   assert.match(source, /Wetter vor Ort weicht deutlich ab/);
@@ -26,7 +34,7 @@ test("Pit weather hides manual overrides and shows per-loop operational details"
 
 test("athlete pre-feedback suppresses duplicate crew check-in and stays visible as a status banner", () => {
   assert.match(source, /if \(incomingApplies\)/);
-  assert.match(source, /setCheckInOpen\(false\)/);
+  assert.match(source, /setCheckInOpen\(Boolean\(pendingCarry/);
   assert.match(source, /RÜCKMELDUNG ATHLET/);
   assert.match(source, /Keine Änderung am vorbereiteten Plan nötig/);
 });

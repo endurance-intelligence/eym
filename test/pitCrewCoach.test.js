@@ -239,7 +239,7 @@ test("spontaneous custom food can contribute carbs, sodium and caffeine with an 
 });
 
 
-test("rolling pit average counts pending carry as provisionally taken until a deviation is reported", () => {
+test("rolling pit average excludes pending carry until return confirmation", () => {
   const history = [{
     selection: [],
     carrySelection: [{ productId: "isostar", portionId: "500" }],
@@ -248,8 +248,8 @@ test("rolling pit average counts pending carry as provisionally taken until a de
     provisionalSummary: { carbs: 35, fluidMl: 500, caffeineMg: 0 },
   }];
   const rolling = rollingPitAverage(history, null, 3);
-  assert.equal(rolling.carbsPerHour, 35);
-  assert.equal(rolling.fluidPerHour, 500);
+  assert.equal(rolling.carbsPerHour, 0);
+  assert.equal(rolling.fluidPerHour, 0);
 });
 
 

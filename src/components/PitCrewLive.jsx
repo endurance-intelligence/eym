@@ -334,12 +334,12 @@ export default function PitCrewLive({ race, onClose }) {
   const arrivalPartialRated = arrivalPendingItems.length === 1 || (arrivalPendingItems.length > 1 && arrivalPendingItems.every((entry, index) =>
     Object.prototype.hasOwnProperty.call(carryAdjust, `${pendingCarry?.round ?? "loop"}:${entry.productId}:${entry.portionId}:${index}`),
   ));
-  const loopMustClose = false;
+  const loopMustClose = Boolean(pendingCarry && Number(pendingLoopNumber) === Number(timing.currentRound));
   const arrivalState = pitCrewArrivalState({
     started: timing.started,
     currentRound: timing.currentRound,
     arrivalRound,
-    loopMustClose: false,
+    loopMustClose,
   });
   const athleteNeedsArrival = Boolean(arrivalState.awaitingArrival && editingRound == null);
   const loopReadyToClose = Boolean(pendingCarry && pendingLoopNumber === Number(timing.currentRound) && arrivalState.arrived && editingRound == null);
@@ -548,6 +548,17 @@ export default function PitCrewLive({ race, onClose }) {
   }
 
   function savePit() {
+    const unresolvedCarry = [...history].reverse().find((record) =>
+      record.carryStatus === "pending"
+      && Array.isArray(record.carrySelection)
+      && record.carrySelection.length
+      && Number(record.round) < Number(saveRound),
+    );
+    if (unresolvedCarry) {
+      setSaveMessage(`Loop ${Number(unresolvedCarry.round) + 1} zuerst bei Rückkehr bestätigen – erst dann wird die nächste Versorgung gespeichert.`);
+      setCheckInOpen(Number(unresolvedCarry.round) + 1 === Number(timing.currentRound));
+      return;
+    }
     if (!activeSelection.length) {
       setSaveMessage("Noch nichts vorgesehen. Bitte Fueling Pit bzw. Loop prüfen.");
       return;
@@ -569,26 +580,8 @@ export default function PitCrewLive({ race, onClose }) {
       flags: editingRound != null && existing ? [...(existing.flags || [])] : [...flags],
       weather: editingRound != null && existing ? [...(existing.weather || [])] : [...effectiveWeather],
     };
-    setHistory((current) => {
-      const finalized = current.map((item) => {
-        if (item.carryStatus !== "pending" || Number(item.round) >= Number(saveRound)) return item;
-        const merged = [...(item.selection || []), ...(item.carrySelection || [])];
-        const confirmedSummary = summarizePitSelection(merged, productCatalog);
-        return {
-          ...item,
-          selection: merged,
-          carriedSelection: (item.carrySelection || []).map((entry) => ({ ...entry })),
-          carrySelection: [],
-          summary: confirmedSummary,
-          provisionalSummary: confirmedSummary,
-          carryStatus: "confirmed",
-          carryConfirmedAt: new Date().toISOString(),
-          carryAssumption: "planned",
-        };
-      });
-      return [...finalized.filter((item) => Number(item.round) !== Number(saveRound)), record]
-        .sort((left, right) => Number(left.round) - Number(right.round));
-    });
+    setHistory((current) => [...current.filter((item) => Number(item.round) !== Number(saveRound)), record]
+      .sort((left, right) => Number(left.round) - Number(right.round)));
     setSaveMessage(editingRound != null
       ? `Pit ${saveRound} korrigiert.`
       : `Loop ${readyLoopNumber} startklar · ${formatNumber(summary.carbs)} g im Pit bestätigt${carrySelection.length ? ` · ${formatNumber(provisionalSummary.carbs - summary.carbs)} g mitgegeben` : ""}.`);
@@ -980,14 +973,14 @@ export default function PitCrewLive({ race, onClose }) {
             </div>
           ) : awaitingReturn ? (
             <div className="pit-live-loop-plan pit-live-loop-running-copy">
-              <p className="pit-live-help">Loop {loopNumber} läuft. Die mitgegebene Versorgung wird vorläufig als planmäßig gerechnet. Bei Rückkehr nur eine Abweichung melden, falls real etwas anders war.</p>
+              <p className="pit-live-help">Loop {loopNumber} läuft. Die mitgegebene Versorgung ist nur geplant und zählt noch nicht als tatsächlich aufgenommen. Bei Rückkehr wird sie einmal bestätigt; „wie geplant“ ist vorausgewählt.</p>
               {runningItems.length ? <div className="pit-live-loop-plan-items">{runningItems.map((entry) => <span key={`${entry.productId}:${entry.portionId}`}>{selectionLabel(entry, productCatalog)}</span>)}</div> : <p className="pit-live-loop-empty">Für diese Loop wurde kein zusätzliches Loop-Fueling mitgegeben.</p>}
             </div>
           ) : preparedPending ? (
             <div className="pit-live-loop-plan pit-live-loop-prepared">
               <p className="pit-live-help">Loop {loopNumber} ist vorbereitet. Das hier wurde mitgegeben:</p>
               {preparedItems.length ? <div className="pit-live-loop-plan-items">{preparedItems.map((entry) => <span key={`${entry.productId}:${entry.portionId}`}>{selectionLabel(entry, productCatalog)}</span>)}</div> : <p className="pit-live-loop-empty">Kein zusätzliches Loop-Fueling mitgegeben.</p>}
-              <p className="pit-live-loop-ready-note">✓ Standardmäßig wird „wie geplant“ übernommen. Nur eine Abweichung muss die Crew melden.</p>
+              <p className="pit-live-loop-ready-note">✓ Bei Rückkehr ist „wie geplant“ vorausgewählt. Erst mit „Rückkehr übernehmen“ zählt die Versorgung als tatsächlich aufgenommen.</p>
             </div>
           ) : (
             <div className="pit-live-loop-plan">
@@ -1221,8 +1214,9 @@ export default function PitCrewLive({ race, onClose }) {
                     ? ` · Loop ${Number(record.round) + 1} abschließen`
                     : ` · Loop ${Number(record.round) + 1} startklar`
                   : "";
-                const shownSummary = record.carryStatus === "pending" && record.provisionalSummary ? record.provisionalSummary : record.summary || summarizePitSelection(record.selection, productCatalog);
-                return <div key={record.round} className={`tone-${tone}`}><em aria-hidden="true" /><b>{carried ? `Pit ${record.round} → Loop ${Number(record.round) + 1}` : `Pit ${record.round}`}</b><span>{formatNumber(shownSummary.carbs)} g KH · {shownSummary.fluidMl} ml{record.carryStatus === "pending" ? " · wie geplant angenommen" : ""}{pendingText}</span></div>;
+                const shownSummary = record.summary || summarizePitSelection(record.selection, productCatalog);
+                const plannedSummary = record.carryStatus === "pending" && record.provisionalSummary ? record.provisionalSummary : null;
+                return <div key={record.round} className={`tone-${tone}`}><em aria-hidden="true" /><b>{carried ? `Pit ${record.round} → Loop ${Number(record.round) + 1}` : `Pit ${record.round}`}</b><span>{formatNumber(shownSummary.carbs)} g KH · {shownSummary.fluidMl} ml{plannedSummary ? ` · geplant ${formatNumber(plannedSummary.carbs)} g / ${plannedSummary.fluidMl} ml · noch nicht bestätigt` : ""}{pendingText}</span></div>;
               })}</div>
               <button type="button" className="pit-live-secondary pit-live-wide" onClick={editLastPit}>Letzten Pit korrigieren</button>
             </div>
@@ -1285,7 +1279,7 @@ export default function PitCrewLive({ race, onClose }) {
 
       {checkInOpen && <div className="pit-live-checkin-backdrop" role="presentation">
         <section className="pit-live-checkin" role="dialog" aria-modal="true" aria-label="Athletenstatus und Loop-Verpflegung nach Rückkehr">
-          <div className="pit-live-checkin-head"><div><small>ATHLET ZURÜCK · LOOP {timing.currentRound}</small><h3>Rückkehr kurz übernehmen</h3><p>Status und Versorgung in einem Schritt. Nur Abweichungen brauchen Details.</p></div></div>
+          <div className="pit-live-checkin-head"><div><small>ATHLET ZURÜCK · LOOP {timing.currentRound}</small><h3>Rückkehr kurz übernehmen</h3><p>Status und tatsächliche Versorgung in einem Schritt bestätigen. Der Vorschlag ist vorausgewählt; nur Abweichungen brauchen Details.</p></div></div>
 
           {athleteFeedbackApplies && athleteFeedback?.source === "athlete" ? (
             <div className="pit-live-checkin-athlete-report">
