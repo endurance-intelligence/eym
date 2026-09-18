@@ -441,7 +441,19 @@ export default function PitCrewLive({ race, onClose }) {
 
   const careLevel = athleteCare.level || (athleteCare.hints.length ? "notice" : "good");
   const careIndicator = careLevel === "urgent" ? "❗" : careLevel === "notice" ? "⚠️" : "✓";
-  const careNeedsAttention = careLevel !== "good";
+  const fuelNeedsAttention = metricStatus.carbs !== "good" || metricStatus.fluid === "low" || metricStatus.fluid === "high" || metricStatus.rolling === "low" || metricStatus.rolling === "high";
+  const planCardTone = planCarbTone === "high" || careLevel === "urgent"
+    ? "high"
+    : planCarbTone === "low" || fuelNeedsAttention || careLevel === "notice" || weatherCrewActions.length > 0 || effectiveAthleteFlags.length > 0
+      ? "low"
+      : "good";
+  const crewOverviewActions = [
+    ...athleteCare.hints.map((hint) => ({ key: `care:${hint.key}`, label: `${hint.icon} ${hint.short}`, urgent: Boolean(hint.urgent) })),
+    ...weatherCrewActions.map((action) => ({ key: `weather:${action}`, label: action, urgent: false })),
+  ].filter((entry, index, all) => {
+    const normalized = entry.label.toLocaleLowerCase("de-DE").replace(/[^a-zäöüß0-9]+/g, " ").trim();
+    return all.findIndex((candidate) => candidate.label.toLocaleLowerCase("de-DE").replace(/[^a-zäöüß0-9]+/g, " ").trim() === normalized) === index;
+  });
 
   function historyTone(record, index) {
     if (record.carryStatus === "pending") return "open";
@@ -1112,9 +1124,7 @@ export default function PitCrewLive({ race, onClose }) {
           </section>
         )}
 
-        {careNeedsAttention && renderAthleteCareSection({ priority: true })}
-
-        <section className="pit-live-recommendation">
+        <section className={`pit-live-recommendation plan-tone-${planCardTone}`}>
           <div className="pit-live-section-head">
             <div><small>{planAdjusted ? "PIT-PLAN · MANUELL ANGEPASST" : "IDEALVORSCHLAG · VORAUSGEWÄHLT"}</small><h3>{timing.started ? `Pit: Loop ${timing.currentRound}` : "Pit: Start"}</h3></div>
             <div className="pit-live-suggestion-total"><b>{formatNumber(activePlanSummary.carbs)} g KH</b><span>{activePlanSummary.fluidMl} ml</span><em className={`pit-live-carb-marker tone-${planCarbTone}`}>{planCarbLabel}</em></div>
@@ -1124,7 +1134,26 @@ export default function PitCrewLive({ race, onClose }) {
           {activePitSelection.length > 0 && <div className="pit-live-suggestion-group"><small>IM PIT</small><div>{activePitSelection.map((entry) => <span key={`pit:${entry.productId}:${entry.portionId}`}>{selectionLabel(entry, productCatalog)}</span>)}</div></div>}
           {activeLoopSelection.length > 0 && <div className="pit-live-suggestion-group"><small>MIT AUF LOOP {Math.max(1, Number(saveRound || 0) + 1)}</small><div>{activeLoopSelection.map((entry) => <span key={`loop:${entry.productId}:${entry.portionId}`}>{selectionLabel(entry, productCatalog)}</span>)}</div></div>}
           {!activeSelection.length && <div className="pit-live-stock-warning">⚠️ Noch keine Versorgung ausgewählt. Fueling öffnen und verfügbare Sachen auswählen.</div>}
-          {weatherCrewActions.length > 0 && <div className="pit-live-crew-prep"><small>LIVE · CREW JETZT</small><div>{weatherCrewActions.slice(0, 4).map((action) => <span key={action}>{action}</span>)}</div></div>}
+          <div className={`pit-live-overview-actions tone-${careLevel === "urgent" ? "high" : crewOverviewActions.length ? "low" : "good"}`}>
+            <small>CREW-AKTIONEN</small>
+            <div>
+              {crewOverviewActions.length
+                ? crewOverviewActions.map((action) => <span key={action.key} className={action.urgent ? "urgent" : ""}>{action.label}</span>)
+                : <span className="clear">✓ Keine Zusatzaktion · Routine ruhig weiterlaufen lassen</span>}
+            </div>
+          </div>
+          <div className="pit-live-actual-overview" aria-label="Bestätigte Versorgung">
+            <div className={lastConfirmedRecord ? `tone-${actualMetricStatus.carbs}` : "tone-neutral"}>
+              <small>ZULETZT BESTÄTIGT</small>
+              <b>{lastConfirmedRecord ? `${formatNumber(lastActualSummary.carbs)} g KH · ${lastActualSummary.fluidMl} ml` : "noch keine Aufnahme"}</b>
+            </div>
+            <div className={historyRolling.hours ? `tone-${actualMetricStatus.rolling}` : "tone-neutral"}>
+              <small>Ø 3 H</small>
+              <b>{historyRolling.hours ? `${formatNumber(historyRolling.carbsPerHour)} g KH/h · ${historyRolling.fluidPerHour} ml/h` : "noch kein belastbarer Ø"}</b>
+            </div>
+            {lastActualSummary.caffeineMg > 0 && <div className="tone-neutral"><small>KOFFEIN ZULETZT</small><b>{Math.round(lastActualSummary.caffeineMg)} mg</b></div>}
+          </div>
+          {fuelNeedsAttention && <div className={`pit-live-plan-alert tone-${metricStatus.carbs === "high" ? "high" : "low"}`}>⚠️ {alert}</div>}
           <p><b>{planAdjusted ? "Coach-Basis:" : "Warum?"}</b> {recommendation.why}</p>
           <div className="pit-live-auto-plan-note">{planAdjusted ? "✎ Auswahl geändert. KH und Flüssigkeit werden sofort mit der aktuellen Crew-Auswahl neu gerechnet." : "✓ Der Idealvorschlag ist automatisch vorausgewählt. Nur ändern, wenn es im Pit tatsächlich anders läuft."}</div>
         </section>
@@ -1141,7 +1170,7 @@ export default function PitCrewLive({ race, onClose }) {
           </div>
         </details>
 
-        {!careNeedsAttention && renderAthleteCareSection()}
+        {renderAthleteCareSection()}
 
         {renderFuelingSection()}
 
@@ -1213,13 +1242,7 @@ export default function PitCrewLive({ race, onClose }) {
         </details>
 
         {saveMessage && <p className="pit-live-save-message">{saveMessage}</p>}
-        {(metricStatus.carbs !== "good" || metricStatus.fluid === "low" || metricStatus.fluid === "high" || metricStatus.rolling === "low" || metricStatus.rolling === "high") && <div className={`pit-live-alert tone-${metricStatus.carbs === "high" || metricStatus.fluid === "high" || metricStatus.rolling === "high" ? "high" : "low"}`}>{alert}</div>}
-
-        <section className="pit-live-mini-bar" aria-label="Versorgungsstatus">
-          <div className={`tone-${actualMetricStatus.carbs}`}><small>IST KH</small><b>{Math.round(lastActualSummary.carbs)} g</b></div>
-          <div className={`tone-${actualMetricStatus.fluid}`}><small>IST 💧</small><b>{lastActualSummary.fluidMl} ml</b></div>
-          <div className={`tone-${actualMetricStatus.rolling}`}><small>Ø3h</small><b>{historyRolling.hours ? `${Math.round(historyRolling.carbsPerHour)} g/h` : "–"}</b></div>
-          {lastActualSummary.caffeineMg > 0 && <div className="tone-neutral"><small>☕</small><b>{Math.round(lastActualSummary.caffeineMg)} mg</b></div>}
+        <section className="pit-live-mini-bar" aria-label="Pit Aktion">
           <button
             type="button"
             className={`pit-live-main-action${athleteNeedsArrival ? " needs-arrival" : savedLoopReady ? " is-ready" : ""}`}

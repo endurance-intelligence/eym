@@ -42,7 +42,7 @@ test("athlete pre-feedback suppresses duplicate crew check-in and stays visible 
   assert.match(source, /Keine Änderung am vorbereiteten Plan nötig/);
 });
 
-test("Pit Crew headline names the upcoming loop weather and actual intake bar uses recorded data", () => {
+test("Pit Crew headline names the upcoming loop weather and keeps confirmed intake in the main plan card", () => {
   assert.match(source, /WETTER FÜR LOOP/);
   assert.match(source, /KOMMENDER LOOP/);
   assert.match(source, /pit-live-weather-summary/);
@@ -50,10 +50,26 @@ test("Pit Crew headline names the upcoming loop weather and actual intake bar us
   assert.match(source, /Regen \{primaryLoopWeather\.precipitationProbability\} %/);
   assert.match(source, /aktuelle Wetterbasis/);
   assert.match(source, /nextLoopWeatherBrief\.detail/);
-  assert.match(source, /IST KH/);
-  assert.match(source, /IST 💧/);
+  assert.match(source, /ZULETZT BESTÄTIGT/);
+  assert.match(source, /Ø 3 H/);
+  assert.match(source, /pit-live-actual-overview/);
+  assert.doesNotMatch(source, /<small>IST KH<\/small>/);
 });
 
+
+
+
+test("Pit Crew main plan card uses traffic-light attention and includes all crew actions", () => {
+  assert.match(source, /plan-tone-\$\{planCardTone\}/);
+  assert.match(source, /planCarbTone === "high" \|\| careLevel === "urgent"/);
+  assert.match(source, /CREW-AKTIONEN/);
+  assert.match(source, /athleteCare\.hints\.map/);
+  assert.match(source, /weatherCrewActions\.map/);
+  assert.match(source, /Keine Zusatzaktion/);
+  assert.match(source, /fuelNeedsAttention/);
+  assert.match(source, /pit-live-plan-alert/);
+  assert.doesNotMatch(source, /<div className=\{`pit-live-alert/);
+});
 
 test("Athlet zurück combines status and loop intake in one return sheet", () => {
   assert.match(source, /AUFNAHME FÜR LOOP/);

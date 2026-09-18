@@ -87,3 +87,32 @@
 .pit-live-tool-option[open]>summary i{transform:rotate(90deg)}
 .pit-live-tool-option-body,.pit-live-tool-option>.pit-live-collapse-body{padding:0 10px 10px;border-top:1px solid var(--border)}
 .pit-live-tool-option .pit-live-start-stock-head{margin-top:9px}
+
+
+/* v4.1.30: one-glance command card with traffic-light attention */
+.pit-live-recommendation.plan-tone-good{border:2px solid #47ad69!important;background:linear-gradient(145deg,color-mix(in srgb,#47ad69 7%,var(--bg-sidebar)),var(--bg-sidebar))!important;box-shadow:0 0 0 1px color-mix(in srgb,#47ad69 10%,transparent),0 10px 28px rgba(0,0,0,.08)!important}
+.pit-live-recommendation.plan-tone-low{border:2px solid #e1a22a!important;background:linear-gradient(145deg,color-mix(in srgb,#e1a22a 8%,var(--bg-sidebar)),var(--bg-sidebar))!important;box-shadow:0 0 0 1px color-mix(in srgb,#e1a22a 12%,transparent),0 10px 28px rgba(0,0,0,.08)!important}
+.pit-live-recommendation.plan-tone-high{border:2px solid #e34242!important;background:linear-gradient(145deg,color-mix(in srgb,#e34242 9%,var(--bg-sidebar)),var(--bg-sidebar))!important;box-shadow:0 0 0 1px color-mix(in srgb,#e34242 16%,transparent),0 10px 30px rgba(227,66,66,.08)!important}
+.pit-live-overview-actions{display:grid;gap:6px;margin-top:10px;padding:9px 10px;border:1px solid var(--border);border-radius:10px;background:var(--bg-input)}
+.pit-live-overview-actions>small{font-size:8px;font-weight:900;letter-spacing:.09em;color:var(--muted)}
+.pit-live-overview-actions>div{display:flex;flex-wrap:wrap;gap:5px}
+.pit-live-overview-actions span{padding:6px 8px;border:1px solid var(--border);border-radius:999px;background:var(--bg-sidebar);font-size:8px;font-weight:850}
+.pit-live-overview-actions span.urgent{border-color:color-mix(in srgb,#e34242 66%,var(--border));background:color-mix(in srgb,#e34242 9%,var(--bg-sidebar));color:#e66b6b}
+.pit-live-overview-actions span.clear{border-color:color-mix(in srgb,#47ad69 55%,var(--border));color:#55bd78}
+.pit-live-overview-actions.tone-good{border-color:color-mix(in srgb,#47ad69 48%,var(--border))}
+.pit-live-overview-actions.tone-low{border-color:color-mix(in srgb,#e1a22a 58%,var(--border))}
+.pit-live-overview-actions.tone-low>small{color:#e1a22a}
+.pit-live-overview-actions.tone-high{border-color:color-mix(in srgb,#e34242 65%,var(--border));background:color-mix(in srgb,#e34242 6%,var(--bg-input))}
+.pit-live-overview-actions.tone-high>small{color:#e34242}
+.pit-live-actual-overview{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:6px;margin-top:8px}
+.pit-live-actual-overview>div{display:grid;gap:2px;padding:8px 9px;border:1px solid var(--border);border-radius:9px;background:var(--bg-input)}
+.pit-live-actual-overview small{color:var(--muted);font-size:7px;font-weight:900;letter-spacing:.08em}
+.pit-live-actual-overview b{font-size:10px}
+.pit-live-actual-overview .tone-good{border-color:color-mix(in srgb,#47ad69 52%,var(--border))}.pit-live-actual-overview .tone-good b{color:#55bd78}
+.pit-live-actual-overview .tone-low{border-color:color-mix(in srgb,#e1a22a 58%,var(--border))}.pit-live-actual-overview .tone-low b{color:#e1a22a}
+.pit-live-actual-overview .tone-high{border-color:color-mix(in srgb,#e34242 62%,var(--border))}.pit-live-actual-overview .tone-high b{color:#e34242}
+.pit-live-actual-overview .tone-neutral{border-color:var(--border)}
+.pit-live-plan-alert{margin-top:8px;padding:7px 9px;border:1px solid #e1a22a;border-radius:9px;background:color-mix(in srgb,#e1a22a 8%,var(--bg-input));color:#e1a22a;font-size:8px;font-weight:850;line-height:1.35}.pit-live-plan-alert.tone-high{border-color:#e34242;background:color-mix(in srgb,#e34242 8%,var(--bg-input));color:#e34242}
+.pit-live-mini-bar{grid-template-columns:1fr;padding:4px;border:0!important;background:color-mix(in srgb,var(--bg) 82%,transparent)!important;box-shadow:none!important}
+.pit-live-mini-bar>button{grid-column:1;min-height:52px}
+@media(max-width:600px){.pit-live-actual-overview{grid-template-columns:1fr}.pit-live-mini-bar{grid-template-columns:1fr}.pit-live-mini-bar>button{grid-column:1}}
