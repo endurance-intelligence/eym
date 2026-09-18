@@ -85,3 +85,9 @@ test("legacy malformed Pit Crew state is sanitized instead of crashing live view
   assert.equal(normalized.customProducts[0].portions[0].id, "1");
   assert.deepEqual(normalized.athleteFeedback.flags, []);
 });
+
+
+test("shared Pit Crew snapshot preserves editable stock targets", () => {
+  const snapshot = normalizePitCrewSnapshot({ stockTargets: { isostar: { quantity: 12, unit: "× 500 ml" }, broken: { quantity: -3 } } });
+  assert.deepEqual(snapshot.stockTargets, { isostar: { quantity: 12, unit: "× 500 ml" } });
+});

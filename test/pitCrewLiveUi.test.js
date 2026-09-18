@@ -35,8 +35,9 @@ test("Pit Crew headline names the upcoming loop weather and actual intake bar us
   assert.match(source, /WETTER FÜR LOOP/);
   assert.match(source, /KOMMENDER LOOP/);
   assert.match(source, /pit-live-weather-summary/);
-  assert.match(source, /Gefühlt \{nextLoopWeather\[0\]\.feelsLike\}/);
-  assert.match(source, /Regen \{nextLoopWeather\[0\]\.precipitationProbability\} %/);
+  assert.match(source, /Gefühlt \{primaryLoopWeather\.feelsLike\}/);
+  assert.match(source, /Regen \{primaryLoopWeather\.precipitationProbability\} %/);
+  assert.match(source, /aktuelle Wetterbasis/);
   assert.match(source, /nextLoopWeatherBrief\.detail/);
   assert.match(source, /IST KH/);
   assert.match(source, /IST 💧/);
@@ -106,8 +107,18 @@ test("athlete status offers persistent liquid-only mode and crew can release sol
   assert.match(source, /Fest geht wieder/);
 });
 
-test("Pit Crew exposes gel priority and start stock planning in the live workspace", () => {
-  assert.match(source, /GEL-PRIORITÄT/);
-  assert.match(source, /STARTVORRAT/);
+test("Pit Crew merges start stock, editable quantities and gel priority into one inventory workspace", () => {
+  assert.match(source, /VORRAT & STARTPLAN/);
+  assert.match(source, /Startmenge/);
+  assert.match(source, /Gel-Prio/);
+  assert.match(source, /setStockTargets/);
   assert.match(source, /buildPitCrewStartStock/);
+  assert.doesNotMatch(source, /<summary><span>STARTVORRAT<\/span>/);
+  assert.doesNotMatch(source, /<summary><span>GEL-PRIORITÄT<\/span>/);
+});
+
+test("demo next-loop control waits for athlete return and weather has a loop fallback", () => {
+  assert.match(source, /disabled=\{!arrivalState\.arrived \|\| checkInOpen\}/);
+  assert.match(source, /weatherFallback/);
+  assert.match(source, /weatherTargetRound/);
 });
