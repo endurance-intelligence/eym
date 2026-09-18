@@ -107,9 +107,12 @@ test("athlete status offers persistent liquid-only mode and crew can release sol
   assert.match(source, /Fest geht wieder/);
 });
 
-test("Pit Crew merges start stock, editable quantities and gel priority into one inventory workspace", () => {
+test("Pit Crew compares on-hand stock with a visible recommendation and keeps gel priority", () => {
   assert.match(source, /VORRAT & STARTPLAN/);
-  assert.match(source, /Startmenge/);
+  assert.match(source, /Vorhanden/);
+  assert.match(source, /Empfohlen mitzunehmen/);
+  assert.match(source, /ausreichend vorhanden/);
+  assert.match(source, /stockStatus/);
   assert.match(source, /Gel-Prio/);
   assert.match(source, /setStockTargets/);
   assert.match(source, /buildPitCrewStartStock/);

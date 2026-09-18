@@ -765,12 +765,18 @@ export default function PitCrewLive({ race, onClose }) {
     });
   }
 
+  function stockRecommendationFor(productId) {
+    const id = String(productId);
+    return startStockPlan.items.find((item) => String(item.id) === id) || null;
+  }
+
   function stockTargetFor(productId) {
     const id = String(productId);
     const override = stockTargets?.[id];
-    if (override && Number.isFinite(Number(override.quantity))) return { quantity: Math.max(0, Number(override.quantity)), unit: String(override.unit || "Portionen") };
-    const planned = startStockPlan.items.find((item) => String(item.id) === id);
-    return planned ? { quantity: Number(planned.quantity || 0), unit: String(planned.unit || "Portionen") } : { quantity: 0, unit: "Portionen" };
+    const planned = stockRecommendationFor(id);
+    const unit = String(planned?.unit || override?.unit || "Portionen");
+    if (override && Number.isFinite(Number(override.quantity))) return { quantity: Math.max(0, Number(override.quantity)), unit };
+    return { quantity: 0, unit };
   }
 
   function setStockTarget(productId, quantity, unit) {
@@ -800,6 +806,10 @@ export default function PitCrewLive({ race, onClose }) {
             {categoryProducts.map((product) => {
               const active = activeStockIds.includes(String(product.id));
               const target = stockTargetFor(product.id);
+              const recommendation = stockRecommendationFor(product.id);
+              const hasRecommendation = Number(recommendation?.quantity || 0) > 0;
+              const stockStatus = !hasRecommendation ? "neutral" : target.quantity >= Number(recommendation.quantity) ? "enough" : "short";
+              const missing = hasRecommendation ? Math.max(0, Number(recommendation.quantity) - target.quantity) : 0;
               const gelIndex = gelOrder.indexOf(String(product.id));
               const portion = product.referencePortionId
                 ? product.portions?.find((item) => String(item.id) === String(product.referencePortionId))
@@ -809,9 +819,15 @@ export default function PitCrewLive({ race, onClose }) {
                   <span>{active ? "✓" : "+"}</span><b>{product.icon} {product.label}</b>
                   <small>{portion ? `${portion.label} · ${formatNumber(portion.carbs)} g KH` : "Portion offen"}{product.estimated ? " · ≈" : ""}{product.stockNote ? ` · ${product.stockNote}` : ""}</small>
                 </button>
-                {active && <div className="pit-live-stock-plan">
-                  <label><span>Startmenge</span><input type="number" min="0" step="1" value={target.quantity} onChange={(event) => setStockTarget(product.id, event.target.value, target.unit)} /></label>
+                {active && <div className={`pit-live-stock-plan ${stockStatus}`}>
+                  <label><span>Vorhanden</span><input type="number" min="0" step={target.unit === "l" ? "0.5" : "1"} value={target.quantity} onChange={(event) => setStockTarget(product.id, event.target.value, target.unit)} /></label>
                   <strong>{target.unit}</strong>
+                  {hasRecommendation && <div className="pit-live-stock-recommendation">
+                    <small>Empfohlen mitzunehmen</small>
+                    <b>{formatNumber(recommendation.quantity)} {recommendation.unit}</b>
+                    {recommendation.note && <span>{recommendation.note}</span>}
+                    <em>{stockStatus === "enough" ? "✓ ausreichend vorhanden" : `Noch ${formatNumber(missing)} ${recommendation.unit} fehlen`}</em>
+                  </div>}
                   {gelIndex >= 0 && <div className="pit-live-stock-priority"><small>Gel-Prio {gelIndex + 1}</small><button type="button" disabled={gelIndex === 0} onClick={() => moveGelPriority(product.id, -1)}>↑</button><button type="button" disabled={gelIndex === gelOrder.length - 1} onClick={() => moveGelPriority(product.id, 1)}>↓</button></div>}
                 </div>}
                 {product.custom && <button type="button" className="pit-live-stock-remove" onClick={() => removeCustomStockItem(product.id)}>Entfernen</button>}

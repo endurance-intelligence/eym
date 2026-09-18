@@ -357,6 +357,28 @@ test("36 hour open Backyard start stock scales supplies and preserves a reserve"
   assert.ok(plan.items.find((item) => item.id === "maurten100")?.priority === 4);
 });
 
+test("24 hour start stock exposes Isostar pack math plus DRYLL and Red Bull cans", () => {
+  const plan = buildPitCrewStartStock({ eventLimitMode: "open", planningHorizonHours: 24 });
+  const isostar = plan.items.find((item) => item.id === "isostar");
+  const dryll = plan.items.find((item) => item.id === "dryll");
+  const redbull = plan.items.find((item) => item.id === "redbull");
+  assert.equal(isostar?.quantity, 7);
+  assert.equal(isostar?.unit, "× 500 ml");
+  assert.match(isostar?.note || "", /280 g Pulver/);
+  assert.match(isostar?.note || "", /400-g-Dose reicht/);
+  assert.equal(dryll?.quantity, 6);
+  assert.equal(dryll?.unit, "Dosen à 330 ml");
+  assert.equal(redbull?.quantity, 3);
+  assert.equal(redbull?.unit, "Dosen à 250 ml");
+});
+
+test("Hydrate & Perform label metadata keeps 400 g as ten 500 ml portions", () => {
+  const product = PIT_CREW_PRODUCTS.find((candidate) => candidate.id === "isostar");
+  assert.deepEqual(product?.mixing, { powderG: 40, drinkMl: 500 });
+  assert.equal(product?.packages?.[0]?.powderG, 400);
+  assert.equal(product?.packages?.[0]?.portions, 10);
+});
+
 test("Waldmeister is an estimated 45 g carb drink per 500 ml and supports Iso fatigue", () => {
   const product = PIT_CREW_PRODUCTS.find((candidate) => candidate.id === "waldmeister");
   const portion = product?.portions.find((candidate) => candidate.id === "500");

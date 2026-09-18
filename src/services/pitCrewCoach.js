@@ -64,6 +64,14 @@ export const PIT_CREW_PRODUCTS = [
     icon: "🧃",
     category: "drink",
     traits: ["carb-drink", "electrolyte", "orange", "quick"],
+    nutritionSource: "label",
+    referencePortionId: "500",
+    mixing: { powderG: 40, drinkMl: 500 },
+    packages: [
+      { label: "400-g-Dose", powderG: 400, portions: 10 },
+      { label: "1,5-kg-Packung", powderG: 1500, portions: 37.5 },
+    ],
+    stockNote: "40 g Pulver / 500 ml · 400 g = 10 Portionen",
     portions: [150, 200, 250, 300, 400, 500].map((ml) => ({ id: `${ml}`, label: `${ml} ml`, carbs: round1(ml * 0.07), fluidMl: ml, caffeineMg: 0 })),
   },
   {
@@ -111,7 +119,9 @@ export const PIT_CREW_PRODUCTS = [
     icon: "🍑",
     category: "drink",
     traits: ["electrolyte", "salty", "refresh", "quick"],
-    portions: [100, 150, 200].map((ml) => ({ id: `${ml}`, label: `${ml} ml`, carbs: 0, fluidMl: ml, caffeineMg: 0, sodiumMg: Math.round(ml * 1.53) })),
+    packageMl: 330,
+    stockNote: "330-ml-Dose · 500 mg Natrium pro Dose",
+    portions: [100, 150, 200].map((ml) => ({ id: `${ml}`, label: `${ml} ml`, carbs: 0, fluidMl: ml, caffeineMg: 0, sodiumMg: Math.round(ml * (500 / 330)) })),
   },
   {
     id: "cola",
@@ -129,6 +139,8 @@ export const PIT_CREW_PRODUCTS = [
     category: "drink",
     traits: ["sweet", "caffeine", "quick"],
     estimated: true,
+    packageMl: 250,
+    stockNote: "250-ml-Dose · 80 mg Koffein pro Dose",
     portions: [75, 100, 150].map((ml) => ({ id: `${ml}`, label: `${ml} ml`, carbs: round1(ml * 0.11), fluidMl: ml, caffeineMg: round1(ml * 0.32) })),
   },
   {
@@ -837,11 +849,24 @@ export function buildPitCrewStartStock(race = {}, gelPriority = PIT_CREW_DEFAULT
     const product = pitProduct(id);
     return { id, label: product?.label || id, icon: product?.icon || "⚡", quantity: gelQuantities[index] || 2, unit: "Gels", priority: index + 1 };
   });
+  const isostarPortions = Math.max(6, Math.ceil(hours * 0.28));
+  const isostarPowderG = isostarPortions * 40;
+  const isostarPackHint = isostarPowderG <= 400
+    ? `${isostarPowderG} g Pulver · 1 × 400-g-Dose reicht`
+    : isostarPowderG <= 800
+      ? `${isostarPowderG} g Pulver · 2 × 400-g-Dosen oder 1 × 1,5-kg-Packung`
+      : isostarPowderG <= 1500
+        ? `${isostarPowderG} g Pulver · 1 × 1,5-kg-Packung reicht`
+        : `${isostarPowderG} g Pulver · ${Math.ceil(isostarPowderG / 1500)} × 1,5-kg-Packung`;
+  const dryllCans = Math.max(4, Math.ceil(hours / 4));
+  const redBullCans = Math.max(3, Math.ceil(hours / 8));
   const items = [
     { id: "water", label: "Wasser gesamt", icon: "💧", quantity: Math.max(12, Math.ceil(hours * 0.65)), unit: "l", category: "drink" },
-    { id: "isostar", label: "Hydrate & Perform Orange", icon: "🧃", quantity: Math.max(6, Math.ceil(hours * 0.28)), unit: "× 500 ml", category: "drink" },
+    { id: "isostar", label: "Hydrate & Perform Orange", icon: "🧃", quantity: isostarPortions, unit: "× 500 ml", category: "drink", note: isostarPackHint },
     { id: "isostar-long", label: "Long Energy Plus Zitrone", icon: "🍋", quantity: Math.max(5, Math.ceil(hours * 0.25)), unit: "× 500 ml", category: "drink" },
     { id: "waldmeister", label: "Waldmeister · nach Gefühl", icon: "🌿", quantity: Math.max(4, Math.ceil(hours * 0.18)), unit: "× 500 ml Mischungen", category: "drink" },
+    { id: "dryll", label: "DRYLL Salty Peach", icon: "🍑", quantity: dryllCans, unit: "Dosen à 330 ml", category: "drink", note: `${round1(dryllCans * 0.33, 2)} l Gesamtmenge · Elektrolyt-/Salz-Reserve` },
+    { id: "redbull", label: "Red Bull", icon: "⚡", quantity: redBullCans, unit: "Dosen à 250 ml", category: "drink", note: `${redBullCans * 80} mg Koffein gesamt, falls alle genutzt · Reserve, kein Trinkziel` },
     ...gelItems.map((item) => ({ ...item, category: "gel" })),
     { id: "banana", label: "Bananen", icon: "🍌", quantity: Math.max(4, Math.ceil(hours * 0.2)), unit: "Stück", category: "food" },
     { id: "milk-roll", label: "Milchbrötchen", icon: "🥛", quantity: Math.max(5, Math.ceil(hours * 0.25)), unit: "Stück", category: "food" },
