@@ -88,7 +88,8 @@ export const PIT_CREW_PRODUCTS = [
     manufacturerUse: { duringMl: 150, everyMinutes: 15 },
     carbSources: ["Saccharose", "Maltodextrin", "Fruktose", "Dextrose"],
     aminoAcids: ["L-Leucin", "L-Valin", "L-Isoleucin"],
-    stockNote: "38 g Pulver · 578 mg Na · 334 mg K · 87 mg Mg",
+    packages: [{ label: "570-g-Dose", powderG: 570, portions: 15 }],
+    stockNote: "38 g Pulver / 500 ml · 570 g = 15 Portionen · 578 mg Na · 334 mg K · 87 mg Mg",
     labelNutritionPer500: ISOSTAR_LONG_ENERGY_PER_500,
     portions: [150, 200, 250, 300, 400, 500].map(longEnergyPortion),
   },
@@ -102,7 +103,10 @@ export const PIT_CREW_PRODUCTS = [
     traits: ["carb-drink", "sweet", "waldmeister", "refresh", "quick"],
     estimated: true,
     nutritionSource: "estimated-mix",
-    stockNote: "nach Gefühl gemischt · ca. 45 g KH / 500 ml",
+    packageMl: 500,
+    syrupCarbsPer100Ml: 72.9,
+    manufacturerMixRatio: "1:5",
+    stockNote: "0,5-l-Flasche · 72,9 g KH / 100 ml Sirup · Hersteller 1:5 · Race-Mix ≈ 45 g KH / 500 ml",
     portions: [250, 300, 400, 500].map((ml) => ({
       id: `${ml}`,
       label: `${ml} ml`,
@@ -214,10 +218,14 @@ export const PIT_CREW_PRODUCTS = [
     icon: "🍬",
     category: "food",
     traits: ["sweet", "quick"],
-    estimated: true,
+    nutritionSource: "label",
+    packageG: 150,
+    rollsPerPackage: 6,
+    rollG: 25,
+    stockNote: "150-g-Packung = 6 Rollen à 25 g",
     portions: [
-      { id: "10g", label: "½ Rolle", carbs: 7.7, fluidMl: 0, caffeineMg: 0 },
-      { id: "20g", label: "1 Rolle", carbs: 15.4, fluidMl: 0, caffeineMg: 0 },
+      { id: "10g", label: "½ Rolle", carbs: 9.6, fluidMl: 0, caffeineMg: 0 },
+      { id: "20g", label: "1 Rolle", carbs: 19.3, fluidMl: 0, caffeineMg: 0 },
     ],
   },
   {
@@ -850,20 +858,23 @@ export function buildPitCrewStartStock(race = {}, gelPriority = PIT_CREW_DEFAULT
   });
   const isostarPortions = Math.max(6, Math.ceil(hours * 0.28));
   const isostarPowderG = isostarPortions * 40;
-  const isostarPackHint = isostarPowderG <= 400
-    ? `${isostarPowderG} g Pulver · 1 × 400-g-Dose reicht`
-    : isostarPowderG <= 800
-      ? `${isostarPowderG} g Pulver · 2 × 400-g-Dosen oder 1 × 1,5-kg-Packung`
-      : isostarPowderG <= 1500
-        ? `${isostarPowderG} g Pulver · 1 × 1,5-kg-Packung reicht`
-        : `${isostarPowderG} g Pulver · ${Math.ceil(isostarPowderG / 1500)} × 1,5-kg-Packung`;
+  const isostarPackage = isostarPowderG <= 800
+    ? { quantity: Math.ceil(isostarPowderG / 400), unit: isostarPowderG <= 400 ? "400-g-Dose" : "400-g-Dosen", label: "400 g Dose" }
+    : { quantity: Math.ceil(isostarPowderG / 1500), unit: "1,5-kg-Packung", label: "1,5 kg Packung" };
+  const longEnergyPortions = Math.max(5, Math.ceil(hours * 0.25));
+  const longEnergyPowderG = longEnergyPortions * 38;
+  const longEnergyPackages = Math.max(1, Math.ceil(longEnergyPowderG / 570));
+  const waldmeisterMixes = Math.max(4, Math.ceil(hours * 0.18));
+  const waldmeisterSyrupMlPer500 = (45 / 72.9) * 100;
+  const waldmeisterSyrupMl = Math.ceil(waldmeisterMixes * waldmeisterSyrupMlPer500);
+  const waldmeisterBottles = Math.max(1, Math.ceil(waldmeisterSyrupMl / 500));
   const dryllCans = Math.max(4, Math.ceil(hours / 4));
   const redBullCans = Math.max(3, Math.ceil(hours / 8));
   const items = [
     { id: "water", label: "Wasser gesamt", icon: "💧", quantity: Math.max(12, Math.ceil(hours * 0.65)), unit: "l", category: "drink" },
-    { id: "isostar", label: "Hydrate & Perform Orange", icon: "🧃", quantity: isostarPortions, unit: "× 500 ml", category: "drink", note: isostarPackHint },
-    { id: "isostar-long", label: "Long Energy Plus Zitrone", icon: "🍋", quantity: Math.max(5, Math.ceil(hours * 0.25)), unit: "× 500 ml", category: "drink" },
-    { id: "waldmeister", label: "Waldmeister · nach Gefühl", icon: "🌿", quantity: Math.max(4, Math.ceil(hours * 0.18)), unit: "× 500 ml Mischungen", category: "drink" },
+    { id: "isostar", label: "Hydrate & Perform Orange", icon: "🧃", quantity: isostarPackage.quantity, unit: isostarPackage.unit, category: "drink", note: `${isostarPackage.quantity === 1 ? isostarPackage.label : isostarPackage.label.replace("Dose", "Dosen").replace("Packung", "Packungen")} = ${isostarPackage.quantity} ausreichend · ${isostarPortions} × 500 ml = ${isostarPowderG} g Pulver` },
+    { id: "isostar-long", label: "Long Energy Plus Zitrone", icon: "🍋", quantity: longEnergyPackages, unit: longEnergyPackages === 1 ? "570-g-Dose" : "570-g-Dosen", category: "drink", note: `570 g ${longEnergyPackages === 1 ? "Dose" : "Dosen"} = ${longEnergyPackages} ausreichend · ${longEnergyPortions} × 500 ml = ${longEnergyPowderG} g Pulver` },
+    { id: "waldmeister", label: "Waldmeister · nach Gefühl", icon: "🌿", quantity: waldmeisterBottles, unit: waldmeisterBottles === 1 ? "0,5-l-Flasche" : "0,5-l-Flaschen", category: "drink", note: `0,5 l ${waldmeisterBottles === 1 ? "Flasche" : "Flaschen"} = ${waldmeisterBottles} ausreichend · ${waldmeisterMixes} × 500 ml Race-Mix ≈ ${waldmeisterSyrupMl} ml Sirup` },
     { id: "dryll", label: "DRYLL Salty Peach", icon: "🍑", quantity: dryllCans, unit: "Dosen à 330 ml", category: "drink", note: `${round1(dryllCans * 0.33, 2)} l Gesamtmenge · Elektrolyt-/Salz-Reserve` },
     { id: "redbull", label: "Red Bull", icon: "⚡", quantity: redBullCans, unit: "Dosen à 250 ml", category: "drink", note: `${redBullCans * 80} mg Koffein gesamt, falls alle genutzt · Reserve, kein Trinkziel` },
     ...gelItems.map((item) => ({ ...item, category: "gel" })),
@@ -874,7 +885,7 @@ export function buildPitCrewStartStock(race = {}, gelPriority = PIT_CREW_DEFAULT
     { id: "broth", label: "Brühe", icon: "☕", quantity: Math.max(6, Math.ceil(hours * 0.25)), unit: "Tassen", category: "food" },
     { id: "cucumber", label: "Gurke", icon: "🥒", quantity: Math.max(2, Math.ceil(hours / 24)), unit: "Stück", category: "food" },
     { id: "cola", label: "Cola", icon: "🥤", quantity: Math.max(2, Math.ceil(hours * 0.07)), unit: "l", category: "drink" },
-    { id: "haribo", label: "Haribo / schnelle KH", icon: "🍬", quantity: Math.max(2, Math.ceil(hours / 15)), unit: "Packungen", category: "food" },
+    { id: "haribo", label: "Haribo Roulette", icon: "🍬", quantity: Math.max(2, Math.ceil(hours / 15)), unit: "Packungen à 6 Rollen", category: "food", note: `${Math.max(2, Math.ceil(hours / 15)) * 6} Rollen gesamt · 150 g / Packung · 1 Rolle = 25 g ≈ 19,3 g KH` },
   ];
   return { hours, reservePercent: 15, targetCarbs, items };
 }

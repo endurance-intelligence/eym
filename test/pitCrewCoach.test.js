@@ -164,7 +164,7 @@ test("pit quantities multiply nutrients without floating-point display garbage",
     { productId: "milk-roll", portionId: "1", quantity: 2 },
     { productId: "haribo", portionId: "20g", quantity: 1 },
   ]);
-  assert.equal(summary.carbs, 71.4);
+  assert.equal(summary.carbs, 75.3);
   assert.equal(Number.isFinite(summary.carbs), true);
 });
 
@@ -357,19 +357,60 @@ test("36 hour open Backyard start stock scales supplies and preserves a reserve"
   assert.ok(plan.items.find((item) => item.id === "maurten100")?.priority === 4);
 });
 
-test("24 hour start stock exposes Isostar pack math plus DRYLL and Red Bull cans", () => {
+test("24 hour start stock uses practical shopping packages for drinks and Haribo", () => {
   const plan = buildPitCrewStartStock({ eventLimitMode: "open", planningHorizonHours: 24 });
   const isostar = plan.items.find((item) => item.id === "isostar");
+  const longEnergy = plan.items.find((item) => item.id === "isostar-long");
+  const waldmeister = plan.items.find((item) => item.id === "waldmeister");
   const dryll = plan.items.find((item) => item.id === "dryll");
   const redbull = plan.items.find((item) => item.id === "redbull");
-  assert.equal(isostar?.quantity, 7);
-  assert.equal(isostar?.unit, "× 500 ml");
-  assert.match(isostar?.note || "", /280 g Pulver/);
-  assert.match(isostar?.note || "", /400-g-Dose reicht/);
+  const haribo = plan.items.find((item) => item.id === "haribo");
+
+  assert.equal(isostar?.quantity, 1);
+  assert.equal(isostar?.unit, "400-g-Dose");
+  assert.match(isostar?.note || "", /400 g Dose = 1 ausreichend/);
+  assert.match(isostar?.note || "", /7 × 500 ml = 280 g Pulver/);
+
+  assert.equal(longEnergy?.quantity, 1);
+  assert.equal(longEnergy?.unit, "570-g-Dose");
+  assert.match(longEnergy?.note || "", /570 g Dose = 1 ausreichend/);
+  assert.match(longEnergy?.note || "", /6 × 500 ml = 228 g Pulver/);
+
+  assert.equal(waldmeister?.quantity, 1);
+  assert.equal(waldmeister?.unit, "0,5-l-Flasche");
+  assert.match(waldmeister?.note || "", /0,5 l Flasche = 1 ausreichend/);
+  assert.match(waldmeister?.note || "", /5 × 500 ml Race-Mix/);
+
   assert.equal(dryll?.quantity, 6);
   assert.equal(dryll?.unit, "Dosen à 330 ml");
   assert.equal(redbull?.quantity, 3);
   assert.equal(redbull?.unit, "Dosen à 250 ml");
+
+  assert.equal(haribo?.quantity, 2);
+  assert.equal(haribo?.unit, "Packungen à 6 Rollen");
+  assert.match(haribo?.note || "", /12 Rollen gesamt/);
+});
+
+
+test("Haribo Roulette uses the current 150 g retail pack with six 25 g rolls", () => {
+  const roulette = PIT_CREW_PRODUCTS.find((product) => product.id === "haribo");
+  const half = roulette?.portions.find((portion) => portion.label === "½ Rolle");
+  const full = roulette?.portions.find((portion) => portion.label === "1 Rolle");
+  assert.equal(roulette?.packageG, 150);
+  assert.equal(roulette?.rollsPerPackage, 6);
+  assert.equal(roulette?.rollG, 25);
+  assert.equal(half?.carbs, 9.6);
+  assert.equal(full?.carbs, 19.3);
+});
+
+test("Long Energy and Waldmeister expose their real retail package metadata", () => {
+  const longEnergy = PIT_CREW_PRODUCTS.find((product) => product.id === "isostar-long");
+  const waldmeister = PIT_CREW_PRODUCTS.find((product) => product.id === "waldmeister");
+  assert.equal(longEnergy?.packages?.[0]?.powderG, 570);
+  assert.equal(longEnergy?.packages?.[0]?.portions, 15);
+  assert.equal(waldmeister?.packageMl, 500);
+  assert.equal(waldmeister?.syrupCarbsPer100Ml, 72.9);
+  assert.equal(waldmeister?.manufacturerMixRatio, "1:5");
 });
 
 test("Hydrate & Perform label metadata keeps 400 g as ten 500 ml portions", () => {
