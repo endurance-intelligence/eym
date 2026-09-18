@@ -11,9 +11,11 @@ test("Pit Crew keeps test controls out of the normal live flow", () => {
 });
 
 test("Pit Crew only books loop intake after explicit return confirmation", () => {
-  assert.match(source, /zählt noch nicht als tatsächlich aufgenommen/);
-  assert.match(source, /„wie geplant“ ist vorausgewählt/);
-  assert.match(source, /Erst mit „Rückkehr übernehmen“ zählt die Versorgung als tatsächlich aufgenommen/);
+  assert.match(source, /arrivalIntakeMode === "planned"/);
+  assert.match(source, /Alles wie geplant/);
+  assert.match(source, /confirmPendingCarry\("planned"\)/);
+  assert.match(source, /lastRecord\.summary \|\| summarizePitSelection/);
+  assert.doesNotMatch(source, /lastRecord\.carryStatus === "pending" && lastRecord\.provisionalSummary/);
   assert.doesNotMatch(source, /wie geplant angenommen/);
 });
 
@@ -71,6 +73,27 @@ test("Pit Crew uses one sticky return action and simplifies single-item intake",
   assert.match(source, /confirmPendingCarry\(arrivalPendingItems\.length === 1 \? "half" : "rated"\)/);
 });
 
+
+test("Pit Crew live view keeps the current plan glanceable and removes duplicate top-level fueling", () => {
+  assert.match(source, /Pit: Loop/);
+  assert.match(source, /Pit: Start/);
+  assert.match(source, /ATHLETE STATUS/);
+  assert.match(source, /PIT-PLAN · MANUELL ANGEPASST/);
+  assert.match(source, /KH passt/);
+  assert.match(source, /KH zu wenig/);
+  assert.match(source, /KH zu viel/);
+  assert.match(source, /MIT AUF LOOP/);
+  assert.match(source, /<span>FUELING<\/span>/);
+  assert.doesNotMatch(source, /<summary><span>FUELING LOOP<\/span>/);
+  assert.doesNotMatch(source, /<summary>\s*<span>FUELING PIT<\/span>/);
+});
+
+test("Pit Crew preparation stock persists independently from a live-session reset", () => {
+  assert.match(source, /endurance-pit-crew-prep:/);
+  assert.match(source, /window\.localStorage\.setItem\(prepStorageKey/);
+  assert.match(source, /Vorrat & Startplan bleiben erhalten/);
+  assert.doesNotMatch(source, /setStockTargets\(\{\}\);/);
+});
 
 test("shared Pit Crew route is protected by the application error boundary and exposes the KH audit", () => {
   const appSource = fs.readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");
