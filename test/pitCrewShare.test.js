@@ -73,12 +73,13 @@ test("old crew snapshots without a stockroom keep stockIds unset so the UI can a
 
 test("legacy malformed Pit Crew state is sanitized instead of crashing live view", () => {
   const normalized = normalizePitCrewSnapshot({
-    history: [null, { round: 3, selection: [null, { productId: "isostar", portionId: 500 }], carrySelection: "bad" }],
+    history: [null, { round: 3, selection: [null, { productId: "isostar", portionId: 500 }], plannedSelection: [{ productId: "banana", portionId: "whole", timing: "now" }], carrySelection: "bad" }],
     customProducts: [null, { id: "broken" }, { id: "ok", portions: [{ id: 1, carbs: 25 }] }],
     athleteFeedback: { round: "3", flags: "bad", source: "athlete" },
   });
   assert.equal(normalized.history.length, 1);
   assert.deepEqual(normalized.history[0].selection, [{ productId: "isostar", portionId: "500", quantity: 1 }]);
+  assert.deepEqual(normalized.history[0].plannedSelection, [{ productId: "banana", portionId: "whole", timing: "now", quantity: 1 }]);
   assert.deepEqual(normalized.history[0].carrySelection, []);
   assert.equal(normalized.customProducts.length, 1);
   assert.equal(normalized.customProducts[0].id, "ok");

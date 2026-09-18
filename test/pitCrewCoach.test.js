@@ -132,7 +132,7 @@ test("athlete self-selection is summed instead of rejected for deviating from su
     { productId: "isostar", portionId: "300" },
   ];
   const summary = summarizePitSelection(selection);
-  assert.equal(summary.carbs, 76);
+  assert.equal(summary.carbs, 69.4);
   assert.equal(summary.fluidMl, 400);
   const assessment = assessPitSelection(selection, [
     { selection: [{ productId: "isostar", portionId: "300" }, { productId: "maurten100", portionId: "1" }] },
@@ -164,7 +164,7 @@ test("pit quantities multiply nutrients without floating-point display garbage",
     { productId: "milk-roll", portionId: "1", quantity: 2 },
     { productId: "haribo", portionId: "20g", quantity: 1 },
   ]);
-  assert.equal(summary.carbs, 75.3);
+  assert.equal(summary.carbs, 62.1);
   assert.equal(Number.isFinite(summary.carbs), true);
 });
 
@@ -365,6 +365,7 @@ test("24 hour start stock uses practical shopping packages for drinks and Haribo
   const dryll = plan.items.find((item) => item.id === "dryll");
   const redbull = plan.items.find((item) => item.id === "redbull");
   const haribo = plan.items.find((item) => item.id === "haribo");
+  const milkRoll = plan.items.find((item) => item.id === "milk-roll");
 
   assert.equal(isostar?.quantity, 1);
   assert.equal(isostar?.unit, "400-g-Dose");
@@ -389,8 +390,25 @@ test("24 hour start stock uses practical shopping packages for drinks and Haribo
   assert.equal(haribo?.quantity, 2);
   assert.equal(haribo?.unit, "Packungen à 6 Rollen");
   assert.match(haribo?.note || "", /12 Rollen gesamt/);
+
+  assert.equal(milkRoll?.quantity, 6);
+  assert.equal(milkRoll?.unit, "Stück");
+  assert.match(milkRoll?.note || "", /480-g-Packung = 12 Stück à 40 g/);
+  assert.match(milkRoll?.note || "", /1 Packung reicht/);
 });
 
+
+
+test("Ibis milk rolls are tracked as individual 40 g pieces with retail-pack context", () => {
+  const product = PIT_CREW_PRODUCTS.find((candidate) => candidate.id === "milk-roll");
+  const piece = product?.portions.find((portion) => portion.id === "1");
+  assert.equal(product?.packageG, 480);
+  assert.equal(product?.piecesPerPackage, 12);
+  assert.equal(product?.pieceG, 40);
+  assert.equal(product?.nutritionSource, "label");
+  assert.equal(piece?.carbs, 21.4);
+  assert.match(product?.stockNote || "", /12 Stück à 40 g/);
+});
 
 test("Haribo Roulette uses the current 150 g retail pack with six 25 g rolls", () => {
   const roulette = PIT_CREW_PRODUCTS.find((product) => product.id === "haribo");

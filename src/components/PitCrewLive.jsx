@@ -98,6 +98,7 @@ function normalizedLiveHistory(value) {
     .map((record) => ({
       ...record,
       selection: normalizedLiveSelection(record.selection),
+      plannedSelection: normalizedLiveSelection(record.plannedSelection),
       carrySelection: normalizedLiveSelection(record.carrySelection),
       carriedSelection: normalizedLiveSelection(record.carriedSelection),
       flags: Array.isArray(record.flags) ? record.flags.map(String) : [],
@@ -168,12 +169,14 @@ function selectionLabel(entry, products = PIT_CREW_PRODUCTS) {
 
 function selectionWithTiming(record = {}) {
   if (record.carryStatus === "pending") {
+    const planned = normalizedLiveSelection(record.plannedSelection);
+    if (planned.length) return planned.map((entry) => ({ ...entry, timing: entry.timing || "now" }));
     return [
-      ...(record.selection || []).map((entry) => ({ ...entry, timing: "now" })),
-      ...(record.carrySelection || []).map((entry) => ({ ...entry, timing: "carry" })),
+      ...(record.selection || []).map((entry) => ({ ...entry, timing: entry.timing || "now" })),
+      ...(record.carrySelection || []).map((entry) => ({ ...entry, timing: entry.timing || "carry" })),
     ];
   }
-  return (record.selection || []).map((entry) => ({ ...entry, timing: "now" }));
+  return (record.selection || []).map((entry) => ({ ...entry, timing: entry.timing || "now" }));
 }
 
 function selectionSignature(value = []) {
@@ -205,7 +208,7 @@ export default function PitCrewLive({ race, onClose }) {
   const storedPrep = useMemo(() => safeStoredSession(prepStorageKey), [prepStorageKey]);
   const storedHasPrep = Array.isArray(stored?.stockIds);
   const [demoActive, setDemoActive] = useState(false);
-  const [demoRound, setDemoRound] = useState(1);
+  const [demoRound, setDemoRound] = useState(0);
   const [demoMinutesToStart, setDemoMinutesToStart] = useState(10);
   const storageKey = demoActive ? `${baseStorageKey}:demo` : baseStorageKey;
   const [now, setNow] = useState(() => new Date());
@@ -249,11 +252,13 @@ export default function PitCrewLive({ race, onClose }) {
   const intervalMinutes = Number(race?.loopIntervalMinutes || 60);
   const liveTiming = timeContext(anchor, intervalMinutes, now);
   const demoBase = plannedAnchor(race) || new Date(2000, 0, 1, 6, 0, 0, 0);
-  const demoNextStart = new Date(demoBase.getTime() + Math.max(1, Number(demoRound || 1)) * intervalMinutes * 60 * 1000);
+  const demoRoundNumber = Math.max(0, Number(demoRound || 0));
+  const demoStarted = demoRoundNumber > 0;
+  const demoNextStart = new Date(demoBase.getTime() + demoRoundNumber * intervalMinutes * 60 * 1000);
   const timing = demoActive ? {
-    started: true,
-    currentRound: Math.max(1, Number(demoRound || 1)),
-    pitRound: Math.max(1, Number(demoRound || 1)),
+    started: demoStarted,
+    currentRound: demoRoundNumber,
+    pitRound: demoRoundNumber,
     nextStart: demoNextStart,
     minutesToStart: Math.max(0, Number(demoMinutesToStart || 0)),
     mode: pitTimeMode(demoMinutesToStart),
@@ -313,10 +318,10 @@ export default function PitCrewLive({ race, onClose }) {
   const athleteFeedbackApplies = Boolean(athleteFeedback) && Number(athleteFeedback.round || 0) === Number(timing.currentRound || 0);
   const effectiveAthleteFlags = [...new Set([...(flags || []), ...(incomingApplies ? incomingFlags : []), ...(fuelMode === "liquid-only" ? ["liquid-only"] : [])])];
   const weatherTargetStart = demoActive
-    ? new Date(demoBase.getTime() + Math.max(0, Number(demoRound || 1) - 1) * intervalMinutes * 60 * 1000)
+    ? new Date(demoBase.getTime() + Math.max(0, demoRoundNumber) * intervalMinutes * 60 * 1000)
     : timing.nextStart;
   const weatherTargetRound = demoActive
-    ? Math.max(1, Number(demoRound || 1))
+    ? Math.max(1, demoRoundNumber + 1)
     : Math.max(1, Number(timing.currentRound || 0) + 1);
   const nextLoopWeather = pitWeatherForecastForLoops({
     observation: autoWeather || {},
@@ -342,10 +347,20 @@ export default function PitCrewLive({ race, onClose }) {
     ...record,
     summary: record.carryStatus === "pending" && record.provisionalSummary ? record.provisionalSummary : record.summary,
   }));
-  const pendingCarry = [...history].reverse().find((record) => record.carryStatus === "pending" && Array.isArray(record.carrySelection) && record.carrySelection.length);
+  const pendingCarry = [...history].reverse().find((record) => {
+    if (record.carryStatus !== "pending") return false;
+    const planned = normalizedLiveSelection(record.plannedSelection);
+    const legacyCarry = normalizedLiveSelection(record.carrySelection);
+    return planned.length > 0 || legacyCarry.length > 0;
+  });
   const pendingLoopNumber = pendingCarry ? Number(pendingCarry.round) + 1 : null;
+  const pendingIntakeSelection = pendingCarry
+    ? (normalizedLiveSelection(pendingCarry.plannedSelection).length
+      ? normalizedLiveSelection(pendingCarry.plannedSelection)
+      : normalizedLiveSelection(pendingCarry.carrySelection).map((entry) => ({ ...entry, timing: entry.timing || "carry" })))
+    : [];
   const arrivalPendingItems = pendingCarry && Number(pendingLoopNumber) === Number(timing.currentRound)
-    ? (Array.isArray(pendingCarry.carrySelection) ? pendingCarry.carrySelection : []).filter((entry) => entry && typeof entry === "object" && entry.productId != null && entry.portionId != null)
+    ? pendingIntakeSelection
     : [];
   const singleArrivalItem = arrivalPendingItems.length === 1 ? arrivalPendingItems[0] : null;
   const arrivalPartialRated = arrivalPendingItems.length === 1 || (arrivalPendingItems.length > 1 && arrivalPendingItems.every((entry, index) =>
@@ -398,11 +413,13 @@ export default function PitCrewLive({ race, onClose }) {
     : null;
   const savedLoopReady = Boolean(savedCurrentPit && !loopMustClose && !selectionDirty);
   const assessment = assessPitSelection(activeSelection, planningHistory, { weather: effectiveWeather, products: productCatalog });
-  const historyRolling = rollingPitAverage(history, null, 3, productCatalog);
+  const confirmedHistory = history.filter((record) => record.carryStatus !== "pending");
+  const historyRolling = rollingPitAverage(confirmedHistory, null, 3, productCatalog);
   const metricStatus = pitMetricStatus(assessment.summary, assessment.rolling, { weather: effectiveWeather });
   const lastRecord = history.length ? history[history.length - 1] : null;
-  const lastActualSummary = lastRecord
-    ? (lastRecord.summary || summarizePitSelection(lastRecord.selection || [], productCatalog))
+  const lastConfirmedRecord = [...confirmedHistory].reverse().find((record) => record.summary || (record.selection || []).length) || null;
+  const lastActualSummary = lastConfirmedRecord
+    ? (lastConfirmedRecord.summary || summarizePitSelection(lastConfirmedRecord.selection || [], productCatalog))
     : { carbs: 0, fluidMl: 0, caffeineMg: 0 };
   const actualMetricStatus = pitMetricStatus(lastActualSummary, historyRolling, { weather: effectiveWeather });
   const alert = warningText(metricStatus, assessment);
@@ -571,8 +588,7 @@ export default function PitCrewLive({ race, onClose }) {
   function savePit() {
     const unresolvedCarry = [...history].reverse().find((record) =>
       record.carryStatus === "pending"
-      && Array.isArray(record.carrySelection)
-      && record.carrySelection.length
+      && (normalizedLiveSelection(record.plannedSelection).length || normalizedLiveSelection(record.carrySelection).length)
       && Number(record.round) < Number(saveRound),
     );
     if (unresolvedCarry) {
@@ -585,27 +601,35 @@ export default function PitCrewLive({ race, onClose }) {
       return;
     }
     const existing = history.find((item) => Number(item.round) === Number(saveRound));
-    const consumedSelection = activeSelection.filter((entry) => entry.timing !== "carry").map(({ productId, portionId, quantity: count }) => ({ productId, portionId, quantity: quantity({ quantity: count }) }));
-    const carrySelection = activeSelection.filter((entry) => entry.timing === "carry").map(({ productId, portionId, quantity: count }) => ({ productId, portionId, quantity: quantity({ quantity: count }) }));
-    const summary = summarizePitSelection(consumedSelection, productCatalog);
-    const provisionalSummary = summarizePitSelection([...consumedSelection, ...carrySelection], productCatalog);
+    const plannedSelection = activeSelection.map(({ productId, portionId, quantity: count, timing: itemTiming }) => ({
+      productId,
+      portionId,
+      quantity: quantity({ quantity: count }),
+      timing: itemTiming || "now",
+    }));
+    const carrySelection = plannedSelection.filter((entry) => entry.timing === "carry");
+    const provisionalSummary = summarizePitSelection(plannedSelection, productCatalog);
+    const correctingConfirmedPit = editingRound != null && existing && existing.carryStatus !== "pending";
+    const summary = correctingConfirmedPit ? provisionalSummary : summarizePitSelection([], productCatalog);
     const record = {
       round: saveRound,
       recordedAt: new Date().toISOString(),
-      selection: consumedSelection,
-      carrySelection,
-      carriedSelection: carrySelection.length ? carrySelection : (existing?.carriedSelection || []),
-      carryStatus: carrySelection.length ? "pending" : "none",
+      selection: correctingConfirmedPit ? plannedSelection : [],
+      plannedSelection: correctingConfirmedPit ? [] : plannedSelection,
+      carrySelection: correctingConfirmedPit ? [] : carrySelection,
+      carriedSelection: correctingConfirmedPit ? (existing?.carriedSelection || carrySelection) : (carrySelection.length ? carrySelection : (existing?.carriedSelection || [])),
+      carryStatus: correctingConfirmedPit ? "confirmed" : (plannedSelection.length ? "pending" : "none"),
       summary,
-      provisionalSummary,
+      provisionalSummary: correctingConfirmedPit ? summary : provisionalSummary,
       flags: editingRound != null && existing ? [...(existing.flags || [])] : [...flags],
       weather: editingRound != null && existing ? [...(existing.weather || [])] : [...effectiveWeather],
     };
     setHistory((current) => [...current.filter((item) => Number(item.round) !== Number(saveRound)), record]
       .sort((left, right) => Number(left.round) - Number(right.round)));
     setSaveMessage(editingRound != null
-      ? `Pit ${saveRound} korrigiert.`
-      : `Loop ${readyLoopNumber} startklar · ${formatNumber(summary.carbs)} g im Pit bestätigt${carrySelection.length ? ` · ${formatNumber(provisionalSummary.carbs - summary.carbs)} g mitgegeben` : ""}.`);
+      ? `Pit ${saveRound} korrigiert · bestätigte IST-Aufnahme aktualisiert.`
+      : `Loop ${readyLoopNumber} startklar · ${formatNumber(provisionalSummary.carbs)} g KH geplant · tatsächliche Aufnahme wird bei Rückkehr bestätigt.`);
+    setSelection(plannedSelection);
     setSelectionMode("manual");
     setSelectionDirty(false);
     setEditingRound(null);
@@ -623,7 +647,8 @@ export default function PitCrewLive({ race, onClose }) {
 
   function confirmPendingCarry(mode = "planned") {
     if (!pendingCarry) return;
-    const consumedCarry = pendingCarry.carrySelection.flatMap((entry, index) => {
+    const intakePlan = pendingIntakeSelection;
+    const consumedPlan = intakePlan.flatMap((entry, index) => {
       const key = carryResultKey(entry, index);
       const factor = mode === "planned"
         ? 1
@@ -635,14 +660,14 @@ export default function PitCrewLive({ race, onClose }) {
       if (!Number.isFinite(factor) || factor <= 0) return [];
       return [{ ...entry, intakeFactor: Math.max(0, Math.min(1, factor)) }];
     });
-    const carriedSelection = pendingCarry.carrySelection.map((entry) => ({ ...entry }));
+    const carriedSelection = intakePlan.filter((entry) => entry.timing === "carry").map((entry) => ({ ...entry }));
     setHistory((current) => current.map((record) => {
       if (Number(record.round) !== Number(pendingCarry.round)) return record;
-      const merged = [...(record.selection || []), ...consumedCarry];
-      const summary = summarizePitSelection(merged, productCatalog);
+      const summary = summarizePitSelection(consumedPlan, productCatalog);
       return {
         ...record,
-        selection: merged,
+        selection: consumedPlan,
+        plannedSelection: [],
         carriedSelection,
         carrySelection: [],
         summary,
@@ -652,7 +677,7 @@ export default function PitCrewLive({ race, onClose }) {
       };
     }));
     setCarryAdjust({});
-    setSaveMessage(`Loop ${Number(pendingCarry.round) + 1}: Abweichung übernommen · Engine rechnet mit der Realität weiter.`);
+    setSaveMessage(`Loop ${Number(pendingCarry.round) + 1}: Aufnahme bestätigt · Engine rechnet nur mit den tatsächlich bestätigten KH weiter.`);
   }
 
   function editLastPit() {
@@ -691,7 +716,7 @@ export default function PitCrewLive({ race, onClose }) {
       window.localStorage.removeItem(`${baseStorageKey}:demo`);
     }
     setDemoActive(true);
-    setDemoRound(1);
+    setDemoRound(0);
     setDemoMinutesToStart(10);
     setHistory([]);
     setFlags([]);
@@ -746,11 +771,18 @@ export default function PitCrewLive({ race, onClose }) {
 
   function moveDemoLoop(delta) {
     if (!demoActive) return;
-    if (delta > 0 && loopMustClose) {
-      setSaveMessage(`Bitte Loop ${pendingLoopNumber} zuerst abschließen.`);
-      return;
+    const current = Math.max(0, Number(demoRound || 0));
+    if (delta > 0) {
+      if (!savedLoopReady) {
+        setSaveMessage(`Loop ${current + 1} zuerst startklar machen – erst dann im Test starten.`);
+        return;
+      }
+      if (current > 0 && (!arrivalState.arrived || checkInOpen)) {
+        setSaveMessage(`Loop ${current} zuerst sauber bei Rückkehr abschließen.`);
+        return;
+      }
     }
-    setDemoRound((current) => Math.max(1, Number(current || 1) + delta));
+    setDemoRound(Math.max(0, current + delta));
     setDemoMinutesToStart(10);
     setArrivalRound(0);
     setArrivalAt("");
@@ -759,7 +791,8 @@ export default function PitCrewLive({ race, onClose }) {
     setSelectionMode("suggestion");
     setSelectionDirty(false);
     setCarryAdjust({});
-    setSaveMessage(delta > 0 ? "Nächste Demo-Loop geladen." : "Vorherige Demo-Loop geladen.");
+    setCheckInOpen(false);
+    setSaveMessage(delta > 0 ? `Loop ${current + 1} läuft · bei Rückkehr unten „Athlet zurück“ bestätigen.` : "Vorherige Demo-Phase geladen.");
     loadedPitRound.current = null;
   }
 
@@ -804,7 +837,7 @@ export default function PitCrewLive({ race, onClose }) {
     const categoryProducts = productCatalog.filter((product) => product.category === stockCategory);
     const gelOrder = normalizeGelPriority(gelPriority);
     return (
-      <details className="pit-live-collapse pit-live-stock">
+      <details className="pit-live-tool-option pit-live-stock">
         <summary><span>VORRAT & STARTPLAN</span><b>{startStockPlan.hours} h · +{startStockPlan.reservePercent}% Reserve · {activeStockIds.length} aktiv</b><i>›</i></summary>
         <div className="pit-live-collapse-body">
           <div className="pit-live-start-stock-head"><b>≈ {startStockPlan.targetCarbs.toLocaleString("de-DE")} g KH Materialziel</b><span>Eventbezogen gespeichert: Einkauf und Startvorrat bleiben auch nach Browser-Neustart und Live-Session-Reset erhalten. Die Crew-Auswahl nutzt denselben Bestand.</span></div>
@@ -918,7 +951,7 @@ export default function PitCrewLive({ race, onClose }) {
           {pendingCarry && <div className="pit-live-loop-inline-status">
             <small>{pendingCarry.carryStatus === "pending" ? `LOOP ${Number(pendingCarry.round) + 1}` : "LOOP"}</small>
             <b>{loopMustClose ? (arrivalState.arrived ? "Rückkehr bestätigen" : "läuft · Aufnahme noch offen") : "Versorgung vorbereitet"}</b>
-            <span>{(pendingCarry.carrySelection || []).length ? (pendingCarry.carrySelection || []).map((entry) => selectionLabel(entry, productCatalog)).join(" · ") : "Keine zusätzliche Versorgung mitgegeben."}</span>
+            <span>{pendingIntakeSelection.length ? pendingIntakeSelection.map((entry) => selectionLabel(entry, productCatalog)).join(" · ") : "Keine geplante Aufnahme offen."}</span>
           </div>}
           <div className={`pit-live-fueling-total tone-${planCarbTone}`}><span>AKTUELL GESAMT</span><b>{formatNumber(activePlanSummary.carbs)} g KH · {activePlanSummary.fluidMl} ml</b><em>{planCarbLabel} · Ziel {PIT_CARB_TARGET.min}–{PIT_CARB_TARGET.max} g</em></div>
         </div>
@@ -1113,61 +1146,71 @@ export default function PitCrewLive({ race, onClose }) {
         {renderFuelingSection()}
 
         <details className="pit-live-collapse pit-live-tools">
-          <summary><span>WERKZEUGE</span><b>{demoActive ? "Testmodus aktiv" : "Korrektur / Test"}</b><i>›</i></summary>
-          <div className="pit-live-collapse-body">
-            {!demoActive ? (
-              <>
-                <p className="pit-live-help">Der Testmodus liegt bewusst nur hier unter Werkzeuge. Die normale Pit-Ansicht zeigt ausschließlich den Live-Workflow; echte Session-Daten bleiben unangetastet.</p>
-                <button type="button" className="pit-live-primary pit-live-wide" onClick={beginDemo}>Testmodus starten</button>
-                {!race?.time && <button type="button" className="pit-live-secondary pit-live-wide" onClick={() => setAnchorAt(new Date().toISOString())}>Startzeit = jetzt</button>}
-                <button type="button" className="pit-live-danger pit-live-wide" onClick={resetSession}>Gesamte Live-Session zurücksetzen</button>
-              </>
-            ) : (
-              <>
-                <p className="pit-live-help">Testdaten liegen separat. „Nächste Loop“ wird erst freigegeben, nachdem „Athlet zurück“ für die aktuelle Runde gemeldet und der Rückkehr-Check abgeschlossen wurde.</p>
-                <div className="pit-live-demo-loop">
-                  <button type="button" className="pit-live-secondary" disabled={demoRound <= 1} onClick={() => moveDemoLoop(-1)}>← Loop</button>
-                  <button type="button" className="pit-live-primary" disabled={!arrivalState.arrived || checkInOpen} onClick={() => moveDemoLoop(1)}>Nächste Loop →</button>
+          <summary><span>WERKZEUGE</span><b>{demoActive ? "Testmodus aktiv" : "Bilanz · Verlauf · Test · Vorrat"}</b><i>›</i></summary>
+          <div className="pit-live-collapse-body pit-live-tools-options">
+            <details className="pit-live-tool-option">
+              <summary><span>KH-BILANZ</span><b>{historyRolling.hours ? `${formatNumber(historyRolling.carbsPerHour)} g/h Ø` : `Ziel ${PIT_CARB_TARGET.center} g/h`}</b><i>›</i></summary>
+              <div className="pit-live-tool-option-body">
+                <div className="pit-live-history-rows">
+                  <div><em aria-hidden="true" /><b>Aktueller Pit-Plan</b><span>{formatNumber(activePlanSummary.carbs)} g KH · {activePlanSummary.fluidMl} ml</span></div>
+                  <div><em aria-hidden="true" /><b>Zuletzt tatsächlich</b><span>{formatNumber(lastActualSummary.carbs)} g KH · {lastActualSummary.fluidMl} ml</span></div>
+                  <div><em aria-hidden="true" /><b>Ø letzte {historyRolling.hours || 0} h</b><span>{historyRolling.hours ? `${formatNumber(historyRolling.carbsPerHour)} g KH/h · ${historyRolling.fluidPerHour} ml/h` : "noch keine belastbare Historie"}</span></div>
                 </div>
-                <div className="pit-live-demo-times" aria-label="Test Pit-Zeit">
-                  {[[10, "STANDARD"], [6, "KOMPAKT"], [4, "QUICK"], [2, "GO"]].map(([minutes, label]) => (
-                    <button type="button" key={minutes} className={demoMinutesToStart === minutes ? "active" : ""} onClick={() => setDemoMinutesToStart(minutes)}><b>{minutes} min</b><span>{label}</span></button>
-                  ))}
-                </div>
-                <button type="button" className="pit-live-secondary pit-live-wide" onClick={beginDemo}>Testmodus neu starten</button>
-                <button type="button" className="pit-live-primary pit-live-wide" onClick={endDemo}>Testmodus beenden</button>
-              </>
-            )}
-
-            <div className="pit-live-tools-block">
-              <div className="pit-live-tools-block-head"><small>KH-BILANZ</small><b>Ziel {PIT_CARB_TARGET.center} g/h · {PIT_CARB_TARGET.min}–{PIT_CARB_TARGET.max}</b></div>
-              <div className="pit-live-history-rows">
-                <div><em aria-hidden="true" /><b>Aktueller Pit-Plan</b><span>{formatNumber(activePlanSummary.carbs)} g KH · {activePlanSummary.fluidMl} ml</span></div>
-                <div><em aria-hidden="true" /><b>Zuletzt tatsächlich</b><span>{formatNumber(lastActualSummary.carbs)} g KH · {lastActualSummary.fluidMl} ml</span></div>
-                <div><em aria-hidden="true" /><b>Ø letzte {historyRolling.hours || 0} h</b><span>{historyRolling.hours ? `${formatNumber(historyRolling.carbsPerHour)} g KH/h · ${historyRolling.fluidPerHour} ml/h` : "noch keine belastbare Historie"}</span></div>
+                <p className="pit-live-help">Zielbereich: {PIT_CARB_TARGET.min}–{PIT_CARB_TARGET.max} g KH/h. Der aktuelle Pit-Plan oben zeigt bereits direkt, ob die ausgewählte Versorgung passt.</p>
               </div>
-            </div>
+            </details>
 
-            {history.length > 0 && <div className="pit-live-tools-block">
-              <div className="pit-live-tools-block-head"><small>VERLAUF & KORREKTUR</small><b>Ø3h {formatNumber(historyRolling.carbsPerHour)} g/h</b></div>
-              <div className="pit-live-history-rows">{history.map((record, index) => ({ record, index })).slice(-5).reverse().map(({ record, index }) => {
-                const carried = (record.carriedSelection || record.carrySelection || []).length > 0;
-                const tone = historyTone(record, index);
-                const pendingText = record.carryStatus === "pending"
-                  ? Number(record.round) < Number(pitRound)
-                    ? ` · Loop ${Number(record.round) + 1} abschließen`
-                    : ` · Loop ${Number(record.round) + 1} startklar`
-                  : "";
-                const shownSummary = record.summary || summarizePitSelection(record.selection, productCatalog);
-                const plannedSummary = record.carryStatus === "pending" && record.provisionalSummary ? record.provisionalSummary : null;
-                return <div key={record.round} className={`tone-${tone}`}><em aria-hidden="true" /><b>{carried ? `Pit ${record.round} → Loop ${Number(record.round) + 1}` : `Pit ${record.round}`}</b><span>{formatNumber(shownSummary.carbs)} g KH · {shownSummary.fluidMl} ml{plannedSummary ? ` · geplant ${formatNumber(plannedSummary.carbs)} g / ${plannedSummary.fluidMl} ml · noch nicht bestätigt` : ""}{pendingText}</span></div>;
-              })}</div>
-              <button type="button" className="pit-live-secondary pit-live-wide" onClick={editLastPit}>Letzten Pit korrigieren</button>
-            </div>}
+            {history.length > 0 && <details className="pit-live-tool-option">
+              <summary><span>VERLAUF & KORREKTUR</span><b>Ø3h {formatNumber(historyRolling.carbsPerHour)} g/h</b><i>›</i></summary>
+              <div className="pit-live-tool-option-body">
+                <div className="pit-live-history-rows">{history.map((record, index) => ({ record, index })).slice(-5).reverse().map(({ record, index }) => {
+                  const carried = (record.carriedSelection || record.plannedSelection || record.carrySelection || []).length > 0;
+                  const tone = historyTone(record, index);
+                  const pendingText = record.carryStatus === "pending"
+                    ? Number(record.round) < Number(pitRound)
+                      ? ` · Loop ${Number(record.round) + 1} Aufnahme bestätigen`
+                      : ` · Loop ${Number(record.round) + 1} startklar`
+                    : "";
+                  const shownSummary = record.summary || summarizePitSelection(record.selection, productCatalog);
+                  const plannedSummary = record.carryStatus === "pending" && record.provisionalSummary ? record.provisionalSummary : null;
+                  return <div key={record.round} className={`tone-${tone}`}><em aria-hidden="true" /><b>{carried ? `Pit ${record.round} → Loop ${Number(record.round) + 1}` : `Pit ${record.round}`}</b><span>{formatNumber(shownSummary.carbs)} g KH · {shownSummary.fluidMl} ml{plannedSummary ? ` · geplant ${formatNumber(plannedSummary.carbs)} g / ${plannedSummary.fluidMl} ml · noch nicht bestätigt` : ""}{pendingText}</span></div>;
+                })}</div>
+                <button type="button" className="pit-live-secondary pit-live-wide" onClick={editLastPit}>Letzten Pit korrigieren</button>
+              </div>
+            </details>}
+
+            <details className="pit-live-tool-option">
+              <summary><span>TEST / DEMO</span><b>{demoActive ? "aktiv" : "optional"}</b><i>›</i></summary>
+              <div className="pit-live-tool-option-body">
+                {!demoActive ? (
+                  <>
+                    <p className="pit-live-help">Testdaten liegen separat. Die normale Pit-Ansicht und echte Session-Daten bleiben unangetastet.</p>
+                    <button type="button" className="pit-live-primary pit-live-wide" onClick={beginDemo}>Testmodus starten</button>
+                    {!race?.time && <button type="button" className="pit-live-secondary pit-live-wide" onClick={() => setAnchorAt(new Date().toISOString())}>Startzeit = jetzt</button>}
+                    <button type="button" className="pit-live-danger pit-live-wide" onClick={resetSession}>Gesamte Live-Session zurücksetzen</button>
+                  </>
+                ) : (
+                  <>
+                    <p className="pit-live-help">Der Test beginnt bewusst bei „Pit: Start“. Erst Versorgung für Loop 1 startklar machen, dann Loop 1 starten. Danach gilt immer: Rückkehr bestätigen → nächsten Pit startklar machen → nächste Loop starten.</p>
+                    <div className="pit-live-demo-loop">
+                      <button type="button" className="pit-live-secondary" disabled={demoRound <= 0} onClick={() => moveDemoLoop(-1)}>← Phase</button>
+                      <button type="button" className="pit-live-primary" disabled={!savedLoopReady || (demoRound > 0 && (!arrivalState.arrived || checkInOpen))} onClick={() => moveDemoLoop(1)}>{demoRound === 0 ? "Loop 1 starten →" : `Loop ${demoRound + 1} starten →`}</button>
+                    </div>
+                    <div className="pit-live-demo-times" aria-label="Test Pit-Zeit">
+                      {[[10, "STANDARD"], [6, "KOMPAKT"], [4, "QUICK"], [2, "GO"]].map(([minutes, label]) => (
+                        <button type="button" key={minutes} className={demoMinutesToStart === minutes ? "active" : ""} onClick={() => setDemoMinutesToStart(minutes)}><b>{minutes} min</b><span>{label}</span></button>
+                      ))}
+                    </div>
+                    <button type="button" className="pit-live-secondary pit-live-wide" onClick={beginDemo}>Testmodus neu starten</button>
+                    <button type="button" className="pit-live-primary pit-live-wide" onClick={endDemo}>Testmodus beenden</button>
+                  </>
+                )}
+              </div>
+            </details>
+
+            {renderStockSection()}
           </div>
         </details>
-
-        {renderStockSection()}
 
         {saveMessage && <p className="pit-live-save-message">{saveMessage}</p>}
         {(metricStatus.carbs !== "good" || metricStatus.fluid === "low" || metricStatus.fluid === "high" || metricStatus.rolling === "low" || metricStatus.rolling === "high") && <div className={`pit-live-alert tone-${metricStatus.carbs === "high" || metricStatus.fluid === "high" || metricStatus.rolling === "high" ? "high" : "low"}`}>{alert}</div>}
@@ -1214,7 +1257,7 @@ export default function PitCrewLive({ race, onClose }) {
 
           {arrivalPendingItems.length > 0 && (
             <div className="pit-live-checkin-intake">
-              <div className="pit-live-checkin-subhead"><small>VERPFLEGUNG AUF LOOP {timing.currentRound}</small><span>{singleArrivalItem ? selectionLabel(singleArrivalItem, productCatalog) : "Was davon wurde tatsächlich genommen?"}</span></div>
+              <div className="pit-live-checkin-subhead"><small>AUFNAHME FÜR LOOP {timing.currentRound}</small><span>{singleArrivalItem ? selectionLabel(singleArrivalItem, productCatalog) : "Was vom kompletten Pit-/Loop-Plan wurde tatsächlich eingenommen?"}</span></div>
               <div className="pit-live-checkin-intake-modes">
                 <button type="button" className={arrivalIntakeMode === "planned" ? "active" : ""} onClick={() => { setArrivalIntakeMode("planned"); setCarryAdjust({}); }}>{singleArrivalItem ? "✓ Komplett" : "✓ Alles wie geplant"}</button>
                 <button type="button" className={arrivalIntakeMode === "partial" ? "active" : ""} onClick={() => { setArrivalIntakeMode("partial"); if (singleArrivalItem) setCarryAdjust({}); }}>½ Teilweise</button>

@@ -31,6 +31,7 @@ function normalizeHistory(value) {
       ...record,
       round: Math.max(0, Number(record.round || 0)),
       selection: normalizeSelection(record.selection),
+      plannedSelection: normalizeSelection(record.plannedSelection),
       carrySelection: normalizeSelection(record.carrySelection),
       carriedSelection: normalizeSelection(record.carriedSelection),
       ...(normalizeSummary(record.summary) ? { summary: normalizeSummary(record.summary) } : {}),

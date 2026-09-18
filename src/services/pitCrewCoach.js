@@ -193,12 +193,16 @@ export const PIT_CREW_PRODUCTS = [
   },
   {
     id: "milk-roll",
-    label: "Milchbrötchen",
+    label: "Ibis Milchbrötchen",
     icon: "🥛",
     category: "food",
     traits: ["real-food", "soft", "sweet"],
-    estimated: true,
-    portions: [{ id: "1", label: "1 Stück", carbs: 28, fluidMl: 0, caffeineMg: 0 }],
+    nutritionSource: "label",
+    packageG: 480,
+    piecesPerPackage: 12,
+    pieceG: 40,
+    stockNote: "480-g-Packung = 12 Stück à 40 g",
+    portions: [{ id: "1", label: "1 Stück · 40 g", carbs: 21.4, fluidMl: 0, caffeineMg: 0 }],
   },
   {
     id: "fusilli",
@@ -455,6 +459,7 @@ function recordProductIds(record = {}) {
   const safe = (value) => Array.isArray(value) ? value : [];
   return [
     ...safe(record.selection),
+    ...safe(record.plannedSelection),
     ...safe(record.carrySelection),
     ...safe(record.carriedSelection),
   ].filter((entry) => entry && typeof entry === "object")
@@ -870,6 +875,8 @@ export function buildPitCrewStartStock(race = {}, gelPriority = PIT_CREW_DEFAULT
   const waldmeisterBottles = Math.max(1, Math.ceil(waldmeisterSyrupMl / 500));
   const dryllCans = Math.max(4, Math.ceil(hours / 4));
   const redBullCans = Math.max(3, Math.ceil(hours / 8));
+  const milkRollPieces = Math.max(5, Math.ceil(hours * 0.25));
+  const milkRollPackages = Math.max(1, Math.ceil(milkRollPieces / 12));
   const items = [
     { id: "water", label: "Wasser gesamt", icon: "💧", quantity: Math.max(12, Math.ceil(hours * 0.65)), unit: "l", category: "drink" },
     { id: "isostar", label: "Hydrate & Perform Orange", icon: "🧃", quantity: isostarPackage.quantity, unit: isostarPackage.unit, category: "drink", note: `${isostarPackage.quantity === 1 ? isostarPackage.label : isostarPackage.label.replace("Dose", "Dosen").replace("Packung", "Packungen")} = ${isostarPackage.quantity} ausreichend · ${isostarPortions} × 500 ml = ${isostarPowderG} g Pulver` },
@@ -879,7 +886,7 @@ export function buildPitCrewStartStock(race = {}, gelPriority = PIT_CREW_DEFAULT
     { id: "redbull", label: "Red Bull", icon: "⚡", quantity: redBullCans, unit: "Dosen à 250 ml", category: "drink", note: `${redBullCans * 80} mg Koffein gesamt, falls alle genutzt · Reserve, kein Trinkziel` },
     ...gelItems.map((item) => ({ ...item, category: "gel" })),
     { id: "banana", label: "Bananen", icon: "🍌", quantity: Math.max(4, Math.ceil(hours * 0.2)), unit: "Stück", category: "food" },
-    { id: "milk-roll", label: "Milchbrötchen", icon: "🥛", quantity: Math.max(5, Math.ceil(hours * 0.25)), unit: "Stück", category: "food" },
+    { id: "milk-roll", label: "Ibis Milchbrötchen", icon: "🥛", quantity: milkRollPieces, unit: "Stück", category: "food", note: `${milkRollPieces} Stück empfohlen · 480-g-Packung = 12 Stück à 40 g · ${milkRollPackages} ${milkRollPackages === 1 ? "Packung reicht" : "Packungen reichen"}` },
     { id: "fusilli", label: "Fusilli / Nudeln", icon: "🍝", quantity: Math.max(4, Math.ceil(hours * 0.18)), unit: "kleine Portionen", category: "food" },
     { id: "salt-sticks", label: "Salzstangen / Brezeln", icon: "🥨", quantity: Math.max(2, Math.ceil(hours / 18)), unit: "Packungen", category: "food" },
     { id: "broth", label: "Brühe", icon: "☕", quantity: Math.max(6, Math.ceil(hours * 0.25)), unit: "Tassen", category: "food" },
