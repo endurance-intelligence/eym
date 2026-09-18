@@ -135,25 +135,25 @@ export function athleteCareHints({
     );
   }
 
-  // Periodic reminders. They intentionally appear only in selected hour/round
-  // windows instead of becoming a permanent checklist on every loop.
-  if (hour >= 3 && currentRound % 3 === 0) {
+  // Routine gear checkpoint: the first full check lands deliberately at Pit 5
+  // (roughly four race hours in a classic Backyard). Afterwards it repeats
+  // every four loops. This is easier for a crew to remember than unrelated
+  // modulo rules and ensures feet/socks and clothing are not forgotten.
+  const routineGearCheckpoint = currentRound >= 5 && (currentRound - 5) % 4 === 0;
+  if (hour >= 4 && routineGearCheckpoint) {
     add(
       "foot-check",
-      "🦶",
-      "Füße prüfen",
-      "Kurzer Fuß-/Socken-Check: Feuchtigkeit, Falten, Reibestellen oder Hotspots. Bewährte Fußcreme/Anti-Chafe nur so nutzen, wie im Training getestet.",
-      62,
+      "🧦",
+      "Socken/Füße prüfen",
+      "Socken und Füße kurz prüfen: trocken, keine Falten oder auffälligen Reibestellen? Wenn feucht oder unangenehm, vorbereitete trockene Socken wechseln.",
+      66,
     );
-  }
-
-  if (hour >= 5 && currentRound % 4 === 1) {
     add(
       "clothing-check",
       "👕",
-      "Kleidung prüfen",
-      "Kurz prüfen: Shirt noch trocken/angenehm? Temperaturtrend passend? Wechselkleidung jetzt bereitlegen, bevor sie später hektisch gesucht wird.",
-      55,
+      "Shirt/Kleidung prüfen",
+      "Shirt und Oberkörper-Schicht kurz prüfen: trocken und temperaturgerecht? Wenn nass oder unangenehm, vorbereitetes trockenes Shirt bzw. passende Schicht wechseln.",
+      64,
     );
   }
 

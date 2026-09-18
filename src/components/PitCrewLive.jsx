@@ -406,7 +406,17 @@ export default function PitCrewLive({ race, onClose }) {
   const activeLoopSummary = summarizePitSelection(activeLoopSelection, productCatalog);
   const planAdjusted = selectionSignature(activeSelection) !== selectionSignature(suggestedSelection);
   const planCarbTone = activePlanSummary.carbs < PIT_CARB_TARGET.min ? "low" : activePlanSummary.carbs > PIT_CARB_TARGET.max ? "high" : "good";
-  const planCarbLabel = planCarbTone === "low" ? "KH zu wenig" : planCarbTone === "high" ? "KH zu viel" : "KH passt";
+  const planCarbDelta = planCarbTone === "low"
+    ? Math.max(0, PIT_CARB_TARGET.min - activePlanSummary.carbs)
+    : planCarbTone === "high"
+      ? Math.max(0, activePlanSummary.carbs - PIT_CARB_TARGET.max)
+      : 0;
+  const planCarbContext = planCarbTone === "low"
+    ? `${formatNumber(planCarbDelta)} g unter Ziel · Ziel ${PIT_CARB_TARGET.min}–${PIT_CARB_TARGET.max} g/h`
+    : planCarbTone === "high"
+      ? `${formatNumber(planCarbDelta)} g über Ziel · Ziel ${PIT_CARB_TARGET.min}–${PIT_CARB_TARGET.max} g/h`
+      : `Fueling im Ziel · ${PIT_CARB_TARGET.min}–${PIT_CARB_TARGET.max} g KH/h`;
+  const planCarbShortLabel = planCarbTone === "low" ? "unter Ziel" : planCarbTone === "high" ? "über Ziel" : "im Ziel";
   const readyLoopNumber = Math.max(1, Number(saveRound || 0) + 1);
   const savedCurrentPit = editingRound == null
     ? history.find((record) => Number(record.round) === Number(saveRound))
@@ -442,11 +452,6 @@ export default function PitCrewLive({ race, onClose }) {
   const careLevel = athleteCare.level || (athleteCare.hints.length ? "notice" : "good");
   const careIndicator = careLevel === "urgent" ? "❗" : careLevel === "notice" ? "⚠️" : "✓";
   const fuelNeedsAttention = metricStatus.carbs !== "good" || metricStatus.fluid === "low" || metricStatus.fluid === "high" || metricStatus.rolling === "low" || metricStatus.rolling === "high";
-  const planCardTone = planCarbTone === "high" || careLevel === "urgent"
-    ? "high"
-    : planCarbTone === "low" || fuelNeedsAttention || careLevel === "notice" || weatherCrewActions.length > 0 || effectiveAthleteFlags.length > 0
-      ? "low"
-      : "good";
   const crewOverviewActions = [
     ...athleteCare.hints.map((hint) => ({ key: `care:${hint.key}`, label: `${hint.icon} ${hint.short}`, urgent: Boolean(hint.urgent) })),
     ...weatherCrewActions.map((action) => ({ key: `weather:${action}`, label: action, urgent: false })),
@@ -454,6 +459,29 @@ export default function PitCrewLive({ race, onClose }) {
     const normalized = entry.label.toLocaleLowerCase("de-DE").replace(/[^a-zäöüß0-9]+/g, " ").trim();
     return all.findIndex((candidate) => candidate.label.toLocaleLowerCase("de-DE").replace(/[^a-zäöüß0-9]+/g, " ").trim() === normalized) === index;
   });
+  const planCardTone = planCarbTone === "high" || careLevel === "urgent"
+    ? "high"
+    : planCarbTone === "low" || fuelNeedsAttention || crewOverviewActions.length > 0 || effectiveAthleteFlags.length > 0
+      ? "low"
+      : "good";
+  const primaryAttentionReason = planCarbTone === "high"
+    ? `KH ${formatNumber(planCarbDelta)} g über Ziel`
+    : careLevel === "urgent" && crewOverviewActions.length
+      ? crewOverviewActions[0].label
+      : planCarbTone === "low"
+        ? `KH ${formatNumber(planCarbDelta)} g unter Ziel`
+        : effectiveAthleteFlags.length
+          ? compactStatus(effectiveAthleteFlags)
+          : crewOverviewActions.length
+            ? crewOverviewActions[0].label
+            : fuelNeedsAttention
+              ? "Versorgungstrend prüfen"
+              : "alles vorbereitet";
+  const planCardStatus = planCardTone === "high"
+    ? `🔴 Handeln · ${primaryAttentionReason}`
+    : planCardTone === "low"
+      ? `🟠 Aufmerksamkeit · ${primaryAttentionReason}`
+      : "🟢 Pit im Plan";
 
   function historyTone(record, index) {
     if (record.carryStatus === "pending") return "open";
@@ -965,7 +993,7 @@ export default function PitCrewLive({ race, onClose }) {
             <b>{loopMustClose ? (arrivalState.arrived ? "Rückkehr bestätigen" : "läuft · Aufnahme noch offen") : "Versorgung vorbereitet"}</b>
             <span>{pendingIntakeSelection.length ? pendingIntakeSelection.map((entry) => selectionLabel(entry, productCatalog)).join(" · ") : "Keine geplante Aufnahme offen."}</span>
           </div>}
-          <div className={`pit-live-fueling-total tone-${planCarbTone}`}><span>AKTUELL GESAMT</span><b>{formatNumber(activePlanSummary.carbs)} g KH · {activePlanSummary.fluidMl} ml</b><em>{planCarbLabel} · Ziel {PIT_CARB_TARGET.min}–{PIT_CARB_TARGET.max} g</em></div>
+          <div className={`pit-live-fueling-total tone-${planCarbTone}`}><span>AKTUELL GESAMT</span><b>{formatNumber(activePlanSummary.carbs)} g KH · {activePlanSummary.fluidMl} ml</b><em>{planCarbShortLabel} · Ziel {PIT_CARB_TARGET.min}–{PIT_CARB_TARGET.max} g</em></div>
         </div>
       </details>
     );
@@ -1126,8 +1154,8 @@ export default function PitCrewLive({ race, onClose }) {
 
         <section className={`pit-live-recommendation plan-tone-${planCardTone}`}>
           <div className="pit-live-section-head">
-            <div><small>{planAdjusted ? "PIT-PLAN · MANUELL ANGEPASST" : "IDEALVORSCHLAG · VORAUSGEWÄHLT"}</small><h3>{timing.started ? `Pit: Loop ${timing.currentRound}` : "Pit: Start"}</h3></div>
-            <div className="pit-live-suggestion-total"><b>{formatNumber(activePlanSummary.carbs)} g KH</b><span>{activePlanSummary.fluidMl} ml</span><em className={`pit-live-carb-marker tone-${planCarbTone}`}>{planCarbLabel}</em></div>
+            <div><small>{planAdjusted ? "PIT-PLAN · MANUELL ANGEPASST" : "IDEALVORSCHLAG · VORAUSGEWÄHLT"}</small><h3>{timing.started ? `Pit: Loop ${timing.currentRound}` : "Pit: Start"}</h3><div className={`pit-live-overall-status tone-${planCardTone}`}>{planCardStatus}</div></div>
+            <div className="pit-live-suggestion-total"><b>{formatNumber(activePlanSummary.carbs)} g KH</b><span>{activePlanSummary.fluidMl} ml</span><em className={`pit-live-carb-context tone-${planCarbTone}`}>{planCarbContext}</em></div>
           </div>
           {effectiveAthleteFlags.length > 0 && <div className="pit-live-plan-adjusted"><b>↻ PLAN LIVE ANGEPASST</b><span>{compactStatus(effectiveAthleteFlags)}</span></div>}
           {planAdjusted && <div className="pit-live-plan-adjusted pit-live-manual-adjusted"><b>✎ CREW-AUSWAHL AKTIV</b><span>Die Werte und Produkte unten sind die tatsächlich ausgewählte Planung, nicht mehr der ursprüngliche Idealvorschlag.</span></div>}

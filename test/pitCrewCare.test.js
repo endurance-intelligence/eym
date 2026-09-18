@@ -23,12 +23,24 @@ test("heavy legs suggest optional short unloading rather than mandatory treatmen
   assert.match(legs.text, /leichte/);
 });
 
-test("long race periodically reminds crew about feet and tested foot care", () => {
-  const care = athleteCareHints({ round: 6, elapsedMinutes: 330, minutesToStart: 10, mode: "normal" });
+test("Pit 5 starts a memorable four-loop socks and clothing checkpoint", () => {
+  const care = athleteCareHints({ round: 5, elapsedMinutes: 260, minutesToStart: 10, mode: "normal" });
   const feet = care.hints.find((item) => item.key === "foot-check");
+  const clothing = care.hints.find((item) => item.key === "clothing-check");
   assert.ok(feet);
-  assert.match(feet.text, /Fußcreme\/Anti-Chafe/);
-  assert.match(feet.text, /Training getestet/);
+  assert.ok(clothing);
+  assert.match(feet.short, /Socken\/Füße/);
+  assert.match(feet.text, /trockene Socken wechseln/);
+  assert.match(clothing.short, /Shirt\/Kleidung/);
+  assert.match(clothing.text, /trockenes Shirt/);
+
+  const quietBetweenChecks = athleteCareHints({ round: 6, elapsedMinutes: 330, minutesToStart: 10, mode: "normal" });
+  assert.equal(quietBetweenChecks.hints.some((item) => item.key === "foot-check"), false);
+  assert.equal(quietBetweenChecks.hints.some((item) => item.key === "clothing-check"), false);
+
+  const nextCheckpoint = athleteCareHints({ round: 9, elapsedMinutes: 500, minutesToStart: 10, mode: "normal" });
+  assert.ok(nextCheckpoint.hints.some((item) => item.key === "foot-check"));
+  assert.ok(nextCheckpoint.hints.some((item) => item.key === "clothing-check"));
 });
 
 test("cold and wind prioritize warm dry layer and wind protection", () => {

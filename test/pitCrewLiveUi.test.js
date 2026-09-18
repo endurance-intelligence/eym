@@ -62,6 +62,8 @@ test("Pit Crew headline names the upcoming loop weather and keeps confirmed inta
 test("Pit Crew main plan card uses traffic-light attention and includes all crew actions", () => {
   assert.match(source, /plan-tone-\$\{planCardTone\}/);
   assert.match(source, /planCarbTone === "high" \|\| careLevel === "urgent"/);
+  assert.match(source, /primaryAttentionReason/);
+  assert.match(source, /planCardStatus/);
   assert.match(source, /CREW-AKTIONEN/);
   assert.match(source, /athleteCare\.hints\.map/);
   assert.match(source, /weatherCrewActions\.map/);
@@ -96,9 +98,12 @@ test("Pit Crew live view keeps the current plan glanceable and removes duplicate
   assert.match(source, /Pit: Start/);
   assert.match(source, /ATHLETE STATUS/);
   assert.match(source, /PIT-PLAN · MANUELL ANGEPASST/);
-  assert.match(source, /KH passt/);
-  assert.match(source, /KH zu wenig/);
-  assert.match(source, /KH zu viel/);
+  assert.match(source, /Fueling im Ziel/);
+  assert.match(source, /g unter Ziel/);
+  assert.match(source, /g über Ziel/);
+  assert.match(source, /Pit im Plan/);
+  assert.match(source, /Aufmerksamkeit/);
+  assert.match(source, /Handeln/);
   assert.match(source, /MIT AUF LOOP/);
   assert.match(source, /<span>FUELING<\/span>/);
   assert.doesNotMatch(source, /<summary><span>FUELING LOOP<\/span>/);
