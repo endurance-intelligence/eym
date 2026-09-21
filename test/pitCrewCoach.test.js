@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   assessPitSelection,
   buildPitCrewCustomProduct,
+  buildPitCrewPackingList,
   buildPitCrewStartStock,
   PIT_CREW_DEFAULT_GEL_PRIORITY,
   PIT_CREW_DEFAULT_STOCK_IDS,
@@ -395,6 +396,30 @@ test("24 hour start stock uses practical shopping packages for drinks and Haribo
   assert.equal(milkRoll?.unit, "Stück");
   assert.match(milkRoll?.note || "", /480-g-Packung = 12 Stück à 40 g/);
   assert.match(milkRoll?.note || "", /1 Packung reicht/);
+});
+
+
+test("24 hour stock tracks Cola as 330 ml cans instead of litres", () => {
+  const plan = buildPitCrewStartStock({ eventLimitMode: "open", planningHorizonHours: 24 });
+  const cola = plan.items.find((item) => item.id === "cola");
+  const product = PIT_CREW_PRODUCTS.find((item) => item.id === "cola");
+  assert.equal(cola?.quantity, 7);
+  assert.equal(cola?.unit, "Dosen à 330 ml");
+  assert.match(cola?.note || "", /2,31 l Gesamtmenge/);
+  assert.equal(product?.packageMl, 330);
+  assert.match(product?.stockNote || "", /330-ml-Dose/);
+});
+
+test("Pit Crew packing list scales wearable quantities with the planning horizon", () => {
+  const day = buildPitCrewPackingList({ eventLimitMode: "open", planningHorizonHours: 24 });
+  const long = buildPitCrewPackingList({ eventLimitMode: "open", planningHorizonHours: 36 });
+  const find = (groups, id) => groups.flatMap((group) => group.items).find((item) => item.id === id);
+  assert.equal(find(day, "run-shirts")?.quantity, 4);
+  assert.equal(find(day, "run-socks")?.quantity, 8);
+  assert.equal(find(long, "run-shirts")?.quantity, 6);
+  assert.equal(find(long, "run-socks")?.quantity, 12);
+  assert.equal(find(day, "pavilion")?.quantity, 1);
+  assert.equal(find(day, "garmin-cable")?.quantity, 1);
 });
 
 

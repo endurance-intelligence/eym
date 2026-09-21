@@ -55,6 +55,11 @@ function normalizeCustomProducts(value) {
 }
 
 
+function normalizePackingChecked(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value).filter(([, checked]) => Boolean(checked)).map(([id]) => [String(id), true]));
+}
+
 function normalizeStockTargets(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   return Object.fromEntries(Object.entries(value).flatMap(([id, target]) => {
@@ -90,6 +95,7 @@ export function normalizePitCrewSnapshot(value = {}) {
     arrivalAt: String(value?.arrivalAt || ""),
     stockIds: Array.isArray(value?.stockIds) ? value.stockIds.map(String) : null,
     stockTargets: normalizeStockTargets(value?.stockTargets),
+    packingChecked: normalizePackingChecked(value?.packingChecked),
     gelPriority: Array.isArray(value?.gelPriority) ? value.gelPriority.map(String) : null,
     fuelMode: value?.fuelMode === "liquid-only" ? "liquid-only" : "normal",
     customProducts: normalizeCustomProducts(value?.customProducts),

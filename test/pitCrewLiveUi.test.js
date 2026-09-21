@@ -207,3 +207,31 @@ test("infrequent Pit Crew tools are nested and collapsible instead of filling th
   const toolsEndIndex = source.indexOf('{saveMessage', toolsIndex);
   assert.ok(toolsIndex >= 0 && stockCallIndex > toolsIndex && stockCallIndex < toolsEndIndex);
 });
+
+
+test("Pit Crew turns missing active stock into a one-tap copyable shopping list", () => {
+  assert.match(source, /EINKAUFSLISTE/);
+  assert.match(source, /Einkaufsliste kopieren/);
+  assert.match(source, /shoppingItems = startStockPlan\.items\.flatMap/);
+  assert.match(source, /activeStockIds\.includes/);
+  assert.match(source, /item\.missing/);
+  assert.match(source, /copyPrepText/);
+  assert.match(source, /navigator\?\.clipboard\?\.writeText/);
+  assert.match(source, /document\.execCommand\("copy"\)/);
+});
+
+test("Pit Crew provides an event-persistent packing checklist with missing-item copy", () => {
+  assert.match(source, /buildPitCrewPackingList/);
+  assert.match(source, /packingChecked/);
+  assert.match(source, /<summary><span>PACKLISTE<\/span>/);
+  assert.match(source, /Fehlendes kopieren/);
+  assert.match(source, /Packliste komplett/);
+  assert.match(source, /packingChecked, customProducts/);
+  assert.match(source, /Pack-Haken zurücksetzen/);
+});
+
+test("legacy Cola litre stock is converted to 330 ml cans for the new inventory unit", () => {
+  assert.match(source, /id === "cola"/);
+  assert.match(source, /override\.unit/);
+  assert.match(source, /\/ 330/);
+});

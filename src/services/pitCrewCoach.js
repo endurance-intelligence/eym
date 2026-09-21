@@ -1,4 +1,5 @@
 const round1 = (value, digits = 1) => Number(Number(value || 0).toFixed(digits));
+const formatLiters = (value) => Number(value || 0).toLocaleString("de-DE", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 
 export const PIT_CARB_TARGET = { min: 60, max: 90, center: 70 };
 
@@ -134,6 +135,8 @@ export const PIT_CREW_PRODUCTS = [
     category: "drink",
     traits: ["sweet", "caffeine", "quick"],
     estimated: true,
+    packageMl: 330,
+    stockNote: "330-ml-Dose · Vorrat und Einkauf in Dosen führen",
     portions: [100, 150, 200].map((ml) => ({ id: `${ml}`, label: `${ml} ml`, carbs: round1(ml * 0.106), fluidMl: ml, caffeineMg: round1(ml * 0.096) })),
   },
   {
@@ -875,6 +878,8 @@ export function buildPitCrewStartStock(race = {}, gelPriority = PIT_CREW_DEFAULT
   const waldmeisterBottles = Math.max(1, Math.ceil(waldmeisterSyrupMl / 500));
   const dryllCans = Math.max(4, Math.ceil(hours / 4));
   const redBullCans = Math.max(3, Math.ceil(hours / 8));
+  const colaLiters = Math.max(2, Math.ceil(hours * 0.07));
+  const colaCans = Math.max(1, Math.ceil((colaLiters * 1000) / 330));
   const milkRollPieces = Math.max(5, Math.ceil(hours * 0.25));
   const milkRollPackages = Math.max(1, Math.ceil(milkRollPieces / 12));
   const items = [
@@ -891,8 +896,79 @@ export function buildPitCrewStartStock(race = {}, gelPriority = PIT_CREW_DEFAULT
     { id: "salt-sticks", label: "Salzstangen / Brezeln", icon: "🥨", quantity: Math.max(2, Math.ceil(hours / 18)), unit: "Packungen", category: "food" },
     { id: "broth", label: "Brühe", icon: "☕", quantity: Math.max(6, Math.ceil(hours * 0.25)), unit: "Tassen", category: "food" },
     { id: "cucumber", label: "Gurke", icon: "🥒", quantity: Math.max(2, Math.ceil(hours / 24)), unit: "Stück", category: "food" },
-    { id: "cola", label: "Cola", icon: "🥤", quantity: Math.max(2, Math.ceil(hours * 0.07)), unit: "l", category: "drink" },
+    { id: "cola", label: "Cola", icon: "🥤", quantity: colaCans, unit: "Dosen à 330 ml", category: "drink", note: `${formatLiters(colaCans * 0.33)} l Gesamtmenge · Einkauf und Vorrat direkt in Dosen` },
     { id: "haribo", label: "Haribo Roulette", icon: "🍬", quantity: Math.max(2, Math.ceil(hours / 15)), unit: "Packungen à 6 Rollen", category: "food", note: `${Math.max(2, Math.ceil(hours / 15)) * 6} Rollen gesamt · 150 g / Packung · 1 Rolle = 25 g ≈ 19,3 g KH` },
   ];
   return { hours, reservePercent: 15, targetCarbs, items };
+}
+
+export function buildPitCrewPackingList(race = {}) {
+  const hours = pitCrewPlanningHours(race);
+  const shirts = Math.max(4, Math.ceil(hours / 6));
+  const shorts = Math.max(3, Math.ceil(hours / 12) + 1);
+  const underwear = Math.max(4, Math.ceil(hours / 6));
+  const socks = Math.max(8, Math.ceil(hours / 3));
+  const footTowels = Math.max(3, Math.ceil(hours / 8));
+
+  return [
+    { id: "clothing", label: "Kleidung", items: [
+      { id: "run-shirts", label: "Laufshirts", quantity: shirts, unit: "Stück" },
+      { id: "run-shorts", label: "Laufhosen", quantity: shorts, unit: "Stück" },
+      { id: "underwear", label: "Unterwäsche", quantity: underwear, unit: "Stück" },
+      { id: "run-socks", label: "Laufsocken", quantity: socks, unit: "Paar" },
+      { id: "longsleeves", label: "Longsleeves", quantity: 2, unit: "Stück" },
+      { id: "warm-layers", label: "Warme Midlayer", quantity: 2, unit: "Stück" },
+      { id: "rain-jacket", label: "Regenjacke", quantity: 1, unit: "Stück" },
+      { id: "pit-jacket", label: "Warme Jacke für den Pit", quantity: 1, unit: "Stück" },
+      { id: "cap", label: "Cap", quantity: 1, unit: "Stück" },
+      { id: "beanie", label: "Mütze", quantity: 1, unit: "Stück" },
+      { id: "buff", label: "Buff", quantity: 2, unit: "Stück" },
+      { id: "gloves", label: "Handschuhe", quantity: 1, unit: "Paar" },
+    ] },
+    { id: "feet", label: "Schuhe & Füße", items: [
+      { id: "running-shoes", label: "Eingelaufene Laufschuhe", quantity: 3, unit: "Paar" },
+      { id: "wet-shoes", label: "Regen-/Nässe-Schuhoption", quantity: 1, unit: "Paar" },
+      { id: "insoles", label: "Ersatz-Einlegesohlen", quantity: 1, unit: "Paar" },
+      { id: "blister-kit", label: "Blasenpflaster", quantity: 1, unit: "Packung" },
+      { id: "tape", label: "Tape", quantity: 2, unit: "Rollen" },
+      { id: "anti-chafe", label: "Anti-Chafing / Vaseline", quantity: 1, unit: "Stück" },
+      { id: "foot-towels", label: "Kleine Handtücher für Füße", quantity: footTowels, unit: "Stück" },
+    ] },
+    { id: "tech", label: "Technik", items: [
+      { id: "garmin", label: "Garmin", quantity: 1, unit: "Stück" },
+      { id: "garmin-cable", label: "Garmin-Ladekabel", quantity: 1, unit: "Stück" },
+      { id: "phone", label: "Handy", quantity: 1, unit: "Stück" },
+      { id: "phone-cable", label: "Handy-Ladekabel", quantity: 2, unit: "Stück" },
+      { id: "powerbanks", label: "Powerbanks", quantity: 2, unit: "Stück" },
+      { id: "headlamps", label: "Stirnlampen", quantity: 2, unit: "Stück" },
+      { id: "lamp-spares", label: "Ersatzakkus / Lampen-Ladekabel", quantity: 1, unit: "Set" },
+      { id: "extension", label: "Verlängerungskabel", quantity: 1, unit: "Stück" },
+      { id: "power-strip", label: "Mehrfachsteckdose", quantity: 1, unit: "Stück" },
+    ] },
+    { id: "camp", label: "Camp & Pit", items: [
+      { id: "pavilion", label: "Pavillon 3 × 3 m", quantity: 1, unit: "Stück" },
+      { id: "sidewalls", label: "Pavillon-Seitenwände", quantity: 3, unit: "Stück" },
+      { id: "groundsheet", label: "Bodenplane 3 × 3 m", quantity: 1, unit: "Stück" },
+      { id: "pavilion-weights", label: "Pavillon-Gewichte / Befestigung", quantity: 4, unit: "Stück" },
+      { id: "camp-bed", label: "Feldbett", quantity: 1, unit: "Stück" },
+      { id: "chair", label: "Campingstuhl", quantity: 1, unit: "Stück" },
+      { id: "table", label: "Tisch", quantity: 1, unit: "Stück" },
+      { id: "sleeping-bag", label: "Schlafsack", quantity: 1, unit: "Stück" },
+      { id: "blankets", label: "Decken", quantity: 2, unit: "Stück" },
+      { id: "pillow", label: "Kissen", quantity: 1, unit: "Stück" },
+      { id: "storage-boxes", label: "Boxen für Kleidung / Fuel", quantity: 4, unit: "Stück" },
+      { id: "cooler", label: "Kühlbox", quantity: 1, unit: "Stück" },
+    ] },
+    { id: "orga", label: "Pflege & Organisation", items: [
+      { id: "towels", label: "Große Handtücher", quantity: 2, unit: "Stück" },
+      { id: "wet-wipes", label: "Feuchttücher", quantity: 2, unit: "Packungen" },
+      { id: "paper-towels", label: "Küchenrolle", quantity: 2, unit: "Rollen" },
+      { id: "toilet-paper", label: "Toilettenpapier", quantity: 2, unit: "Rollen" },
+      { id: "trash-bags", label: "Müllbeutel", quantity: 10, unit: "Stück" },
+      { id: "sunscreen", label: "Sonnencreme", quantity: 1, unit: "Stück" },
+      { id: "lip-care", label: "Lippenpflege", quantity: 1, unit: "Stück" },
+      { id: "race-bib", label: "Startnummer / Startnummernband", quantity: 1, unit: "Set" },
+      { id: "wallet", label: "Ausweis / Karte / Bargeld", quantity: 1, unit: "Set" },
+    ] },
+  ];
 }

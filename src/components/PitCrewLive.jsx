@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   assessPitSelection,
   buildPitCrewCustomProduct,
+  buildPitCrewPackingList,
   PIT_CARB_TARGET,
   PIT_CREW_DEFAULT_GEL_PRIORITY,
   PIT_CREW_DEFAULT_STOCK_IDS,
@@ -231,6 +232,10 @@ export default function PitCrewLive({ race, onClose }) {
     const source = storedHasPrep ? stored?.stockTargets : storedPrep?.stockTargets;
     return source && typeof source === "object" ? source : {};
   });
+  const [packingChecked, setPackingChecked] = useState(() => {
+    const source = storedPrep?.packingChecked && Object.keys(storedPrep.packingChecked).length ? storedPrep.packingChecked : stored?.packingChecked;
+    return source && typeof source === "object" ? source : {};
+  });
   const [gelPriority, setGelPriority] = useState(() => normalizeGelPriority((storedHasPrep ? stored?.gelPriority : storedPrep?.gelPriority) || PIT_CREW_DEFAULT_GEL_PRIORITY));
   const [fuelMode, setFuelMode] = useState(() => stored?.fuelMode === "liquid-only" ? "liquid-only" : "normal");
   const [stockCategory, setStockCategory] = useState("drink");
@@ -273,13 +278,13 @@ export default function PitCrewLive({ race, onClose }) {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    window.localStorage.setItem(storageKey, JSON.stringify({ anchorAt, history, flags, incomingFlags, incomingAt, incomingRound, athleteFeedback, weather, arrivalRound, arrivalAt, stockIds, stockTargets, customProducts, gelPriority, fuelMode }));
-  }, [anchorAt, arrivalAt, arrivalRound, athleteFeedback, customProducts, flags, fuelMode, gelPriority, history, incomingAt, incomingFlags, incomingRound, stockIds, stockTargets, storageKey, weather]);
+    window.localStorage.setItem(storageKey, JSON.stringify({ anchorAt, history, flags, incomingFlags, incomingAt, incomingRound, athleteFeedback, weather, arrivalRound, arrivalAt, stockIds, stockTargets, packingChecked, customProducts, gelPriority, fuelMode }));
+  }, [anchorAt, arrivalAt, arrivalRound, athleteFeedback, customProducts, flags, fuelMode, gelPriority, history, incomingAt, incomingFlags, incomingRound, packingChecked, stockIds, stockTargets, storageKey, weather]);
 
   useEffect(() => {
     if (typeof window === "undefined" || demoActive) return;
-    window.localStorage.setItem(prepStorageKey, JSON.stringify({ stockIds, stockTargets, customProducts, gelPriority }));
-  }, [customProducts, demoActive, gelPriority, prepStorageKey, stockIds, stockTargets]);
+    window.localStorage.setItem(prepStorageKey, JSON.stringify({ stockIds, stockTargets, packingChecked, customProducts, gelPriority }));
+  }, [customProducts, demoActive, gelPriority, packingChecked, prepStorageKey, stockIds, stockTargets]);
 
   useEffect(() => {
     if (loadedPitRound.current === pitRound || editingRound != null) return;
@@ -379,6 +384,7 @@ export default function PitCrewLive({ race, onClose }) {
   const activeStockIds = stockIds.filter((id) => knownStockIds.has(String(id)));
   const availableProducts = productCatalog.filter((product) => activeStockIds.includes(String(product.id)));
   const startStockPlan = buildPitCrewStartStock(race || {}, gelPriority);
+  const packingGroups = buildPitCrewPackingList(race || {});
 
   const recommendation = recommendPitCrew({
     round: Math.max(1, timing.currentRound || 1),
@@ -861,6 +867,9 @@ export default function PitCrewLive({ race, onClose }) {
     const override = stockTargets?.[id];
     const planned = stockRecommendationFor(id);
     const unit = String(planned?.unit || override?.unit || "Portionen");
+    if (id === "cola" && override && String(override.unit || "").toLowerCase() === "l" && unit.startsWith("Dosen")) {
+      return { quantity: Math.max(0, Math.ceil((Number(override.quantity || 0) * 1000) / 330)), unit };
+    }
     if (override && Number.isFinite(Number(override.quantity))) return { quantity: Math.max(0, Number(override.quantity)), unit };
     return { quantity: 0, unit };
   }
@@ -873,14 +882,96 @@ export default function PitCrewLive({ race, onClose }) {
     }));
   }
 
+  async function copyPrepText(text, successMessage) {
+    if (!String(text || "").trim()) return;
+    try {
+      if (globalThis.navigator?.clipboard?.writeText) {
+        await globalThis.navigator.clipboard.writeText(text);
+      } else {
+        throw new Error("Clipboard API nicht verfügbar");
+      }
+    } catch {
+      const area = document.createElement("textarea");
+      area.value = text;
+      area.setAttribute("readonly", "");
+      area.style.position = "fixed";
+      area.style.opacity = "0";
+      document.body.appendChild(area);
+      area.select();
+      document.execCommand("copy");
+      area.remove();
+    }
+    setSaveMessage(successMessage);
+  }
+
+  function togglePackingItem(itemId) {
+    const id = String(itemId);
+    setPackingChecked((current) => ({ ...current, [id]: !current?.[id] }));
+  }
+
+  function renderPackingSection() {
+    const allItems = packingGroups.flatMap((group) => group.items.map((item) => ({ ...item, categoryLabel: group.label })));
+    const packedCount = allItems.filter((item) => Boolean(packingChecked?.[item.id])).length;
+    const missingItems = allItems.filter((item) => !packingChecked?.[item.id]);
+    const missingText = [
+      `PACKLISTE · ${race?.name || "Event"}`,
+      ...packingGroups.flatMap((group) => {
+        const open = group.items.filter((item) => !packingChecked?.[item.id]);
+        if (!open.length) return [];
+        return ["", group.label.toUpperCase(), ...open.map((item) => `☐ ${item.label} · ${formatNumber(item.quantity)} ${item.unit}`)];
+      }),
+    ].join("\n");
+
+    return (
+      <details className="pit-live-tool-option pit-live-packing">
+        <summary><span>PACKLISTE</span><b>{packedCount}/{allItems.length} gepackt</b><i>›</i></summary>
+        <div className="pit-live-tool-option-body">
+          <div className="pit-live-prep-list-head">
+            <span>Eventbezogen gespeichert. Einmal zusammensuchen, abhaken, fertig.</span>
+            <button type="button" className="pit-live-secondary" disabled={!missingItems.length} onClick={() => copyPrepText(missingText, "Fehlende Packliste kopiert ✓")}>Fehlendes kopieren</button>
+          </div>
+          {!missingItems.length && <div className="pit-live-prep-complete">✓ Packliste komplett</div>}
+          <div className="pit-live-packing-groups">
+            {packingGroups.map((group) => (
+              <section key={group.id} className="pit-live-packing-group">
+                <h4>{group.label}</h4>
+                <div>
+                  {group.items.map((item) => {
+                    const checked = Boolean(packingChecked?.[item.id]);
+                    return <button type="button" key={item.id} className={checked ? "packed" : ""} aria-pressed={checked} onClick={() => togglePackingItem(item.id)}><span>{checked ? "✓" : ""}</span><b>{item.label}</b><small>{formatNumber(item.quantity)} {item.unit}</small></button>;
+                  })}
+                </div>
+              </section>
+            ))}
+          </div>
+          {packedCount > 0 && <button type="button" className="pit-live-secondary pit-live-wide" onClick={() => setPackingChecked({})}>Pack-Haken zurücksetzen</button>}
+        </div>
+      </details>
+    );
+  }
+
   function renderStockSection() {
     const categoryProducts = productCatalog.filter((product) => product.category === stockCategory);
     const gelOrder = normalizeGelPriority(gelPriority);
+    const shoppingItems = startStockPlan.items.flatMap((recommendation) => {
+      if (!activeStockIds.includes(String(recommendation.id))) return [];
+      const target = stockTargetFor(recommendation.id);
+      const missing = Math.max(0, Number(recommendation.quantity || 0) - Number(target.quantity || 0));
+      return missing > 0 ? [{ ...recommendation, missing }] : [];
+    });
+    const shoppingText = [
+      `EINKAUFSLISTE · ${race?.name || "Event"}`,
+      ...shoppingItems.map((item) => `☐ ${item.label} · ${formatNumber(item.missing)} ${item.unit}${item.note ? ` — ${item.note}` : ""}`),
+    ].join("\n");
     return (
       <details className="pit-live-tool-option pit-live-stock">
         <summary><span>VORRAT & STARTPLAN</span><b>{startStockPlan.hours} h · +{startStockPlan.reservePercent}% Reserve · {activeStockIds.length} aktiv</b><i>›</i></summary>
         <div className="pit-live-collapse-body">
           <div className="pit-live-start-stock-head"><b>≈ {startStockPlan.targetCarbs.toLocaleString("de-DE")} g KH Materialziel</b><span>Eventbezogen gespeichert: Einkauf und Startvorrat bleiben auch nach Browser-Neustart und Live-Session-Reset erhalten. Die Crew-Auswahl nutzt denselben Bestand.</span></div>
+          <section className={`pit-live-shopping-list${shoppingItems.length ? " has-items" : " complete"}`}>
+            <div className="pit-live-shopping-head"><div><small>EINKAUFSLISTE</small><b>{shoppingItems.length ? `${shoppingItems.length} Positionen fehlen` : "Alles vorhanden"}</b></div><button type="button" className="pit-live-primary" disabled={!shoppingItems.length} onClick={() => copyPrepText(shoppingText, "Einkaufsliste kopiert ✓")}>Einkaufsliste kopieren</button></div>
+            {shoppingItems.length > 0 ? <div className="pit-live-shopping-rows">{shoppingItems.map((item) => <div key={item.id}><span>☐</span><b>{item.icon} {item.label}</b><strong>{formatNumber(item.missing)} {item.unit}</strong>{item.note && <small>{item.note}</small>}</div>)}</div> : <div className="pit-live-prep-complete">✓ Für alle aktivierten Produkte ist mindestens die Empfehlung vorhanden.</div>}
+          </section>
           <div className="pit-live-stock-actions">
             <button type="button" className="pit-live-secondary" onClick={selectStarterStock}>Grundstock aktivieren</button>
             <button type="button" className="pit-live-primary" onClick={() => setShowStockForm((value) => !value)}>＋ Eigenes Produkt</button>
@@ -1203,7 +1294,7 @@ export default function PitCrewLive({ race, onClose }) {
         {renderFuelingSection()}
 
         <details className="pit-live-collapse pit-live-tools">
-          <summary><span>WERKZEUGE</span><b>{demoActive ? "Testmodus aktiv" : "Bilanz · Verlauf · Test · Vorrat"}</b><i>›</i></summary>
+          <summary><span>WERKZEUGE</span><b>{demoActive ? "Testmodus aktiv" : "Bilanz · Verlauf · Test · Vorrat · Packliste"}</b><i>›</i></summary>
           <div className="pit-live-collapse-body pit-live-tools-options">
             <details className="pit-live-tool-option">
               <summary><span>KH-BILANZ</span><b>{historyRolling.hours ? `${formatNumber(historyRolling.carbsPerHour)} g/h Ø` : `Ziel ${PIT_CARB_TARGET.center} g/h`}</b><i>›</i></summary>
@@ -1266,6 +1357,8 @@ export default function PitCrewLive({ race, onClose }) {
             </details>
 
             {renderStockSection()}
+
+            {renderPackingSection()}
           </div>
         </details>
 
