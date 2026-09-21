@@ -390,7 +390,6 @@ export default function Briefing() {
                   <p className="eyebrow">Als Nächstes</p>
                   <h2>Morgen · {todayLabel.format(upcoming.date)}</h2>
                 </div>
-                <span>Preview</span>
               </div>
               <div className="today-upcoming-preview">
                 <div className="today-upcoming-items">

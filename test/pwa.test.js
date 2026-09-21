@@ -11,5 +11,5 @@ test("web app manifest and offline shell use the GitHub Pages relative scope", a
   assert.match(worker, /manifest\.webmanifest/);
   assert.match(worker, /request\.mode === "navigate"/);
   assert.match(worker, /fetch\(request, \{ cache: "no-store" \}\)/);
-  assert.match(worker, /eym-shell-v4\.1\.38/);
+  assert.match(worker, /eym-shell-v4\.1\.41/);
 });

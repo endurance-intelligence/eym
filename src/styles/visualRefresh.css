@@ -648,3 +648,109 @@ details.card{box-shadow:none}
     padding-right:max(12px,env(safe-area-inset-right));
   }
 }
+
+
+/* v4.1.41 – clean briefing day cards; authoritative because visualRefresh loads last */
+.today-card.premium-briefing-card{
+  overflow:visible;
+  padding:0;
+  border:0;
+  border-radius:0;
+  background:transparent;
+  box-shadow:none;
+}
+.today-card.premium-briefing-card::after{display:none}
+.today-columns-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:14px;
+  align-items:start;
+}
+.today-card.premium-briefing-card .today-hero-column,
+.today-card.premium-briefing-card .today-side-panel{
+  display:grid;
+  align-content:start;
+  gap:14px;
+  min-width:0;
+  min-height:0;
+  padding:18px;
+  border:1px solid var(--ui-border-subtle);
+  border-radius:20px;
+  background:var(--ui-panel-raised);
+  box-shadow:var(--ui-shadow-card);
+}
+.today-card.premium-briefing-card .today-hero-column::before,
+.today-card.premium-briefing-card .today-side-panel::before{display:none}
+.today-card.premium-briefing-card .today-side-panel{
+  padding:18px;
+  border-left:1px solid var(--ui-border-subtle);
+  border-top:1px solid var(--ui-border-subtle);
+}
+.today-card.premium-briefing-card .today-card-heading,
+.today-card.premium-briefing-card .today-upcoming-heading-hero{
+  min-height:0;
+  margin:0;
+  padding:0;
+}
+.today-card.premium-briefing-card .today-card-heading h2,
+.today-card.premium-briefing-card .today-upcoming-heading-hero h2{
+  margin:0;
+  font-size:clamp(24px,2.2vw,31px);
+  line-height:1.12;
+}
+.today-card.premium-briefing-card .today-workout-list,
+.today-card.premium-briefing-card .today-upcoming-preview{
+  margin:0;
+  padding:0;
+  border:0;
+  background:transparent;
+  box-shadow:none;
+}
+.today-card.premium-briefing-card .today-workout-row{
+  grid-template-columns:auto minmax(0,1fr);
+  gap:14px;
+  min-height:96px;
+  padding:14px 16px;
+  border:1px solid color-mix(in srgb,var(--ui-border-subtle) 82%,transparent);
+  border-radius:16px;
+  background:color-mix(in srgb,var(--bg-input) 82%,transparent);
+  box-shadow:none;
+}
+.today-card.premium-briefing-card .today-workout-row.rest{
+  background:linear-gradient(145deg,rgba(111,193,255,.07),color-mix(in srgb,var(--bg-input) 88%,transparent));
+}
+.today-card.premium-briefing-card .today-status-pill{
+  align-self:start;
+  justify-self:start;
+  width:auto;
+  max-width:none;
+  white-space:nowrap;
+  padding:6px 9px;
+  font-size:8px;
+  line-height:1.1;
+}
+.today-card.premium-briefing-card .today-workout-copy h3{font-size:17px}
+.today-card.premium-briefing-card .today-upcoming-items{gap:8px}
+.today-card.premium-briefing-card .today-upcoming-item{
+  grid-template-columns:auto minmax(0,1fr);
+  min-height:76px;
+  padding:13px 14px;
+  border:1px solid color-mix(in srgb,var(--ui-border-subtle) 82%,transparent);
+  border-radius:16px;
+  background:color-mix(in srgb,var(--bg-input) 84%,transparent);
+}
+.today-card.premium-briefing-card .today-upcoming-item>span{
+  align-self:start;
+  white-space:nowrap;
+}
+@media(max-width:1040px){
+  .today-columns-grid{grid-template-columns:1fr}
+  .today-card.premium-briefing-card .today-side-panel{padding:18px;border:1px solid var(--ui-border-subtle)}
+}
+@media(max-width:600px){
+  .today-card.premium-briefing-card .today-hero-column,
+  .today-card.premium-briefing-card .today-side-panel{padding:15px;border-radius:18px}
+  .today-card.premium-briefing-card .today-workout-row,
+  .today-card.premium-briefing-card .today-upcoming-item{grid-template-columns:1fr;gap:8px;min-height:0}
+  .today-card.premium-briefing-card .today-status-pill{white-space:normal}
+}
