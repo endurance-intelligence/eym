@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { plannerEventSyncStatus } from "../src/services/plannerEventSync.js";
+import { plannerEventSyncStatus, reconcileEventContinuationEntries } from "../src/services/plannerEventSync.js";
 
 const asg = {
   id: "asg-bahn-2026",
@@ -53,4 +53,71 @@ test("removing an event from the mission flags the old race entry", () => {
   const result = plannerEventSyncStatus([], [planned()]);
   assert.equal(result.upToDate, false);
   assert.equal(result.orphanedEntries.length, 1);
+});
+
+
+test("multi-day event requires a continuation entry on the next active calendar day", () => {
+  const backyard = {
+    id: "backyard-owl",
+    name: "1. Backyard OWL",
+    date: "2026-09-26",
+    time: "06:00",
+    targetKm: 100,
+    priority: "B",
+    eventLimitMode: "open",
+    planningHorizonHours: 36,
+  };
+  const race = {
+    id: "plan-backyard",
+    targetEventId: backyard.id,
+    raceEvent: true,
+    title: backyard.name,
+    date: backyard.date,
+    time: backyard.time,
+    distance: backyard.targetKm,
+    duration: 800,
+    goalPriority: backyard.priority,
+  };
+
+  const result = plannerEventSyncStatus([backyard], [race]);
+  assert.equal(result.upToDate, false);
+  assert.equal(result.missingContinuations.length, 1);
+  assert.equal(result.missingContinuations[0].date, "2026-09-27");
+});
+
+test("event continuation repair replaces generated post-event recovery on a day where the event can still run", () => {
+  const backyard = {
+    id: "backyard-owl",
+    name: "1. Backyard OWL",
+    date: "2026-09-26",
+    time: "06:00",
+    priority: "B",
+    eventLimitMode: "open",
+    planningHorizonHours: 36,
+  };
+  const plan = [{
+    id: "race",
+    targetEventId: backyard.id,
+    raceEvent: true,
+    title: backyard.name,
+    date: backyard.date,
+    type: "Wettkampf",
+  }, {
+    id: "old-recovery",
+    date: "2026-09-27",
+    title: "Erholung nach 1. Backyard OWL",
+    type: "Ruhetag",
+    notes: "Erholung nach 1. Backyard OWL: keine weitere intensive Belastung in dieser Eventwoche.",
+    source: "planner-engine",
+  }];
+
+  const repaired = reconcileEventContinuationEntries([backyard], plan);
+  assert.equal(repaired.changed, true);
+  assert.equal(repaired.plan.some((item) => item.id === "old-recovery"), false);
+  const continuation = repaired.plan.find((item) => item.eventContinuation);
+  assert.equal(continuation?.date, "2026-09-27");
+  assert.match(continuation?.title || "", /mögliche Fortsetzung/);
+
+  const stable = reconcileEventContinuationEntries([backyard], repaired.plan);
+  assert.equal(stable.changed, false);
 });

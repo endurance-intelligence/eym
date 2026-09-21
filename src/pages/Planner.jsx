@@ -28,7 +28,7 @@ import { publishIntervalsWeek } from "../services/intervals";
 import { DEFAULT_REPLACEMENT_SPORTS, SPORT_OPTIONS, sortCommitments, sportLabel } from "../services/configuration";
 import { goalRequirements } from "../services/scienceCoach";
 import { missionEvents } from "../services/goalPlanning";
-import { plannerEventSyncStatus } from "../services/plannerEventSync";
+import { plannerEventSyncStatus, reconcileEventContinuationEntries } from "../services/plannerEventSync";
 import { buildRacePrepPlan, racePrepProfileFromEvent } from "../services/racePrepPlanner";
 import {
   buildRaceProtocol,
@@ -337,6 +337,27 @@ function createBlank(weekStart) {
   };
 }
 
+function passiveRestDay(date) {
+  return {
+    id: `rest-placeholder:${date}`,
+    date,
+    day: "",
+    time: "",
+    spontaneous: false,
+    title: "Ruhetag / Erholung",
+    type: "Ruhetag",
+    distance: 0,
+    duration: 0,
+    notes: "Kein Training geplant. Erholung gehört zum Trainingsplan; es müssen keine Kilometer nachgeholt werden.",
+    optional: false,
+    completed: false,
+    fixed: true,
+    syntheticRestDay: true,
+    source: "planner-rest-placeholder",
+    archived: false,
+  };
+}
+
 function prepareWorkoutForEditing(item) {
   const loopPrepared = isLoopWorkout(item) ? normalizeLoopWorkoutItem(item) : item;
   const prepared = prepareWorkoutPaceGuidance(loopPrepared);
@@ -546,6 +567,7 @@ export default function Planner() {
     const requestedWorkout = state.plan.find((item) => String(item.id) === String(requestedWorkoutId || ""));
     return requestedWorkout?.id || null;
   });
+  const [restDayDetailDate, setRestDayDetailDate] = useState("");
   const [editing, setEditing] = useState(null);
   const [missedEditing, setMissedEditing] = useState(null);
   const [planningOpen, setPlanningOpen] = useState(false);
@@ -594,10 +616,22 @@ export default function Planner() {
   const canonicalActivities = useMemo(() => preferredActivities(state.activities, { hideStrava: Boolean(state.intervals?.connected) }), [state.activities, state.intervals?.connected]);
   const groupedActivities = useMemo(() => activitiesWithGroups(canonicalActivities, state.activityGroups), [canonicalActivities, state.activityGroups]);
   const activityById = useMemo(() => new Map([...canonicalActivities, ...groupedActivities].map((activity) => [activity.id, activity])), [canonicalActivities, groupedActivities]);
-  const weekPlan = useMemo(() => state.plan.filter((item) => {
+  const eventContinuationRepair = useMemo(
+    () => reconcileEventContinuationEntries(weekMissionEvents, state.plan),
+    [weekMissionEvents, state.plan],
+  );
+  const effectivePlan = eventContinuationRepair.plan;
+  useEffect(() => {
+    if (!eventContinuationRepair.changed) return;
+    setState((current) => {
+      const repaired = reconcileEventContinuationEntries(weekMissionEvents, current.plan);
+      return repaired.changed ? { ...current, plan: repaired.plan } : current;
+    });
+  }, [eventContinuationRepair.changed, setState, weekMissionEvents]);
+  const weekPlan = useMemo(() => effectivePlan.filter((item) => {
     const value = item.date || "";
     return value >= isoDate(weekStart) && value <= isoDate(weekEnd) && !item.archived;
-  }).sort((a, b) => `${a.date}${workoutSortTime(a)}${a.title || ""}`.localeCompare(`${b.date}${workoutSortTime(b)}${b.title || ""}`)), [state.plan, weekStart, weekEnd]);
+  }).sort((a, b) => `${a.date}${workoutSortTime(a)}${a.title || ""}`.localeCompare(`${b.date}${workoutSortTime(b)}${b.title || ""}`)), [effectivePlan, weekStart, weekEnd]);
   const weekEventSync = useMemo(() => plannerEventSyncStatus(weekMissionEvents, weekPlan), [weekMissionEvents, weekPlan]);
   const weekEventPlanNeedsRefresh = offsetWeeks >= 0 && weekPlan.length > 0 && !weekEventSync.upToDate;
   const fuelRecommendations = useMemo(() => new Map(
@@ -821,9 +855,11 @@ export default function Planner() {
   const planningTargetLabel = offsetWeeks === 1 ? "Nächste Woche" : "Aktuelle Woche";
   const closurePeriodLabel = offsetWeeks === 1 ? "aktuelle Woche" : "Vorwoche";
   const isPastWeek = offsetWeeks < 0;
-  const detailWorkout = workoutDetailId
-    ? state.plan.find((item) => String(item.id) === String(workoutDetailId) && !item.archived) || null
+  const persistedDetailWorkout = workoutDetailId
+    ? effectivePlan.find((item) => String(item.id) === String(workoutDetailId) && !item.archived) || null
     : null;
+  const detailWorkout = persistedDetailWorkout || (restDayDetailDate ? passiveRestDay(restDayDetailDate) : null);
+  const detailIsSyntheticRest = Boolean(detailWorkout?.syntheticRestDay);
   const modalVisible = Boolean(detailWorkout || editing || missedEditing || availabilityEditing || planningOpen || adjustmentOpen || planningInfoOpen || crossTrainingPreviewOpen || pendingPlanChange || publishConfirmOpen);
   const editingTrackWorkout = editing && isTrackWorkout(editing)
     ? editing.structuredWorkout
@@ -1921,14 +1957,30 @@ export default function Planner() {
     setStatus(`„${item.title}“ wurde aus dem Wochenplan entfernt.`);
   }
 
-  function openWorkoutEditor(item) {
+  function closeWorkoutDetails() {
     setWorkoutDetailId(null);
+    setRestDayDetailDate("");
+  }
+
+  function openWorkoutEditor(item) {
+    closeWorkoutDetails();
     setEditing(prepareWorkoutForEditing(item));
   }
 
   function openWorkoutDetails(item) {
     if (!item?.id) return;
+    setRestDayDetailDate("");
     setWorkoutDetailId(item.id);
+  }
+
+  function openPassiveRestDay(date) {
+    setWorkoutDetailId(null);
+    setRestDayDetailDate(date);
+  }
+
+  function addTrainingOnRestDay(date) {
+    closeWorkoutDetails();
+    setEditing({ ...createBlank(weekStart), date });
   }
 
   function openCompletedReview(destination, event) {
@@ -2829,7 +2881,7 @@ export default function Planner() {
                   ? completedActivityDestination(activity.id)
                   : null;
                 const roleAssessment = workoutRoleAssessment(activity, {
-                  plan: state.plan,
+                  plan: effectivePlan,
                   goal: goalProfile,
                   weekPrescription,
                 });
@@ -2863,7 +2915,37 @@ export default function Planner() {
                   ? availability.status === "blocked"
                     ? <div className="planner-empty planner-empty-blocked"><strong>Training frei gehalten</strong><span>Der Coach plant an diesem Tag keine Einheit.</span></div>
                     : <div className="planner-empty planner-empty-limited"><strong>Heute bewusst eingeschränkt</strong><span>{availabilityLabel(availability)}. Der Coach nutzt den Tag nur innerhalb dieser Grenze.</span></div>
-                  : <button className="planner-empty" onClick={() => setEditing({ ...createBlank(weekStart), date: dateKey })}>+ frei</button>
+                  : (() => {
+                    const restDay = passiveRestDay(dateKey);
+                    const restAssessment = workoutRoleAssessment(restDay, { goal: goalProfile, weekPrescription });
+                    return (
+                      <div
+                        className="planner-workout planner-workout-compact no-marker planner-workout-detail-open planner-rest-placeholder"
+                        role="button"
+                        tabIndex={0}
+                        title="Ruhetag / Erholung öffnen"
+                        aria-label={`${dateKey}: Ruhetag / Erholung öffnen`}
+                        onClick={() => openPassiveRestDay(dateKey)}
+                        onKeyDown={(event) => {
+                          if (event.target !== event.currentTarget || !["Enter", " "].includes(event.key)) return;
+                          event.preventDefault();
+                          openPassiveRestDay(dateKey);
+                        }}
+                      >
+                        <div className="planner-workout-main planner-workout-compact-main">
+                          <div className="planner-compact-kicker"><span>Ganztägig</span></div>
+                          <div className="planner-compact-title-row">
+                            <h3>Ruhetag / Erholung</h3>
+                            <div className="planner-compact-trailing">
+                              <WorkoutRoleBadges assessment={restAssessment} className="planner-workout-roles planner-workout-roles-compact" />
+                            </div>
+                          </div>
+                          <p>Keine Einheit geplant · bewusste Erholung</p>
+                        </div>
+                        <span className="planner-detail-cue" aria-hidden="true">→</span>
+                      </div>
+                    );
+                  })()
               ) : entries.map((item) => {
                 const matched = matches.get(item.id) || (item.matchedActivityId ? activityById.get(item.matchedActivityId) : null);
                 const isCancelled = Boolean(item.plannedCancellation);
@@ -2886,7 +2968,7 @@ export default function Planner() {
                   weekWasPublished: Boolean(publishedWeek),
                 });
                 const roleAssessment = workoutRoleAssessment(item, {
-                  plan: state.plan,
+                  plan: effectivePlan,
                   goal: goalProfile,
                   weekPrescription,
                 });
@@ -3003,7 +3085,7 @@ export default function Planner() {
         const paceLabel = loopWorkoutPaceLabel(detailWorkout) || workoutPaceLabel(detailWorkout, { includeSource: true });
         const loopLabel = loopWorkoutCompactLabel(detailWorkout);
         const roleAssessment = workoutRoleAssessment(detailWorkout, {
-          plan: state.plan,
+          plan: effectivePlan,
           goal: goalProfile,
           weekPrescription,
         });
@@ -3032,7 +3114,7 @@ export default function Planner() {
         return (
           <div className="modal-backdrop">
             <div className="modal planner-workout-detail-modal">
-              <button type="button" className="close" onClick={() => setWorkoutDetailId(null)}>×</button>
+              <button type="button" className="close" onClick={closeWorkoutDetails}>×</button>
               <div className="planner-workout-detail-head">
                 <div>
                   <p className="eyebrow">{new Intl.DateTimeFormat("de-DE", { weekday: "long", day: "2-digit", month: "2-digit" }).format(new Date(`${detailWorkout.date}T12:00:00`))} · {workoutTimingLabel(detailWorkout)}</p>
@@ -3045,18 +3127,18 @@ export default function Planner() {
               <div className="planner-workout-detail-grid">
                 <section>
                   <span>Einheit</span>
-                  <strong>{detailWorkout.type || "Training"}</strong>
-                  <small>{detailWorkout.optional ? "Optional eingeplant" : detailWorkout.fixed || detailWorkout.commitmentId ? "Fester Termin" : "Geplante Einheit"}</small>
+                  <strong>{detailWorkout.type === "Ruhetag" ? "Ruhetag / Erholung" : detailWorkout.type || "Training"}</strong>
+                  <small>{detailWorkout.type === "Ruhetag" ? "Bewusst trainingsfrei" : detailWorkout.optional ? "Optional eingeplant" : detailWorkout.fixed || detailWorkout.commitmentId ? "Fester Termin" : "Geplante Einheit"}</small>
                 </section>
                 <section>
                   <span>Umfang</span>
-                  <strong>{Number(detailWorkout.distance || 0) > 0 ? `${Number(detailWorkout.distance).toFixed(1).replace(".0", "")} km` : Number(detailWorkout.duration || 0) > 0 ? `${Math.round(Number(detailWorkout.duration))} min` : "Offen"}</strong>
-                  <small>{Number(detailWorkout.distance || 0) > 0 && Number(detailWorkout.duration || 0) > 0 ? `${Math.round(Number(detailWorkout.duration))} min geplant` : paceLabel || "ohne weitere Vorgabe"}</small>
+                  <strong>{detailWorkout.type === "Ruhetag" ? "0 km" : Number(detailWorkout.distance || 0) > 0 ? `${Number(detailWorkout.distance).toFixed(1).replace(".0", "")} km` : Number(detailWorkout.duration || 0) > 0 ? `${Math.round(Number(detailWorkout.duration))} min` : "Offen"}</strong>
+                  <small>{detailWorkout.type === "Ruhetag" ? "keine Belastung geplant" : Number(detailWorkout.distance || 0) > 0 && Number(detailWorkout.duration || 0) > 0 ? `${Math.round(Number(detailWorkout.duration))} min geplant` : paceLabel || "ohne weitere Vorgabe"}</small>
                 </section>
                 <section>
                   <span>Status</span>
-                  <strong>{completed ? passiveRecoveryDone ? "Planmäßig" : "Erledigt" : isCancelled ? "Ausgefallen" : isMissed ? "Rückmeldung offen" : "Geplant"}</strong>
-                  <small>{passiveRecoveryDone ? "Coach-geplanter Regenerationstag · keine Aktivität oder Review nötig" : matched ? matched.name || "Aktivität zugeordnet" : detailWorkout.optional ? "kann ausgelassen werden" : "Teil des Wochenplans"}</small>
+                  <strong>{detailWorkout.type === "Ruhetag" ? "Planmäßig" : completed ? passiveRecoveryDone ? "Planmäßig" : "Erledigt" : isCancelled ? "Ausgefallen" : isMissed ? "Rückmeldung offen" : "Geplant"}</strong>
+                  <small>{detailWorkout.type === "Ruhetag" ? "Keine Aktivität oder Review nötig" : passiveRecoveryDone ? "Coach-geplanter Regenerationstag · keine Aktivität oder Review nötig" : matched ? matched.name || "Aktivität zugeordnet" : detailWorkout.optional ? "kann ausgelassen werden" : "Teil des Wochenplans"}</small>
                 </section>
               </div>
 
@@ -3177,7 +3259,7 @@ export default function Planner() {
                 </Link>
               )}
 
-              <details className="planner-workout-detail-system-meta">
+              {!detailIsSyntheticRest && <details className="planner-workout-detail-system-meta">
                 <summary>Planstatus & Systemdetails</summary>
                 <div>
                   <span>Quelle <b>{String(detailWorkout.source || "planner").toUpperCase()}</b></span>
@@ -3185,16 +3267,18 @@ export default function Planner() {
                   <span>Termin <b>{detailWorkout.fixed || detailWorkout.commitmentId ? "Fixtermin" : detailWorkout.spontaneous ? "Spontan" : "Geplant"}</b></span>
                   {detailWorkout.intervalsPublishedAt && <span>Intervals <b>veröffentlicht</b></span>}
                 </div>
-              </details>
+              </details>}
 
               <div className="planner-workout-detail-actions">
-                {detailWorkout.raceEvent
-                  ? <button type="button" className="primary" onClick={() => { setWorkoutDetailId(null); navigate("/mission"); }}>Ziel öffnen</button>
-                  : <button type="button" className="primary" onClick={() => openWorkoutEditor(detailWorkout)}>Bearbeiten</button>}
-                {!completed && isMissed && <button type="button" onClick={() => { setWorkoutDetailId(null); openMissed(detailWorkout); }}>Grund angeben</button>}
-                {!completed && isCancelled && <button type="button" onClick={() => { restoreCancelledWorkout(detailWorkout); setWorkoutDetailId(null); }}>Wieder einplanen</button>}
-                {!completed && !isCancelled && !isPastWeek && <button type="button" onClick={() => { setWorkoutDetailId(null); openAdjustment(detailWorkout.id, "cancel"); }}>Fällt aus</button>}
-                {canRemoveFromPlan && <button type="button" className="danger" onClick={() => { setWorkoutDetailId(null); removeManualWorkout(detailWorkout); }}>Entfernen</button>}
+                {detailIsSyntheticRest
+                  ? !isPastWeek && <button type="button" className="primary" onClick={() => addTrainingOnRestDay(detailWorkout.date)}>Training hinzufügen</button>
+                  : detailWorkout.raceEvent || detailWorkout.eventContinuation
+                    ? <button type="button" className="primary" onClick={() => { closeWorkoutDetails(); navigate("/mission"); }}>Ziel öffnen</button>
+                    : <button type="button" className="primary" onClick={() => openWorkoutEditor(detailWorkout)}>Bearbeiten</button>}
+                {!detailIsSyntheticRest && !detailWorkout.eventContinuation && detailWorkout.type !== "Ruhetag" && !completed && isMissed && <button type="button" onClick={() => { closeWorkoutDetails(); openMissed(detailWorkout); }}>Grund angeben</button>}
+                {!detailIsSyntheticRest && !detailWorkout.eventContinuation && detailWorkout.type !== "Ruhetag" && !completed && isCancelled && <button type="button" onClick={() => { restoreCancelledWorkout(detailWorkout); closeWorkoutDetails(); }}>Wieder einplanen</button>}
+                {!detailIsSyntheticRest && !detailWorkout.eventContinuation && detailWorkout.type !== "Ruhetag" && !completed && !isCancelled && !isPastWeek && <button type="button" onClick={() => { closeWorkoutDetails(); openAdjustment(detailWorkout.id, "cancel"); }}>Fällt aus</button>}
+                {!detailIsSyntheticRest && canRemoveFromPlan && <button type="button" className="danger" onClick={() => { closeWorkoutDetails(); removeManualWorkout(detailWorkout); }}>Entfernen</button>}
               </div>
             </div>
           </div>

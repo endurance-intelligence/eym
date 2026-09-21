@@ -163,3 +163,20 @@ test("multi-day event continuation uses an event-running marker instead of long-
   assert.deepEqual(assessment.markers.map((marker) => marker.key), ["event"]);
   assert.equal(assessment.markers[0].label, "Event läuft");
 });
+
+
+test("rest day uses a dedicated recovery marker and never inherits shake-out semantics", () => {
+  const assessment = workoutRoleAssessment({
+    id: "rest-before-race",
+    title: "Ruhetag / Erholung",
+    type: "Ruhetag",
+    goalSessionRole: "pre_race_activation",
+    notes: "Shake-out wurde durch Ruhetag / Erholung ersetzt.",
+  });
+
+  assert.equal(assessment.classificationKey, "rest");
+  assert.deepEqual(assessment.markers.map((marker) => marker.key), ["rest"]);
+  assert.equal(assessment.markers[0].icon, "🧘");
+  assert.match(assessment.title, /Erholung/);
+  assert.doesNotMatch(assessment.explanation, /Shake-out|Strides/i);
+});

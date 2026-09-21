@@ -2866,3 +2866,11 @@ button:focus-visible,a:focus-visible,summary:focus-visible{
 .workout-role-badges>summary>span.key:has(i:first-child){
   max-width:100%;
 }
+
+/* v4.1.38 – explicit recovery days and calm rest semantics */
+.briefing-role-markers>span.rest,
+.workout-role-badges>summary>span.rest{
+  border-color:color-mix(in srgb,var(--muted-bright) 34%,var(--border));
+  background:color-mix(in srgb,var(--muted-bright) 6%,var(--bg-sidebar));
+  color:var(--muted-bright);
+}

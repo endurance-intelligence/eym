@@ -10,6 +10,7 @@ export const WORKOUT_ROLE_DEFINITIONS = {
   additional: { key: "additional", label: "Zusatzbelastung", icon: "↗", tone: "additional" },
   intense: { key: "intense", label: "Intensiv", icon: "⚡", tone: "quality" },
   event: { key: "event", label: "Event läuft", icon: "🏁", tone: "key" },
+  rest: { key: "rest", label: "Erholung", icon: "🧘", tone: "rest" },
 };
 
 const ROLE_REASON_BY_SESSION = {
@@ -195,6 +196,21 @@ function secondaryRole(item, family) {
 }
 
 export function workoutRoleAssessment(item = {}, context = {}) {
+  if (String(item.type || "") === "Ruhetag" || item.syntheticRestDay) {
+    const marker = WORKOUT_ROLE_DEFINITIONS.rest;
+    return {
+      classificationKey: "rest",
+      family: "rest",
+      isKeySession: false,
+      markers: [marker],
+      title: "Warum Erholung?",
+      explanation: "Bewusste Erholung ist Teil des Trainingsplans. Heute ist kein Trainingsreiz vorgesehen und es müssen keine Kilometer nachgeholt werden.",
+      context: context.goal ? goalLabel(context.goal) : "Erholung schützt die Qualität der nächsten wichtigen Einheit.",
+      matchedPlanId: null,
+      source: item.syntheticRestDay ? "rest-placeholder" : "plan",
+    };
+  }
+
   if (item.eventContinuation) {
     const marker = WORKOUT_ROLE_DEFINITIONS.event;
     return {
@@ -277,6 +293,7 @@ export function workoutRoleDistribution(items = [], context = {}) {
     additional: [],
     key: [],
     event: [],
+    rest: [],
   };
   (Array.isArray(items) ? items : []).forEach((item) => {
     const assessment = workoutRoleAssessment(item, context);

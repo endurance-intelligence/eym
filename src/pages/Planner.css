@@ -2790,3 +2790,8 @@
 .planner-event-week-card.needs-refresh .eyebrow{color:var(--warning)}
 .planner-event-week-card.needs-refresh .planner-event-week-badges span{border-color:color-mix(in srgb,var(--warning) 42%,var(--border));color:var(--warning)}
 @media(max-width:720px){.planner-event-week-side{justify-items:start}.planner-event-week-side>button{width:100%}}
+
+/* v4.1.38 – empty calendar days are explicit recovery, not a hidden add-workout action */
+.planner-rest-placeholder{min-height:64px;color:inherit;background:transparent}
+.planner-rest-placeholder .planner-compact-kicker>span{color:var(--muted)}
+.planner-rest-placeholder .planner-workout-compact-main>p{color:var(--muted)!important}
