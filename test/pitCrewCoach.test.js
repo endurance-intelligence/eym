@@ -109,19 +109,21 @@ test("no salty removes savory pit food without disabling electrolyte drink", () 
   assert.equal(recommendation.selection.find((item) => item.productId === "isostar")?.timing, "carry");
 });
 
-test("caffeine is dynamic only when tired and recent caffeine is low", () => {
+test("caffeine is never injected automatically and tired status asks the crew to choose the source", () => {
   const stable = recommendPitCrew({ round: 12, minutesToStart: 10, history: [], flags: [] });
-  assert.equal(stable.selection.some((item) => ["cola", "redbull"].includes(item.productId)), false);
+  assert.equal(stable.selection.some((item) => ["cola", "redbull", "226ers-high-cherry-caf"].includes(item.productId)), false);
 
   const tired = recommendPitCrew({ round: 2, minutesToStart: 10, history: [], flags: ["tired"] });
-  assert.equal(tired.selection.some((item) => item.productId === "cola"), true);
+  assert.equal(tired.selection.some((item) => ["cola", "redbull", "226ers-high-cherry-caf"].includes(item.productId)), false);
+  assert.match(tired.why, /Gel oder Getränk/);
 
   const caffeinatedHistory = [
     { selection: [{ productId: "redbull", portionId: "150" }] },
     { selection: [{ productId: "cola", portionId: "200" }] },
   ];
   const tiredAgain = recommendPitCrew({ round: 4, minutesToStart: 10, history: caffeinatedHistory, flags: ["tired"] });
-  assert.equal(tiredAgain.selection.some((item) => ["cola", "redbull"].includes(item.productId)), false);
+  assert.equal(tiredAgain.selection.some((item) => ["cola", "redbull", "226ers-high-cherry-caf"].includes(item.productId)), false);
+  assert.match(tiredAgain.why, /bereits .* mg Koffein erfasst/);
 });
 
 test("athlete self-selection is summed instead of rejected for deviating from suggestion", () => {
@@ -254,11 +256,12 @@ test("rolling pit average excludes pending carry until return confirmation", () 
 });
 
 
-test("pit catalog distinguishes the athlete's two Isostar drinks and both 226ERS High Energy gels", () => {
+test("pit catalog distinguishes both Isostar drinks, regular 226ERS gels and the manual caffeine joker", () => {
   const orange = PIT_CREW_PRODUCTS.find((product) => product.id === "isostar");
   const lemon = PIT_CREW_PRODUCTS.find((product) => product.id === "isostar-long");
   const neutral = PIT_CREW_PRODUCTS.find((product) => product.id === "226ers-high");
   const strawberry = PIT_CREW_PRODUCTS.find((product) => product.id === "226ers-high-strawberry");
+  const cherryCaf = PIT_CREW_PRODUCTS.find((product) => product.id === "226ers-high-cherry-caf");
   assert.equal(orange?.label, "Isostar Hydrate & Perform Orange");
   assert.equal(orange?.portions.find((portion) => portion.id === "500")?.carbs, 35);
   assert.equal(lemon?.label, "Isostar Long Energy Plus Zitrone");
@@ -273,6 +276,11 @@ test("pit catalog distinguishes the athlete's two Isostar drinks and both 226ERS
   assert.equal(lemon500?.sodiumMg, 578);
   assert.equal(lemon500?.potassiumMg, 334);
   assert.equal(lemon500?.magnesiumMg, 87);
+  assert.equal(cherryCaf?.label, "226ERS High Energy Cherry + 2× Caffeine");
+  assert.equal(cherryCaf?.manualOnly, true);
+  assert.equal(cherryCaf?.portions[0]?.carbs, 50);
+  assert.equal(cherryCaf?.portions[0]?.caffeineMg, 160);
+  assert.equal(summarizePitSelection([{ productId: "226ers-high-cherry-caf", portionId: "1" }]).caffeineMg, 160);
   assert.equal(lemon500?.calciumMg, 190);
   assert.equal(lemon500?.bcaaG, 0.99);
   assert.equal(neutral?.portions[0]?.carbs, 50);
@@ -398,6 +406,14 @@ test("24 hour start stock uses practical shopping packages for drinks and Haribo
   assert.match(milkRoll?.note || "", /1 Packung reicht/);
 });
 
+
+test("start stock keeps two high-caffeine Cherry gels as a manual joker outside normal gel rotation", () => {
+  const plan = buildPitCrewStartStock({ eventLimitMode: "open", planningHorizonHours: 24 });
+  const cherry = plan.items.find((item) => item.id === "226ers-high-cherry-caf");
+  assert.equal(cherry?.quantity, 2);
+  assert.equal(cherry?.unit, "Gels");
+  assert.match(cherry?.note || "", /160 mg Koffein/);
+});
 
 test("24 hour stock tracks Cola as 330 ml cans instead of litres", () => {
   const plan = buildPitCrewStartStock({ eventLimitMode: "open", planningHorizonHours: 24 });

@@ -235,3 +235,15 @@ test("legacy Cola litre stock is converted to 330 ml cans for the new inventory 
   assert.match(source, /override\.unit/);
   assert.match(source, /\/ 330/);
 });
+
+
+test("Pit Crew asks for a deliberate caffeine source instead of silently adding caffeine", () => {
+  assert.match(source, /KOFFEINQUELLE FÜR DIESE RUNDE/);
+  assert.match(source, /EI setzt Koffein nie automatisch/);
+  assert.match(source, /226ERS Cherry · 160 mg · 50 g KH/);
+  assert.match(source, /Cola 150 ml · ≈14 mg/);
+  assert.match(source, /Red Bull 100 ml · 32 mg/);
+  assert.match(source, /selectCaffeineOption/);
+  assert.match(source, /KOFFEIN DIESE RUNDE/);
+  assert.match(source, /letzte 3 h/);
+});

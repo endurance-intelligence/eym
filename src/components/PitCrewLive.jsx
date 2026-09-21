@@ -168,6 +168,18 @@ function selectionLabel(entry, products = PIT_CREW_PRODUCTS) {
   return `${product.icon} ${product.label} · ${portion.label}${count > 1 ? ` ×${count}` : ""}`;
 }
 
+function caffeineMgForEntry(entry, products = PIT_CREW_PRODUCTS) {
+  return Number(summarizePitSelection([entry], products).caffeineMg || 0);
+}
+
+function caffeineSourceForSelection(selection = [], products = PIT_CREW_PRODUCTS) {
+  const caffeinated = normalizedLiveSelection(selection).filter((entry) => caffeineMgForEntry(entry, products) > 0);
+  if (!caffeinated.length) return "none";
+  const categories = new Set(caffeinated.map((entry) => products.find((product) => String(product.id) === String(entry.productId))?.category).filter(Boolean));
+  if (categories.size > 1) return "mixed";
+  return categories.has("gel") ? "gel" : "drink";
+}
+
 function selectionWithTiming(record = {}) {
   if (record.carryStatus === "pending") {
     const planned = normalizedLiveSelection(record.plannedSelection);
@@ -410,6 +422,11 @@ export default function PitCrewLive({ race, onClose }) {
   const activePlanSummary = summarizePitSelection(activeSelection, productCatalog);
   const activePitSummary = summarizePitSelection(activePitSelection, productCatalog);
   const activeLoopSummary = summarizePitSelection(activeLoopSelection, productCatalog);
+  const activeCaffeineSource = caffeineSourceForSelection(activeSelection, productCatalog);
+  const activeCaffeineProducts = [...new Set(activeSelection
+    .filter((entry) => caffeineMgForEntry(entry, productCatalog) > 0)
+    .map((entry) => productCatalog.find((product) => String(product.id) === String(entry.productId))?.label)
+    .filter(Boolean))];
   const planAdjusted = selectionSignature(activeSelection) !== selectionSignature(suggestedSelection);
   const planCarbTone = activePlanSummary.carbs < PIT_CARB_TARGET.min ? "low" : activePlanSummary.carbs > PIT_CARB_TARGET.max ? "high" : "good";
   const planCarbDelta = planCarbTone === "low"
@@ -431,6 +448,8 @@ export default function PitCrewLive({ race, onClose }) {
   const assessment = assessPitSelection(activeSelection, planningHistory, { weather: effectiveWeather, products: productCatalog });
   const confirmedHistory = history.filter((record) => record.carryStatus !== "pending");
   const historyRolling = rollingPitAverage(confirmedHistory, null, 3, productCatalog);
+  const caffeineSourceLabel = activeCaffeineSource === "gel" ? "Gel" : activeCaffeineSource === "drink" ? "Getränk" : activeCaffeineSource === "mixed" ? "gemischt" : "kein Koffein";
+  const caffeinePromptRecommended = effectiveAthleteFlags.includes("tired") && Number(historyRolling.caffeineMg || 0) < 45 && Number(activePlanSummary.caffeineMg || 0) <= 0;
   const metricStatus = pitMetricStatus(assessment.summary, assessment.rolling, { weather: effectiveWeather });
   const lastRecord = history.length ? history[history.length - 1] : null;
   const lastConfirmedRecord = [...confirmedHistory].reverse().find((record) => record.summary || (record.selection || []).length) || null;
@@ -516,6 +535,27 @@ export default function PitCrewLive({ race, onClose }) {
         { productId, portionId: String(portionId), timing: timingMode, quantity: 1 },
       ];
     });
+  }
+
+  function selectCaffeineOption(productId = "", portionId = "", timingMode = "now") {
+    const id = String(productId || "");
+    if (!id && Number(activePlanSummary.caffeineMg || 0) <= 0) return;
+    if (id && !activeStockIds.includes(id)) {
+      setSaveMessage("Diese Koffeinquelle ist im Vorrat nicht aktiviert. Vorrat & Startplan öffnen oder eine andere Quelle wählen.");
+      return;
+    }
+    updateSelection((current) => {
+      const withoutCaffeine = current.filter((entry) => caffeineMgForEntry(entry, productCatalog) <= 0);
+      if (!id) return withoutCaffeine;
+      return [...withoutCaffeine, { productId: id, portionId: String(portionId), timing: timingMode, quantity: 1 }];
+    });
+    if (id === "226ers-high-cherry-caf") {
+      setFuelTimingTab("carry");
+      setPitCategory("gel");
+    } else if (id) {
+      setFuelTimingTab("now");
+      setPitCategory("drink");
+    }
   }
 
   function changeQuantity(productId, timingMode, delta) {
@@ -1045,6 +1085,20 @@ export default function PitCrewLive({ race, onClose }) {
         <div className="pit-live-collapse-body pit-live-intake">
           {editingRound != null && <div className="pit-live-edit-banner">Pit {editingRound} wird korrigiert. Speichern ersetzt nur diesen Pit.</div>}
           <p className="pit-live-help">Ein Ort für die gesamte Versorgung: Was jetzt im Pit genommen wird und was der Athlet mit auf die nächste Loop bekommt.</p>
+          <div className={`pit-live-caffeine-source${caffeinePromptRecommended ? " needs-choice" : ""}`}>
+            <div className="pit-live-caffeine-source-head">
+              <div><small>KOFFEINQUELLE FÜR DIESE RUNDE</small><b>{activePlanSummary.caffeineMg > 0 ? `${Math.round(activePlanSummary.caffeineMg)} mg · via ${caffeineSourceLabel}` : "kein Koffein gewählt"}</b></div>
+              <span>letzte 3 h: {Math.round(historyRolling.caffeineMg || 0)} mg</span>
+            </div>
+            <p>Gel oder Getränk bewusst wählen. EI setzt Koffein nie automatisch.</p>
+            <div className="pit-live-caffeine-options">
+              <button type="button" className={activePlanSummary.caffeineMg <= 0 ? "active" : ""} onClick={() => selectCaffeineOption()}>○ Kein Koffein</button>
+              <button type="button" className={activeSelection.some((entry) => entry.productId === "226ers-high-cherry-caf") ? "active" : ""} disabled={!activeStockIds.includes("226ers-high-cherry-caf")} onClick={() => selectCaffeineOption("226ers-high-cherry-caf", "1", "carry")}><b>⚡ Gel</b><span>226ERS Cherry · 160 mg · 50 g KH</span></button>
+              <button type="button" className={activeSelection.some((entry) => entry.productId === "cola" && caffeineMgForEntry(entry, productCatalog) > 0) ? "active" : ""} disabled={!activeStockIds.includes("cola")} onClick={() => selectCaffeineOption("cola", "150", "now")}><b>🥤 Getränk</b><span>Cola 150 ml · ≈14 mg</span></button>
+              <button type="button" className={activeSelection.some((entry) => entry.productId === "redbull" && caffeineMgForEntry(entry, productCatalog) > 0) ? "active" : ""} disabled={!activeStockIds.includes("redbull")} onClick={() => selectCaffeineOption("redbull", "100", "now")}><b>⚡ Getränk</b><span>Red Bull 100 ml · 32 mg</span></button>
+            </div>
+            {caffeinePromptRecommended && <strong className="pit-live-caffeine-prompt">😴 Müde gemeldet · falls Koffein gewünscht, jetzt Quelle festlegen.</strong>}
+          </div>
           <div className="pit-live-fueling-timing-tabs">
             <button type="button" className={fuelTimingTab === "now" ? "active" : ""} onClick={() => setFuelTimingTab("now")}><small>IM PIT</small><b>{formatNumber(activePitSummary.carbs)} g KH · {activePitSummary.fluidMl} ml</b></button>
             <button type="button" className={fuelTimingTab === "carry" ? "active" : ""} onClick={() => setFuelTimingTab("carry")}><small>MIT AUF LOOP {loopNumber}</small><b>{formatNumber(activeLoopSummary.carbs)} g KH · {activeLoopSummary.fluidMl} ml</b></button>
@@ -1261,6 +1315,11 @@ export default function PitCrewLive({ race, onClose }) {
                 : <span className="clear">✓ Keine Zusatzaktion · Routine ruhig weiterlaufen lassen</span>}
             </div>
           </div>
+          {(activePlanSummary.caffeineMg > 0 || caffeinePromptRecommended) && <div className={`pit-live-caffeine-overview${caffeinePromptRecommended ? " needs-choice" : ""}`}>
+            <small>KOFFEIN DIESE RUNDE</small>
+            <b>{activePlanSummary.caffeineMg > 0 ? `${Math.round(activePlanSummary.caffeineMg)} mg · via ${caffeineSourceLabel}` : "noch nicht gewählt"}</b>
+            <span>{activePlanSummary.caffeineMg > 0 ? `${activeCaffeineProducts.join(" · ")} · letzte 3 h ${Math.round(historyRolling.caffeineMg || 0)} mg` : `Müde gemeldet · letzte 3 h ${Math.round(historyRolling.caffeineMg || 0)} mg · Quelle im Fueling wählen`}</span>
+          </div>}
           <div className="pit-live-actual-overview" aria-label="Bestätigte Versorgung">
             <div className={lastConfirmedRecord ? `tone-${actualMetricStatus.carbs}` : "tone-neutral"}>
               <small>ZULETZT BESTÄTIGT</small>

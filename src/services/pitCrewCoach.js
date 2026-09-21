@@ -183,6 +183,20 @@ export const PIT_CREW_PRODUCTS = [
     portions: [{ id: "1", label: "1 Gel · 76 g", carbs: 50, fluidMl: 0, caffeineMg: 0, sodiumMg: 250 }],
   },
   {
+    id: "226ers-high-cherry-caf",
+    label: "226ERS High Energy Cherry + 2× Caffeine",
+    brand: "226ERS",
+    flavor: "Kirsche (Cherry)",
+    icon: "⚡",
+    category: "gel",
+    traits: ["sweet", "quick", "portable", "caffeine", "high-caffeine"],
+    nutritionSource: "label",
+    packageG: 76,
+    manualOnly: true,
+    stockNote: "76-g-Beutel · 50 g KH · 160 mg Koffein · 0,1 g Salz · gezielter Joker, keine Auto-Rotation",
+    portions: [{ id: "1", label: "1 Gel · 76 g", carbs: 50, fluidMl: 0, caffeineMg: 160, saltG: 0.1 }],
+  },
+  {
     id: "banana",
     label: "Banane",
     icon: "🍌",
@@ -631,9 +645,10 @@ function normalSuggestion({ round = 1, history = [], flags = [], weather = [], g
   let selection = [...recommendation.selection];
   const reasons = [recommendation.why];
 
-  if (athlete.has("tired") && caffeineLast3 < 45 && !hasSelection(selection, "cola", "now")) {
-    selection = addUnique(selection, choice("cola", "150", "now"));
-    reasons.push("Müdigkeit gemeldet: kleine Cola-Portion ergänzen, ohne die restliche Fuel-Auswahl neu zu würfeln.");
+  if (athlete.has("tired") && caffeineLast3 < 45) {
+    reasons.push("Müdigkeit gemeldet: Koffein nicht automatisch einplanen. Die Crew entscheidet bewusst für diese Runde zwischen Gel oder Getränk.");
+  } else if (athlete.has("tired")) {
+    reasons.push(`Müdigkeit gemeldet: in den letzten 3 bestätigten Stunden wurden bereits ${caffeineLast3} mg Koffein erfasst. Kein weiteres Koffein automatisch ergänzen.`);
   }
 
   if (athlete.has("thirsty")) {
@@ -703,7 +718,7 @@ function closestPortion(product, targetCarbs = 0) {
 
 function fallbackProduct(missing, products, availableIds, usedIds) {
   const desired = pitProduct(missing.productId, products) || pitProduct(missing.productId);
-  const candidates = products.filter((product) => availableIds.has(String(product.id)) && !usedIds.has(String(product.id)));
+  const candidates = products.filter((product) => availableIds.has(String(product.id)) && !usedIds.has(String(product.id)) && !product.manualOnly);
   if (!candidates.length) return null;
   const sameCategory = candidates.filter((product) => product.category === desired?.category);
   const desiredTraits = new Set(desired?.traits || []);
@@ -891,6 +906,7 @@ export function buildPitCrewStartStock(race = {}, gelPriority = PIT_CREW_DEFAULT
     { id: "dryll", label: "DRYLL Salty Peach", icon: "🍑", quantity: dryllCans, unit: "Dosen à 330 ml", category: "drink", note: `${round1(dryllCans * 0.33, 2)} l Gesamtmenge · Elektrolyt-/Salz-Reserve` },
     { id: "redbull", label: "Red Bull", icon: "⚡", quantity: redBullCans, unit: "Dosen à 250 ml", category: "drink", note: `${redBullCans * 80} mg Koffein gesamt, falls alle genutzt · Reserve, kein Trinkziel` },
     ...gelItems.map((item) => ({ ...item, category: "gel" })),
+    { id: "226ers-high-cherry-caf", label: "226ERS High Energy Cherry + 2× Caffeine", icon: "⚡", quantity: 2, unit: "Gels", category: "gel", note: "2 Stück · je 50 g KH + 160 mg Koffein · gezielter Joker, keine Auto-Rotation" },
     { id: "banana", label: "Bananen", icon: "🍌", quantity: Math.max(4, Math.ceil(hours * 0.2)), unit: "Stück", category: "food" },
     { id: "milk-roll", label: "Ibis Milchbrötchen", icon: "🥛", quantity: milkRollPieces, unit: "Stück", category: "food", note: `${milkRollPieces} Stück empfohlen · 480-g-Packung = 12 Stück à 40 g · ${milkRollPackages} ${milkRollPackages === 1 ? "Packung reicht" : "Packungen reichen"}` },
     { id: "fusilli", label: "Fusilli / Nudeln", icon: "🍝", quantity: Math.max(4, Math.ceil(hours * 0.18)), unit: "kleine Portionen", category: "food" },
