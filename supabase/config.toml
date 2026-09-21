@@ -9,3 +9,6 @@ verify_jwt = true
 
 [functions.event-search]
 verify_jwt = true
+
+[functions.pit-crew-share]
+verify_jwt = false

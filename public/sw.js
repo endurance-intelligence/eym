@@ -1,4 +1,4 @@
-const CACHE_NAME = "eym-shell-v3.9.3";
+const CACHE_NAME = "eym-shell-v4.1.32";
 const APP_SHELL = ["./", "./index.html", "./favicon.svg", "./manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
@@ -25,7 +25,7 @@ self.addEventListener("fetch", (event) => {
 
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request)
+      fetch(request, { cache: "no-store" })
         .then((response) => {
           const copy = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put("./index.html", copy));

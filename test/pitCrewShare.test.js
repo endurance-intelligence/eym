@@ -92,3 +92,15 @@ test("shared Pit Crew snapshot preserves editable stock targets", () => {
   const snapshot = normalizePitCrewSnapshot({ stockTargets: { isostar: { quantity: 12, unit: "× 500 ml" }, broken: { quantity: -3 } } });
   assert.deepEqual(snapshot.stockTargets, { isostar: { quantity: 12, unit: "× 500 ml" } });
 });
+
+
+test("Pit Crew share is deployable without an EI login and mobile loading can recover", async () => {
+  const config = await import("node:fs/promises").then(({ readFile }) => readFile(new URL("../supabase/config.toml", import.meta.url), "utf8"));
+  const sharedSource = await import("node:fs/promises").then(({ readFile }) => readFile(new URL("../src/components/PitCrewSharedSession.jsx", import.meta.url), "utf8"));
+  assert.match(config, /\[functions\.pit-crew-share\]\s+verify_jwt = false/);
+  assert.match(sharedSource, /INITIAL_RETRY_DELAYS/);
+  assert.match(sharedSource, /Erneut versuchen/);
+  assert.match(sharedSource, /window\.addEventListener\("online"/);
+  assert.match(sharedSource, /document\.addEventListener\("visibilitychange"/);
+  assert.match(sharedSource, /setError\(""\);\s*if \(Number\(remote\.revision/);
+});

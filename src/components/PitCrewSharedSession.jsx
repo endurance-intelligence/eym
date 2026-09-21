@@ -10,12 +10,31 @@ import { normalizePitCrewSnapshot } from "../services/pitCrewShareCore.js";
 
 const POLL_MS = 2500;
 const LOCAL_WATCH_MS = 700;
+const INITIAL_RETRY_DELAYS = [0, 450, 1400];
 
+function wait(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function loadPitCrewShareResilient(token) {
+  let lastError = null;
+  for (const delay of INITIAL_RETRY_DELAYS) {
+    if (delay) await wait(delay);
+    try {
+      return await loadPitCrewShare(token);
+    } catch (error) {
+      lastError = error;
+      if (globalThis.navigator?.onLine === false) break;
+    }
+  }
+  throw lastError || new Error("Der Crew-Link konnte nicht geladen werden.");
+}
 
 export default function PitCrewSharedSession({ token, race: raceFallback = null, onClose = null }) {
   const [share, setShare] = useState(null);
   const [error, setError] = useState("");
   const [mountRevision, setMountRevision] = useState(0);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const revisionRef = useRef(0);
   const lastLocalRef = useRef("");
   const pushingRef = useRef(false);
@@ -23,9 +42,10 @@ export default function PitCrewSharedSession({ token, race: raceFallback = null,
 
   useEffect(() => {
     let active = true;
-    loadPitCrewShare(token)
+    loadPitCrewShareResilient(token)
       .then((loaded) => {
         if (!active) return;
+        setError("");
         const next = { ...loaded, state: normalizePitCrewSnapshot(loaded.state) };
         writePitCrewLocalSnapshot(next.race || raceFallback || {}, next.state);
         lastLocalRef.current = JSON.stringify(next.state);
@@ -35,7 +55,21 @@ export default function PitCrewSharedSession({ token, race: raceFallback = null,
       })
       .catch((cause) => active && setError(cause?.message || "Der Crew-Link konnte nicht geladen werden."));
     return () => { active = false; };
-  }, [raceFallback, token]);
+  }, [loadAttempt, raceFallback, token]);
+
+  useEffect(() => {
+    if (share) return undefined;
+    const retry = () => setLoadAttempt((value) => value + 1);
+    const resume = () => {
+      if (document.visibilityState === "visible") retry();
+    };
+    window.addEventListener("online", retry);
+    document.addEventListener("visibilitychange", resume);
+    return () => {
+      window.removeEventListener("online", retry);
+      document.removeEventListener("visibilitychange", resume);
+    };
+  }, [share]);
 
   useEffect(() => {
     if (!share?.race) return undefined;
@@ -43,7 +77,9 @@ export default function PitCrewSharedSession({ token, race: raceFallback = null,
     const timer = window.setInterval(async () => {
       try {
         const remote = await loadPitCrewShare(token);
-        if (!active || Number(remote.revision || 0) <= revisionRef.current) return;
+        if (!active) return;
+        setError("");
+        if (Number(remote.revision || 0) <= revisionRef.current) return;
         const nextState = normalizePitCrewSnapshot(remote.state);
         const serialized = JSON.stringify(nextState);
         revisionRef.current = Number(remote.revision || 0);
@@ -91,7 +127,7 @@ export default function PitCrewSharedSession({ token, race: raceFallback = null,
   }, [share?.race, token]);
 
   if (error && !share) {
-    return <main className="auth-shell"><section className="auth-card"><p className="eyebrow">Pit Crew Live</p><h1>Crew-Link nicht verfügbar</h1><p className="muted">{error}</p></section></main>;
+    return <main className="auth-shell"><section className="auth-card"><p className="eyebrow">Pit Crew Live</p><h1>Crew-Link nicht verfügbar</h1><p className="muted">{error}</p><div className="button-row"><button type="button" onClick={() => setLoadAttempt((value) => value + 1)}>Erneut versuchen</button></div></section></main>;
   }
   if (!race) {
     return <main className="auth-shell"><section className="auth-card"><p className="eyebrow">Pit Crew Live</p><h1>Crew-Session wird geladen …</h1><p className="muted">Kein EI-Login erforderlich.</p></section></main>;
