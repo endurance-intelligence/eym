@@ -1137,3 +1137,41 @@ test("final preview validation catches a protected stale workout that violates w
   assert.equal(violations[0].date, "2026-08-20");
   assert.match(violations[0].message, /Recovery|Aktivierung/i);
 });
+
+test("36 h Backyard reserves Sunday as a possible event continuation instead of a separate long run", () => {
+  const result = generateWeekPlan({
+    mission: {
+      id: "backyard",
+      name: "1. Backyard OWL",
+      date: "2026-09-26",
+      time: "06:00",
+      targetKm: 100,
+      priority: "A",
+      goalType: "distance",
+      courseType: "loop",
+      loopKm: 6.7,
+      loopMode: "fixed_interval",
+      loopIntervalMinutes: 60,
+      eventLimitMode: "open",
+      planningHorizonHours: 36,
+      milestones: [],
+    },
+    profile: { selfReportedRunsPerWeek: 4, selfReportedWeeklyKm: 45, selfReportedLongestRunKm: 30 },
+    offsetWeeks: 0,
+    today: new Date("2026-09-21T12:00:00"),
+    config: {
+      recurringCommitments: [],
+      fixedAppointments: { football: false, orcRun: false, saturdayMode: "off" },
+      targetRunCount: 4,
+      stabiCount: 0,
+      rowingCount: 0,
+      runDays: ["Dienstag", "Mittwoch", "Sonntag"],
+      maxLongRun: 30,
+    },
+  });
+
+  const sunday = result.plan.filter((item) => item.date === "2026-09-27");
+  assert.ok(sunday.some((item) => item.eventContinuation));
+  assert.ok(sunday.some((item) => /mögliche Fortsetzung/.test(item.title)));
+  assert.equal(sunday.some((item) => !item.eventContinuation && ["Long Run", "Loop-Training", "Backyard Training", "Easy Run"].includes(item.type)), false);
+});

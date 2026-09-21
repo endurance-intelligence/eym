@@ -9,6 +9,7 @@ export const WORKOUT_ROLE_DEFINITIONS = {
   support: { key: "support", label: "Ergänzung", icon: "🧩", tone: "support" },
   additional: { key: "additional", label: "Zusatzbelastung", icon: "↗", tone: "additional" },
   intense: { key: "intense", label: "Intensiv", icon: "⚡", tone: "quality" },
+  event: { key: "event", label: "Event läuft", icon: "🏁", tone: "key" },
 };
 
 const ROLE_REASON_BY_SESSION = {
@@ -85,7 +86,52 @@ function sameSport(left = {}, right = {}) {
   return sportFamily(left) === sportFamily(right);
 }
 
-export function findPlannedWorkoutForActivity(plan = [], activity = {}) {
+function isRecordedActivity(item = {}) {
+  const source = String(item.source || "").toLowerCase();
+  return Boolean(
+    (source && source !== "planner-engine")
+    || item.durationSeconds != null
+    || item.startDateLocal
+    || item.startTimeLocal
+  );
+}
+
+function coarseRunningRole(item = {}) {
+  if (isQuality(item)) return "quality";
+  if (isLongSpecific(item)) return "long";
+  if (isEasy(item)) return "easy";
+  return "steady";
+}
+
+export function plannedActivityCompatibility(actual = {}, planned = {}) {
+  if (!planned || !isRecordedActivity(actual)) return { compatible: true, reason: "" };
+  const actualFamily = sportFamily(actual);
+  const plannedFamily = sportFamily(planned);
+  if (actualFamily !== plannedFamily) return { compatible: false, reason: "andere Sportart" };
+  if (actualFamily !== "running") return { compatible: true, reason: "" };
+
+  const actualRole = coarseRunningRole(actual);
+  const plannedRole = coarseRunningRole(planned);
+  const actualDistance = numeric(actual.distance);
+  const plannedDistance = numeric(planned.distance);
+  const distanceRatio = actualDistance > 0 && plannedDistance > 0
+    ? Math.min(actualDistance, plannedDistance) / Math.max(actualDistance, plannedDistance)
+    : 1;
+  const actualDuration = durationMinutes(actual);
+  const plannedDuration = durationMinutes(planned);
+  const durationRatio = actualDuration > 0 && plannedDuration > 0
+    ? Math.min(actualDuration, plannedDuration) / Math.max(actualDuration, plannedDuration)
+    : 1;
+
+  if (actualRole === "quality" && plannedRole !== "quality") return { compatible: false, reason: "Intensität deutlich anders als geplant" };
+  if (plannedRole === "quality" && actualRole !== "quality") return { compatible: false, reason: "geplanter Qualitätsreiz nicht absolviert" };
+  if (actualRole === "long" && plannedRole !== "long" && distanceRatio < 0.75) return { compatible: false, reason: "deutlich längere Einheit als geplant" };
+  if (plannedRole === "long" && actualRole !== "long" && distanceRatio < 0.75) return { compatible: false, reason: "geplanter langer Reiz deutlich verkürzt" };
+  if (distanceRatio < 0.6 || durationRatio < 0.55) return { compatible: false, reason: "Umfang deutlich anders als geplant" };
+  return { compatible: true, reason: "" };
+}
+
+function findPlanCandidateForActivity(plan = [], activity = {}) {
   const entries = Array.isArray(plan) ? plan.filter((item) => !item.archived) : [];
   const direct = entries.find((item) => (
     item.matchedActivityId === activity.id
@@ -113,6 +159,11 @@ export function findPlannedWorkoutForActivity(plan = [], activity = {}) {
       return { item, score: overlap * 5 - distancePenalty - durationPenalty };
     })
     .sort((left, right) => right.score - left.score)[0]?.item || null;
+}
+
+export function findPlannedWorkoutForActivity(plan = [], activity = {}) {
+  const candidate = findPlanCandidateForActivity(plan, activity);
+  return candidate && plannedActivityCompatibility(activity, candidate).compatible ? candidate : null;
 }
 
 function goalLabel(goal = {}) {
@@ -144,16 +195,33 @@ function secondaryRole(item, family) {
 }
 
 export function workoutRoleAssessment(item = {}, context = {}) {
-  const matchedPlan = context.matchedPlan || findPlannedWorkoutForActivity(context.plan, item);
-  const roleItem = matchedPlan
+  if (item.eventContinuation) {
+    const marker = WORKOUT_ROLE_DEFINITIONS.event;
+    return {
+      classificationKey: "event",
+      family: "running",
+      isKeySession: false,
+      markers: [marker],
+      title: "Warum Event läuft?",
+      explanation: item.notes || "Das mehrstündige Event kann bis in diesen Kalendertag hineinlaufen. Dieser Eintrag ist kein separater Longrun.",
+      context: goalLabel(context.goal),
+      matchedPlanId: null,
+      source: "event-continuation",
+    };
+  }
+
+  const matchedPlan = context.matchedPlan || findPlanCandidateForActivity(context.plan, item);
+  const compatibility = plannedActivityCompatibility(item, matchedPlan);
+  const rolePlan = matchedPlan && compatibility.compatible ? matchedPlan : null;
+  const roleItem = rolePlan
     ? {
       ...item,
-      title: matchedPlan.title || item.title || item.name,
-      type: matchedPlan.type || item.type,
-      notes: matchedPlan.notes || item.notes,
-      keySession: Boolean(matchedPlan.keySession),
-      raceEvent: Boolean(matchedPlan.raceEvent || item.raceEvent),
-      goalSessionRole: matchedPlan.goalSessionRole || item.goalSessionRole,
+      title: rolePlan.title || item.title || item.name,
+      type: rolePlan.type || item.type,
+      notes: rolePlan.notes || item.notes,
+      keySession: Boolean(rolePlan.keySession),
+      raceEvent: Boolean(rolePlan.raceEvent || item.raceEvent),
+      goalSessionRole: rolePlan.goalSessionRole || item.goalSessionRole,
     }
     : item;
   const family = sportFamily(roleItem);
@@ -177,7 +245,7 @@ export function workoutRoleAssessment(item = {}, context = {}) {
     .map((key) => WORKOUT_ROLE_DEFINITIONS[key])
     .filter(Boolean);
   const phaseLabel = context.weekPrescription?.weekType?.label || context.phaseLabel || "";
-  const reason = roleReason(classificationKey, roleItem, context, matchedPlan);
+  const reason = roleReason(classificationKey, roleItem, context, rolePlan);
   const keyReason = keySession
     ? `${reason} Der Coach schützt sie deshalb als einen der wichtigsten Reize dieses Trainingsblocks.`
     : reason;
@@ -189,9 +257,13 @@ export function workoutRoleAssessment(item = {}, context = {}) {
     markers,
     title: keySession ? "Warum ist das ein Schlüsselreiz?" : `Warum ${WORKOUT_ROLE_DEFINITIONS[classificationKey]?.label || "diese Rolle"}?`,
     explanation: keyReason,
-    context: [phaseLabel, goalLabel(context.goal)].filter(Boolean).join(" · "),
+    context: [
+      phaseLabel,
+      goalLabel(context.goal),
+      matchedPlan && !compatibility.compatible ? `Planabweichung: ${compatibility.reason}; Rolle basiert auf der tatsächlichen Einheit.` : "",
+    ].filter(Boolean).join(" · "),
     matchedPlanId: matchedPlan?.id || null,
-    source: matchedPlan ? "plan" : "inferred",
+    source: rolePlan ? "plan" : matchedPlan ? "actual-deviation" : "inferred",
   };
 }
 
@@ -204,6 +276,7 @@ export function workoutRoleDistribution(items = [], context = {}) {
     support: [],
     additional: [],
     key: [],
+    event: [],
   };
   (Array.isArray(items) ? items : []).forEach((item) => {
     const assessment = workoutRoleAssessment(item, context);

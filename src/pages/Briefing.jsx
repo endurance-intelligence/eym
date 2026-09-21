@@ -127,7 +127,7 @@ function todayOverview(plan, activities) {
       detail: "Keine Einheit geplant",
       note: "Erholung gehört zum Trainingsplan.",
       tone: "rest",
-      status: "Frei",
+      status: "Ruhetag / Erholung 🧘",
     });
   }
 
@@ -186,7 +186,7 @@ function nextDayOverview(plan) {
     title: item.title,
     detail: plannedMetrics(item),
     tone: item.missedReason ? "missed" : item.optional ? "optional" : item.type === "Ruhetag" ? "rest" : "planned",
-    status: item.missedReason ? "Ausgefallen" : item.optional ? "Optional" : item.type === "Ruhetag" ? "Frei" : "Geplant",
+    status: item.missedReason ? "Ausgefallen" : item.optional ? "Optional" : item.type === "Ruhetag" ? "Ruhetag / Erholung 🧘" : "Geplant",
   }));
 
   if (!items.length) {
@@ -195,7 +195,7 @@ function nextDayOverview(plan) {
       title: "Regenerationstag",
       detail: "Keine Einheit geplant",
       tone: "rest",
-      status: "Frei",
+      status: "Ruhetag / Erholung 🧘",
     });
   }
 

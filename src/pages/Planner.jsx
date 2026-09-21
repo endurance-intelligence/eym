@@ -146,7 +146,7 @@ import {
   weeklyContextLabel,
   weeklyContextPreset,
 } from "../services/plannerAvailability";
-import { workoutRoleAssessment } from "../services/workoutRoles";
+import { plannedActivityCompatibility, workoutRoleAssessment } from "../services/workoutRoles";
 import { weeklyReviewSummary } from "../services/weeklyReview";
 import "./Planner.css";
 
@@ -458,6 +458,7 @@ function compatible(plan, activity) {
 
 function matchScore(plan, activity) {
   if (plan.date !== activityDate(activity) || !compatible(plan, activity)) return -1;
+  if (!plannedActivityCompatibility(activity, plan).compatible) return -1;
   let score = 10;
   const planText = `${plan.title} ${plan.type}`.toLowerCase();
   const actualText = `${activity.name || ""} ${activity.type || ""} ${activity.sportType || ""}`.toLowerCase();
@@ -858,15 +859,34 @@ export default function Planner() {
   }, []);
 
   useEffect(() => {
+    const staleLinks = new Set(state.plan
+      .filter((item) => item.matchedActivityId)
+      .filter((item) => {
+        const activity = activityById.get(item.matchedActivityId);
+        return activity && !plannedActivityCompatibility(activity, item).compatible;
+      })
+      .map((item) => item.id));
     const updates = [...matches.entries()].filter(([id, activity]) => {
       const item = state.plan.find((entry) => entry.id === id);
       return item && (!item.completed || item.matchedActivityId !== activity.id);
     });
-    if (!updates.length) return;
+    if (!updates.length && !staleLinks.size) return;
     const byId = new Map(updates);
     setState((current) => ({
       ...current,
       plan: current.plan.map((item) => {
+        if (staleLinks.has(item.id)) {
+          return {
+            ...item,
+            completed: false,
+            completedAt: null,
+            matchedActivityId: null,
+            actualTitle: null,
+            actualDistance: null,
+            actualDuration: null,
+            actualSource: null,
+          };
+        }
         const activity = byId.get(item.id);
         if (!activity) return item;
         return {
@@ -882,7 +902,7 @@ export default function Planner() {
         };
       }),
     }));
-  }, [matches, setState, state.plan]);
+  }, [activityById, matches, setState, state.plan]);
 
   function patchConfig(patch) {
     setState((current) => ({ ...current, planner: { ...current.planner, ...patch } }));

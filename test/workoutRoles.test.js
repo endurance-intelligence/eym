@@ -97,3 +97,69 @@ test("pre-race activation explains the shake-out purpose through the existing wo
   assert.match(assessment.explanation, /neuromuskuläre Spannung/i);
   assert.match(assessment.explanation, /keinen zusätzlichen harten Trainingsreiz/i);
 });
+
+test("actual easy run does not inherit long/key badges from a very different planned workout", () => {
+  const plan = [{
+    id: "planned-long",
+    date: "2026-09-20",
+    title: "12 km Long Run",
+    type: "Long Run",
+    distance: 12,
+    keySession: true,
+    goalSessionRole: "long_run",
+  }];
+  const activity = {
+    id: "actual-short",
+    date: "2026-09-20",
+    name: "Lage - 5 km locker",
+    type: "Run",
+    source: "Intervals.icu",
+    distance: 4.7,
+    duration: 33,
+  };
+
+  const assessment = workoutRoleAssessment(activity, { plan });
+  assert.equal(assessment.source, "actual-deviation");
+  assert.equal(assessment.isKeySession, false);
+  assert.equal(assessment.classificationKey, "easy");
+  assert.deepEqual(assessment.markers.map((marker) => marker.key), ["easy"]);
+  assert.match(assessment.context, /Planabweichung/);
+});
+
+test("actual track session does not inherit an easy planned role when the athlete changed the workout", () => {
+  const plan = [{
+    id: "planned-easy",
+    date: "2026-09-19",
+    title: "5 km locker",
+    type: "Easy Run",
+    distance: 5,
+  }];
+  const activity = {
+    id: "actual-track",
+    date: "2026-09-19",
+    name: "ORC Track - Kombi",
+    type: "Run",
+    source: "Intervals.icu",
+    distance: 13.47,
+    duration: 78,
+  };
+
+  const assessment = workoutRoleAssessment(activity, { plan });
+  assert.equal(assessment.source, "actual-deviation");
+  assert.equal(assessment.classificationKey, "quality");
+  assert.deepEqual(assessment.markers.map((marker) => marker.key), ["quality"]);
+});
+
+test("multi-day event continuation uses an event-running marker instead of long-specific", () => {
+  const assessment = workoutRoleAssessment({
+    id: "event-continuation",
+    title: "1. Backyard OWL · mögliche Fortsetzung",
+    type: "Wettkampf-Fortsetzung",
+    eventContinuation: true,
+    notes: "Das Event kann bis in diesen Kalendertag laufen.",
+  });
+
+  assert.equal(assessment.classificationKey, "event");
+  assert.deepEqual(assessment.markers.map((marker) => marker.key), ["event"]);
+  assert.equal(assessment.markers[0].label, "Event läuft");
+});

@@ -9,8 +9,10 @@ import {
 } from "./plannerAvailability.js";
 import {
   buildEventWeek,
+  eventActiveOnDate,
   eventDurationMinutes,
   eventGoalLabel,
+  eventPlanningWindowMinutes,
   eventRelation,
 } from "./goalPlanning.js";
 import {
@@ -1089,6 +1091,29 @@ function addMissionEvents(plan, weekStart, eventWeek) {
       surface: event.surface || "",
       fuelMode: "race",
     }));
+
+    const planningWindowMinutes = eventPlanningWindowMinutes(event);
+    if (planningWindowMinutes > 24 * 60) {
+      for (let continuationIndex = dayIndex + 1; continuationIndex <= 6; continuationIndex += 1) {
+        const continuationDate = isoDate(dateForDay(weekStart, continuationIndex));
+        if (!eventActiveOnDate(event, continuationDate)) break;
+        plan.push(item(weekStart, continuationIndex, {
+          time: "",
+          title: `${event.name || "Event"} · mögliche Fortsetzung`,
+          type: "Wettkampf-Fortsetzung",
+          distance: 0,
+          duration: 0,
+          notes: `Das Event ist mit einem Planungshorizont von ${Math.round(planningWindowMinutes / 60)} h hinterlegt und kann bis in diesen Kalendertag laufen. Kein separater Longrun und keine zusätzliche Trainingseinheit einplanen.`,
+          optional: false,
+          fixed: true,
+          spontaneous: false,
+          eventContinuation: true,
+          targetEventId: event.id || null,
+          goalPriority: event.priority,
+          goalType: event.goalType,
+        }));
+      }
+    }
   });
 }
 
@@ -1120,7 +1145,7 @@ function eventProtectedMobility(entry, eventName, afterEvent = false) {
 function applyEventWeekProtection(plan, weekStart, eventWeek) {
   if (!eventWeek) return plan;
   const protectedPlan = plan.flatMap((entry) => {
-    if (entry.raceEvent || entry.type === "Ruhetag" || entry.preRaceActivation) return [entry];
+    if (entry.raceEvent || entry.eventContinuation || entry.type === "Ruhetag" || entry.preRaceActivation) return [entry];
     const relation = eventRelation(entry.date, eventWeek);
     if (!relation) return [entry];
     const eventName = relation.event.name || "das Event";
@@ -2103,7 +2128,7 @@ export function generateWeekPlan({
   }
 
   if (blockedDates.size) {
-    plan = plan.filter((entry) => entry.raceEvent || !blockedDates.has(entry.date));
+    plan = plan.filter((entry) => entry.raceEvent || entry.eventContinuation || !blockedDates.has(entry.date));
   }
   plan = applyDailyAvailabilityConstraints(plan, effectiveAvailabilityExceptions, weekStart);
 

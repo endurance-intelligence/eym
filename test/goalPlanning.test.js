@@ -2,10 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   buildEventWeek,
+  eventActiveOnDate,
   eventCourseProfile,
+  eventPlanningWindowMinutes,
   eventPolicy,
   missionEvents,
   selectStrategicTarget,
+  eventRelation,
 } from "../src/services/goalPlanning.js";
 
 const mission = {
@@ -149,4 +152,26 @@ test("Backyard course profile separates open-end planning horizon from a true ev
   assert.equal(limited.eventLimitMode, "limited");
   assert.equal(limited.planningHorizonHours, 0);
   assert.equal(limited.eventTimeLimitMinutes, 2160);
+});
+
+test("36 h open Backyard planning window remains active on the following calendar day", () => {
+  const event = {
+    id: "backyard-36h",
+    name: "1. Backyard OWL",
+    date: "2026-09-26",
+    time: "06:00",
+    courseType: "loop",
+    loopMode: "fixed_interval",
+    eventLimitMode: "open",
+    planningHorizonHours: 36,
+  };
+  assert.equal(eventPlanningWindowMinutes(event), 2160);
+  assert.equal(eventActiveOnDate(event, "2026-09-26"), true);
+  assert.equal(eventActiveOnDate(event, "2026-09-27"), true);
+  assert.equal(eventActiveOnDate(event, "2026-09-28"), false);
+
+  const relation = eventRelation("2026-09-27", { events: [event] });
+  assert.equal(relation.active, true);
+  assert.equal(relation.days, 0);
+  assert.equal(relation.continuesFromPreviousDay, true);
 });

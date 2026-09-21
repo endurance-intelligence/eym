@@ -231,6 +231,33 @@ export function eventDurationMinutes(event = {}) {
   return distance ? Math.max(20, Math.round(distance * (distance >= 50 ? 8 : 6.2))) : 60;
 }
 
+export function eventPlanningWindowMinutes(event = {}) {
+  const limitedMinutes = Math.max(0, Number(event.eventTimeLimitMinutes || 0));
+  if (limitedMinutes > 0) return limitedMinutes;
+  if (String(event.eventLimitMode || "") === "open") {
+    const horizonHours = Math.max(0, Number(event.planningHorizonHours || 0));
+    if (horizonHours > 0) return Math.round(horizonHours * 60);
+  }
+  return eventDurationMinutes(event);
+}
+
+function eventStartTimestamp(event = {}) {
+  if (!event.date) return null;
+  const time = /^\d{2}:\d{2}$/.test(String(event.time || "")) ? event.time : "12:00";
+  const value = new Date(`${event.date}T${time}:00`);
+  return Number.isFinite(value.getTime()) ? value.getTime() : null;
+}
+
+export function eventActiveOnDate(event = {}, date = "") {
+  const start = eventStartTimestamp(event);
+  if (start == null || !date) return false;
+  const dayStart = new Date(`${date}T00:00:00`).getTime();
+  const dayEnd = new Date(`${date}T23:59:59`).getTime();
+  if (!Number.isFinite(dayStart) || !Number.isFinite(dayEnd)) return false;
+  const end = start + Math.max(1, eventPlanningWindowMinutes(event)) * 60000;
+  return dayStart <= end && dayEnd >= start;
+}
+
 export function eventGoalLabel(event = {}) {
   return {
     finish: "Teilnehmen und schaffen",
@@ -248,9 +275,14 @@ export function eventRelation(date, eventWeek) {
   return eventWeek.events
     .map((event) => {
       const eventDate = dateAtNoon(event.date);
+      const calendarDays = eventDate ? Math.round((eventDate - input) / DAY_MS) : 999;
+      const active = eventActiveOnDate(event, date);
       return {
         event,
-        days: eventDate ? Math.round((eventDate - input) / DAY_MS) : 999,
+        days: active ? 0 : calendarDays,
+        calendarDays,
+        active,
+        continuesFromPreviousDay: active && calendarDays < 0,
       };
     })
     .sort((left, right) => Math.abs(left.days) - Math.abs(right.days)
