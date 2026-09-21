@@ -112,7 +112,7 @@ test("Pit Crew live view keeps the current plan glanceable and removes duplicate
 
 test("Pit Crew preparation stock persists independently from a live-session reset", () => {
   assert.match(source, /endurance-pit-crew-prep:/);
-  assert.match(source, /window\.localStorage\.setItem\(prepStorageKey/);
+  assert.match(source, /safePitCrewStorageWrite\(prepStorageKey/);
   assert.match(source, /Vorrat & Startplan bleiben erhalten/);
   assert.doesNotMatch(source, /setStockTargets\(\{\}\);/);
 });
@@ -143,7 +143,7 @@ test("Crew sharing preserves the browser user gesture instead of awaiting token 
   assert.match(raceCoachSource, /if \(pitCrewShareToken\)/);
   assert.match(raceCoachSource, /sharePitCrewUrl\(buildPitCrewShareUrl\(pitCrewShareToken\), pitCrewRace\.name\)/);
   assert.match(raceCoachSource, /Crew-Link erstellt ✓ · Jetzt erneut auf „Crew-Link teilen“ klicken/);
-  assert.match(raceCoachSource, /pitCrewShareToken \? "Crew-Link teilen" : "Crew-Link erstellen"/);
+  assert.match(raceCoachSource, /pitCrewShareValidated \? "Crew-Link teilen" : "Crew-Link wird geprüft …"/);
   assert.match(shareSource, /NotAllowedError/);
   assert.match(shareSource, /copyPitCrewUrl/);
 });

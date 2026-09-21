@@ -180,6 +180,8 @@ export function AppProvider({ children }) {
   const [cloudStatus, setCloudStatus] = useState("local");
   const [cloudUpdatedAt, setCloudUpdatedAt] = useState(null);
   const [cloudError, setCloudError] = useState("");
+  const [localStorageMode, setLocalStorageMode] = useState("full");
+  const [localStorageError, setLocalStorageError] = useState("");
   const [imageStorageStatus, setImageStorageStatus] = useState("idle");
   const [imageStorageMessage, setImageStorageMessage] = useState("");
   const [imageMigrationAttempt, setImageMigrationAttempt] = useState(0);
@@ -199,8 +201,20 @@ export function AppProvider({ children }) {
   useEffect(() => { stateRef.current = state; }, [state]);
   useEffect(() => {
     const userId = session?.user?.id || "";
-    if (!userId || localStateUserIdRef.current !== userId || !cloudHydrated.current) return;
-    saveState(state, userId);
+    if (!userId || localStateUserIdRef.current !== userId) return;
+    try {
+      const result = saveState(state, userId);
+      queueMicrotask(() => {
+        setLocalStorageMode(result?.mode || "full");
+        setLocalStorageError("");
+      });
+    } catch (error) {
+      console.error("Local state save failed", error);
+      queueMicrotask(() => {
+        setLocalStorageMode("error");
+        setLocalStorageError(error instanceof Error ? error.message : String(error));
+      });
+    }
   }, [state, session?.user?.id]);
 
   useEffect(() => {
@@ -223,6 +237,8 @@ export function AppProvider({ children }) {
         intervalsAutoSyncStarted.current = false;
         setCloudStatus("local");
         setCloudError("");
+        setLocalStorageMode("full");
+        setLocalStorageError("");
         setCalendarToken(null);
         setCloudUpdatedAt(null);
         setImageStorageStatus("idle");
@@ -250,8 +266,8 @@ export function AppProvider({ children }) {
       const userId = session.user.id;
       const hasAccountState = hasStoredState(userId);
       const local = hasAccountState ? loadState(defaultState, userId) : mergeState(defaultState, {});
+      localStateUserIdRef.current = userId;
       if (hasAccountState) {
-        localStateUserIdRef.current = userId;
         setState(withAccountReviewTrackingStart(local, session.user.created_at));
       }
       setCloudStatus("loading");
@@ -281,7 +297,9 @@ export function AppProvider({ children }) {
         }
         skipNextCloudSave.current = true;
         localStateUserIdRef.current = userId;
-        saveState(hydratedState, userId);
+        const localSave = saveState(hydratedState, userId);
+        setLocalStorageMode(localSave?.mode || "full");
+        setLocalStorageError("");
         setState(hydratedState);
         cloudHydrated.current = true;
         cloudConflict.current = false;
@@ -452,6 +470,7 @@ export function AppProvider({ children }) {
       setCloudUpdatedAt(saved.updated_at);
       cloudUpdatedAtRef.current = saved.updated_at;
       cloudConflict.current = false;
+      cloudHydrated.current = true;
       setCloudStatus("synced");
       flushQueuedImageDeletions(session.user.id, stateForCloud(state)).catch((error) => console.warn("Image cleanup postponed", error));
       return { ok: true, saved };
@@ -482,6 +501,7 @@ export function AppProvider({ children }) {
         cloudUpdatedAtRef.current = cloud.updated_at;
         flushQueuedImageDeletions(session.user.id, cloud.app_data).catch((error) => console.warn("Image cleanup postponed", error));
       }
+      cloudHydrated.current = true;
       cloudConflict.current = false;
       setCloudStatus("synced");
     } catch (error) {
@@ -498,6 +518,8 @@ export function AppProvider({ children }) {
     cloudStatus,
     cloudUpdatedAt,
     cloudError,
+    localStorageMode,
+    localStorageError,
     imageStorageStatus,
     imageStorageMessage,
     retryImageMigration: () => {

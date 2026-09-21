@@ -10,6 +10,7 @@ import {
 
 const defaults = {
   activities: [], activityGroups: [], plan: [], equipment: [], fuel: [], fuelCatalogExclusions: [], reviews: {}, healthCheckins: [],
+  racePrepPlans: [], raceCoachSessions: {},
   coachRecommendationHistory: [],
   mobilityCoach: { equipment: [], physioExerciseIds: [], focusAreaIds: [], knownExerciseIds: [], history: [] },
   appearance: {}, profile: {}, planner: { fixedAppointments: { football: false, orcRun: false, saturdayMode: "off" } },
@@ -42,6 +43,100 @@ test("backup roundtrip keeps relevant athlete data", () => {
   assert.equal(restored.state.planner.trackWorkoutTemplates[0].name, "1200/800 Mix");
   assert.equal(restored.state.coachRecommendationHistory[0].id, "feedback-1");
   assert.ok(restored.createdAt);
+});
+
+test("race prep and race coach sessions survive browser storage roundtrip", () => {
+  const previousStorage = globalThis.localStorage;
+  const memory = new Map();
+  globalThis.localStorage = {
+    getItem: (key) => memory.get(key) ?? null,
+    setItem: (key, value) => memory.set(key, String(value)),
+    removeItem: (key) => memory.delete(key),
+  };
+
+  try {
+    saveState({
+      ...defaults,
+      racePrepPlans: [{ id: "race-prep-1", name: "Backyard" }],
+      raceCoachSessions: { backyard: { setup: { targetDurationMinutes: 900 } } },
+    }, "race-user");
+    const restored = loadState(defaults, "race-user");
+    assert.equal(restored.racePrepPlans[0].id, "race-prep-1");
+    assert.equal(restored.raceCoachSessions.backyard.setup.targetDurationMinutes, 900);
+  } finally {
+    if (previousStorage === undefined) delete globalThis.localStorage;
+    else globalThis.localStorage = previousStorage;
+  }
+});
+
+test("mobile quota falls back to a compact snapshot without losing reviews or the active plan", () => {
+  const previousStorage = globalThis.localStorage;
+  const memory = new Map();
+  globalThis.localStorage = {
+    getItem: (key) => memory.get(key) ?? null,
+    setItem: (key, value) => {
+      const text = String(value);
+      if (!key.endsWith(".recovery") && text.length > 2500) {
+        const error = new Error("The quota has been exceeded.");
+        error.name = "QuotaExceededError";
+        throw error;
+      }
+      memory.set(key, text);
+    },
+    removeItem: (key) => memory.delete(key),
+  };
+
+  try {
+    const result = saveState({
+      ...defaults,
+      plan: [{ id: "plan-1", title: "Backyard Taper" }],
+      reviews: { "activity-1": { feeling: 8, notes: "frisch" } },
+      fuel: [{ id: "fuel-1", name: "Test", imageUrl: `data:image/jpeg;base64,${"A".repeat(6000)}` }],
+    }, "mobile-user");
+    assert.equal(result.mode, "compact");
+    const restored = loadState(defaults, "mobile-user");
+    assert.equal(restored.plan[0].title, "Backyard Taper");
+    assert.equal(restored.reviews["activity-1"].notes, "frisch");
+    assert.equal(restored.fuel[0].imageUrl, "");
+  } finally {
+    if (previousStorage === undefined) delete globalThis.localStorage;
+    else globalThis.localStorage = previousStorage;
+  }
+});
+
+test("recovery snapshot remains usable when Safari refuses the full account key entirely", () => {
+  const previousStorage = globalThis.localStorage;
+  const memory = new Map();
+  globalThis.localStorage = {
+    getItem: (key) => memory.get(key) ?? null,
+    setItem: (key, value) => {
+      if (!key.endsWith(".recovery")) {
+        const error = new Error("The quota has been exceeded.");
+        error.name = "QuotaExceededError";
+        throw error;
+      }
+      memory.set(key, String(value));
+    },
+    removeItem: (key) => memory.delete(key),
+  };
+
+  try {
+    const result = saveState({
+      ...defaults,
+      plan: [{ id: "plan-emergency", title: "Nicht verlieren" }],
+      reviews: { "activity-emergency": { feeling: 7 } },
+      racePrepPlans: [{ id: "race-emergency" }],
+    }, "quota-user");
+    assert.equal(result.mode, "recovery");
+    assert.equal(hasStoredState("quota-user"), true);
+    const restored = loadState(defaults, "quota-user");
+    assert.equal(restored.plan[0].id, "plan-emergency");
+    assert.equal(restored.reviews["activity-emergency"].feeling, 7);
+    assert.equal(restored.racePrepPlans[0].id, "race-emergency");
+  } finally {
+    if (previousStorage === undefined) delete globalThis.localStorage;
+    else globalThis.localStorage = previousStorage;
+  }
 });
 
 test("unrelated JSON is rejected as a backup", () => {

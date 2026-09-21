@@ -121,19 +121,33 @@ export function readPitCrewLocalSnapshot(race = {}, storage = globalThis.window?
 }
 
 export function writePitCrewLocalSnapshot(race = {}, snapshot = {}, storage = globalThis.window?.localStorage) {
-  if (!storage) return;
-  storage.setItem(pitCrewStorageKey(race), JSON.stringify(normalizePitCrewSnapshot(snapshot)));
+  if (!storage) return false;
+  try {
+    storage.setItem(pitCrewStorageKey(race), JSON.stringify(normalizePitCrewSnapshot(snapshot)));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function storedPitCrewShareToken(raceKey, storage = globalThis.window?.localStorage) {
   if (!storage) return "";
-  return String(storage.getItem(`${TOKEN_STORAGE_PREFIX}${cleanRaceKey(raceKey)}`) || "");
+  try {
+    return String(storage.getItem(`${TOKEN_STORAGE_PREFIX}${cleanRaceKey(raceKey)}`) || "");
+  } catch {
+    return "";
+  }
 }
 
 export function rememberPitCrewShareToken(raceKey, token, storage = globalThis.window?.localStorage) {
-  if (!storage || !cleanRaceKey(raceKey)) return;
-  if (token) storage.setItem(`${TOKEN_STORAGE_PREFIX}${cleanRaceKey(raceKey)}`, String(token));
-  else storage.removeItem(`${TOKEN_STORAGE_PREFIX}${cleanRaceKey(raceKey)}`);
+  if (!storage || !cleanRaceKey(raceKey)) return false;
+  try {
+    if (token) storage.setItem(`${TOKEN_STORAGE_PREFIX}${cleanRaceKey(raceKey)}`, String(token));
+    else storage.removeItem(`${TOKEN_STORAGE_PREFIX}${cleanRaceKey(raceKey)}`);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function buildPitCrewShareUrl(token, {

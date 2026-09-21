@@ -81,6 +81,26 @@ function safeStoredSession(key) {
   }
 }
 
+function safePitCrewStorageWrite(key, value) {
+  if (typeof window === "undefined") return false;
+  try {
+    window.localStorage.setItem(key, typeof value === "string" ? value : JSON.stringify(value));
+    return true;
+  } catch (error) {
+    console.warn("Pit Crew local snapshot could not be stored", error);
+    return false;
+  }
+}
+
+function safePitCrewStorageRemove(key) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(key);
+  } catch (error) {
+    console.warn("Pit Crew local snapshot could not be removed", error);
+  }
+}
+
 
 function normalizedLiveSelection(value) {
   return (Array.isArray(value) ? value : [])
@@ -290,12 +310,12 @@ export default function PitCrewLive({ race, onClose }) {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    window.localStorage.setItem(storageKey, JSON.stringify({ anchorAt, history, flags, incomingFlags, incomingAt, incomingRound, athleteFeedback, weather, arrivalRound, arrivalAt, stockIds, stockTargets, packingChecked, customProducts, gelPriority, fuelMode }));
+    safePitCrewStorageWrite(storageKey, { anchorAt, history, flags, incomingFlags, incomingAt, incomingRound, athleteFeedback, weather, arrivalRound, arrivalAt, stockIds, stockTargets, packingChecked, customProducts, gelPriority, fuelMode });
   }, [anchorAt, arrivalAt, arrivalRound, athleteFeedback, customProducts, flags, fuelMode, gelPriority, history, incomingAt, incomingFlags, incomingRound, packingChecked, stockIds, stockTargets, storageKey, weather]);
 
   useEffect(() => {
     if (typeof window === "undefined" || demoActive) return;
-    window.localStorage.setItem(prepStorageKey, JSON.stringify({ stockIds, stockTargets, packingChecked, customProducts, gelPriority }));
+    safePitCrewStorageWrite(prepStorageKey, { stockIds, stockTargets, packingChecked, customProducts, gelPriority });
   }, [customProducts, demoActive, gelPriority, packingChecked, prepStorageKey, stockIds, stockTargets]);
 
   useEffect(() => {
@@ -798,8 +818,8 @@ export default function PitCrewLive({ race, onClose }) {
       };
     }
     if (typeof window !== "undefined") {
-      if (!demoActive) window.localStorage.setItem(baseStorageKey, JSON.stringify({ anchorAt, history, flags, incomingFlags, incomingAt, incomingRound, weather, arrivalRound, arrivalAt, stockIds, stockTargets, customProducts, gelPriority, fuelMode }));
-      window.localStorage.removeItem(`${baseStorageKey}:demo`);
+      if (!demoActive) safePitCrewStorageWrite(baseStorageKey, { anchorAt, history, flags, incomingFlags, incomingAt, incomingRound, weather, arrivalRound, arrivalAt, stockIds, stockTargets, customProducts, gelPriority, fuelMode });
+      safePitCrewStorageRemove(`${baseStorageKey}:demo`);
     }
     setDemoActive(true);
     setDemoRound(0);
@@ -1174,7 +1194,7 @@ export default function PitCrewLive({ race, onClose }) {
     }
     const confirmed = typeof window === "undefined" || window.confirm("Wirklich die gesamte Live-Session löschen? Alle gespeicherten Pits, Statusmeldungen und Crew-Daten dieser Session werden zurückgesetzt.");
     if (!confirmed) return;
-    if (typeof window !== "undefined") window.localStorage.removeItem(storageKey);
+    safePitCrewStorageRemove(storageKey);
     setHistory([]);
     setFlags([]);
     setIncomingFlags([]);

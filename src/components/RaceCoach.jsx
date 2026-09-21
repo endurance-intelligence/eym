@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useApp } from "../context/AppContext";
 import { missionEvents } from "../services/goalPlanning";
@@ -32,6 +32,7 @@ import {
   rememberPitCrewShareToken,
   sharePitCrewUrl,
   storedPitCrewShareToken,
+  validatePitCrewShare,
 } from "../services/pitCrewShare.js";
 import "./FuelPartner.css";
 
@@ -197,6 +198,8 @@ export default function RaceCoach() {
   const [pitCrewShareTokens, setPitCrewShareTokens] = useState({});
   const [pitCrewShareBusy, setPitCrewShareBusy] = useState(false);
   const [pitCrewShareMessage, setPitCrewShareMessage] = useState("");
+  const [validatedPitCrewToken, setValidatedPitCrewToken] = useState("");
+  const pitCrewValidationKeyRef = useRef("");
   const sources = useMemo(() => sourceOptions(state), [state]);
   const requestedSource = searchParams.get("race");
   const source = sources.find((item) => item.key === requestedSource) || sources[0] || null;
@@ -267,6 +270,41 @@ export default function RaceCoach() {
   const pitCrewShareToken = sourceKey
     ? (pitCrewShareTokens[sourceKey] || storedPitCrewShareToken(sourceKey))
     : "";
+  const pitCrewShareValidated = Boolean(pitCrewShareToken && validatedPitCrewToken === pitCrewShareToken);
+
+  useEffect(() => {
+    if (!sourceKey || !pitCrewShareToken) {
+      pitCrewValidationKeyRef.current = "";
+      return undefined;
+    }
+    const validationKey = `${sourceKey}:${pitCrewShareToken}`;
+    if (pitCrewValidationKeyRef.current === validationKey) return undefined;
+    pitCrewValidationKeyRef.current = validationKey;
+    let active = true;
+    validatePitCrewShare({ raceKey: sourceKey, token: pitCrewShareToken })
+      .then((valid) => {
+        if (!active) return;
+        if (valid) {
+          setValidatedPitCrewToken(pitCrewShareToken);
+          return;
+        }
+        setValidatedPitCrewToken("");
+        rememberPitCrewShareToken(sourceKey, "");
+        setPitCrewShareTokens((current) => {
+          const next = { ...current };
+          delete next[sourceKey];
+          return next;
+        });
+        setPitCrewShareMessage("Der gespeicherte Crew-Link war veraltet. Bitte einmal neu erstellen und danach teilen.");
+        pitCrewValidationKeyRef.current = "";
+      })
+      .catch((error) => {
+        if (!active) return;
+        pitCrewValidationKeyRef.current = "";
+        setPitCrewShareMessage(error?.message || "Crew-Link konnte nicht geprüft werden.");
+      });
+    return () => { active = false; };
+  }, [pitCrewShareToken, sourceKey]);
 
   async function sharePitCrew() {
     if (!pitCrewRace || !sourceKey || pitCrewShareBusy) return;
@@ -275,6 +313,10 @@ export default function RaceCoach() {
     // Web Share requires a live user gesture. If we already have a token,
     // call navigator.share immediately from this click before any network await.
     if (pitCrewShareToken) {
+      if (!pitCrewShareValidated) {
+        setPitCrewShareMessage("Crew-Link wird noch geprüft. Bitte kurz erneut tippen, sobald er bereit ist.");
+        return;
+      }
       setPitCrewShareBusy(true);
       try {
         const result = await sharePitCrewUrl(buildPitCrewShareUrl(pitCrewShareToken), pitCrewRace.name);
@@ -302,6 +344,8 @@ export default function RaceCoach() {
       });
       rememberPitCrewShareToken(sourceKey, created.token);
       setPitCrewShareTokens((current) => ({ ...current, [sourceKey]: created.token }));
+      setValidatedPitCrewToken(created.token);
+      pitCrewValidationKeyRef.current = `${sourceKey}:${created.token}`;
       setPitCrewShareMessage("Crew-Link erstellt ✓ · Jetzt erneut auf „Crew-Link teilen“ klicken.");
     } catch (error) {
       setPitCrewShareMessage(error?.message || "Crew-Link konnte nicht erstellt werden.");
@@ -564,7 +608,7 @@ export default function RaceCoach() {
           </div>
           <div className="pit-crew-launch-actions">
             <button type="button" onClick={() => setPitCrewOpen(true)}>Pit Crew Live öffnen</button>
-            <button type="button" className="secondary" disabled={pitCrewShareBusy} onClick={sharePitCrew}>{pitCrewShareBusy ? "Crew-Link wird vorbereitet …" : pitCrewShareToken ? "Crew-Link teilen" : "Crew-Link erstellen"}</button>
+            <button type="button" className="secondary" disabled={pitCrewShareBusy || Boolean(pitCrewShareToken && !pitCrewShareValidated)} onClick={sharePitCrew}>{pitCrewShareBusy ? "Crew-Link wird vorbereitet …" : pitCrewShareToken ? pitCrewShareValidated ? "Crew-Link teilen" : "Crew-Link wird geprüft …" : "Crew-Link erstellen"}</button>
           </div>
           {pitCrewShareMessage && <p className="pit-crew-share-message">{pitCrewShareMessage}</p>}
         </section>

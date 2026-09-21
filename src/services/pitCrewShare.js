@@ -57,6 +57,14 @@ export async function createPitCrewShare({ raceKey, race, state }) {
   };
 }
 
+export async function validatePitCrewShare({ raceKey, token }) {
+  const data = await invokeShare("validate", {
+    raceKey: cleanRaceKey(raceKey),
+    token: String(token || ""),
+  });
+  return Boolean(data.valid);
+}
+
 export async function loadPitCrewShare(token) {
   const data = await invokeShare("get", { token: String(token || "") });
   return {

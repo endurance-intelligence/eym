@@ -619,3 +619,32 @@ details.card{box-shadow:none}
   opacity:1;
 }
 .shell main .planner-overview-volume small{font-size:11px}
+
+/* v4.1.36 – iOS mobile shell: respect rounded viewport edges and clip nested surfaces cleanly */
+@media(max-width:800px){
+  .shell>aside{
+    overflow:hidden;
+    padding-left:max(12px,env(safe-area-inset-left));
+    padding-right:max(12px,env(safe-area-inset-right));
+    background-clip:padding-box;
+  }
+  .shell nav{
+    overscroll-behavior-x:contain;
+    -webkit-overflow-scrolling:touch;
+  }
+  .content{
+    padding-left:max(14px,env(safe-area-inset-left));
+    padding-right:max(14px,env(safe-area-inset-right));
+  }
+  .today-card.premium-briefing-card,
+  .today-card.premium-briefing-card .today-workout-row{
+    overflow:hidden;
+    background-clip:padding-box;
+  }
+}
+@media(max-width:520px){
+  .content{
+    padding-left:max(12px,env(safe-area-inset-left));
+    padding-right:max(12px,env(safe-area-inset-right));
+  }
+}

@@ -89,6 +89,17 @@ async function shareByToken(admin: ReturnType<typeof adminClient>, token: string
   return data;
 }
 
+async function ownerRaceShare(admin: ReturnType<typeof adminClient>, ownerUserId: string, raceKey: string) {
+  const { data, error } = await admin
+    .from("pit_crew_shares")
+    .select("id,token_hash,expires_at")
+    .eq("owner_user_id", ownerUserId)
+    .eq("race_key", raceKey)
+    .maybeSingle();
+  if (error) throw error;
+  return data || null;
+}
+
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (request.method !== "POST") return json({ ok: false, message: "Nur POST wird unterstützt." }, 405);
@@ -124,6 +135,17 @@ Deno.serve(async (request) => {
         .single();
       if (error) throw error;
       return json({ ok: true, token, revision: data.revision, expiresAt: data.expires_at });
+    }
+
+    if (action === "validate") {
+      const user = await authenticatedUser(request, admin);
+      if (!user) return json({ ok: false, message: "Crew-Link-Prüfung benötigt deinen EI-Login." }, 401);
+      const raceKey = cleanRaceKey(payload?.raceKey);
+      const token = String(payload?.token || "");
+      if (!raceKey || !TOKEN_PATTERN.test(token)) return json({ ok: true, valid: false });
+      const row = await ownerRaceShare(admin, user.id, raceKey);
+      if (!row || expired(row.expires_at)) return json({ ok: true, valid: false });
+      return json({ ok: true, valid: row.token_hash === await tokenHash(token) });
     }
 
     if (action === "get") {

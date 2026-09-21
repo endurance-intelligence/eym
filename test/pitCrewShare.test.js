@@ -38,6 +38,17 @@ test("crew share token is stored per race", () => {
   assert.equal(storedPitCrewShareToken("other-race", storage), "token-two");
 });
 
+test("Pit Crew local persistence degrades safely when mobile storage is full", () => {
+  const fullStorage = {
+    getItem: () => { throw new Error("The quota has been exceeded."); },
+    setItem: () => { throw new Error("The quota has been exceeded."); },
+    removeItem: () => { throw new Error("The quota has been exceeded."); },
+  };
+  assert.equal(storedPitCrewShareToken("backyard-2026", fullStorage), "");
+  assert.equal(rememberPitCrewShareToken("backyard-2026", "token", fullStorage), false);
+  assert.equal(writePitCrewLocalSnapshot({ key: "backyard-2026" }, { history: [] }, fullStorage), false);
+});
+
 test("shared pit snapshot preserves only race-operation state", () => {
   const storage = memoryStorage();
   const race = { key: "backyard-2026", date: "2026-09-26" };
@@ -97,10 +108,15 @@ test("shared Pit Crew snapshot preserves editable stock targets", () => {
 test("Pit Crew share is deployable without an EI login and mobile loading can recover", async () => {
   const config = await import("node:fs/promises").then(({ readFile }) => readFile(new URL("../supabase/config.toml", import.meta.url), "utf8"));
   const sharedSource = await import("node:fs/promises").then(({ readFile }) => readFile(new URL("../src/components/PitCrewSharedSession.jsx", import.meta.url), "utf8"));
+  const ownerSource = await import("node:fs/promises").then(({ readFile }) => readFile(new URL("../src/components/RaceCoach.jsx", import.meta.url), "utf8"));
+  const functionSource = await import("node:fs/promises").then(({ readFile }) => readFile(new URL("../supabase/functions/pit-crew-share/index.ts", import.meta.url), "utf8"));
   assert.match(config, /\[functions\.pit-crew-share\]\s+verify_jwt = false/);
   assert.match(sharedSource, /INITIAL_RETRY_DELAYS/);
   assert.match(sharedSource, /Erneut versuchen/);
   assert.match(sharedSource, /window\.addEventListener\("online"/);
   assert.match(sharedSource, /document\.addEventListener\("visibilitychange"/);
   assert.match(sharedSource, /setError\(""\);\s*if \(Number\(remote\.revision/);
+  assert.match(functionSource, /action === "validate"/);
+  assert.match(ownerSource, /validatePitCrewShare/);
+  assert.match(ownerSource, /Crew-Link wird geprüft/);
 });
