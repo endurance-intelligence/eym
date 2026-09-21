@@ -2989,3 +2989,59 @@ button:focus-visible,a:focus-visible,summary:focus-visible{
     min-height:0;
   }
 }
+
+
+/* v4.1.40 – flatten briefing hero */
+.today-card.premium-briefing-card{
+  padding:18px 20px;
+  border-radius:22px;
+  background:
+    radial-gradient(circle at top left, rgba(126,237,169,.07), transparent 24%),
+    linear-gradient(145deg, color-mix(in srgb,var(--bg-card) 98%, #12263d), color-mix(in srgb,var(--bg-card-alt) 96%, #0a1627));
+}
+.today-card.premium-briefing-card::after{box-shadow:none}
+.today-columns-grid{gap:18px}
+.today-card.premium-briefing-card .today-hero-column,
+.today-card.premium-briefing-card .today-side-panel{
+  min-height:auto;
+  padding:0;
+  border:0;
+  border-radius:0;
+  background:transparent;
+  box-shadow:none;
+}
+.today-card.premium-briefing-card .today-hero-column::before,
+.today-card.premium-briefing-card .today-side-panel::before{display:none}
+.today-card.premium-briefing-card .today-side-panel{
+  padding-left:18px;
+  border-left:1px solid color-mix(in srgb,var(--accent-border) 18%, var(--border));
+}
+.today-card.premium-briefing-card .today-card-heading,
+.today-card.premium-briefing-card .today-upcoming-heading-hero{
+  margin-bottom:10px;
+}
+.today-card.premium-briefing-card .today-upcoming-preview{gap:10px}
+.today-card.premium-briefing-card .today-workout-row{
+  border-radius:18px;
+  min-height:104px;
+  background:linear-gradient(145deg,rgba(255,255,255,.02),rgba(255,255,255,.01));
+}
+.today-card.premium-briefing-card .today-upcoming-item{
+  border-radius:16px;
+  min-height:80px;
+  align-content:center;
+  background:linear-gradient(145deg,var(--bg-input),color-mix(in srgb,var(--bg-input) 88%,#130a24));
+}
+@media(max-width:1040px){
+  .today-columns-grid{gap:14px}
+  .today-card.premium-briefing-card .today-side-panel{
+    padding-left:0;
+    padding-top:14px;
+    border-left:0;
+    border-top:1px solid color-mix(in srgb,var(--accent-border) 18%, var(--border));
+  }
+}
+@media(max-width:560px){
+  .today-card.premium-briefing-card{padding:14px 15px}
+  .today-card.premium-briefing-card .today-workout-row{padding-right:48px}
+}

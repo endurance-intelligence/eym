@@ -12,3 +12,66 @@
 .race-weather-track{display:grid;gap:10px;padding-top:2px}.race-weather-track-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.race-weather-track-head span{display:block;color:var(--accent-bright);font-size:8px;font-weight:900;letter-spacing:.1em}.race-weather-track-head strong{display:block;margin-top:2px;font-size:13px}.race-weather-track-head small{color:var(--muted-bright);font-size:9px;font-weight:750}.race-weather-track-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}.race-weather-track-grid article{display:grid;gap:4px;padding:9px;border:1px solid var(--border);border-radius:10px;background:var(--bg-input)}.race-weather-track-grid article.tone-hard{border-color:color-mix(in srgb,#e34242 70%,var(--border));background:color-mix(in srgb,#e34242 7%,var(--bg-input))}.race-weather-track-grid article.tone-warn{border-color:color-mix(in srgb,#e1a22a 68%,var(--border))}.race-weather-track-grid article.tone-good{border-color:color-mix(in srgb,#47ad69 50%,var(--border))}.race-weather-track-grid span{color:var(--muted);font-size:8px;font-weight:850}.race-weather-track-grid strong{font-size:11px}.race-weather-track-grid b{font-size:9px}.race-weather-track-grid p{margin:0;color:var(--muted-bright);font-size:8px;line-height:1.35}.race-weather-track-note{margin:0;color:var(--muted);font-size:9px;line-height:1.45}
 @media(max-width:1050px){.race-weather-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.race-weather-track-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.race-weather-sections{grid-template-columns:repeat(2,minmax(0,1fr))}.race-weather-section-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:700px){.race-weather-strategy{padding:12px}.race-weather-heading,.race-weather-track-head{display:grid}.race-weather-heading>small{justify-self:start}.race-weather-summary,.race-weather-sections,.race-weather-track-grid{grid-template-columns:1fr}.race-weather-section-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.race-weather-section-head{grid-template-columns:auto 1fr}.race-weather-impact{grid-column:1/-1;justify-self:start}.race-weather-track-head small{text-align:left}}
+
+
+/* v4.1.40 – simplify race weather cards */
+.race-weather-strategy{
+  gap:16px;
+  padding:18px;
+  border-radius:18px;
+}
+.race-weather-summary{gap:10px}
+.race-weather-summary article{
+  border-radius:12px;
+  background:linear-gradient(145deg,var(--bg-input),color-mix(in srgb,var(--bg-input) 92%,#10253e));
+}
+.race-weather-sections{
+  grid-template-columns:1fr;
+  gap:12px;
+}
+.race-weather-section-card{
+  gap:12px;
+  padding:14px;
+  border-radius:14px;
+  background:linear-gradient(145deg,rgba(255,255,255,.02),rgba(255,255,255,.01));
+}
+.race-weather-section-head{
+  grid-template-columns:auto minmax(0,1fr) auto;
+  align-items:center;
+}
+.race-weather-section-head strong{font-size:14px}
+.race-weather-section-head span{font-size:10px}
+.race-weather-impact{padding:5px 9px;font-size:9px}
+.race-weather-section-metrics{
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:8px;
+}
+.race-weather-section-metrics>span{
+  gap:3px;
+  padding:10px;
+  border-radius:10px;
+  background:color-mix(in srgb,var(--bg-sidebar) 92%, transparent);
+}
+.race-weather-section-metrics small{font-size:8px}
+.race-weather-section-metrics b{font-size:11px}
+.race-weather-route-wind,.race-weather-coach{padding:10px 11px;border-radius:11px}
+.race-weather-route-wind strong,.race-weather-coach strong{font-size:11px}
+.race-weather-sections ul{
+  gap:6px;
+  padding-left:18px;
+  font-size:10px;
+}
+.race-weather-track-grid{gap:9px}
+.race-weather-track-grid article{padding:10px;border-radius:11px}
+.race-weather-track-grid strong{font-size:12px}
+.race-weather-track-grid b,.race-weather-track-grid p{font-size:10px;line-height:1.4}
+@media(max-width:1050px){
+  .race-weather-sections{grid-template-columns:1fr}
+}
+@media(max-width:700px){
+  .race-weather-strategy{padding:14px}
+  .race-weather-section-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:520px){
+  .race-weather-section-metrics{grid-template-columns:1fr}
+}
