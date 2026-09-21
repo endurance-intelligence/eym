@@ -250,14 +250,15 @@ export const PIT_CREW_PRODUCTS = [
   },
   {
     id: "cucumber",
-    label: "Gurke",
+    label: "Hengstenberg KNAX Gewürzgurken",
     icon: "🥒",
     category: "refresh",
-    traits: ["savory", "refresh", "neutral"],
-    estimated: true,
+    traits: ["savory", "salty", "refresh"],
+    nutritionSource: "label",
+    stockNote: "670-ml-Glas · 360 g Abtropfgewicht",
     portions: [
-      { id: "50", label: "50 g", carbs: 1, fluidMl: 0, caffeineMg: 0 },
-      { id: "100", label: "100 g", carbs: 2, fluidMl: 0, caffeineMg: 0 },
+      { id: "50", label: "50 g Gewürzgurken", carbs: 2, fluidMl: 0, caffeineMg: 0 },
+      { id: "100", label: "100 g Gewürzgurken", carbs: 4, fluidMl: 0, caffeineMg: 0 },
     ],
   },
   {
@@ -895,7 +896,7 @@ export function buildPitCrewStartStock(race = {}, gelPriority = PIT_CREW_DEFAULT
     { id: "fusilli", label: "Fusilli / Nudeln", icon: "🍝", quantity: Math.max(4, Math.ceil(hours * 0.18)), unit: "kleine Portionen", category: "food" },
     { id: "salt-sticks", label: "Salzstangen / Brezeln", icon: "🥨", quantity: Math.max(2, Math.ceil(hours / 18)), unit: "Packungen", category: "food" },
     { id: "broth", label: "Brühe", icon: "☕", quantity: Math.max(6, Math.ceil(hours * 0.25)), unit: "Tassen", category: "food" },
-    { id: "cucumber", label: "Gurke", icon: "🥒", quantity: Math.max(2, Math.ceil(hours / 24)), unit: "Stück", category: "food" },
+    { id: "cucumber", label: "Hengstenberg KNAX Gewürzgurken", icon: "🥒", quantity: Math.max(1, Math.ceil(hours / 24)), unit: "Glas à 360 g Abtropfgewicht", category: "food", note: "670 ml Nettofüllmenge · 360 g Abtropfgewicht · ca. 7 × 50-g-Portionen pro Glas" },
     { id: "cola", label: "Cola", icon: "🥤", quantity: colaCans, unit: "Dosen à 330 ml", category: "drink", note: `${formatLiters(colaCans * 0.33)} l Gesamtmenge · Einkauf und Vorrat direkt in Dosen` },
     { id: "haribo", label: "Haribo Roulette", icon: "🍬", quantity: Math.max(2, Math.ceil(hours / 15)), unit: "Packungen à 6 Rollen", category: "food", note: `${Math.max(2, Math.ceil(hours / 15)) * 6} Rollen gesamt · 150 g / Packung · 1 Rolle = 25 g ≈ 19,3 g KH` },
   ];

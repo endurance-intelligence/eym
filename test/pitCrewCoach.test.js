@@ -478,3 +478,23 @@ test("Waldmeister is an estimated 45 g carb drink per 500 ml and supports Iso fa
   assert.equal(ids.includes("waldmeister"), true);
   assert.ok(recommendation.summary.carbs >= 60);
 });
+
+
+test("KNAX cucumber uses the actual jar and label nutrition instead of a fresh cucumber", () => {
+  const product = PIT_CREW_PRODUCTS.find((candidate) => candidate.id === "cucumber");
+  const portion50 = product?.portions?.find((portion) => portion.id === "50");
+  const plan24 = buildPitCrewStartStock({ planningHorizonHours: 24 });
+  const stock24 = plan24.items.find((item) => item.id === "cucumber");
+  const plan36 = buildPitCrewStartStock({ planningHorizonHours: 36 });
+  const stock36 = plan36.items.find((item) => item.id === "cucumber");
+
+  assert.equal(product?.label, "Hengstenberg KNAX Gewürzgurken");
+  assert.equal(product?.estimated, undefined);
+  assert.ok(product?.traits?.includes("salty"));
+  assert.equal(portion50?.carbs, 2);
+  assert.match(product?.stockNote || "", /360 g Abtropfgewicht/);
+  assert.equal(stock24?.quantity, 1);
+  assert.equal(stock24?.unit, "Glas à 360 g Abtropfgewicht");
+  assert.match(stock24?.note || "", /7 × 50-g-Portionen/);
+  assert.equal(stock36?.quantity, 2);
+});
