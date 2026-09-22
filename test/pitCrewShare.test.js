@@ -115,8 +115,17 @@ test("Pit Crew share is deployable without an EI login and mobile loading can re
   assert.match(sharedSource, /Erneut versuchen/);
   assert.match(sharedSource, /window\.addEventListener\("online"/);
   assert.match(sharedSource, /document\.addEventListener\("visibilitychange"/);
-  assert.match(sharedSource, /setError\(""\);\s*if \(Number\(remote\.revision/);
+  assert.match(sharedSource, /setError\(""\);[\s\S]*setSyncStatus\("synced"\);[\s\S]*if \(Number\(remote\.revision/);
   assert.match(functionSource, /action === "validate"/);
   assert.match(ownerSource, /validatePitCrewShare/);
   assert.match(ownerSource, /Crew-Link wird geprüft/);
+});
+
+test("direct shared Crew session has no forced exit and pauses sync while iOS is backgrounded", async () => {
+  const sharedSource = await import("node:fs/promises").then(({ readFile }) => readFile(new URL("../src/components/PitCrewSharedSession.jsx", import.meta.url), "utf8"));
+  assert.doesNotMatch(sharedSource, /window\.location\.assign/);
+  assert.match(sharedSource, /onClose=\{onClose\} sharedMode syncStatus=\{syncStatus\}/);
+  assert.match(sharedSource, /document\.visibilityState !== "visible"/);
+  assert.match(sharedSource, /setSyncStatus\("offline"\)/);
+  assert.match(sharedSource, /setSyncStatus\("synced"\)/);
 });

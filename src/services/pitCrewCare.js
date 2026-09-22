@@ -15,8 +15,8 @@ function hourNumber(elapsedMinutes = 0) {
 function careLimit(mode) {
   if (mode === "go") return 2;
   if (mode === "quick") return 2;
-  if (mode === "compact") return 2;
-  return 3;
+  if (mode === "compact") return 3;
+  return 6;
 }
 
 function rank(items = []) {

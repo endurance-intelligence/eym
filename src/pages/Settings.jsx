@@ -320,7 +320,7 @@ export default function Settings() {
   }
 
   const calendarUrl = calendarToken ? calendarSubscriptionUrl(calendarToken) : "";
-  const cloudStatusLabel = { local: "Nur lokal", loading: "Cloud wird geladen …", saving: "Wird gespeichert …", synced: "Synchronisiert", conflict: "Neuerer Stand auf einem anderen Gerät", error: "Synchronisierung fehlgeschlagen" }[cloudStatus] || cloudStatus;
+  const cloudStatusLabel = { local: "Nur lokal", loading: "Cloud wird geladen …", saving: "Wird gespeichert …", reconciling: "Cloud wird abgeglichen …", pending: "Lokal gesichert · Cloud-Abgleich offen", synced: "Synchronisiert", conflict: "Neuerer Stand auf einem anderen Gerät", error: "Synchronisierung fehlgeschlagen" }[cloudStatus] || cloudStatus;
 
   return <>
     <PageTitle eyebrow="Settings" title="Deine Konfiguration" />

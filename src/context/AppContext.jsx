@@ -161,6 +161,18 @@ function stateForCloud(state) {
   return cloudState;
 }
 
+function stableCloudSignature(value) {
+  const normalize = (input) => {
+    if (Array.isArray(input)) return input.map(normalize);
+    if (!input || typeof input !== "object") return input;
+    return Object.keys(input).sort().reduce((result, key) => {
+      result[key] = normalize(input[key]);
+      return result;
+    }, {});
+  };
+  return JSON.stringify(normalize(value));
+}
+
 function withAccountReviewTrackingStart(state, accountCreatedAt) {
   const startDate = accountReviewTrackingStartDate(state, accountCreatedAt);
   if (state.profile?.reviewTrackingStartDate === startDate) return state;
@@ -193,6 +205,10 @@ export function AppProvider({ children }) {
   const cloudUpdatedAtRef = useRef(null);
   const cloudConflict = useRef(false);
   const cloudSaveQueue = useRef(Promise.resolve());
+  const cloudSaveGeneration = useRef(0);
+  const localChangeVersion = useRef(0);
+  const localDirtySinceCloud = useRef(false);
+  const resumeSyncBusy = useRef(false);
   const imageMigrationStarted = useRef(false);
   const stateRef = useRef(state);
   const sessionUserIdRef = useRef(null);
@@ -233,6 +249,10 @@ export function AppProvider({ children }) {
         skipNextCloudSave.current = false;
         cloudUpdatedAtRef.current = null;
         cloudConflict.current = false;
+        cloudSaveGeneration.current += 1;
+        localChangeVersion.current = 0;
+        localDirtySinceCloud.current = false;
+        resumeSyncBusy.current = false;
         imageMigrationStarted.current = false;
         intervalsAutoSyncStarted.current = false;
         setCloudStatus("local");
@@ -303,6 +323,8 @@ export function AppProvider({ children }) {
         setState(hydratedState);
         cloudHydrated.current = true;
         cloudConflict.current = false;
+        localDirtySinceCloud.current = false;
+        cloudSaveGeneration.current += 1;
         setCloudStatus("synced");
       } catch (error) {
         console.error("Supabase hydration failed", error);
@@ -323,28 +345,49 @@ export function AppProvider({ children }) {
     if (!session?.user?.id || !cloudHydrated.current || cloudConflict.current) return;
     if (skipNextCloudSave.current) {
       skipNextCloudSave.current = false;
+      localDirtySinceCloud.current = false;
       return;
     }
-    const timer = window.setTimeout(async () => {
+
+    localDirtySinceCloud.current = true;
+    const changeVersion = ++localChangeVersion.current;
+    const generation = cloudSaveGeneration.current;
+    const appVisible = typeof document === "undefined" || document.visibilityState === "visible";
+    const online = globalThis.navigator?.onLine !== false;
+    if (!appVisible || !online) {
+      queueMicrotask(() => {
+        if (!cloudConflict.current) {
+          setCloudStatus("pending");
+          setCloudError(online ? "Änderungen sind lokal gesichert und werden nach Rückkehr in die App abgeglichen." : "Offline · Änderungen sind lokal gesichert.");
+        }
+      });
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
       const userId = session.user.id;
       const snapshot = stateForCloud(state);
       cloudSaveQueue.current = cloudSaveQueue.current.catch(() => {}).then(async () => {
-        if (cloudConflict.current) return;
+        if (cloudConflict.current || generation !== cloudSaveGeneration.current) return;
+        if (document.visibilityState !== "visible" || globalThis.navigator?.onLine === false) return;
         setCloudStatus("saving");
         setCloudError("");
         try {
           const saved = await saveCloudState(userId, snapshot, { expectedUpdatedAt: cloudUpdatedAtRef.current });
+          if (generation !== cloudSaveGeneration.current) return;
           setCalendarToken(saved.calendar_token);
           setCloudUpdatedAt(saved.updated_at);
           cloudUpdatedAtRef.current = saved.updated_at;
-          setCloudStatus("synced");
+          if (localChangeVersion.current === changeVersion) localDirtySinceCloud.current = false;
+          setCloudStatus(localDirtySinceCloud.current ? "pending" : "synced");
           flushQueuedImageDeletions(userId, snapshot).catch((error) => console.warn("Image cleanup postponed", error));
         } catch (error) {
           console.error("Supabase save failed", error);
+          if (generation !== cloudSaveGeneration.current) return;
           if (error instanceof CloudConflictError || error?.code === "CLOUD_CONFLICT") {
             cloudConflict.current = true;
             setCloudStatus("conflict");
-            setCloudError("Auf einem anderen Gerät liegt ein neuerer Stand. Wähle in den Settings aus, welchen Stand du behalten möchtest.");
+            setCloudError("Auf einem anderen Gerät liegt ein neuerer Stand. EI hat lokal nichts verworfen.");
           } else {
             setCloudStatus("error");
             setCloudError(error instanceof Error ? error.message : String(error));
@@ -354,6 +397,123 @@ export function AppProvider({ children }) {
     }, 1200);
     return () => window.clearTimeout(timer);
   }, [state, session]);
+
+  useEffect(() => {
+    const userId = session?.user?.id;
+    if (!userId) return undefined;
+    let active = true;
+
+    async function reconcileAfterResume() {
+      if (!active || !cloudHydrated.current || cloudConflict.current || resumeSyncBusy.current) return;
+      if (globalThis.navigator?.onLine === false) {
+        setCloudStatus("pending");
+        setCloudError("Offline · Änderungen sind lokal gesichert.");
+        return;
+      }
+      resumeSyncBusy.current = true;
+      const generation = ++cloudSaveGeneration.current;
+      setCloudStatus("reconciling");
+      setCloudError("");
+      try {
+        await cloudSaveQueue.current.catch(() => {});
+        const cloud = await loadCloudState(userId);
+        if (!active || generation !== cloudSaveGeneration.current || sessionUserIdRef.current !== userId) return;
+        const remoteUpdatedAt = cloud?.updated_at || null;
+        const remoteChanged = Boolean(remoteUpdatedAt && remoteUpdatedAt !== cloudUpdatedAtRef.current);
+        const localDirty = localDirtySinceCloud.current;
+        const localSnapshot = stateForCloud(stateRef.current);
+        const remoteSnapshot = cloud?.app_data || {};
+        const samePayload = stableCloudSignature(localSnapshot) === stableCloudSignature(remoteSnapshot);
+
+        if (remoteChanged && localDirty && !samePayload) {
+          cloudConflict.current = true;
+          setCloudStatus("conflict");
+          setCloudError("Cloud und dieses Gerät wurden beide geändert. Lokal bleibt alles erhalten; bitte in Settings entscheiden.");
+          return;
+        }
+
+        if (remoteChanged && !localDirty && cloud?.app_data) {
+          skipNextCloudSave.current = true;
+          const hydrated = withAccountReviewTrackingStart(mergeState(stateRef.current, cloud.app_data), session?.user?.created_at);
+          setState(hydrated);
+          setCalendarToken(cloud.calendar_token);
+          setCloudUpdatedAt(remoteUpdatedAt);
+          cloudUpdatedAtRef.current = remoteUpdatedAt;
+          localDirtySinceCloud.current = false;
+          setCloudStatus("synced");
+          return;
+        }
+
+        if (samePayload) {
+          setCalendarToken(cloud?.calendar_token || null);
+          setCloudUpdatedAt(remoteUpdatedAt);
+          cloudUpdatedAtRef.current = remoteUpdatedAt;
+          localDirtySinceCloud.current = false;
+          setCloudStatus("synced");
+          return;
+        }
+
+        if (localDirty) {
+          const changeVersion = localChangeVersion.current;
+          const saved = await saveCloudState(userId, localSnapshot, { expectedUpdatedAt: remoteUpdatedAt || cloudUpdatedAtRef.current });
+          if (!active || generation !== cloudSaveGeneration.current) return;
+          setCalendarToken(saved.calendar_token);
+          setCloudUpdatedAt(saved.updated_at);
+          cloudUpdatedAtRef.current = saved.updated_at;
+          if (localChangeVersion.current === changeVersion) localDirtySinceCloud.current = false;
+          setCloudStatus(localDirtySinceCloud.current ? "pending" : "synced");
+          return;
+        }
+
+        setCloudUpdatedAt(remoteUpdatedAt);
+        cloudUpdatedAtRef.current = remoteUpdatedAt;
+        setCloudStatus("synced");
+      } catch (error) {
+        if (!active || generation !== cloudSaveGeneration.current) return;
+        if (error instanceof CloudConflictError || error?.code === "CLOUD_CONFLICT") {
+          cloudConflict.current = true;
+          setCloudStatus("conflict");
+          setCloudError("Cloud und dieses Gerät wurden beide geändert. Lokal bleibt alles erhalten.");
+        } else {
+          setCloudStatus(globalThis.navigator?.onLine === false ? "pending" : "error");
+          setCloudError(globalThis.navigator?.onLine === false ? "Offline · Änderungen sind lokal gesichert." : (error instanceof Error ? error.message : String(error)));
+        }
+      } finally {
+        resumeSyncBusy.current = false;
+      }
+    }
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        cloudSaveGeneration.current += 1;
+        if (localDirtySinceCloud.current && !cloudConflict.current) {
+          setCloudStatus("pending");
+          setCloudError("Änderungen sind lokal gesichert. Cloud-Abgleich beim Öffnen der App.");
+        }
+        return;
+      }
+      void reconcileAfterResume();
+    };
+    const onPageShow = () => void reconcileAfterResume();
+    const onOnline = () => void reconcileAfterResume();
+    const onOffline = () => {
+      cloudSaveGeneration.current += 1;
+      setCloudStatus("pending");
+      setCloudError("Offline · Änderungen sind lokal gesichert.");
+    };
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("pageshow", onPageShow);
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
+    return () => {
+      active = false;
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("pageshow", onPageShow);
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
+    };
+  }, [session?.user?.created_at, session?.user?.id]);
 
   useEffect(() => {
     if (!session?.user?.id || cloudStatus !== "synced" || imageMigrationStarted.current) return;
@@ -471,6 +631,8 @@ export function AppProvider({ children }) {
       cloudUpdatedAtRef.current = saved.updated_at;
       cloudConflict.current = false;
       cloudHydrated.current = true;
+      localDirtySinceCloud.current = false;
+      cloudSaveGeneration.current += 1;
       setCloudStatus("synced");
       flushQueuedImageDeletions(session.user.id, stateForCloud(state)).catch((error) => console.warn("Image cleanup postponed", error));
       return { ok: true, saved };
@@ -503,6 +665,8 @@ export function AppProvider({ children }) {
       }
       cloudHydrated.current = true;
       cloudConflict.current = false;
+      localDirtySinceCloud.current = false;
+      cloudSaveGeneration.current += 1;
       setCloudStatus("synced");
     } catch (error) {
       setCloudStatus("error");

@@ -3045,3 +3045,7 @@ button:focus-visible,a:focus-visible,summary:focus-visible{
   .today-card.premium-briefing-card{padding:14px 15px}
   .today-card.premium-briefing-card .today-workout-row{padding-right:48px}
 }
+
+/* v4.1.42 · mobile cloud resume states */
+.aside-cloud-status.pending i,.aside-cloud-status.reconciling i,.cloud-status.pending::before,.cloud-status.reconciling::before{background:var(--warning)}
+.aside-cloud-status.pending,.aside-cloud-status.reconciling{border-color:color-mix(in srgb,var(--warning) 45%,var(--border));color:var(--muted-bright)}

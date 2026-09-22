@@ -128,3 +128,56 @@
 .pit-live-caffeine-options{display:grid;grid-template-columns:.72fr 1.2fr 1fr 1fr;gap:6px}.pit-live-caffeine-options button{display:grid;gap:2px;min-height:44px;padding:7px 8px;border:1px solid var(--border);border-radius:9px;background:var(--bg-input);color:var(--text);text-align:left;font-size:8px;font-weight:850}.pit-live-caffeine-options button>b{font-size:9px}.pit-live-caffeine-options button>span{color:var(--muted);font-size:7px;line-height:1.25}.pit-live-caffeine-options button.active{border-color:color-mix(in srgb,var(--accent) 70%,var(--border));background:color-mix(in srgb,var(--accent) 9%,var(--bg-input))}.pit-live-caffeine-options button:disabled{opacity:.42;cursor:not-allowed}.pit-live-caffeine-prompt{color:#e1a22a;font-size:8px;line-height:1.35}
 .pit-live-caffeine-overview{display:grid;grid-template-columns:auto auto 1fr;align-items:center;gap:8px;margin:10px 0;padding:8px 9px;border:1px solid color-mix(in srgb,var(--accent) 38%,var(--border));border-radius:9px;background:color-mix(in srgb,var(--accent) 4%,var(--bg-input))}.pit-live-caffeine-overview small{color:var(--muted);font-size:8px;font-weight:900;letter-spacing:.06em}.pit-live-caffeine-overview b{font-size:9px}.pit-live-caffeine-overview span{justify-self:end;color:var(--muted);font-size:8px;text-align:right}.pit-live-caffeine-overview.needs-choice{border-color:color-mix(in srgb,#e1a22a 65%,var(--border));background:color-mix(in srgb,#e1a22a 6%,var(--bg-input))}.pit-live-caffeine-overview.needs-choice b{color:#e1a22a}
 @media(max-width:700px){.pit-live-caffeine-options{grid-template-columns:1fr 1fr}.pit-live-caffeine-overview{grid-template-columns:1fr auto}.pit-live-caffeine-overview span{grid-column:1/-1;justify-self:start;text-align:left}}
+
+/* v4.1.42 · final race-ready Pit Crew cockpit */
+.pit-live-topbar{min-height:58px;padding-top:max(8px,env(safe-area-inset-top));}
+.pit-live-topbar-title{display:grid;gap:2px;min-width:0}
+.pit-live-topbar-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;min-width:0}
+.pit-live-sync-state{display:inline-flex;align-items:center;gap:6px;min-height:30px;padding:0 9px;border:1px solid var(--border);border-radius:999px;background:var(--bg-input);color:var(--muted-bright);font-size:8px;font-weight:850;white-space:nowrap}
+.pit-live-sync-state>i{width:7px;height:7px;border-radius:50%;background:#e1a22a}
+.pit-live-sync-state.synced>i{background:#47ad69}.pit-live-sync-state.synced{border-color:color-mix(in srgb,#47ad69 45%,var(--border));color:#62c582}
+.pit-live-sync-state.offline>i,.pit-live-sync-state.error>i{background:#e87817}.pit-live-sync-state.offline,.pit-live-sync-state.error{border-color:color-mix(in srgb,#e87817 50%,var(--border));color:#e9aa62}
+.pit-live-sync-state.syncing>i{animation:pit-live-pulse 1.1s ease-in-out infinite}
+@keyframes pit-live-pulse{50%{opacity:.35;transform:scale(.78)}}
+
+.pit-live-fueling .pit-live-collapse-body{padding-top:12px}
+.pit-live-fueling-dashboard{display:grid;grid-template-columns:minmax(260px,.9fr) minmax(360px,1.35fr);gap:9px;margin-bottom:10px}
+.pit-live-fueling-dashboard .pit-live-fueling-timing-tabs{margin:0;align-self:stretch}
+.pit-live-fueling-dashboard .pit-live-fueling-timing-tabs button{min-height:100%;padding:10px 11px}
+.pit-live-fueling-dashboard .pit-live-caffeine-source{margin:0;padding:9px 10px;align-content:center}
+.pit-live-fueling-dashboard .pit-live-caffeine-source-head{align-items:center}
+.pit-live-fueling-dashboard .pit-live-caffeine-options{grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}
+.pit-live-fueling-dashboard .pit-live-caffeine-options button{min-height:39px;padding:6px 7px;text-align:center;align-content:center}
+.pit-live-fueling-dashboard .pit-live-caffeine-options button>b{font-size:8px}.pit-live-fueling-dashboard .pit-live-caffeine-options button>span{font-size:7px}
+.pit-live-fueling-dashboard .pit-live-caffeine-prompt{padding-top:2px}
+.pit-live-category-tabs{margin-bottom:10px}
+.pit-live-product-grid article.unavailable{opacity:.62;border-style:dashed}
+.pit-live-product-grid article.unavailable .pit-live-portions button{cursor:not-allowed}
+.pit-live-out-of-stock{margin-left:auto!important;padding:4px 7px!important;border:1px solid color-mix(in srgb,#e1a22a 55%,var(--border));border-radius:999px!important;background:color-mix(in srgb,#e1a22a 7%,var(--bg-sidebar))!important;color:#e1a22a!important;font-size:7px!important;font-style:normal!important;font-weight:900!important;white-space:nowrap}
+
+.pit-live-tools>summary{min-height:56px;padding:0 15px;background:linear-gradient(145deg,color-mix(in srgb,var(--accent-surface) 18%,var(--bg-sidebar)),var(--bg-sidebar))}
+.pit-live-tools>summary span{font-size:9px}.pit-live-tools>summary b{font-size:10px;color:var(--muted-bright)}
+.pit-live-tools .pit-live-collapse-body.pit-live-tools-options{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:12px;border-top:1px solid var(--border);background:color-mix(in srgb,var(--bg) 35%,transparent)}
+.pit-live-tool-option{border-radius:14px;background:linear-gradient(145deg,var(--bg-input),color-mix(in srgb,var(--bg-input) 90%,var(--bg-sidebar)));box-shadow:inset 0 1px 0 rgba(255,255,255,.02)}
+.pit-live-tool-option>summary{min-height:58px;padding:0 13px;grid-template-columns:minmax(0,1fr) auto auto}
+.pit-live-tool-option>summary span{font-size:8px}.pit-live-tool-option>summary b{max-width:240px;font-size:9px;color:var(--muted-bright)}
+.pit-live-tool-option[open]{grid-column:1/-1;border-color:color-mix(in srgb,var(--accent) 38%,var(--border))}
+.pit-live-tool-option[open]>summary{background:color-mix(in srgb,var(--accent) 4%,transparent)}
+.pit-live-tool-option-body,.pit-live-tool-option>.pit-live-collapse-body{padding:12px 13px 13px}
+.pit-live-status-tool>summary span,.pit-live-care-tool>summary span{color:var(--accent-bright)}
+.pit-live-care-tool.care-urgent{border-color:color-mix(in srgb,#e34242 65%,var(--border))}.pit-live-care-tool.care-notice{border-color:color-mix(in srgb,#e1a22a 55%,var(--border))}
+
+@media(max-width:760px){
+  .pit-live-topbar-actions{gap:5px}.pit-live-sync-state{padding:0 8px}
+  .pit-live-fueling-dashboard{grid-template-columns:1fr}
+  .pit-live-fueling-dashboard .pit-live-fueling-timing-tabs button{min-height:50px}
+  .pit-live-tools .pit-live-collapse-body.pit-live-tools-options{grid-template-columns:1fr}
+  .pit-live-tool-option[open]{grid-column:auto}
+}
+@media(max-width:520px){
+  .pit-live-topbar{align-items:flex-start}.pit-live-topbar-actions{align-items:flex-end;flex-direction:column}
+  .pit-live-topbar button{min-height:30px}
+  .pit-live-sync-state{min-height:27px;font-size:7px}
+  .pit-live-fueling-dashboard .pit-live-caffeine-options{grid-template-columns:1fr 1fr}
+  .pit-live-tools>summary{grid-template-columns:auto minmax(0,1fr) auto}.pit-live-tools>summary b{font-size:8px}
+}

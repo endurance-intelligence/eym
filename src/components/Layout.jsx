@@ -13,6 +13,8 @@ export default function Layout() {
     local: "Nur lokal",
     loading: "Cloud lädt",
     saving: "Wird gespeichert",
+    reconciling: "Cloud-Abgleich",
+    pending: "Lokal gesichert",
     synced: "Cloud aktuell",
     conflict: "Cloud-Konflikt",
     error: "Cloud-Fehler",

@@ -35,6 +35,7 @@ export default function PitCrewSharedSession({ token, race: raceFallback = null,
   const [error, setError] = useState("");
   const [mountRevision, setMountRevision] = useState(0);
   const [loadAttempt, setLoadAttempt] = useState(0);
+  const [syncStatus, setSyncStatus] = useState(() => globalThis.navigator?.onLine === false ? "offline" : "syncing");
   const revisionRef = useRef(0);
   const lastLocalRef = useRef("");
   const pushingRef = useRef(false);
@@ -51,17 +52,26 @@ export default function PitCrewSharedSession({ token, race: raceFallback = null,
         lastLocalRef.current = JSON.stringify(next.state);
         revisionRef.current = next.revision;
         setShare(next);
+        setSyncStatus("synced");
         setMountRevision((value) => value + 1);
       })
-      .catch((cause) => active && setError(cause?.message || "Der Crew-Link konnte nicht geladen werden."));
+      .catch((cause) => {
+        if (!active) return;
+        setSyncStatus(globalThis.navigator?.onLine === false ? "offline" : "error");
+        setError(cause?.message || "Der Crew-Link konnte nicht geladen werden.");
+      });
     return () => { active = false; };
   }, [loadAttempt, raceFallback, token]);
 
   useEffect(() => {
     if (share) return undefined;
-    const retry = () => setLoadAttempt((value) => value + 1);
+    const retry = () => {
+      setSyncStatus(globalThis.navigator?.onLine === false ? "offline" : "syncing");
+      setLoadAttempt((value) => value + 1);
+    };
     const resume = () => {
       if (document.visibilityState === "visible") retry();
+      else setSyncStatus("offline");
     };
     window.addEventListener("online", retry);
     document.addEventListener("visibilitychange", resume);
@@ -75,10 +85,16 @@ export default function PitCrewSharedSession({ token, race: raceFallback = null,
     if (!share?.race) return undefined;
     let active = true;
     const timer = window.setInterval(async () => {
+      if (document.visibilityState !== "visible" || globalThis.navigator?.onLine === false) {
+        setSyncStatus("offline");
+        return;
+      }
       try {
+        setSyncStatus("syncing");
         const remote = await loadPitCrewShare(token);
         if (!active) return;
         setError("");
+        setSyncStatus("synced");
         if (Number(remote.revision || 0) <= revisionRef.current) return;
         const nextState = normalizePitCrewSnapshot(remote.state);
         const serialized = JSON.stringify(nextState);
@@ -89,7 +105,10 @@ export default function PitCrewSharedSession({ token, race: raceFallback = null,
         setShare((current) => ({ ...(current || {}), ...remote, state: nextState }));
         setMountRevision((value) => value + 1);
       } catch (cause) {
-        if (active) setError(cause?.message || "Crew-Sync ist kurzzeitig nicht erreichbar.");
+        if (active) {
+          setSyncStatus(globalThis.navigator?.onLine === false ? "offline" : "error");
+          setError(cause?.message || "Crew-Sync ist kurzzeitig nicht erreichbar.");
+        }
       }
     }, POLL_MS);
     return () => {
@@ -103,19 +122,28 @@ export default function PitCrewSharedSession({ token, race: raceFallback = null,
     let active = true;
     const timer = window.setInterval(async () => {
       if (pushingRef.current) return;
+      if (document.visibilityState !== "visible" || globalThis.navigator?.onLine === false) {
+        setSyncStatus("offline");
+        return;
+      }
       const snapshot = normalizePitCrewSnapshot(readPitCrewLocalSnapshot(share.race));
       const serialized = JSON.stringify(snapshot);
       if (!serialized || serialized === lastLocalRef.current) return;
       lastLocalRef.current = serialized;
       pushingRef.current = true;
+      setSyncStatus("syncing");
       try {
         const saved = await updatePitCrewShare(token, snapshot);
         if (!active) return;
         revisionRef.current = Math.max(revisionRef.current, Number(saved.revision || 0));
         setShare((current) => ({ ...(current || {}), state: normalizePitCrewSnapshot(saved.state), revision: saved.revision }));
         setError("");
+        setSyncStatus("synced");
       } catch (cause) {
-        if (active) setError(cause?.message || "Crew-Änderung konnte nicht synchronisiert werden.");
+        if (active) {
+          setSyncStatus(globalThis.navigator?.onLine === false ? "offline" : "error");
+          setError(cause?.message || "Crew-Änderung konnte nicht synchronisiert werden.");
+        }
       } finally {
         pushingRef.current = false;
       }
@@ -135,6 +163,6 @@ export default function PitCrewSharedSession({ token, race: raceFallback = null,
 
   return <>
     {error && <div className="pit-shared-sync-warning">{error}</div>}
-    <PitCrewLive key={`${race.key || race.name}:${mountRevision}`} race={race} onClose={onClose || (() => window.location.assign(import.meta.env.BASE_URL))} />
+    <PitCrewLive key={`${race.key || race.name}:${mountRevision}`} race={race} onClose={onClose} sharedMode syncStatus={syncStatus} />
   </>;
 }

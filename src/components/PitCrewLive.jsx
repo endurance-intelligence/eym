@@ -234,7 +234,7 @@ function warningText(metricStatus, assessment) {
   return assessment?.headline || "";
 }
 
-export default function PitCrewLive({ race, onClose }) {
+export default function PitCrewLive({ race, onClose = null, syncStatus = "", sharedMode = false }) {
   const baseStorageKey = `endurance-pit-crew:${race?.key || race?.name || "backyard"}:${race?.date || "open"}`;
   const prepStorageKey = `endurance-pit-crew-prep:${race?.key || race?.name || "backyard"}:${race?.date || "open"}`;
   const stored = useMemo(() => safeStoredSession(baseStorageKey), [baseStorageKey]);
@@ -414,8 +414,12 @@ export default function PitCrewLive({ race, onClose }) {
   const productCatalog = [...PIT_CREW_PRODUCTS, ...normalizedCustomProducts(customProducts)];
   const knownStockIds = new Set(productCatalog.map((product) => String(product.id)));
   const activeStockIds = stockIds.filter((id) => knownStockIds.has(String(id)));
-  const availableProducts = productCatalog.filter((product) => activeStockIds.includes(String(product.id)));
   const startStockPlan = buildPitCrewStartStock(race || {}, gelPriority);
+  const inventoryTrackingActive = activeStockIds.some((id) => Object.prototype.hasOwnProperty.call(stockTargets || {}, String(id)));
+  const availableNowStockIds = inventoryTrackingActive
+    ? activeStockIds.filter((id) => Number(stockTargetFor(id).quantity || 0) > 0)
+    : activeStockIds;
+  const activeProducts = productCatalog.filter((product) => activeStockIds.includes(String(product.id)));
   const packingGroups = buildPitCrewPackingList(race || {});
 
   const recommendation = recommendPitCrew({
@@ -425,7 +429,7 @@ export default function PitCrewLive({ race, onClose }) {
     flags: effectiveAthleteFlags,
     weather: effectiveWeather,
     products: productCatalog,
-    availableProductIds: activeStockIds,
+    availableProductIds: availableNowStockIds,
     gelPriority,
   });
 
@@ -547,6 +551,11 @@ export default function PitCrewLive({ race, onClose }) {
   }
 
   function selectPortion(productId, portionId, timingMode) {
+    const id = String(productId);
+    if (!availableNowStockIds.includes(id)) {
+      setSaveMessage("Dieses Produkt ist aktiviert, aber aktuell nicht als vorhanden eingetragen. Vorrat & Startplan prüfen.");
+      return;
+    }
     updateSelection((current) => {
       const existing = current.find((item) => item.productId === productId && (item.timing || "now") === timingMode);
       if (existing && String(existing.portionId) === String(portionId)) return current;
@@ -560,8 +569,10 @@ export default function PitCrewLive({ race, onClose }) {
   function selectCaffeineOption(productId = "", portionId = "", timingMode = "now") {
     const id = String(productId || "");
     if (!id && Number(activePlanSummary.caffeineMg || 0) <= 0) return;
-    if (id && !activeStockIds.includes(id)) {
-      setSaveMessage("Diese Koffeinquelle ist im Vorrat nicht aktiviert. Vorrat & Startplan öffnen oder eine andere Quelle wählen.");
+    if (id && !availableNowStockIds.includes(id)) {
+      setSaveMessage(activeStockIds.includes(id)
+        ? "Diese Koffeinquelle ist aktiviert, aber aktuell nicht als vorhanden eingetragen."
+        : "Diese Koffeinquelle ist im Vorrat nicht aktiviert. Vorrat & Startplan öffnen oder eine andere Quelle wählen.");
       return;
     }
     updateSelection((current) => {
@@ -1093,7 +1104,7 @@ export default function PitCrewLive({ race, onClose }) {
 
   function renderFuelingSection() {
     const selected = fuelTimingTab === "carry" ? activeLoopSelection : activePitSelection;
-    const products = availableProducts.filter((product) => product.category === pitCategory);
+    const products = activeProducts.filter((product) => product.category === pitCategory);
     const loopNumber = Math.max(1, Number(saveRound || 0) + 1);
     return (
       <details className="pit-live-collapse pit-live-fueling">
@@ -1104,43 +1115,44 @@ export default function PitCrewLive({ race, onClose }) {
         </summary>
         <div className="pit-live-collapse-body pit-live-intake">
           {editingRound != null && <div className="pit-live-edit-banner">Pit {editingRound} wird korrigiert. Speichern ersetzt nur diesen Pit.</div>}
-          <p className="pit-live-help">Ein Ort für die gesamte Versorgung: Was jetzt im Pit genommen wird und was der Athlet mit auf die nächste Loop bekommt.</p>
-          <div className={`pit-live-caffeine-source${caffeinePromptRecommended ? " needs-choice" : ""}`}>
-            <div className="pit-live-caffeine-source-head">
-              <div><small>KOFFEINQUELLE FÜR DIESE RUNDE</small><b>{activePlanSummary.caffeineMg > 0 ? `${Math.round(activePlanSummary.caffeineMg)} mg · via ${caffeineSourceLabel}` : "kein Koffein gewählt"}</b></div>
-              <span>letzte 3 h: {Math.round(historyRolling.caffeineMg || 0)} mg</span>
+          <div className="pit-live-fueling-dashboard">
+            <div className="pit-live-fueling-timing-tabs">
+              <button type="button" className={fuelTimingTab === "now" ? "active" : ""} onClick={() => setFuelTimingTab("now")}><small>IM PIT</small><b>{formatNumber(activePitSummary.carbs)} g KH · {activePitSummary.fluidMl} ml</b></button>
+              <button type="button" className={fuelTimingTab === "carry" ? "active" : ""} onClick={() => setFuelTimingTab("carry")}><small>MIT AUF LOOP {loopNumber}</small><b>{formatNumber(activeLoopSummary.carbs)} g KH · {activeLoopSummary.fluidMl} ml</b></button>
             </div>
-            <p>Gel oder Getränk bewusst wählen. EI setzt Koffein nie automatisch.</p>
-            <div className="pit-live-caffeine-options">
-              <button type="button" className={activePlanSummary.caffeineMg <= 0 ? "active" : ""} onClick={() => selectCaffeineOption()}>○ Kein Koffein</button>
-              <button type="button" className={activeSelection.some((entry) => entry.productId === "226ers-high-cherry-caf") ? "active" : ""} disabled={!activeStockIds.includes("226ers-high-cherry-caf")} onClick={() => selectCaffeineOption("226ers-high-cherry-caf", "1", "carry")}><b>⚡ Gel</b><span>226ERS Cherry · 160 mg · 50 g KH</span></button>
-              <button type="button" className={activeSelection.some((entry) => entry.productId === "cola" && caffeineMgForEntry(entry, productCatalog) > 0) ? "active" : ""} disabled={!activeStockIds.includes("cola")} onClick={() => selectCaffeineOption("cola", "150", "now")}><b>🥤 Getränk</b><span>Cola 150 ml · ≈14 mg</span></button>
-              <button type="button" className={activeSelection.some((entry) => entry.productId === "redbull" && caffeineMgForEntry(entry, productCatalog) > 0) ? "active" : ""} disabled={!activeStockIds.includes("redbull")} onClick={() => selectCaffeineOption("redbull", "100", "now")}><b>⚡ Getränk</b><span>Red Bull 100 ml · 32 mg</span></button>
+            <div className={`pit-live-caffeine-source${caffeinePromptRecommended ? " needs-choice" : ""}`}>
+              <div className="pit-live-caffeine-source-head">
+                <div><small>KOFFEIN</small><b>{activePlanSummary.caffeineMg > 0 ? `${Math.round(activePlanSummary.caffeineMg)} mg · ${caffeineSourceLabel}` : "kein Koffein"}</b></div>
+                <span>Ø 3 h: {Math.round(historyRolling.caffeineMg || 0)} mg</span>
+              </div>
+              <div className="pit-live-caffeine-options">
+                <button type="button" className={activePlanSummary.caffeineMg <= 0 ? "active" : ""} onClick={() => selectCaffeineOption()}><b>○ Keins</b></button>
+                <button type="button" className={activeSelection.some((entry) => entry.productId === "226ers-high-cherry-caf") ? "active" : ""} disabled={!availableNowStockIds.includes("226ers-high-cherry-caf")} onClick={() => selectCaffeineOption("226ers-high-cherry-caf", "1", "carry")}><b>⚡ Gel</b><span>160 mg</span></button>
+                <button type="button" className={activeSelection.some((entry) => entry.productId === "cola" && caffeineMgForEntry(entry, productCatalog) > 0) ? "active" : ""} disabled={!availableNowStockIds.includes("cola")} onClick={() => selectCaffeineOption("cola", "150", "now")}><b>🥤 Cola</b><span>≈14 mg</span></button>
+                <button type="button" className={activeSelection.some((entry) => entry.productId === "redbull" && caffeineMgForEntry(entry, productCatalog) > 0) ? "active" : ""} disabled={!availableNowStockIds.includes("redbull")} onClick={() => selectCaffeineOption("redbull", "100", "now")}><b>⚡ Red Bull</b><span>32 mg</span></button>
+              </div>
+              {caffeinePromptRecommended && <strong className="pit-live-caffeine-prompt">😴 Müde · Koffein nur bewusst auswählen.</strong>}
             </div>
-            {caffeinePromptRecommended && <strong className="pit-live-caffeine-prompt">😴 Müde gemeldet · falls Koffein gewünscht, jetzt Quelle festlegen.</strong>}
-          </div>
-          <div className="pit-live-fueling-timing-tabs">
-            <button type="button" className={fuelTimingTab === "now" ? "active" : ""} onClick={() => setFuelTimingTab("now")}><small>IM PIT</small><b>{formatNumber(activePitSummary.carbs)} g KH · {activePitSummary.fluidMl} ml</b></button>
-            <button type="button" className={fuelTimingTab === "carry" ? "active" : ""} onClick={() => setFuelTimingTab("carry")}><small>MIT AUF LOOP {loopNumber}</small><b>{formatNumber(activeLoopSummary.carbs)} g KH · {activeLoopSummary.fluidMl} ml</b></button>
           </div>
           <div className="pit-live-category-tabs">
             {CATEGORIES.map(([key, label]) => <button type="button" key={key} className={pitCategory === key ? "active" : ""} onClick={() => setPitCategory(key)}>{label}</button>)}
           </div>
-          {!products.length && <p className="pit-live-loop-empty">In dieser Kategorie ist aktuell nichts im Vorrat aktiviert. „Vorrat & Startplan“ findest du ganz unten.</p>}
+          {!products.length && <p className="pit-live-loop-empty">In dieser Kategorie ist aktuell kein Produkt im Vorrat aktiviert. „Vorrat & Startplan“ findest du unter Werkzeuge.</p>}
           <div className="pit-live-product-grid">
             {products.map((product) => {
               const selectedInMode = activeSelection.find((item) => item.productId === product.id && (item.timing || "now") === fuelTimingTab);
+              const inStock = availableNowStockIds.includes(String(product.id));
               return (
-                <article key={product.id} className={selectedInMode ? "selected" : ""}>
-                  <div><b>{product.icon}</b><strong>{product.label}{product.estimated ? " ≈" : ""}</strong>{selectedInMode && quantity(selectedInMode) > 1 && <em>×{quantity(selectedInMode)}</em>}</div>
+                <article key={product.id} className={`${selectedInMode ? "selected " : ""}${inStock ? "" : "unavailable"}`.trim()}>
+                  <div><b>{product.icon}</b><strong>{product.label}{product.estimated ? " ≈" : ""}</strong>{!inStock && <em className="pit-live-out-of-stock">nicht im Vorrat</em>}{selectedInMode && quantity(selectedInMode) > 1 && <em>×{quantity(selectedInMode)}</em>}</div>
                   <div className="pit-live-portions">
                     {product.portions.filter((portion) => !portion.hidden).map((portion) => (
-                      <button type="button" key={portion.id} className={selectedInMode && String(selectedInMode.portionId) === String(portion.id) ? "active" : ""} onClick={() => selectPortion(product.id, portion.id, fuelTimingTab)}>
+                      <button type="button" key={portion.id} disabled={!inStock} className={selectedInMode && String(selectedInMode.portionId) === String(portion.id) ? "active" : ""} onClick={() => selectPortion(product.id, portion.id, fuelTimingTab)}>
                         <b>{portion.label}</b><span>{portion.carbs ? `${formatNumber(portion.carbs)} g KH` : "0 g KH"}</span>
                       </button>
                     ))}
                   </div>
-                  {selectedInMode && (
+                  {selectedInMode && inStock && (
                     <div className="pit-live-quantity">
                       <button type="button" onClick={() => changeQuantity(product.id, fuelTimingTab, -1)}>−</button>
                       <b>{quantity(selectedInMode)}</b>
@@ -1164,11 +1176,12 @@ export default function PitCrewLive({ race, onClose }) {
     );
   }
 
-  function renderAthleteCareSection({ priority = false } = {}) {
+  function renderAthleteCareSection({ priority = false, asTool = false } = {}) {
+    const shellClass = asTool ? "pit-live-tool-option pit-live-care-tool" : "pit-live-collapse pit-live-care";
     return (
-      <details className={`pit-live-collapse pit-live-care care-${careLevel}${priority ? " priority" : ""}`} open={priority ? true : undefined}>
+      <details className={`${shellClass} care-${careLevel}${priority ? " priority" : ""}`} open={priority ? true : undefined}>
         <summary><span>ATHLETE CARE {careIndicator}</span><b>{athleteCare.summary}</b><i>›</i></summary>
-        <div className="pit-live-collapse-body">
+        <div className={asTool ? "pit-live-tool-option-body" : "pit-live-collapse-body"}>
           <p className="pit-live-help">Nur Gedächtnisstützen für die Crew – nichts abhaken, nichts erzwingen. Hinweise passen sich an Restzeit, Rennverlauf, Athletenstatus und Wetter an.</p>
           {athleteCare.hints.length ? (
             <div className="pit-live-care-list">
@@ -1218,8 +1231,11 @@ export default function PitCrewLive({ race, onClose }) {
   return (
     <div className="pit-live-shell" role="dialog" aria-modal="true" aria-label="Pit Crew Live">
       <header className="pit-live-topbar">
-        <div><small>PIT CREW LIVE{demoActive ? " · TESTMODUS" : ""}</small><strong>{race?.name || "Backyard"}</strong></div>
-        <button type="button" onClick={onClose} aria-label="Pit Crew schließen">Schließen</button>
+        <div className="pit-live-topbar-title"><small>PIT CREW LIVE{demoActive ? " · TESTMODUS" : ""}</small><strong>{race?.name || "Backyard"}</strong></div>
+        <div className="pit-live-topbar-actions">
+          {syncStatus && <span className={`pit-live-sync-state ${syncStatus}`}><i aria-hidden="true" />{syncStatus === "synced" ? "synchron" : syncStatus === "syncing" ? "wird abgeglichen" : syncStatus === "offline" ? "offline · lokal" : "Sync prüfen"}</span>}
+          {onClose && <button type="button" onClick={onClose} aria-label="Pit Crew verlassen">{sharedMode ? "Zurück zu EI" : "Zurück"}</button>}
+        </div>
       </header>
 
       <main className="pit-live-main">
@@ -1356,25 +1372,24 @@ export default function PitCrewLive({ race, onClose }) {
           <div className="pit-live-auto-plan-note">{planAdjusted ? "✎ Auswahl geändert. KH und Flüssigkeit werden sofort mit der aktuellen Crew-Auswahl neu gerechnet." : "✓ Der Idealvorschlag ist automatisch vorausgewählt. Nur ändern, wenn es im Pit tatsächlich anders läuft."}</div>
         </section>
 
-        <details className="pit-live-collapse">
-          <summary><span>ATHLETE STATUS</span><b>{compactStatus(effectiveAthleteFlags)}</b><i>›</i></summary>
-          <div className="pit-live-collapse-body">
-            <p className="pit-live-help">Nur Änderungen melden. Wenn alles gut ist, muss hier nichts angefasst werden.</p>
-            <div className="pit-live-status-grid">
-              {STATUS_OPTIONS.map(([key, icon, label]) => (
-                <button type="button" key={key} className={flags.includes(key) ? "active" : ""} onClick={() => setFlags((current) => toggleValue(current, key))}><b>{icon}</b><span>{label}</span></button>
-              ))}
-            </div>
-          </div>
-        </details>
-
-        {renderAthleteCareSection()}
-
         {renderFuelingSection()}
 
         <details className="pit-live-collapse pit-live-tools">
-          <summary><span>WERKZEUGE</span><b>{demoActive ? "Testmodus aktiv" : "Bilanz · Verlauf · Test · Vorrat · Packliste"}</b><i>›</i></summary>
+          <summary><span>WERKZEUGE</span><b>{demoActive ? "Testmodus aktiv" : "Bilanz · Status · Verlauf · Vorrat · Packliste"}</b><i>›</i></summary>
           <div className="pit-live-collapse-body pit-live-tools-options">
+            <details className="pit-live-tool-option pit-live-status-tool">
+              <summary><span>ATHLETE STATUS</span><b>{compactStatus(effectiveAthleteFlags)}</b><i>›</i></summary>
+              <div className="pit-live-tool-option-body">
+                <p className="pit-live-help">Nur nachträglich korrigieren oder ergänzen. Relevante Hinweise erscheinen automatisch oben in der Pit-Karte.</p>
+                <div className="pit-live-status-grid">
+                  {STATUS_OPTIONS.map(([key, icon, label]) => (
+                    <button type="button" key={key} className={flags.includes(key) ? "active" : ""} onClick={() => setFlags((current) => toggleValue(current, key))}><b>{icon}</b><span>{label}</span></button>
+                  ))}
+                </div>
+              </div>
+            </details>
+
+            {renderAthleteCareSection({ asTool: true })}
             <details className="pit-live-tool-option">
               <summary><span>KH-BILANZ</span><b>{historyRolling.hours ? `${formatNumber(historyRolling.carbsPerHour)} g/h Ø` : `Ziel ${PIT_CARB_TARGET.center} g/h`}</b><i>›</i></summary>
               <div className="pit-live-tool-option-body">

@@ -183,7 +183,7 @@ function compactGarminSteps(steps) {
 }
 
 export default function RaceCoach() {
-  const { state, setState } = useApp();
+  const { state, setState, cloudStatus } = useApp();
   const [searchParams, setSearchParams] = useSearchParams();
   const [targetDrafts, setTargetDrafts] = useState({});
   const [routeUrls, setRouteUrls] = useState({});
@@ -616,7 +616,7 @@ export default function RaceCoach() {
 
       {pitCrewOpen && (pitCrewShareToken
         ? <PitCrewSharedSession token={pitCrewShareToken} race={pitCrewRace} onClose={() => setPitCrewOpen(false)} />
-        : <PitCrewLive race={pitCrewRace} onClose={() => setPitCrewOpen(false)} />)}
+        : <PitCrewLive race={pitCrewRace} onClose={() => setPitCrewOpen(false)} syncStatus={cloudStatus === "synced" ? "synced" : ["loading", "saving", "reconciling"].includes(cloudStatus) ? "syncing" : cloudStatus === "error" || cloudStatus === "conflict" ? "error" : "offline"} />)}
 
       <section className="race-coach-setup">
         <div className="race-coach-section-heading">

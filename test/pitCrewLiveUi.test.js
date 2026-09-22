@@ -238,12 +238,38 @@ test("legacy Cola litre stock is converted to 330 ml cans for the new inventory 
 
 
 test("Pit Crew asks for a deliberate caffeine source instead of silently adding caffeine", () => {
-  assert.match(source, /KOFFEINQUELLE FÜR DIESE RUNDE/);
-  assert.match(source, /EI setzt Koffein nie automatisch/);
-  assert.match(source, /226ERS Cherry · 160 mg · 50 g KH/);
-  assert.match(source, /Cola 150 ml · ≈14 mg/);
-  assert.match(source, /Red Bull 100 ml · 32 mg/);
+  assert.match(source, /<small>KOFFEIN<\/small>/);
+  assert.match(source, /○ Keins/);
+  assert.match(source, /160 mg/);
+  assert.match(source, /≈14 mg/);
+  assert.match(source, /Red Bull/);
+  assert.match(source, /32 mg/);
   assert.match(source, /selectCaffeineOption/);
   assert.match(source, /KOFFEIN DIESE RUNDE/);
-  assert.match(source, /letzte 3 h/);
+  assert.match(source, /Ø 3 h/);
+});
+
+test("race cockpit keeps athlete status and care inside tools while actions stay in the main pit card", () => {
+  assert.match(source, /<summary><span>WERKZEUGE<\/span>/);
+  assert.match(source, /pit-live-status-tool/);
+  assert.match(source, /renderAthleteCareSection\(\{ asTool: true \}\)/);
+  assert.doesNotMatch(source, /\{renderAthleteCareSection\(\)\}/);
+  assert.match(source, /crewOverviewActions/);
+  assert.match(source, /athleteCare\.hints\.map/);
+});
+
+test("fueling cockpit shows active stock but disables products that are not actually on hand", () => {
+  assert.match(source, /inventoryTrackingActive/);
+  assert.match(source, /availableNowStockIds/);
+  assert.match(source, /const products = activeProducts\.filter/);
+  assert.match(source, /nicht im Vorrat/);
+  assert.match(source, /disabled=\{!inStock\}/);
+  assert.match(source, /pit-live-fueling-dashboard/);
+});
+
+test("shared Pit Crew can hide the destructive exit button and display sync state", () => {
+  assert.match(source, /onClose = null, syncStatus = "", sharedMode = false/);
+  assert.match(source, /\{onClose && <button/);
+  assert.match(source, /pit-live-sync-state/);
+  assert.match(source, /Zurück zu EI/);
 });
