@@ -45,13 +45,12 @@ test("athlete pre-feedback suppresses duplicate crew check-in and stays visible 
 });
 
 test("Pit Crew headline names the upcoming loop weather and keeps confirmed intake in the main plan card", () => {
-  assert.match(source, /WETTER FÜR LOOP/);
+  assert.match(source, /WETTER · LOOP/);
   assert.match(source, /KOMMENDER LOOP/);
   assert.match(source, /pit-live-weather-summary/);
-  assert.match(source, /Gefühlt \{primaryLoopWeather\.feelsLike\}/);
-  assert.match(source, /Regen \{primaryLoopWeather\.precipitationProbability\} %/);
-  assert.match(source, /aktuelle Wetterbasis/);
-  assert.match(source, /nextLoopWeatherBrief\.detail/);
+  assert.match(source, /pit-live-weather-summary-compact/);
+  assert.match(source, /Regen \${primaryLoopWeather\.precipitationProbability} %/);
+  assert.match(source, /Wind \${primaryLoopWeather\.windSpeed} km\/h/);
   assert.match(source, /ZULETZT BESTÄTIGT/);
   assert.match(source, /Ø 3 H/);
   assert.match(source, /pit-live-actual-overview/);
@@ -99,7 +98,7 @@ test("Pit Crew live view keeps the current plan glanceable and removes duplicate
   assert.match(source, /Pit: Loop/);
   assert.match(source, /Pit: Start/);
   assert.match(source, /ATHLETE STATUS/);
-  assert.match(source, /PIT-PLAN · MANUELL ANGEPASST/);
+  assert.match(source, /SPOT · MANUELL ANGEPASST/);
   assert.match(source, /Fueling im Ziel/);
   assert.match(source, /g unter Ziel/);
   assert.match(source, /g über Ziel/);
@@ -303,4 +302,12 @@ test("Pit Crew mobile return check-in is a full-screen work step instead of a bo
   assert.match(css, /height:100dvh/);
   assert.match(css, /backdrop-filter:none/);
   assert.match(css, /pit-live-checkin-actions\{position:sticky/);
+});
+
+
+test("SPOT is the single point of truth and treats the breakfast-backed first loop as a special start plan", () => {
+  assert.match(source, /SPOT · IDEALVORSCHLAG/);
+  assert.match(source, /const isStartLoopPlan = !timing\.started && readyLoopNumber === 1/);
+  assert.match(source, /Startversorgung · Frühstück als Basis/);
+  assert.match(source, /Frühstück deckt die Basis/);
 });

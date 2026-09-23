@@ -298,3 +298,30 @@
   .pit-live-checkin-actions .pit-live-primary,.pit-live-checkin-actions .pit-live-secondary{min-height:58px;font-size:14px}
   .pit-live-status-recheck button{min-height:82px;align-content:center}
 }
+
+
+/* v4.1.45 · SPOT-first layout: compact weather, more room for the command card */
+.pit-live-weather-summary-compact{
+  min-height:46px!important;
+  padding:7px 11px!important;
+  align-items:center!important;
+}
+.pit-live-weather-summary-compact .pit-live-weather-summary-label{
+  min-width:92px;
+  align-content:center;
+}
+.pit-live-weather-summary-compact .pit-live-weather-summary-main{
+  align-content:center;
+}
+.pit-live-weather-summary-compact .pit-live-weather-summary-main>b{
+  font-size:10px!important;
+  line-height:1.25;
+}
+@media(max-width:700px){
+  .pit-live-weather-summary-compact{
+    grid-template-columns:auto minmax(0,1fr) auto!important;
+    min-height:44px!important;
+  }
+  .pit-live-weather-summary-compact .pit-live-weather-summary-label{min-width:74px}
+  .pit-live-weather-summary-compact .pit-live-weather-summary-main>b{font-size:12px!important}
+}

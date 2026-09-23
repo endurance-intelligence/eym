@@ -359,13 +359,21 @@ test("gel priority can be reordered while Maurten stays reserve by default", () 
 
 
 
-test("stable Backyard rotation separates awkward sweet combinations between pit and loop", () => {
+test("first Backyard loop uses breakfast as the base and only schedules a drink", () => {
   const first = recommendPitCrew({ round: 1, minutesToStart: 10, history: [] });
-  const banana = first.selection.find((entry) => entry.productId === "banana");
-  const haribo = first.selection.find((entry) => entry.productId === "haribo");
-  assert.equal(banana?.timing, "now");
-  assert.equal(haribo?.timing, "carry");
-  assert.equal(pitCrewPairingAssessment(first.selection).good, true);
+  assert.equal(first.selection.length, 1);
+  assert.equal(first.selection[0]?.productId, "isostar");
+  assert.equal(first.selection[0]?.portionId, "500");
+  assert.equal(first.selection[0]?.timing, "carry");
+  assert.match(first.why, /Frühstück ist die Energiebasis/);
+});
+
+test("stable Backyard rotation separates awkward sweet combinations after the start loop", () => {
+  const history = [{ round: 0, selection: [{ productId: "isostar", portionId: "500", timing: "carry" }], summary: { carbs: 35, fluidMl: 500 } }];
+  const next = recommendPitCrew({ round: 2, minutesToStart: 10, history });
+  assert.equal(pitCrewPairingAssessment(next.selection).good, true);
+  const pitIds = next.selection.filter((entry) => (entry.timing || "now") === "now").map((entry) => entry.productId);
+  assert.equal(pitIds.includes("banana") && pitIds.includes("haribo"), false);
 });
 
 test("Haribo repetition is penalized so the coach does not prescribe Roulette every loop", () => {

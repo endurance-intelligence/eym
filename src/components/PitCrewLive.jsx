@@ -555,19 +555,25 @@ export default function PitCrewLive({ race, onClose = null, syncStatus = "", sha
     .map((entry) => productCatalog.find((product) => String(product.id) === String(entry.productId))?.label)
     .filter(Boolean))];
   const planAdjusted = selectionSignature(activeSelection) !== selectionSignature(suggestedSelection);
-  const planCarbTone = activePlanSummary.carbs < PIT_CARB_TARGET.min ? "low" : activePlanSummary.carbs > PIT_CARB_TARGET.max ? "high" : "good";
+  const readyLoopNumber = Math.max(1, Number(saveRound || 0) + 1);
+  const isStartLoopPlan = !timing.started && readyLoopNumber === 1;
+  const hasStartDrink = isStartLoopPlan && Number(activePlanSummary.fluidMl || 0) > 0;
+  const planCarbTone = hasStartDrink
+    ? "good"
+    : activePlanSummary.carbs < PIT_CARB_TARGET.min ? "low" : activePlanSummary.carbs > PIT_CARB_TARGET.max ? "high" : "good";
   const planCarbDelta = planCarbTone === "low"
     ? Math.max(0, PIT_CARB_TARGET.min - activePlanSummary.carbs)
     : planCarbTone === "high"
       ? Math.max(0, activePlanSummary.carbs - PIT_CARB_TARGET.max)
       : 0;
-  const planCarbContext = planCarbTone === "low"
-    ? `${formatNumber(planCarbDelta)} g unter Ziel · Ziel ${PIT_CARB_TARGET.min}–${PIT_CARB_TARGET.max} g/h`
-    : planCarbTone === "high"
-      ? `${formatNumber(planCarbDelta)} g über Ziel · Ziel ${PIT_CARB_TARGET.min}–${PIT_CARB_TARGET.max} g/h`
-      : `Fueling im Ziel · ${PIT_CARB_TARGET.min}–${PIT_CARB_TARGET.max} g KH/h`;
-  const planCarbShortLabel = planCarbTone === "low" ? "unter Ziel" : planCarbTone === "high" ? "über Ziel" : "im Ziel";
-  const readyLoopNumber = Math.max(1, Number(saveRound || 0) + 1);
+  const planCarbContext = hasStartDrink
+    ? `Startversorgung · Frühstück als Basis · ${activePlanSummary.fluidMl} ml für Loop 1`
+    : planCarbTone === "low"
+      ? `${formatNumber(planCarbDelta)} g unter Ziel · Ziel ${PIT_CARB_TARGET.min}–${PIT_CARB_TARGET.max} g/h`
+      : planCarbTone === "high"
+        ? `${formatNumber(planCarbDelta)} g über Ziel · Ziel ${PIT_CARB_TARGET.min}–${PIT_CARB_TARGET.max} g/h`
+        : `Fueling im Ziel · ${PIT_CARB_TARGET.min}–${PIT_CARB_TARGET.max} g KH/h`;
+  const planCarbShortLabel = hasStartDrink ? "Startversorgung passt" : planCarbTone === "low" ? "unter Ziel" : planCarbTone === "high" ? "über Ziel" : "im Ziel";
   const savedCurrentPit = editingRound == null
     ? history.find((record) => Number(record.round) === Number(saveRound))
     : null;
@@ -603,7 +609,9 @@ export default function PitCrewLive({ race, onClose = null, syncStatus = "", sha
 
   const careLevel = athleteCare.level || (athleteCare.hints.length ? "notice" : "good");
   const careIndicator = careLevel === "urgent" ? "❗" : careLevel === "notice" ? "⚠️" : "✓";
-  const fuelNeedsAttention = metricStatus.carbs !== "good" || metricStatus.fluid === "low" || metricStatus.fluid === "high" || metricStatus.rolling === "low" || metricStatus.rolling === "high";
+  const fuelNeedsAttention = isStartLoopPlan
+    ? Number(activePlanSummary.fluidMl || 0) <= 0
+    : metricStatus.carbs !== "good" || metricStatus.fluid === "low" || metricStatus.fluid === "high" || metricStatus.rolling === "low" || metricStatus.rolling === "high";
   const crewOverviewActions = [
     ...athleteCare.hints.map((hint) => ({ key: `care:${hint.key}`, label: `${hint.icon} ${hint.short}`, urgent: Boolean(hint.urgent), bucket: crewActionBucket(hint.key, hint.short) })),
     ...weatherCrewActions.map((action) => ({ key: `weather:${action}`, label: action, urgent: false, bucket: crewActionBucket("weather", action) })),
@@ -1359,7 +1367,7 @@ export default function PitCrewLive({ race, onClose = null, syncStatus = "", sha
             <b>{loopMustClose ? (arrivalState.arrived ? "Rückkehr bestätigen" : "läuft · Aufnahme noch offen") : "Versorgung vorbereitet"}</b>
             <span>{pendingIntakeSelection.length ? pendingIntakeSelection.map((entry) => selectionLabel(entry, productCatalog)).join(" · ") : "Keine geplante Aufnahme offen."}</span>
           </div>}
-          <div className={`pit-live-fueling-total tone-${planCarbTone}`}><span>AKTUELL GESAMT</span><b>{formatNumber(activePlanSummary.carbs)} g KH · {activePlanSummary.fluidMl} ml</b><em>{planCarbShortLabel} · Ziel {PIT_CARB_TARGET.min}–{PIT_CARB_TARGET.max} g</em></div>
+          <div className={`pit-live-fueling-total tone-${planCarbTone}`}><span>AKTUELL GESAMT</span><b>{formatNumber(activePlanSummary.carbs)} g KH · {activePlanSummary.fluidMl} ml</b><em>{isStartLoopPlan ? `${planCarbShortLabel} · Frühstück deckt die Basis` : `${planCarbShortLabel} · Ziel ${PIT_CARB_TARGET.min}–${PIT_CARB_TARGET.max} g`}</em></div>
         </div>
       </details>
     );
@@ -1433,15 +1441,12 @@ export default function PitCrewLive({ race, onClose = null, syncStatus = "", sha
 
       <main className="pit-live-main">
         <details className="pit-live-collapse pit-live-weather-top">
-          <summary className="pit-live-weather-summary">
+          <summary className="pit-live-weather-summary pit-live-weather-summary-compact">
             <div className="pit-live-weather-summary-label">
-              <span>{primaryLoopWeather ? `WETTER FÜR LOOP ${primaryLoopWeather.round}` : "WETTER"}</span>
-              {primaryLoopWeather && <small>{hhmm(primaryLoopWeather.startAt)}–{hhmm(primaryLoopWeather.endAt)}</small>}
+              <span>{primaryLoopWeather ? `WETTER · LOOP ${primaryLoopWeather.round}` : "WETTER"}</span>
             </div>
             <div className="pit-live-weather-summary-main">
-              <b>{nextLoopWeatherBrief ? nextLoopWeatherBrief.headline : autoWeather ? `${pitWeatherIcon(autoWeather.weatherCode, autoWeather.isDay)} ${autoWeather.temperature} °C · ${autoWeather.windSpeed} km/h` : weatherError ? "Auto nicht verfügbar" : "wird automatisch geladen …"}</b>
-              {primaryLoopWeather && <small>Gefühlt {primaryLoopWeather.feelsLike} °C · Regen {primaryLoopWeather.precipitationProbability} % · Wind {primaryLoopWeather.windSpeed} km/h · Böen {primaryLoopWeather.windGusts} km/h{primaryLoopWeather.approximate ? " · aktuelle Wetterbasis" : ""}</small>}
-              {nextLoopWeatherBrief && <span className={`pit-live-weather-summary-advice tone-${nextLoopWeatherBrief.tone}`}>{nextLoopWeatherBrief.detail}</span>}
+              <b>{primaryLoopWeather ? `${pitWeatherIcon(primaryLoopWeather.weatherCode, primaryLoopWeather.isDay)} ${primaryLoopWeather.temperature} °C · Regen ${primaryLoopWeather.precipitationProbability} % · Wind ${primaryLoopWeather.windSpeed} km/h` : autoWeather ? `${pitWeatherIcon(autoWeather.weatherCode, autoWeather.isDay)} ${autoWeather.temperature} °C · Wind ${autoWeather.windSpeed} km/h` : weatherError ? "Auto nicht verfügbar" : "wird geladen …"}</b>
             </div>
             <i>›</i>
           </summary>
@@ -1528,7 +1533,7 @@ export default function PitCrewLive({ race, onClose = null, syncStatus = "", sha
 
         <section className={`pit-live-recommendation plan-tone-${planCardTone}`}>
           <div className="pit-live-section-head">
-            <div><small>{planAdjusted ? "PIT-PLAN · MANUELL ANGEPASST" : "IDEALVORSCHLAG · VORAUSGEWÄHLT"}</small><h3>{timing.started ? `Pit: Loop ${timing.currentRound}` : "Pit: Start"}</h3><div className={`pit-live-overall-status tone-${planCardTone}`}>{planCardStatus}</div></div>
+            <div><small>{planAdjusted ? "SPOT · MANUELL ANGEPASST" : "SPOT · IDEALVORSCHLAG"}</small><h3>{timing.started ? `Pit: Loop ${timing.currentRound}` : "Pit: Start"}</h3><div className={`pit-live-overall-status tone-${planCardTone}`}>{planCardStatus}</div></div>
             <div className="pit-live-suggestion-total"><b>{formatNumber(activePlanSummary.carbs)} g KH</b><span>{activePlanSummary.fluidMl} ml</span><em className={`pit-live-carb-context tone-${planCarbTone}`}>{planCarbContext}</em></div>
           </div>
           {effectiveAthleteFlags.length > 0 && <div className="pit-live-plan-adjusted"><b>↻ PLAN LIVE ANGEPASST</b><span>{compactStatus(effectiveAthleteFlags)}</span></div>}

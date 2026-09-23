@@ -501,6 +501,13 @@ function choice(productId, portionId, timing = "") {
   return { productId, portionId: String(portionId), ...(timing ? { timing } : {}) };
 }
 
+function firstLoopSuggestion() {
+  return {
+    selection: [choice("isostar", "500", "carry")],
+    why: "Start-Loop: Frühstück ist die Energiebasis. Vor Loop 1 keine feste Nahrung erzwingen; Hydrate & Perform liefert Flüssigkeit und einen kleinen KH-Puffer für die Runde.",
+  };
+}
+
 function quickSuggestion(history, mode, gelPriority = PIT_CREW_DEFAULT_GEL_PRIORITY) {
   const gel = choice(preferredGel(history, gelPriority), "1");
   return {
@@ -805,9 +812,12 @@ function fitRecommendationToStock(selection, products, availableProductIds) {
 
 export function recommendPitCrew({ round = 1, minutesToStart = 10, history = [], flags = [], weather = [], products = PIT_CREW_PRODUCTS, availableProductIds = null, gelPriority = PIT_CREW_DEFAULT_GEL_PRIORITY } = {}) {
   const mode = pitTimeMode(minutesToStart);
-  const recommendation = mode === "go" || mode === "quick"
-    ? quickSuggestion(history, mode, gelPriority)
-    : normalSuggestion({ round, history, flags, weather, gelPriority });
+  const isFreshStartLoop = Math.max(1, Number(round || 1)) === 1 && !(Array.isArray(history) && history.length);
+  const recommendation = isFreshStartLoop
+    ? firstLoopSuggestion()
+    : mode === "go" || mode === "quick"
+      ? quickSuggestion(history, mode, gelPriority)
+      : normalSuggestion({ round, history, flags, weather, gelPriority });
   const fitted = fitRecommendationToStock(recommendation.selection, products, availableProductIds);
   const paired = sanitizeRecommendationPairing(fitted.selection);
   const summary = summarizePitSelection(paired.selection, products);
