@@ -71,6 +71,15 @@ function normalizeStockTargets(value) {
   }));
 }
 
+
+function normalizeStatusSinceRound(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value).flatMap(([key, round]) => {
+    const numeric = Math.max(0, Math.round(Number(round || 0)));
+    return key && numeric > 0 ? [[String(key), numeric]] : [];
+  }));
+}
+
 function normalizeAthleteFeedback(value) {
   if (!value || typeof value !== "object") return null;
   return {
@@ -87,6 +96,7 @@ function normalizePitCrewOperationalState(value = {}) {
     anchorAt: String(value?.anchorAt || ""),
     history: normalizeHistory(value?.history),
     flags: Array.isArray(value?.flags) ? value.flags.map(String) : [],
+    statusSinceRound: normalizeStatusSinceRound(value?.statusSinceRound),
     incomingFlags: Array.isArray(value?.incomingFlags) ? value.incomingFlags.map(String) : [],
     incomingAt: String(value?.incomingAt || ""),
     incomingRound: Math.max(0, Number(value?.incomingRound || 0)),

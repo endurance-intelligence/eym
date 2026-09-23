@@ -44,6 +44,23 @@ const STATUS_OPTIONS = [
   ["heavy-legs", "🦵", "Beine schwer"],
 ];
 
+const STATUS_GUIDANCE = {
+  hungry: "Energiebedarf ernst nehmen · Essen griffbereit",
+  thirsty: "Getränk zuerst · Flüssigkeit bewusst bestätigen",
+  stomach: "magenruhig und bewährt · nichts Neues erzwingen",
+  "sweet-fatigue": "keine süße feste Pit-Verpflegung automatisch anbieten",
+  "wants-salty": "salzige/neutralere Option priorisieren",
+  "no-salty": "salzige Optionen aktuell meiden",
+  "iso-fatigue": "Isostar nicht erzwingen · Getränk geschmacklich rotieren",
+  "liquid-only": "nur flüssige Versorgung anbieten, bis Entwarnung kommt",
+  "too-warm": "Kühlung priorisieren · Kleidung/Sonnenschutz prüfen",
+  "too-cold": "trockene Wärmeschicht priorisieren",
+  tired: "Ruhe im Pit · Koffein nur bewusst wählen",
+  "heavy-legs": "Beine kurz entlasten, wenn die Pit-Zeit reicht",
+};
+
+const PERSISTENT_STATUS_KEYS = new Set(["stomach", "sweet-fatigue", "no-salty", "iso-fatigue", "liquid-only"]);
+
 const WEATHER_OPTIONS = [
   ["hot", "☀️", "Warm/heiß"],
   ["cold", "🥶", "Kalt"],
@@ -224,6 +241,14 @@ function compactStatus(flags = []) {
   return STATUS_OPTIONS.filter(([key]) => flags.includes(key)).map(([, icon, label]) => `${icon} ${label}`).join(" · ");
 }
 
+function crewActionBucket(key = "", label = "") {
+  const normalized = `${key} ${label}`.toLocaleLowerCase("de-DE");
+  if (["wet-feet", "dry-top", "wet-gear-change", "foot-check", "clothing-check", "shoe-check", "sun-protection"].some((token) => normalized.includes(token))) return "check";
+  if (["warmer-layer", "wind-layer", "regenjacke", "windschutz", "wärmeschicht"].some((token) => normalized.includes(token))) return "give";
+  if (["trockene socken", "handtuch"].some((token) => normalized.includes(token))) return "check";
+  return "now";
+}
+
 function warningText(metricStatus, assessment) {
   if (metricStatus.carbs === "high") return "KH aktuell hoch – nichts zusätzlich erzwingen.";
   if (metricStatus.rolling === "high") return "3-h-KH-Trend hoch – nächste Versorgung nicht unnötig stapeln.";
@@ -247,6 +272,7 @@ export default function PitCrewLive({ race, onClose = null, syncStatus = "", sha
   const [now, setNow] = useState(() => new Date());
   const [history, setHistory] = useState(() => normalizedLiveHistory(stored?.history));
   const [flags, setFlags] = useState(() => Array.isArray(stored?.flags) ? stored.flags : []);
+  const [statusSinceRound, setStatusSinceRound] = useState(() => stored?.statusSinceRound && typeof stored.statusSinceRound === "object" ? stored.statusSinceRound : {});
   const [incomingFlags, setIncomingFlags] = useState(() => Array.isArray(stored?.incomingFlags) ? stored.incomingFlags : []);
   const [incomingAt, setIncomingAt] = useState(() => String(stored?.incomingAt || ""));
   const [incomingRound, setIncomingRound] = useState(() => Math.max(0, Number(stored?.incomingRound || 0)));
@@ -306,6 +332,45 @@ export default function PitCrewLive({ race, onClose = null, syncStatus = "", sha
   const pitRound = timing.pitRound;
   const saveRound = editingRound ?? pitRound;
 
+  function statusRoundNumber() {
+    return Math.max(1, Number(timing.currentRound || saveRound || 1));
+  }
+
+  function replaceAthleteFlags(nextFlags = []) {
+    const next = [...new Set((Array.isArray(nextFlags) ? nextFlags : []).map(String))];
+    const round = statusRoundNumber();
+    setStatusSinceRound((current) => {
+      const updated = {};
+      next.forEach((key) => { updated[key] = Math.max(1, Number(current?.[key] || round)); });
+      return updated;
+    });
+    setFlags(next);
+  }
+
+  function toggleAthleteFlag(key) {
+    const round = statusRoundNumber();
+    setFlags((current) => {
+      const active = current.includes(key);
+      const next = active ? current.filter((item) => item !== key) : [...current, key];
+      setStatusSinceRound((since) => {
+        const updated = { ...(since || {}) };
+        if (active) delete updated[key];
+        else updated[key] = Math.max(1, Number(updated[key] || round));
+        return updated;
+      });
+      return next;
+    });
+  }
+
+  function clearAthleteFlag(key) {
+    setFlags((current) => current.filter((item) => item !== key));
+    setStatusSinceRound((since) => {
+      const updated = { ...(since || {}) };
+      delete updated[key];
+      return updated;
+    });
+  }
+
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 1000);
     return () => window.clearInterval(timer);
@@ -317,6 +382,7 @@ export default function PitCrewLive({ race, onClose = null, syncStatus = "", sha
       anchorAt,
       history,
       flags,
+      statusSinceRound,
       incomingFlags,
       incomingAt,
       incomingRound,
@@ -337,7 +403,7 @@ export default function PitCrewLive({ race, onClose = null, syncStatus = "", sha
         liveSnapshot: demoActive ? liveSnapshotBeforeDemo.current : null,
       } : {}),
     });
-  }, [anchorAt, arrivalAt, arrivalRound, athleteFeedback, customProducts, demoActive, demoMinutesToStart, demoRound, flags, fuelMode, gelPriority, history, incomingAt, incomingFlags, incomingRound, packingChecked, sharedMode, stockIds, stockTargets, storageKey, weather]);
+  }, [anchorAt, arrivalAt, arrivalRound, athleteFeedback, customProducts, demoActive, demoMinutesToStart, demoRound, flags, statusSinceRound, fuelMode, gelPriority, history, incomingAt, incomingFlags, incomingRound, packingChecked, sharedMode, stockIds, stockTargets, storageKey, weather]);
 
   useEffect(() => {
     if (typeof window === "undefined" || demoActive) return;
@@ -380,6 +446,14 @@ export default function PitCrewLive({ race, onClose = null, syncStatus = "", sha
   const incomingApplies = Number(incomingRound || 0) === Number(timing.currentRound || 0) && Boolean(incomingAt);
   const athleteFeedbackApplies = Boolean(athleteFeedback) && Number(athleteFeedback.round || 0) === Number(timing.currentRound || 0);
   const effectiveAthleteFlags = [...new Set([...(flags || []), ...(incomingApplies ? incomingFlags : []), ...(fuelMode === "liquid-only" ? ["liquid-only"] : [])])];
+  const athleteStatusNotes = STATUS_OPTIONS.filter(([key]) => effectiveAthleteFlags.includes(key)).map(([key, icon, label]) => ({
+    key,
+    icon,
+    label,
+    guidance: STATUS_GUIDANCE[key] || "bei jeder Rückkehr kurz neu bewerten",
+    sinceRound: Math.max(1, Number(statusSinceRound?.[key] || timing.currentRound || 1)),
+    persistent: PERSISTENT_STATUS_KEYS.has(key),
+  }));
   const weatherTargetStart = demoActive
     ? new Date(demoBase.getTime() + Math.max(0, demoRoundNumber) * intervalMinutes * 60 * 1000)
     : timing.nextStart;
@@ -524,19 +598,24 @@ export default function PitCrewLive({ race, onClose = null, syncStatus = "", sha
     flags: effectiveAthleteFlags,
     weather: effectiveWeather,
     recentWeather: planningHistory.slice(-3).map((record) => record.weather || []),
-    observation: autoWeather,
+    observation: primaryLoopWeather || autoWeather,
   });
 
   const careLevel = athleteCare.level || (athleteCare.hints.length ? "notice" : "good");
   const careIndicator = careLevel === "urgent" ? "❗" : careLevel === "notice" ? "⚠️" : "✓";
   const fuelNeedsAttention = metricStatus.carbs !== "good" || metricStatus.fluid === "low" || metricStatus.fluid === "high" || metricStatus.rolling === "low" || metricStatus.rolling === "high";
   const crewOverviewActions = [
-    ...athleteCare.hints.map((hint) => ({ key: `care:${hint.key}`, label: `${hint.icon} ${hint.short}`, urgent: Boolean(hint.urgent) })),
-    ...weatherCrewActions.map((action) => ({ key: `weather:${action}`, label: action, urgent: false })),
+    ...athleteCare.hints.map((hint) => ({ key: `care:${hint.key}`, label: `${hint.icon} ${hint.short}`, urgent: Boolean(hint.urgent), bucket: crewActionBucket(hint.key, hint.short) })),
+    ...weatherCrewActions.map((action) => ({ key: `weather:${action}`, label: action, urgent: false, bucket: crewActionBucket("weather", action) })),
   ].filter((entry, index, all) => {
     const normalized = entry.label.toLocaleLowerCase("de-DE").replace(/[^a-zäöüß0-9]+/g, " ").trim();
     return all.findIndex((candidate) => candidate.label.toLocaleLowerCase("de-DE").replace(/[^a-zäöüß0-9]+/g, " ").trim() === normalized) === index;
   });
+  const crewActionGroups = [
+    ["now", "JETZT"],
+    ["check", "PRÜFEN"],
+    ["give", "MITGEBEN"],
+  ].map(([key, label]) => ({ key, label, items: crewOverviewActions.filter((action) => action.bucket === key) })).filter((group) => group.items.length);
   const planCardTone = planCarbTone === "high" || careLevel === "urgent"
     ? "high"
     : planCarbTone === "low" || fuelNeedsAttention || crewOverviewActions.length > 0 || effectiveAthleteFlags.length > 0
@@ -636,7 +715,7 @@ export default function PitCrewLive({ race, onClose = null, syncStatus = "", sha
     setCarryAdjust({});
     if (incomingApplies) {
       const reportedFlags = [...incomingFlags];
-      setFlags(reportedFlags);
+      replaceAthleteFlags(reportedFlags);
       if (reportedFlags.includes("liquid-only")) setFuelMode("liquid-only");
       setAthleteFeedback({ round, flags: reportedFlags, at: incomingAt || returnedAt, source: "athlete" });
       // Athlete status is already known. Open the return sheet only when the
@@ -651,7 +730,6 @@ export default function PitCrewLive({ race, onClose = null, syncStatus = "", sha
         : "Rückmeldung Athlet: Alles okay · keine Änderung am vorbereiteten Plan.");
       return;
     }
-    setFlags([]);
     setAthleteFeedback(null);
     setCheckInOpen(true);
     setSaveMessage(`Loop ${round}: Athlet zurück · Countdown bis Start ${pitCountdownLabel(timing.minutesToStart)}.`);
@@ -908,6 +986,7 @@ export default function PitCrewLive({ race, onClose = null, syncStatus = "", sha
         anchorAt,
         history,
         flags,
+        statusSinceRound,
         incomingFlags,
         incomingAt,
         incomingRound,
@@ -930,7 +1009,7 @@ export default function PitCrewLive({ race, onClose = null, syncStatus = "", sha
       };
     }
     if (typeof window !== "undefined") {
-      if (!demoActive && !sharedMode) safePitCrewStorageWrite(baseStorageKey, { anchorAt, history, flags, incomingFlags, incomingAt, incomingRound, athleteFeedback, weather, arrivalRound, arrivalAt, stockIds, stockTargets, packingChecked, customProducts, gelPriority, fuelMode });
+      if (!demoActive && !sharedMode) safePitCrewStorageWrite(baseStorageKey, { anchorAt, history, flags, statusSinceRound, incomingFlags, incomingAt, incomingRound, athleteFeedback, weather, arrivalRound, arrivalAt, stockIds, stockTargets, packingChecked, customProducts, gelPriority, fuelMode });
       if (!sharedMode) safePitCrewStorageRemove(`${baseStorageKey}:demo`);
     }
     setDemoActive(true);
@@ -938,6 +1017,7 @@ export default function PitCrewLive({ race, onClose = null, syncStatus = "", sha
     setDemoMinutesToStart(10);
     setHistory([]);
     setFlags([]);
+    setStatusSinceRound({});
     setIncomingFlags([]);
     setIncomingAt("");
     setIncomingRound(0);
@@ -969,6 +1049,7 @@ export default function PitCrewLive({ race, onClose = null, syncStatus = "", sha
     setDemoMinutesToStart(10);
     setHistory(normalizedLiveHistory(liveStored?.history ?? transient.history));
     setFlags(Array.isArray(liveStored?.flags) ? liveStored.flags : (transient.flags || []));
+    setStatusSinceRound(liveStored?.statusSinceRound && typeof liveStored.statusSinceRound === "object" ? liveStored.statusSinceRound : (transient.statusSinceRound || {}));
     setIncomingFlags(Array.isArray(liveStored?.incomingFlags) ? liveStored.incomingFlags : (transient.incomingFlags || []));
     setIncomingAt(String(liveStored?.incomingAt || transient.incomingAt || ""));
     setIncomingRound(Math.max(0, Number(liveStored?.incomingRound ?? transient.incomingRound ?? 0)));
@@ -1318,6 +1399,7 @@ export default function PitCrewLive({ race, onClose = null, syncStatus = "", sha
     safePitCrewStorageRemove(storageKey);
     setHistory([]);
     setFlags([]);
+    setStatusSinceRound({});
     setIncomingFlags([]);
     setIncomingAt("");
     setIncomingRound(0);
@@ -1404,7 +1486,7 @@ export default function PitCrewLive({ race, onClose = null, syncStatus = "", sha
         {fuelMode === "liquid-only" && (
           <section className="pit-live-fuel-mode">
             <div><small>FUEL-MODUS</small><strong>🥤 Nur flüssig aktiv</strong><span>Feste Nahrung bleibt aus dem Idealvorschlag, bis der Athlet wieder feste Nahrung freigibt.</span></div>
-            <button type="button" onClick={() => { setFuelMode("normal"); setFlags((current) => current.filter((flag) => flag !== "liquid-only")); setSaveMessage("Fuel-Modus: feste Nahrung wieder freigegeben."); }}>Fest geht wieder</button>
+            <button type="button" onClick={() => { setFuelMode("normal"); clearAthleteFlag("liquid-only"); setSaveMessage("Fuel-Modus: feste Nahrung wieder freigegeben."); }}>Fest geht wieder</button>
           </section>
         )}
 
@@ -1424,7 +1506,7 @@ export default function PitCrewLive({ race, onClose = null, syncStatus = "", sha
         )}
 
         {athleteNeedsArrival && (
-          <details className="pit-live-collapse pit-live-athlete-signal">
+          <details className="pit-live-collapse pit-live-athlete-signal" onToggle={(event) => { if (event.currentTarget.open) setSignalDraft([...flags]); }}>
             <summary><span>ATHLETENMELDUNG</span><b>{incomingApplies ? compactStatus(incomingFlags) : "Status vor Rückkehr senden"}</b><i>›</i></summary>
             <div className="pit-live-collapse-body">
               <p className="pit-live-help">Auf dem Athleten-Handy oder durch Begleitung antippen. Die Meldung wird über den gemeinsamen Crew-Link synchronisiert und passt die Vorbereitung schon vor der Rückkehr an.</p>
@@ -1455,13 +1537,15 @@ export default function PitCrewLive({ race, onClose = null, syncStatus = "", sha
           {activeLoopSelection.length > 0 && <div className="pit-live-suggestion-group"><small>MIT AUF LOOP {Math.max(1, Number(saveRound || 0) + 1)}</small><div>{activeLoopSelection.map((entry) => <span key={`loop:${entry.productId}:${entry.portionId}`}>{selectionLabel(entry, productCatalog)}</span>)}</div></div>}
           {!activeSelection.length && <div className="pit-live-stock-warning">⚠️ Noch keine Versorgung ausgewählt. Fueling öffnen und verfügbare Sachen auswählen.</div>}
           <div className={`pit-live-overview-actions tone-${careLevel === "urgent" ? "high" : crewOverviewActions.length ? "low" : "good"}`}>
-            <small>CREW-AKTIONEN</small>
-            <div>
-              {crewOverviewActions.length
-                ? crewOverviewActions.map((action) => <span key={action.key} className={action.urgent ? "urgent" : ""}>{action.label}</span>)
-                : <span className="clear">✓ Keine Zusatzaktion · Routine ruhig weiterlaufen lassen</span>}
-            </div>
+            <small>CREW-AKTIONEN · ALLES AUF EINEN BLICK</small>
+            {crewActionGroups.length ? <div className="pit-live-command-groups">
+              {crewActionGroups.map((group) => <div className={`pit-live-command-group bucket-${group.key}`} key={group.key}><b>{group.label}</b><div>{group.items.map((action) => <span key={action.key} className={action.urgent ? "urgent" : ""}>{action.label}</span>)}</div></div>)}
+            </div> : <div><span className="clear">✓ Keine Zusatzaktion · Routine ruhig weiterlaufen lassen</span></div>}
           </div>
+          {athleteStatusNotes.length > 0 && <div className="pit-live-athlete-notes">
+            <small>ATHLETE-HINWEISE · BLEIBEN AKTIV BIS ENTWARNUNG</small>
+            <div>{athleteStatusNotes.map((note) => <span key={note.key} className={note.persistent ? "persistent" : "recheck"}><b>{note.icon} {note.label}</b><em>seit Loop {note.sinceRound}</em><small>{note.guidance}</small></span>)}</div>
+          </div>}
           {(activePlanSummary.caffeineMg > 0 || caffeinePromptRecommended) && <div className={`pit-live-caffeine-overview${caffeinePromptRecommended ? " needs-choice" : ""}`}>
             <small>KOFFEIN DIESE RUNDE</small>
             <b>{activePlanSummary.caffeineMg > 0 ? `${Math.round(activePlanSummary.caffeineMg)} mg · via ${caffeineSourceLabel}` : "noch nicht gewählt"}</b>
@@ -1494,7 +1578,7 @@ export default function PitCrewLive({ race, onClose = null, syncStatus = "", sha
                 <p className="pit-live-help">Nur nachträglich korrigieren oder ergänzen. Relevante Hinweise erscheinen automatisch oben in der Pit-Karte.</p>
                 <div className="pit-live-status-grid">
                   {STATUS_OPTIONS.map(([key, icon, label]) => (
-                    <button type="button" key={key} className={flags.includes(key) ? "active" : ""} onClick={() => setFlags((current) => toggleValue(current, key))}><b>{icon}</b><span>{label}</span></button>
+                    <button type="button" key={key} className={flags.includes(key) ? "active" : ""} onClick={() => toggleAthleteFlag(key)}><b>{icon}</b><span>{label}</span></button>
                   ))}
                 </div>
               </div>
@@ -1626,9 +1710,13 @@ export default function PitCrewLive({ race, onClose = null, syncStatus = "", sha
             </div>
           ) : (
             <>
-              <div className="pit-live-checkin-subhead"><small>ATHLETENSTATUS</small><span>Alles okay ist der Standard. Nur Änderungen antippen.</span></div>
-              <button type="button" className={`pit-live-checkin-ok${flags.length === 0 ? " active" : ""}`} onClick={() => setFlags([])}>✓ Alles okay</button>
-              <div className="pit-live-status-grid">{STATUS_OPTIONS.map(([key, icon, label]) => <button type="button" key={key} className={flags.includes(key) ? "active" : ""} onClick={() => setFlags((current) => toggleValue(current, key))}><b>{icon}</b><span>{label}</span></button>)}</div>
+              <div className="pit-live-checkin-subhead"><small>ATHLETENSTATUS</small><span>Aktive Hinweise bleiben markiert, bis bewusst Entwarnung gegeben wird. Bei jeder Rückkehr kurz bestätigen oder ändern.</span></div>
+              <button type="button" className={`pit-live-checkin-ok${flags.length === 0 ? " active" : ""}`} onClick={() => replaceAthleteFlags([])}>✓ Alles okay · alle Hinweise entwarnen</button>
+              <div className="pit-live-status-grid pit-live-status-recheck">{STATUS_OPTIONS.map(([key, icon, label]) => {
+                const active = flags.includes(key);
+                const since = Math.max(1, Number(statusSinceRound?.[key] || timing.currentRound || 1));
+                return <button type="button" key={key} className={active ? "active" : ""} onClick={() => toggleAthleteFlag(key)}><b>{icon}</b><span>{label}</span>{active && <small>seit Loop {since} · antippen = Entwarnung</small>}</button>;
+              })}</div>
             </>
           )}
 

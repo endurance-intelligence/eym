@@ -105,3 +105,9 @@ test("athlete care exposes green notice and urgent attention levels for the crew
   assert.equal(wetCold.level, "urgent");
   assert.equal(wetCold.summary, "bitte beachten");
 });
+
+test("daylight warm checkpoints remind the crew about sunscreen", async () => {
+  const { athleteCareHints } = await import("../src/services/pitCrewCare.js");
+  const result = athleteCareHints({ round: 4, elapsedMinutes: 180, flags: ["too-warm"], observation: { isDay: true, temperature: 20 } });
+  assert.ok(result.hints.some((hint) => hint.key === "sun-protection"));
+});

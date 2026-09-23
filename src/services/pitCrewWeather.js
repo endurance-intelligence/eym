@@ -195,7 +195,7 @@ export function pitWeatherCrewActions(forecast = null, athleteFlags = []) {
   if (athlete.has("stomach")) actions.push("🤢 magenruhige, bewährte Option");
   if (athlete.has("heavy-legs")) actions.push("🦵 Beine kurz hoch / locker halten");
   if (athlete.has("tired")) actions.push("😴 Müdigkeit beobachten");
-  return [...new Set(actions)].slice(0, 6);
+  return [...new Set(actions)];
 }
 
 export async function fetchPitCrewWeather(race = {}) {

@@ -16,7 +16,7 @@ function careLimit(mode) {
   if (mode === "go") return 2;
   if (mode === "quick") return 2;
   if (mode === "compact") return 3;
-  return 6;
+  return 12;
 }
 
 function rank(items = []) {
@@ -99,6 +99,19 @@ export function athleteCareHints({
       "Überflüssige Schicht raus. Trockenes Shirt bzw. bewährte Kühlung/Sonnenschutz bereitlegen, ohne den Pit unnötig zu verlängern.",
       98,
       true,
+    );
+  }
+
+  const daylight = observation?.isDay === true;
+  const observedTemperature = Number(observation?.temperature);
+  const sunCheckpoint = currentRound === 1 || (currentRound >= 4 && (currentRound - 1) % 3 === 0);
+  if (daylight && sunCheckpoint && (active.has("hot") || active.has("too-warm") || (Number.isFinite(observedTemperature) && observedTemperature >= 16))) {
+    add(
+      "sun-protection",
+      "☀️",
+      "Sonnenschutz",
+      "Sonnencreme prüfen und bei Bedarf nachlegen. Nacken, Ohren, Gesicht und andere freie Hautstellen nicht vergessen.",
+      86,
     );
   }
 

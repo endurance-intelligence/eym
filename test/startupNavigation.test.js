@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import {
   briefingStartupUrl,
   isAuthCallbackLocation,
@@ -34,4 +35,11 @@ test("startup reset happens before the router renders and only for ordinary app 
   assert.equal(resetStartupLocationToBriefing({ pathname: "/eym/", search: "", hash: "#/" }, history), false);
   assert.equal(resetStartupLocationToBriefing({ pathname: "/eym/", search: "?code=auth", hash: "#/planner" }, history), false);
   assert.equal(calls.length, 1);
+});
+
+test("startup removes only the legacy v query parameter while preserving hash routing", () => {
+  const source = fs.readFileSync(new URL("../src/main.jsx", import.meta.url), "utf8");
+  assert.match(source, /searchParams\.has\("v"\)/);
+  assert.match(source, /searchParams\.delete\("v"\)/);
+  assert.match(source, /\$\{url\.pathname\}\$\{url\.search\}\$\{url\.hash\}/);
 });

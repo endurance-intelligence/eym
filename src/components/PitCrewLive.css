@@ -269,3 +269,32 @@
   .pit-live-fueling-timing-tabs{grid-template-columns:1fr}
   .pit-live-topbar{align-items:flex-start}.pit-live-topbar-actions{align-items:flex-end;flex-direction:column}
 }
+
+/* v4.1.44 · single-source pit card + full-screen mobile check-in */
+.pit-live-command-groups{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.pit-live-command-group{display:grid;align-content:start;gap:6px;padding:9px;border:1px solid var(--border);border-radius:10px;background:color-mix(in srgb,var(--bg-sidebar) 82%,transparent)}
+.pit-live-command-group>b{color:var(--muted-bright);font-size:8px;font-weight:950;letter-spacing:.09em}
+.pit-live-command-group>div{display:flex;flex-wrap:wrap;gap:5px}
+.pit-live-command-group.bucket-now{border-color:color-mix(in srgb,#e1a22a 48%,var(--border))}
+.pit-live-command-group.bucket-check{border-color:color-mix(in srgb,#59b3ff 42%,var(--border))}
+.pit-live-command-group.bucket-give{border-color:color-mix(in srgb,var(--accent) 44%,var(--border))}
+.pit-live-athlete-notes{display:grid;gap:7px;margin-top:10px;padding:10px;border:1px solid color-mix(in srgb,#e1a22a 50%,var(--border));border-radius:10px;background:color-mix(in srgb,#e1a22a 5%,var(--bg-input))}
+.pit-live-athlete-notes>small{color:#e1a22a;font-size:8px;font-weight:950;letter-spacing:.09em}
+.pit-live-athlete-notes>div{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:6px}
+.pit-live-athlete-notes>div>span{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 8px;padding:8px 9px;border:1px solid var(--border);border-radius:9px;background:var(--bg-sidebar)}
+.pit-live-athlete-notes b{font-size:9px}.pit-live-athlete-notes em{color:#e1a22a;font-size:8px;font-style:normal;font-weight:850}.pit-live-athlete-notes span>small{grid-column:1/-1;color:var(--muted-bright);font-size:8px;line-height:1.35}
+.pit-live-athlete-notes span.persistent{border-color:color-mix(in srgb,#e1a22a 56%,var(--border))}
+.pit-live-status-recheck button small{grid-column:1/-1;color:#e1a22a;font-size:8px;line-height:1.25}
+
+@media(max-width:700px){
+  .pit-live-command-groups{grid-template-columns:1fr!important}
+  .pit-live-command-group{padding:10px}.pit-live-command-group>b{font-size:10px}.pit-live-command-group>div span{font-size:12px}
+  .pit-live-athlete-notes>small{font-size:10px}.pit-live-athlete-notes>div{grid-template-columns:1fr}.pit-live-athlete-notes b{font-size:12px}.pit-live-athlete-notes em{font-size:10px}.pit-live-athlete-notes span>small{font-size:10px}
+  .pit-live-checkin-backdrop{position:fixed;inset:0;display:block;padding:0;background:var(--bg-body);backdrop-filter:none;overflow:hidden}
+  .pit-live-checkin{width:100%;height:100dvh;max-height:none;overflow:auto;padding:0 14px;border:0;border-radius:0;background:linear-gradient(180deg,var(--bg-sidebar),var(--bg-body));box-shadow:none}
+  .pit-live-checkin-head{position:sticky;top:0;z-index:3;margin:0 -14px 14px;padding:max(18px,env(safe-area-inset-top)) 14px 12px;border-bottom:1px solid var(--border);background:color-mix(in srgb,var(--bg-sidebar) 96%,transparent);backdrop-filter:blur(10px)}
+  .pit-live-checkin-head h3{font-size:25px}.pit-live-checkin-head p{font-size:13px}
+  .pit-live-checkin-actions{position:sticky;z-index:4;bottom:0;margin:18px -14px 0;padding:10px 14px calc(10px + env(safe-area-inset-bottom));border-top:1px solid var(--border);background:color-mix(in srgb,var(--bg-sidebar) 97%,transparent);backdrop-filter:blur(12px)}
+  .pit-live-checkin-actions .pit-live-primary,.pit-live-checkin-actions .pit-live-secondary{min-height:58px;font-size:14px}
+  .pit-live-status-recheck button{min-height:82px;align-content:center}
+}

@@ -6,6 +6,16 @@ import { removeRecoveryMarker } from "./services/appRecovery";
 import "./styles/main.css";
 import "./styles/visualRefresh.css";
 
+function removeLegacyVersionQuery() {
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has("v")) return;
+  url.searchParams.delete("v");
+  window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+}
+
+removeLegacyVersionQuery();
+
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <AppProvider>

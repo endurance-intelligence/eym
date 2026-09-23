@@ -288,3 +288,19 @@ test("shared Pit Crew can hide the destructive exit button and display sync stat
   assert.match(source, /pit-live-sync-state/);
   assert.match(source, /Zurück zu EI/);
 });
+
+test("Pit Crew keeps athlete hints active until explicit relief and shows them in the command card", () => {
+  assert.match(source, /statusSinceRound/);
+  assert.match(source, /BLEIBEN AKTIV BIS ENTWARNUNG/);
+  assert.match(source, /seit Loop/);
+  assert.match(source, /antippen = Entwarnung/);
+  assert.match(source, /ALLES AUF EINEN BLICK/);
+  assert.match(source, /crewActionGroups/);
+});
+
+test("Pit Crew mobile return check-in is a full-screen work step instead of a bottom sheet", () => {
+  const css = fs.readFileSync(new URL("../src/components/PitCrewLive.css", import.meta.url), "utf8");
+  assert.match(css, /height:100dvh/);
+  assert.match(css, /backdrop-filter:none/);
+  assert.match(css, /pit-live-checkin-actions\{position:sticky/);
+});

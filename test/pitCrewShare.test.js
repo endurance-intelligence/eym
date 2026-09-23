@@ -171,3 +171,8 @@ test("failed shared pushes stay retryable instead of being marked locally synced
   assert.ok(updateAt >= 0);
   assert.ok(markSyncedAt > updateAt);
 });
+
+test("shared Pit Crew snapshot preserves athlete status age across devices", () => {
+  const snapshot = normalizePitCrewSnapshot({ flags: ["sweet-fatigue"], statusSinceRound: { "sweet-fatigue": 7, broken: 0 } });
+  assert.deepEqual(snapshot.statusSinceRound, { "sweet-fatigue": 7 });
+});
