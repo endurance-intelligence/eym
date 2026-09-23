@@ -37,11 +37,12 @@ test("Pit weather hides manual overrides and shows per-loop operational details"
 });
 
 
-test("athlete pre-feedback suppresses duplicate crew check-in and stays visible as a status banner", () => {
+test("athlete pre-feedback suppresses duplicate crew check-in and flows into SPOT instead of a separate crew banner", () => {
   assert.match(source, /if \(incomingApplies\)/);
   assert.match(source, /setCheckInOpen\(Boolean\(pendingCarry/);
-  assert.match(source, /RÜCKMELDUNG ATHLET/);
-  assert.match(source, /Keine Änderung am vorbereiteten Plan nötig/);
+  assert.match(source, /ATHLETE-MELDUNG · LOOP/);
+  assert.match(source, /pit-live-spot-athlete-signal/);
+  assert.doesNotMatch(source, /RÜCKMELDUNG CREW/);
 });
 
 test("Pit Crew headline names the upcoming loop weather and keeps confirmed intake in the main plan card", () => {
@@ -305,9 +306,12 @@ test("Pit Crew mobile return check-in is a full-screen work step instead of a bo
 });
 
 
-test("SPOT is the single point of truth and treats the breakfast-backed first loop as a special start plan", () => {
+test("SPOT owns weather and keeps the breakfast-backed first loop visually quiet", () => {
   assert.match(source, /SPOT · IDEALVORSCHLAG/);
   assert.match(source, /const isStartLoopPlan = !timing\.started && readyLoopNumber === 1/);
-  assert.match(source, /Startversorgung · Frühstück als Basis/);
-  assert.match(source, /Frühstück deckt die Basis/);
+  const spotIndex = source.indexOf("SPOT · IDEALVORSCHLAG");
+  const weatherIndex = source.indexOf("pit-live-spot-weather");
+  assert.ok(weatherIndex > spotIndex, "weather disclosure should render inside SPOT");
+  assert.doesNotMatch(source, /Startversorgung · Frühstück als Basis/);
+  assert.doesNotMatch(source, /Frühstück deckt die Basis/);
 });

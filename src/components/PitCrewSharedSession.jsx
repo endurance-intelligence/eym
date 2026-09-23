@@ -9,8 +9,8 @@ import {
 } from "../services/pitCrewShare.js";
 import { normalizePitCrewSnapshot } from "../services/pitCrewShareCore.js";
 
-const POLL_MS = 2500;
-const LOCAL_WATCH_MS = 700;
+const POLL_MS = 5000;
+const LOCAL_WATCH_MS = 1000;
 const INITIAL_RETRY_DELAYS = [0, 450, 1400, 3000, 6000];
 
 function wait(ms) {
@@ -108,7 +108,6 @@ export default function PitCrewSharedSession({ token, race: raceFallback = null,
         return;
       }
       try {
-        setSyncStatus("syncing");
         const remote = await loadPitCrewShare(token);
         if (!active) return;
         setError("");

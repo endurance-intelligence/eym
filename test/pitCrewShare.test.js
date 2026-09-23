@@ -176,3 +176,12 @@ test("shared Pit Crew snapshot preserves athlete status age across devices", () 
   const snapshot = normalizePitCrewSnapshot({ flags: ["sweet-fatigue"], statusSinceRound: { "sweet-fatigue": 7, broken: 0 } });
   assert.deepEqual(snapshot.statusSinceRound, { "sweet-fatigue": 7 });
 });
+
+
+test("shared Pit Crew sync is battery-friendlier and does not show syncing on every passive poll", async () => {
+  const sharedSource = await import("node:fs/promises").then(({ readFile }) => readFile(new URL("../src/components/PitCrewSharedSession.jsx", import.meta.url), "utf8"));
+  assert.match(sharedSource, /const POLL_MS = 5000/);
+  assert.match(sharedSource, /const LOCAL_WATCH_MS = 1000/);
+  assert.doesNotMatch(sharedSource, /try \{\s*setSyncStatus\("syncing"\);\s*const remote = await loadPitCrewShare\(token\)/);
+  assert.match(sharedSource, /document\.visibilityState !== "visible"/);
+});

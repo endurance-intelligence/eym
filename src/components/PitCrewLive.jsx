@@ -567,13 +567,13 @@ export default function PitCrewLive({ race, onClose = null, syncStatus = "", sha
       ? Math.max(0, activePlanSummary.carbs - PIT_CARB_TARGET.max)
       : 0;
   const planCarbContext = hasStartDrink
-    ? `Startversorgung · Frühstück als Basis · ${activePlanSummary.fluidMl} ml für Loop 1`
+    ? ""
     : planCarbTone === "low"
       ? `${formatNumber(planCarbDelta)} g unter Ziel · Ziel ${PIT_CARB_TARGET.min}–${PIT_CARB_TARGET.max} g/h`
       : planCarbTone === "high"
         ? `${formatNumber(planCarbDelta)} g über Ziel · Ziel ${PIT_CARB_TARGET.min}–${PIT_CARB_TARGET.max} g/h`
         : `Fueling im Ziel · ${PIT_CARB_TARGET.min}–${PIT_CARB_TARGET.max} g KH/h`;
-  const planCarbShortLabel = hasStartDrink ? "Startversorgung passt" : planCarbTone === "low" ? "unter Ziel" : planCarbTone === "high" ? "über Ziel" : "im Ziel";
+  const planCarbShortLabel = planCarbTone === "low" ? "unter Ziel" : planCarbTone === "high" ? "über Ziel" : "im Ziel";
   const savedCurrentPit = editingRound == null
     ? history.find((record) => Number(record.round) === Number(saveRound))
     : null;
@@ -1367,7 +1367,7 @@ export default function PitCrewLive({ race, onClose = null, syncStatus = "", sha
             <b>{loopMustClose ? (arrivalState.arrived ? "Rückkehr bestätigen" : "läuft · Aufnahme noch offen") : "Versorgung vorbereitet"}</b>
             <span>{pendingIntakeSelection.length ? pendingIntakeSelection.map((entry) => selectionLabel(entry, productCatalog)).join(" · ") : "Keine geplante Aufnahme offen."}</span>
           </div>}
-          <div className={`pit-live-fueling-total tone-${planCarbTone}`}><span>AKTUELL GESAMT</span><b>{formatNumber(activePlanSummary.carbs)} g KH · {activePlanSummary.fluidMl} ml</b><em>{isStartLoopPlan ? `${planCarbShortLabel} · Frühstück deckt die Basis` : `${planCarbShortLabel} · Ziel ${PIT_CARB_TARGET.min}–${PIT_CARB_TARGET.max} g`}</em></div>
+          <div className={`pit-live-fueling-total tone-${planCarbTone}`}><span>AKTUELL GESAMT</span><b>{formatNumber(activePlanSummary.carbs)} g KH · {activePlanSummary.fluidMl} ml</b>{!isStartLoopPlan && <em>{planCarbShortLabel} · Ziel {PIT_CARB_TARGET.min}–{PIT_CARB_TARGET.max} g</em>}</div>
         </div>
       </details>
     );
@@ -1440,65 +1440,16 @@ export default function PitCrewLive({ race, onClose = null, syncStatus = "", sha
       </header>
 
       <main className="pit-live-main">
-        <details className="pit-live-collapse pit-live-weather-top">
-          <summary className="pit-live-weather-summary pit-live-weather-summary-compact">
-            <div className="pit-live-weather-summary-label">
-              <span>{primaryLoopWeather ? `WETTER · LOOP ${primaryLoopWeather.round}` : "WETTER"}</span>
-            </div>
-            <div className="pit-live-weather-summary-main">
-              <b>{primaryLoopWeather ? `${pitWeatherIcon(primaryLoopWeather.weatherCode, primaryLoopWeather.isDay)} ${primaryLoopWeather.temperature} °C · Regen ${primaryLoopWeather.precipitationProbability} % · Wind ${primaryLoopWeather.windSpeed} km/h` : autoWeather ? `${pitWeatherIcon(autoWeather.weatherCode, autoWeather.isDay)} ${autoWeather.temperature} °C · Wind ${autoWeather.windSpeed} km/h` : weatherError ? "Auto nicht verfügbar" : "wird geladen …"}</b>
-            </div>
-            <i>›</i>
-          </summary>
-          <div className="pit-live-collapse-body">
-            {autoWeather ? <>
-              {nextLoopWeatherBrief && <div className={`pit-live-weather-brief tone-${nextLoopWeatherBrief.tone}`}><small>KOMMENDER LOOP</small><strong>{nextLoopWeatherBrief.headline}</strong><span>{nextLoopWeatherBrief.detail}</span></div>}
-              <div className="pit-live-weather-facts"><span><b>{autoWeather.feelsLike} °C</b> gefühlt</span><span><b>{autoWeather.humidity} %</b> Feuchte</span><span><b>{formatNumber(autoWeather.precipitation)} mm</b> Regen</span><span><b>{autoWeather.windGusts} km/h</b> Böen</span></div>
-              <div className="pit-live-weather-horizon"><span>PLANUNG</span><b>{Math.round(Number(autoWeather.horizonMinutes || 0) / 60)} h</b><small>{race?.eventLimitMode === "open" ? "Open End · Einsatzhorizont, kein Rennende" : "Eventhorizont"}</small></div>
-              {nextLoopWeather.length > 0 && <div className="pit-live-weather-next">
-                <div className="pit-live-weather-next-head"><small>NÄCHSTE LOOPS</small><strong>{nextWeatherAlert?.label || "Wettertrend"}</strong></div>
-                <div className="pit-live-weather-loop-grid">{nextLoopWeather.map((forecast) => {
-                  const alert = pitWeatherAlert(forecast);
-                  const loopActions = pitWeatherCrewActions(forecast, effectiveAthleteFlags);
-                  return <article key={forecast.round} className={`tone-${alert?.tone || "good"}`}><div><span>LOOP {forecast.round}</span><b>{hhmm(forecast.startAt)}–{hhmm(forecast.endAt)}</b></div><strong>{pitWeatherIcon(forecast.weatherCode, forecast.isDay)} {forecast.temperature} °C <em>· gefühlt {forecast.feelsLike} °C</em></strong><small>Regen {forecast.precipitationProbability} % · {formatNumber(forecast.precipitation)} mm · Feuchte {forecast.humidity} %<br />Wind {forecast.windSpeed} km/h · Böen {forecast.windGusts} km/h</small>{loopActions.length > 0 && <div className="pit-live-weather-loop-actions">{loopActions.slice(0, 3).map((action) => <span key={action}>{action}</span>)}</div>}</article>;
-                })}</div>
-              </div>}
-              {weatherCrewActions.length > 0 && <div className="pit-live-weather-actions"><small>CREW VORBEREITEN</small><div>{weatherCrewActions.map((action) => <span key={action}>{action}</span>)}</div></div>}
-            </> : <p className="pit-live-help">{weatherError || "Wetter wird geladen …"}</p>}
-            <details className="pit-live-weather-override">
-              <summary>Wetter vor Ort weicht deutlich ab</summary>
-              <p className="pit-live-help">Nur hier korrigieren, wenn die reale Situation sichtbar anders ist als der Forecast.</p>
-              <div className="pit-live-weather-grid">
-                {WEATHER_OPTIONS.map(([key, icon, label]) => <button type="button" key={key} className={weather.includes(key) ? "active" : ""} onClick={() => setWeather((current) => toggleValue(current, key))}>{icon} {label}</button>)}
-              </div>
-            </details>
-          </div>
-        </details>
-
         <section className={`pit-live-clock mode-${timing.mode} ${timing.started ? "" : "prestart"}`}>
           <b>{timing.started ? `RUNDE ${timing.currentRound}` : "VOR START"}</b>
           <span>Nächster Start <strong>{hhmm(timing.nextStart)}</strong>{timing.started && arrivalState.arrived && <small>Countdown bis Start: {pitCountdownLabel(timing.minutesToStart)}</small>}</span>
           {timing.started && <em><span>Pit Modus:</span><strong>{arrivalState.arrived ? modeTitle : "WARTET AUF ATHLET"}</strong></em>}
         </section>
 
-        {incomingApplies && (
-          <section className="pit-live-incoming">
-            <div><small>ATHLET IM ANFLUG · LOOP {timing.currentRound}</small><strong>{compactStatus(incomingFlags)}</strong><span>Vorabmeldung synchronisiert{incomingAt ? ` · ${hhmm(new Date(incomingAt))}` : ""}. Crew-Hinweise und Fueling reagieren bereits darauf.</span></div>
-            <b>→ vorbereiten</b>
-          </section>
-        )}
-
         {fuelMode === "liquid-only" && (
           <section className="pit-live-fuel-mode">
             <div><small>FUEL-MODUS</small><strong>🥤 Nur flüssig aktiv</strong><span>Feste Nahrung bleibt aus dem Idealvorschlag, bis der Athlet wieder feste Nahrung freigibt.</span></div>
             <button type="button" onClick={() => { setFuelMode("normal"); clearAthleteFlag("liquid-only"); setSaveMessage("Fuel-Modus: feste Nahrung wieder freigegeben."); }}>Fest geht wieder</button>
-          </section>
-        )}
-
-        {athleteFeedbackApplies && !incomingApplies && (
-          <section className={`pit-live-athlete-feedback ${athleteFeedback.flags?.length ? "changed" : "okay"}`}>
-            <div><small>{athleteFeedback.source === "athlete" ? "RÜCKMELDUNG ATHLET" : "RÜCKMELDUNG CREW"}</small><strong>{athleteFeedback.flags?.length ? compactStatus(athleteFeedback.flags) : "✓ Alles okay"}</strong><span>{athleteFeedback.flags?.length ? "Änderungen am Pit-Vorschlag wurden übernommen." : "Keine Änderung am vorbereiteten Plan nötig."}</span></div>
-            <b>{athleteFeedback.flags?.length ? "↻ angepasst" : "✓ unverändert"}</b>
           </section>
         )}
 
@@ -1534,8 +1485,46 @@ export default function PitCrewLive({ race, onClose = null, syncStatus = "", sha
         <section className={`pit-live-recommendation plan-tone-${planCardTone}`}>
           <div className="pit-live-section-head">
             <div><small>{planAdjusted ? "SPOT · MANUELL ANGEPASST" : "SPOT · IDEALVORSCHLAG"}</small><h3>{timing.started ? `Pit: Loop ${timing.currentRound}` : "Pit: Start"}</h3><div className={`pit-live-overall-status tone-${planCardTone}`}>{planCardStatus}</div></div>
-            <div className="pit-live-suggestion-total"><b>{formatNumber(activePlanSummary.carbs)} g KH</b><span>{activePlanSummary.fluidMl} ml</span><em className={`pit-live-carb-context tone-${planCarbTone}`}>{planCarbContext}</em></div>
+            <div className="pit-live-suggestion-total"><b>{formatNumber(activePlanSummary.carbs)} g KH</b><span>{activePlanSummary.fluidMl} ml</span>{planCarbContext && <em className={`pit-live-carb-context tone-${planCarbTone}`}>{planCarbContext}</em>}</div>
           </div>
+          <details className="pit-live-collapse pit-live-weather-top pit-live-spot-weather">
+          <summary className="pit-live-weather-summary pit-live-weather-summary-compact">
+            <div className="pit-live-weather-summary-label">
+              <span>{primaryLoopWeather ? `WETTER · LOOP ${primaryLoopWeather.round}` : "WETTER"}</span>
+            </div>
+            <div className="pit-live-weather-summary-main">
+              <b>{primaryLoopWeather ? `${pitWeatherIcon(primaryLoopWeather.weatherCode, primaryLoopWeather.isDay)} ${primaryLoopWeather.temperature} °C · Regen ${primaryLoopWeather.precipitationProbability} % · Wind ${primaryLoopWeather.windSpeed} km/h` : autoWeather ? `${pitWeatherIcon(autoWeather.weatherCode, autoWeather.isDay)} ${autoWeather.temperature} °C · Wind ${autoWeather.windSpeed} km/h` : weatherError ? "Auto nicht verfügbar" : "wird geladen …"}</b>
+            </div>
+            <i>›</i>
+          </summary>
+          <div className="pit-live-collapse-body">
+            {autoWeather ? <>
+              {nextLoopWeatherBrief && <div className={`pit-live-weather-brief tone-${nextLoopWeatherBrief.tone}`}><small>KOMMENDER LOOP</small><strong>{nextLoopWeatherBrief.headline}</strong><span>{nextLoopWeatherBrief.detail}</span></div>}
+              <div className="pit-live-weather-facts"><span><b>{autoWeather.feelsLike} °C</b> gefühlt</span><span><b>{autoWeather.humidity} %</b> Feuchte</span><span><b>{formatNumber(autoWeather.precipitation)} mm</b> Regen</span><span><b>{autoWeather.windGusts} km/h</b> Böen</span></div>
+              <div className="pit-live-weather-horizon"><span>PLANUNG</span><b>{Math.round(Number(autoWeather.horizonMinutes || 0) / 60)} h</b><small>{race?.eventLimitMode === "open" ? "Open End · Einsatzhorizont, kein Rennende" : "Eventhorizont"}</small></div>
+              {nextLoopWeather.length > 0 && <div className="pit-live-weather-next">
+                <div className="pit-live-weather-next-head"><small>NÄCHSTE LOOPS</small><strong>{nextWeatherAlert?.label || "Wettertrend"}</strong></div>
+                <div className="pit-live-weather-loop-grid">{nextLoopWeather.map((forecast) => {
+                  const alert = pitWeatherAlert(forecast);
+                  const loopActions = pitWeatherCrewActions(forecast, effectiveAthleteFlags);
+                  return <article key={forecast.round} className={`tone-${alert?.tone || "good"}`}><div><span>LOOP {forecast.round}</span><b>{hhmm(forecast.startAt)}–{hhmm(forecast.endAt)}</b></div><strong>{pitWeatherIcon(forecast.weatherCode, forecast.isDay)} {forecast.temperature} °C <em>· gefühlt {forecast.feelsLike} °C</em></strong><small>Regen {forecast.precipitationProbability} % · {formatNumber(forecast.precipitation)} mm · Feuchte {forecast.humidity} %<br />Wind {forecast.windSpeed} km/h · Böen {forecast.windGusts} km/h</small>{loopActions.length > 0 && <div className="pit-live-weather-loop-actions">{loopActions.slice(0, 3).map((action) => <span key={action}>{action}</span>)}</div>}</article>;
+                })}</div>
+              </div>}
+              {weatherCrewActions.length > 0 && <div className="pit-live-weather-actions"><small>CREW VORBEREITEN</small><div>{weatherCrewActions.map((action) => <span key={action}>{action}</span>)}</div></div>}
+            </> : <p className="pit-live-help">{weatherError || "Wetter wird geladen …"}</p>}
+            <details className="pit-live-weather-override">
+              <summary>Wetter vor Ort weicht deutlich ab</summary>
+              <p className="pit-live-help">Nur hier korrigieren, wenn die reale Situation sichtbar anders ist als der Forecast.</p>
+              <div className="pit-live-weather-grid">
+                {WEATHER_OPTIONS.map(([key, icon, label]) => <button type="button" key={key} className={weather.includes(key) ? "active" : ""} onClick={() => setWeather((current) => toggleValue(current, key))}>{icon} {label}</button>)}
+              </div>
+            </details>
+          </div>
+        </details>
+          {incomingApplies && incomingFlags.length > 0 && <div className="pit-live-athlete-feedback changed pit-live-spot-athlete-signal">
+            <div><small>ATHLETE-MELDUNG · LOOP {timing.currentRound}</small><strong>{compactStatus(incomingFlags)}</strong><span>Vorabmeldung übernommen · SPOT, Crew-Aktionen und Fueling sind bereits angepasst{incomingAt ? ` · ${hhmm(new Date(incomingAt))}` : ""}.</span></div>
+            <b>↻ aktiv</b>
+          </div>}
           {effectiveAthleteFlags.length > 0 && <div className="pit-live-plan-adjusted"><b>↻ PLAN LIVE ANGEPASST</b><span>{compactStatus(effectiveAthleteFlags)}</span></div>}
           {planAdjusted && <div className="pit-live-plan-adjusted pit-live-manual-adjusted"><b>✎ CREW-AUSWAHL AKTIV</b><span>Die Werte und Produkte unten sind die tatsächlich ausgewählte Planung, nicht mehr der ursprüngliche Idealvorschlag.</span></div>}
           {activePitSelection.length > 0 && <div className="pit-live-suggestion-group"><small>IM PIT</small><div>{activePitSelection.map((entry) => <span key={`pit:${entry.productId}:${entry.portionId}`}>{selectionLabel(entry, productCatalog)}</span>)}</div></div>}

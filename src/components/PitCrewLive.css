@@ -325,3 +325,20 @@
   .pit-live-weather-summary-compact .pit-live-weather-summary-label{min-width:74px}
   .pit-live-weather-summary-compact .pit-live-weather-summary-main>b{font-size:12px!important}
 }
+
+
+/* v4.1.46 · weather lives inside SPOT; no separate start-supply banner */
+.pit-live-spot-weather{
+  margin-top:10px;
+  border-color:color-mix(in srgb,var(--accent) 24%,var(--border));
+  border-radius:11px;
+  background:color-mix(in srgb,var(--bg-input) 82%,transparent);
+  box-shadow:none;
+}
+.pit-live-spot-weather .pit-live-weather-summary-compact{min-height:40px!important;padding:6px 9px!important}
+.pit-live-spot-weather .pit-live-collapse-body{background:color-mix(in srgb,var(--bg-sidebar) 94%,transparent)}
+.pit-live-spot-athlete-signal{margin-top:9px}
+@media(max-width:700px){
+  .pit-live-spot-weather{margin-top:9px}
+  .pit-live-spot-weather .pit-live-weather-summary-compact{min-height:44px!important}
+}
