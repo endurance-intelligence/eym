@@ -129,3 +129,45 @@ test("direct shared Crew session has no forced exit and pauses sync while iOS is
   assert.match(sharedSource, /setSyncStatus\("offline"\)/);
   assert.match(sharedSource, /setSyncStatus\("synced"\)/);
 });
+
+
+test("shared Pit Crew snapshot carries test mode so every device sees the same demo phase", () => {
+  const snapshot = normalizePitCrewSnapshot({
+    demoActive: true,
+    demoRound: 4,
+    demoMinutesToStart: 6,
+    history: [{ round: 3, selection: [{ productId: "banana", portionId: "whole", timing: "now" }] }],
+    liveSnapshot: { history: [{ round: 8, selection: [{ productId: "isostar", portionId: "500", timing: "carry" }] }] },
+  });
+  assert.equal(snapshot.demoActive, true);
+  assert.equal(snapshot.demoRound, 4);
+  assert.equal(snapshot.demoMinutesToStart, 6);
+  assert.equal(snapshot.history[0].round, 3);
+  assert.equal(snapshot.liveSnapshot.history[0].round, 8);
+});
+
+test("shared Crew recovery listens to iPad page restore and exposes copyable diagnostics", async () => {
+  const sharedSource = await import("node:fs/promises").then(({ readFile }) => readFile(new URL("../src/components/PitCrewSharedSession.jsx", import.meta.url), "utf8"));
+  assert.match(sharedSource, /window\.addEventListener\("pageshow", retry\)/);
+  assert.match(sharedSource, /window\.addEventListener\("focus", retry\)/);
+  assert.match(sharedSource, /Diagnose kopieren/);
+  assert.match(sharedSource, /Technische Diagnose/);
+  assert.match(sharedSource, /INITIAL_RETRY_DELAYS = \[0, 450, 1400, 3000, 6000\]/);
+});
+
+test("app accepts a crew token from query or hash fallback for mobile link hand-offs", async () => {
+  const appSource = await import("node:fs/promises").then(({ readFile }) => readFile(new URL("../src/App.jsx", import.meta.url), "utf8"));
+  assert.match(appSource, /sharedPitCrewTokenFromLocation/);
+  assert.match(appSource, /location\.search/);
+  assert.match(appSource, /location\.hash/);
+  assert.match(appSource, /new URLSearchParams\(hashQuery\)\.get\("crew"\)/);
+});
+
+
+test("failed shared pushes stay retryable instead of being marked locally synced", async () => {
+  const sharedSource = await import("node:fs/promises").then(({ readFile }) => readFile(new URL("../src/components/PitCrewSharedSession.jsx", import.meta.url), "utf8"));
+  const updateAt = sharedSource.indexOf("const saved = await updatePitCrewShare(token, snapshot)");
+  const markSyncedAt = sharedSource.indexOf("lastLocalRef.current = JSON.stringify(savedState)");
+  assert.ok(updateAt >= 0);
+  assert.ok(markSyncedAt > updateAt);
+});

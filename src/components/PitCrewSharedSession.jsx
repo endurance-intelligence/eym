@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { version } from "../../package.json";
 import PitCrewLive from "./PitCrewLive";
 import {
   loadPitCrewShare,
@@ -10,10 +11,23 @@ import { normalizePitCrewSnapshot } from "../services/pitCrewShareCore.js";
 
 const POLL_MS = 2500;
 const LOCAL_WATCH_MS = 700;
-const INITIAL_RETRY_DELAYS = [0, 450, 1400];
+const INITIAL_RETRY_DELAYS = [0, 450, 1400, 3000, 6000];
 
 function wait(ms) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function sharedSessionDiagnostic(token, error = "") {
+  return [
+    `EI v${version}`,
+    `online=${globalThis.navigator?.onLine !== false}`,
+    `visibility=${globalThis.document?.visibilityState || "unknown"}`,
+    `token=${String(token || "").length ? `erkannt (${String(token).length} Zeichen)` : "fehlt"}`,
+    `path=${globalThis.location?.pathname || ""}`,
+    `search=${globalThis.location?.search ? "vorhanden" : "leer"}`,
+    `error=${String(error || "kein Fehler")}`,
+    `browser=${String(globalThis.navigator?.userAgent || "unbekannt").slice(0, 180)}`,
+  ].join("\n");
 }
 
 async function loadPitCrewShareResilient(token) {
@@ -74,9 +88,13 @@ export default function PitCrewSharedSession({ token, race: raceFallback = null,
       else setSyncStatus("offline");
     };
     window.addEventListener("online", retry);
+    window.addEventListener("pageshow", retry);
+    window.addEventListener("focus", retry);
     document.addEventListener("visibilitychange", resume);
     return () => {
       window.removeEventListener("online", retry);
+      window.removeEventListener("pageshow", retry);
+      window.removeEventListener("focus", retry);
       document.removeEventListener("visibilitychange", resume);
     };
   }, [share]);
@@ -129,14 +147,15 @@ export default function PitCrewSharedSession({ token, race: raceFallback = null,
       const snapshot = normalizePitCrewSnapshot(readPitCrewLocalSnapshot(share.race));
       const serialized = JSON.stringify(snapshot);
       if (!serialized || serialized === lastLocalRef.current) return;
-      lastLocalRef.current = serialized;
       pushingRef.current = true;
       setSyncStatus("syncing");
       try {
         const saved = await updatePitCrewShare(token, snapshot);
         if (!active) return;
+        const savedState = normalizePitCrewSnapshot(saved.state);
+        lastLocalRef.current = JSON.stringify(savedState);
         revisionRef.current = Math.max(revisionRef.current, Number(saved.revision || 0));
-        setShare((current) => ({ ...(current || {}), state: normalizePitCrewSnapshot(saved.state), revision: saved.revision }));
+        setShare((current) => ({ ...(current || {}), state: savedState, revision: saved.revision }));
         setError("");
         setSyncStatus("synced");
       } catch (cause) {
@@ -155,7 +174,15 @@ export default function PitCrewSharedSession({ token, race: raceFallback = null,
   }, [share?.race, token]);
 
   if (error && !share) {
-    return <main className="auth-shell"><section className="auth-card"><p className="eyebrow">Pit Crew Live</p><h1>Crew-Link nicht verfügbar</h1><p className="muted">{error}</p><div className="button-row"><button type="button" onClick={() => setLoadAttempt((value) => value + 1)}>Erneut versuchen</button></div></section></main>;
+    const diagnostic = sharedSessionDiagnostic(token, error);
+    const copyDiagnostic = async () => {
+      try {
+        await globalThis.navigator?.clipboard?.writeText?.(diagnostic);
+      } catch {
+        // Screenshot of the diagnostic block is still enough for support.
+      }
+    };
+    return <main className="auth-shell"><section className="auth-card pit-shared-error-card"><p className="eyebrow">Pit Crew Live</p><h1>Crew-Link nicht verfügbar</h1><p className="muted">{error}</p><div className="button-row"><button type="button" onClick={() => setLoadAttempt((value) => value + 1)}>Erneut versuchen</button><button type="button" className="secondary" onClick={copyDiagnostic}>Diagnose kopieren</button></div><details className="pit-shared-diagnostic"><summary>Technische Diagnose</summary><pre>{diagnostic}</pre></details></section></main>;
   }
   if (!race) {
     return <main className="auth-shell"><section className="auth-card"><p className="eyebrow">Pit Crew Live</p><h1>Crew-Session wird geladen …</h1><p className="muted">Kein EI-Login erforderlich.</p></section></main>;

@@ -32,6 +32,7 @@ function normalizeHistory(value) {
       round: Math.max(0, Number(record.round || 0)),
       selection: normalizeSelection(record.selection),
       plannedSelection: normalizeSelection(record.plannedSelection),
+      pitSelection: normalizeSelection(record.pitSelection),
       carrySelection: normalizeSelection(record.carrySelection),
       carriedSelection: normalizeSelection(record.carriedSelection),
       ...(normalizeSummary(record.summary) ? { summary: normalizeSummary(record.summary) } : {}),
@@ -81,7 +82,7 @@ function normalizeAthleteFeedback(value) {
   };
 }
 
-export function normalizePitCrewSnapshot(value = {}) {
+function normalizePitCrewOperationalState(value = {}) {
   return {
     anchorAt: String(value?.anchorAt || ""),
     history: normalizeHistory(value?.history),
@@ -99,6 +100,20 @@ export function normalizePitCrewSnapshot(value = {}) {
     gelPriority: Array.isArray(value?.gelPriority) ? value.gelPriority.map(String) : null,
     fuelMode: value?.fuelMode === "liquid-only" ? "liquid-only" : "normal",
     customProducts: normalizeCustomProducts(value?.customProducts),
+  };
+}
+
+export function normalizePitCrewSnapshot(value = {}) {
+  const base = normalizePitCrewOperationalState(value);
+  const liveSnapshot = value?.liveSnapshot && typeof value.liveSnapshot === "object"
+    ? normalizePitCrewOperationalState(value.liveSnapshot)
+    : null;
+  return {
+    ...base,
+    demoActive: Boolean(value?.demoActive),
+    demoRound: Math.max(0, Number(value?.demoRound || 0)),
+    demoMinutesToStart: Math.max(0, Math.min(60, Number(value?.demoMinutesToStart ?? 10) || 10)),
+    liveSnapshot,
   };
 }
 

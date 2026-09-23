@@ -25,9 +25,18 @@ function deferredPage(Component) {
   );
 }
 
+function sharedPitCrewTokenFromLocation(location = window.location) {
+  const direct = new URLSearchParams(location.search || "").get("crew");
+  if (direct) return String(direct).trim();
+  const hash = String(location.hash || "").replace(/^#\/?/, "");
+  const hashQuery = hash.includes("?") ? hash.slice(hash.indexOf("?") + 1) : hash;
+  const fallback = new URLSearchParams(hashQuery).get("crew");
+  return fallback ? String(fallback).trim() : "";
+}
+
 export default function App() {
   const { state, session, authLoading, cloudStatus, cloudError, reloadCloudState, logout } = useApp();
-  const sharedPitCrewToken = new URLSearchParams(window.location.search).get("crew");
+  const sharedPitCrewToken = sharedPitCrewTokenFromLocation(window.location);
   if (sharedPitCrewToken) return <ErrorBoundary><PitCrewSharedSession token={sharedPitCrewToken} /></ErrorBoundary>;
   if (authLoading) return <main className="auth-shell"><section className="auth-card"><p className="eyebrow">Endurance Intelligence</p><h1>Cloud wird verbunden …</h1></section></main>;
   if (!session) return <Auth />;

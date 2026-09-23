@@ -8,6 +8,7 @@ import {
   PIT_CREW_DEFAULT_GEL_PRIORITY,
   PIT_CREW_DEFAULT_STOCK_IDS,
   PIT_CREW_PRODUCTS,
+  pitCrewPairingAssessment,
   pitCrewRaceEligible,
   pitCrewArrivalState,
   pitCountdownLabel,
@@ -354,6 +355,35 @@ test("gel priority can be reordered while Maurten stays reserve by default", () 
     gelPriority: ["sis-beta", "226ers-high-strawberry", "226ers-high", "maurten100"],
   });
   assert.equal(recommendation.selection.some((item) => item.productId === "sis-beta"), true);
+});
+
+
+
+test("stable Backyard rotation separates awkward sweet combinations between pit and loop", () => {
+  const first = recommendPitCrew({ round: 1, minutesToStart: 10, history: [] });
+  const banana = first.selection.find((entry) => entry.productId === "banana");
+  const haribo = first.selection.find((entry) => entry.productId === "haribo");
+  assert.equal(banana?.timing, "now");
+  assert.equal(haribo?.timing, "carry");
+  assert.equal(pitCrewPairingAssessment(first.selection).good, true);
+});
+
+test("Haribo repetition is penalized so the coach does not prescribe Roulette every loop", () => {
+  const history = [
+    { selection: [{ productId: "haribo", portionId: "10g", timing: "carry" }], summary: { carbs: 9.6 } },
+    { selection: [{ productId: "haribo", portionId: "10g", timing: "carry" }], summary: { carbs: 9.6 } },
+  ];
+  const next = recommendPitCrew({ round: 3, minutesToStart: 10, history });
+  assert.equal(next.selection.some((entry) => entry.productId === "haribo"), false);
+});
+
+test("hot-weather refresh never pairs KNAX with banana or another sweet solid in the same pit", () => {
+  const result = recommendPitCrew({ round: 3, minutesToStart: 10, history: [], weather: ["hot"] });
+  assert.equal(pitCrewPairingAssessment(result.selection).good, true);
+  const pitIds = result.selection.filter((entry) => (entry.timing || "now") === "now").map((entry) => entry.productId);
+  if (pitIds.includes("cucumber")) {
+    assert.equal(pitIds.some((id) => ["banana", "milk-roll", "haribo"].includes(id)), false);
+  }
 });
 
 test("36 hour open Backyard start stock scales supplies and preserves a reserve", () => {

@@ -238,7 +238,7 @@ export const PIT_CREW_PRODUCTS = [
     label: "Haribo Roulette",
     icon: "🍬",
     category: "food",
-    traits: ["sweet", "quick"],
+    traits: ["sweet", "quick", "portable"],
     nutritionSource: "label",
     packageG: 150,
     rollsPerPackage: 6,
@@ -513,58 +513,87 @@ function quickSuggestion(history, mode, gelPriority = PIT_CREW_DEFAULT_GEL_PRIOR
 
 const STABLE_FUEL_OPTIONS = [
   {
-    key: "banana",
-    selection: [choice("banana", "whole", "now"), choice("haribo", "10g", "now"), choice("isostar", "500", "carry")],
-    why: "Alles stabil: echte Nahrung plus kleiner KH-Baustein und Hydrate & Perform Orange für die Runde.",
+    key: "banana-orange",
+    selection: [choice("banana", "whole", "now"), choice("haribo", "10g", "carry"), choice("isostar", "500", "carry")],
+    why: "Banane im Pit, den kleinen Haribo-Baustein bewusst erst auf der Runde. So bleiben Geschmack und Textur getrennt, Hydrate & Perform deckt die Flüssigkeit.",
   },
   {
-    key: "milk-roll",
-    selection: [choice("milk-roll", "1", "now"), choice("haribo", "10g", "now"), choice("isostar-long", "500", "carry")],
-    why: "Alles stabil: feste Kohlenhydrate plus kleiner KH-Baustein und Long Energy Zitrone als Getränke-Rotation.",
+    key: "milk-roll-long",
+    selection: [choice("milk-roll", "1", "now"), choice("haribo", "10g", "carry"), choice("isostar-long", "500", "carry")],
+    why: "Milchbrötchen im Pit; Haribo erst auf der Runde. Long Energy Zitrone rotiert den Getränkegeschmack, ohne mehrere süße feste Sachen gleichzeitig zu stapeln.",
   },
   {
-    key: "fusilli",
+    key: "fusilli-orange",
     selection: [choice("fusilli", "100", "now"), choice("salt-sticks", "10g", "now"), choice("isostar", "500", "carry")],
-    why: "Herzhafte Abwechslung im Pit plus ausreichend Kohlenhydrate und Hydrate & Perform Orange.",
+    why: "Herzhafter Pit mit Fusilli und kleiner Salzkomponente; Hydrate & Perform kommt getrennt auf die Runde.",
   },
   {
-    key: "226ers-high",
-    selection: [choice("haribo", "20g", "now"), choice("226ers-high", "1", "carry"), choice("water", "500", "carry")],
-    why: "Gezielte Gel-Rotation: 226ERS Neutral liefert 50 g KH, Wasser hält Geschmack und Flüssigkeit getrennt steuerbar.",
+    key: "neutral-gel",
+    selection: [choice("milk-roll", "1", "now"), choice("226ers-high", "1", "carry"), choice("water", "500", "carry")],
+    why: "Im Pit eine einfache feste Basis, auf der Runde 226ERS Neutral plus Wasser. Geschmack und Konsistenz werden bewusst getrennt.",
   },
   {
     key: "banana-long",
-    selection: [choice("banana", "whole", "now"), choice("haribo", "10g", "now"), choice("isostar-long", "500", "carry")],
-    why: "Echte Nahrung plus Long Energy Zitrone: Getränkegeschmack bewusst rotieren, ohne die KH-Zufuhr zu verlieren.",
+    selection: [choice("banana", "whole", "now"), choice("haribo", "10g", "carry"), choice("isostar-long", "500", "carry")],
+    why: "Banane im Pit und Long Energy für die Runde; der kleine Haribo-Baustein bleibt unterwegs statt gleichzeitig mit der Banane gegessen zu werden.",
   },
   {
     key: "milk-roll-orange",
-    selection: [choice("milk-roll", "1", "now"), choice("haribo", "10g", "now"), choice("isostar", "500", "carry")],
-    why: "Feste Kohlenhydrate plus Hydrate & Perform Orange: bewährte Kombination nach der Getränke-Rotation.",
+    selection: [choice("milk-roll", "1", "now"), choice("haribo", "10g", "carry"), choice("isostar", "500", "carry")],
+    why: "Milchbrötchen im Pit, Hydrate & Perform auf der Runde. Haribo dient nur als getrennte portable Ergänzung und nicht als zweites süßes Pit-Food.",
   },
   {
-    key: "226ers-high-strawberry",
+    key: "salty-strawberry",
     selection: [choice("banana", "half", "now"), choice("226ers-high-strawberry", "1", "carry"), choice("water", "500", "carry")],
-    why: "Gel-Rotation mit Salty Strawberry: 50 g KH plus 250 mg Natrium; Wasser separat dazu, damit die Runde nicht nur süß bleibt.",
+    why: "Kleine Banane im Pit; Salty Strawberry und Wasser kommen auf die Runde. Das hält feste Nahrung und Gel geschmacklich auseinander.",
   },
   {
     key: "fusilli-long",
     selection: [choice("fusilli", "100", "now"), choice("salt-sticks", "10g", "now"), choice("isostar-long", "500", "carry")],
-    why: "Herzhafte Abwechslung plus Long Energy Zitrone als zweite Getränkeoption.",
+    why: "Herzhafte Pit-Rotation mit Fusilli und Salzstangen; Long Energy Zitrone liefert die Runde separat.",
   },
 ];
 
+const PIT_PAIRING_AVOID_SAME_PIT = new Set([
+  "banana|cucumber",
+  "banana|haribo",
+  "cucumber|haribo",
+  "cucumber|milk-roll",
+  "haribo|milk-roll",
+]);
+
+function pairingKey(leftId, rightId) {
+  return [String(leftId || ""), String(rightId || "")].sort().join("|");
+}
+
+export function pitCrewPairingAssessment(selection = []) {
+  const now = (Array.isArray(selection) ? selection : []).filter((entry) => (entry?.timing || "now") === "now");
+  const conflicts = [];
+  for (let left = 0; left < now.length; left += 1) {
+    for (let right = left + 1; right < now.length; right += 1) {
+      if (PIT_PAIRING_AVOID_SAME_PIT.has(pairingKey(now[left]?.productId, now[right]?.productId))) {
+        conflicts.push([String(now[left]?.productId || ""), String(now[right]?.productId || "")]);
+      }
+    }
+  }
+  return { good: conflicts.length === 0, conflicts };
+}
+
+function rotationScore(candidate, history = []) {
+  const ids = [...new Set((candidate.selection || []).map((entry) => String(entry.productId || "")).filter(Boolean))];
+  const repeatPenalty = ids.reduce((sum, id) => sum + recentProductCount(history, id, 2) * (id === "haribo" ? 6 : 3), 0);
+  const pairingPenalty = pitCrewPairingAssessment(candidate.selection).conflicts.length * 20;
+  return repeatPenalty + pairingPenalty;
+}
+
 function stableSuggestion(round = 1, history = []) {
   const startIndex = Math.max(0, (Math.max(1, Number(round || 1)) - 1) % STABLE_FUEL_OPTIONS.length);
-  for (let offset = 0; offset < STABLE_FUEL_OPTIONS.length; offset += 1) {
-    const candidate = STABLE_FUEL_OPTIONS[(startIndex + offset) % STABLE_FUEL_OPTIONS.length];
-    const recentKey = candidate.key.startsWith("banana") ? "banana"
-      : candidate.key.startsWith("milk-roll") ? "milk-roll"
-        : candidate.key.startsWith("fusilli") ? "fusilli"
-          : candidate.key;
-    if (recentProductCount(history, recentKey, 2) === 0) return candidate;
-  }
-  return STABLE_FUEL_OPTIONS[startIndex];
+  const ranked = STABLE_FUEL_OPTIONS.map((candidate, index) => ({
+    candidate,
+    order: (index - startIndex + STABLE_FUEL_OPTIONS.length) % STABLE_FUEL_OPTIONS.length,
+    score: rotationScore(candidate, history),
+  })).sort((left, right) => left.score - right.score || left.order - right.order);
+  return ranked[0]?.candidate || STABLE_FUEL_OPTIONS[startIndex];
 }
 
 function hasSelection(selection = [], productId, timing = null) {
@@ -661,7 +690,8 @@ function normalSuggestion({ round = 1, history = [], flags = [], weather = [], g
     selection = addUnique(selection, choice("water", "200", "now"));
     if (!hasSelection(selection, "dryll", "carry") && !hasSelection(selection, "isostar", "carry")) selection = addUnique(selection, choice("isostar", "500", "carry"));
     const cucumberRecently = recentProductCount(history, "cucumber", 2) > 0;
-    const allowRefresh = Math.max(1, Number(round || 1)) % 3 === 0 && !cucumberRecently;
+    const sweetPitFood = selection.some((entry) => (entry.timing || "now") === "now" && ["banana", "milk-roll", "haribo"].includes(String(entry.productId)));
+    const allowRefresh = Math.max(1, Number(round || 1)) % 3 === 0 && !cucumberRecently && !sweetPitFood;
     if (allowRefresh) selection = addUnique(selection, choice("cucumber", "50", "now"));
     reasons.push(allowRefresh
       ? "Warm: Flüssigkeit priorisieren; Gurke nur als gelegentlicher Refresh, nicht als wiederkehrende Fuel-Hauptkomponente."
@@ -730,6 +760,24 @@ function fallbackProduct(missing, products, availableIds, usedIds) {
   return ranked[0]?.product || null;
 }
 
+function sanitizeRecommendationPairing(selection = []) {
+  let adjusted = false;
+  let next = (Array.isArray(selection) ? selection : []).map((entry) => ({ ...entry }));
+  const nowIds = () => new Set(next.filter((entry) => (entry.timing || "now") === "now").map((entry) => String(entry.productId)));
+  let ids = nowIds();
+
+  if (ids.has("haribo") && (ids.has("banana") || ids.has("milk-roll"))) {
+    next = next.map((entry) => String(entry.productId) === "haribo" && (entry.timing || "now") === "now" ? { ...entry, timing: "carry" } : entry);
+    adjusted = true;
+    ids = nowIds();
+  }
+  if (ids.has("cucumber") && (ids.has("banana") || ids.has("milk-roll") || ids.has("haribo"))) {
+    next = next.filter((entry) => !(String(entry.productId) === "cucumber" && (entry.timing || "now") === "now"));
+    adjusted = true;
+  }
+  return { selection: next, adjusted };
+}
+
 function fitRecommendationToStock(selection, products, availableProductIds) {
   if (!Array.isArray(availableProductIds)) return { selection, adjusted: false };
   const availableIds = new Set(availableProductIds.map(String));
@@ -761,14 +809,15 @@ export function recommendPitCrew({ round = 1, minutesToStart = 10, history = [],
     ? quickSuggestion(history, mode, gelPriority)
     : normalSuggestion({ round, history, flags, weather, gelPriority });
   const fitted = fitRecommendationToStock(recommendation.selection, products, availableProductIds);
-  const summary = summarizePitSelection(fitted.selection, products);
-  const why = fitted.selection.length
-    ? `${recommendation.why}${fitted.adjusted ? " · An deinen Vorrat angepasst." : ""}`
+  const paired = sanitizeRecommendationPairing(fitted.selection);
+  const summary = summarizePitSelection(paired.selection, products);
+  const why = paired.selection.length
+    ? `${recommendation.why}${fitted.adjusted ? " · An deinen Vorrat angepasst." : ""}${paired.adjusted ? " · Geschmacklich ungünstige Pit-Kombination getrennt." : ""}`
     : "Im Vorrat ist aktuell keine passende Versorgung aktiviert. Vorrat öffnen und verfügbare Sachen auswählen.";
   return {
     mode,
     ...recommendation,
-    selection: fitted.selection,
+    selection: paired.selection,
     why,
     summary,
   };

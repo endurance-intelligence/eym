@@ -240,10 +240,10 @@ export default function PitCrewLive({ race, onClose = null, syncStatus = "", sha
   const stored = useMemo(() => safeStoredSession(baseStorageKey), [baseStorageKey]);
   const storedPrep = useMemo(() => safeStoredSession(prepStorageKey), [prepStorageKey]);
   const storedHasPrep = Array.isArray(stored?.stockIds);
-  const [demoActive, setDemoActive] = useState(false);
-  const [demoRound, setDemoRound] = useState(0);
-  const [demoMinutesToStart, setDemoMinutesToStart] = useState(10);
-  const storageKey = demoActive ? `${baseStorageKey}:demo` : baseStorageKey;
+  const [demoActive, setDemoActive] = useState(() => Boolean(sharedMode && stored?.demoActive));
+  const [demoRound, setDemoRound] = useState(() => sharedMode && stored?.demoActive ? Math.max(0, Number(stored?.demoRound || 0)) : 0);
+  const [demoMinutesToStart, setDemoMinutesToStart] = useState(() => sharedMode && stored?.demoActive ? Math.max(0, Number(stored?.demoMinutesToStart || 10)) : 10);
+  const storageKey = sharedMode ? baseStorageKey : demoActive ? `${baseStorageKey}:demo` : baseStorageKey;
   const [now, setNow] = useState(() => new Date());
   const [history, setHistory] = useState(() => normalizedLiveHistory(stored?.history));
   const [flags, setFlags] = useState(() => Array.isArray(stored?.flags) ? stored.flags : []);
@@ -277,6 +277,9 @@ export default function PitCrewLive({ race, onClose = null, syncStatus = "", sha
   const [selectionMode, setSelectionMode] = useState("suggestion");
   const [selectionDirty, setSelectionDirty] = useState(false);
   const [carryAdjust, setCarryAdjust] = useState({});
+  const [pitIntakeOpen, setPitIntakeOpen] = useState(false);
+  const [pitIntakeMode, setPitIntakeMode] = useState("planned");
+  const [pitIntakeAdjust, setPitIntakeAdjust] = useState({});
   const [pitCategory, setPitCategory] = useState("drink");
   const [fuelTimingTab, setFuelTimingTab] = useState("now");
   const [saveMessage, setSaveMessage] = useState("");
@@ -284,7 +287,7 @@ export default function PitCrewLive({ race, onClose = null, syncStatus = "", sha
   const [autoWeather, setAutoWeather] = useState(null);
   const [weatherError, setWeatherError] = useState("");
   const loadedPitRound = useRef(null);
-  const liveSnapshotBeforeDemo = useRef(null);
+  const liveSnapshotBeforeDemo = useRef(sharedMode && stored?.liveSnapshot ? stored.liveSnapshot : null);
   const anchor = anchorAt ? new Date(anchorAt) : null;
   const intervalMinutes = Number(race?.loopIntervalMinutes || 60);
   const liveTiming = timeContext(anchor, intervalMinutes, now);
@@ -310,8 +313,31 @@ export default function PitCrewLive({ race, onClose = null, syncStatus = "", sha
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    safePitCrewStorageWrite(storageKey, { anchorAt, history, flags, incomingFlags, incomingAt, incomingRound, athleteFeedback, weather, arrivalRound, arrivalAt, stockIds, stockTargets, packingChecked, customProducts, gelPriority, fuelMode });
-  }, [anchorAt, arrivalAt, arrivalRound, athleteFeedback, customProducts, flags, fuelMode, gelPriority, history, incomingAt, incomingFlags, incomingRound, packingChecked, stockIds, stockTargets, storageKey, weather]);
+    safePitCrewStorageWrite(storageKey, {
+      anchorAt,
+      history,
+      flags,
+      incomingFlags,
+      incomingAt,
+      incomingRound,
+      athleteFeedback,
+      weather,
+      arrivalRound,
+      arrivalAt,
+      stockIds,
+      stockTargets,
+      packingChecked,
+      customProducts,
+      gelPriority,
+      fuelMode,
+      ...(sharedMode ? {
+        demoActive,
+        demoRound,
+        demoMinutesToStart,
+        liveSnapshot: demoActive ? liveSnapshotBeforeDemo.current : null,
+      } : {}),
+    });
+  }, [anchorAt, arrivalAt, arrivalRound, athleteFeedback, customProducts, demoActive, demoMinutesToStart, demoRound, flags, fuelMode, gelPriority, history, incomingAt, incomingFlags, incomingRound, packingChecked, sharedMode, stockIds, stockTargets, storageKey, weather]);
 
   useEffect(() => {
     if (typeof window === "undefined" || demoActive) return;
@@ -380,10 +406,9 @@ export default function PitCrewLive({ race, onClose = null, syncStatus = "", sha
   const weatherCrewActions = pitWeatherCrewActions(primaryLoopWeather, effectiveAthleteFlags);
   const effectiveWeather = [...new Set([...(autoWeather?.flags || []), ...weather, ...(primaryLoopWeather?.flags || [])])];
   const previousHistory = history.filter((record) => Number(record.round) !== Number(saveRound));
-  const planningHistory = previousHistory.map((record) => ({
-    ...record,
-    summary: record.carryStatus === "pending" && record.provisionalSummary ? record.provisionalSummary : record.summary,
-  }));
+  // Only confirmed intake belongs to the physiological history. A bottle or gel
+  // merely carried onto the loop is still a plan until the athlete returns.
+  const planningHistory = previousHistory.map((record) => ({ ...record, summary: record.summary }));
   const pendingCarry = [...history].reverse().find((record) => {
     if (record.carryStatus !== "pending") return false;
     const planned = normalizedLiveSelection(record.plannedSelection);
@@ -392,9 +417,9 @@ export default function PitCrewLive({ race, onClose = null, syncStatus = "", sha
   });
   const pendingLoopNumber = pendingCarry ? Number(pendingCarry.round) + 1 : null;
   const pendingIntakeSelection = pendingCarry
-    ? (normalizedLiveSelection(pendingCarry.plannedSelection).length
-      ? normalizedLiveSelection(pendingCarry.plannedSelection)
-      : normalizedLiveSelection(pendingCarry.carrySelection).map((entry) => ({ ...entry, timing: entry.timing || "carry" })))
+    ? (normalizedLiveSelection(pendingCarry.carrySelection).length
+      ? normalizedLiveSelection(pendingCarry.carrySelection).map((entry) => ({ ...entry, timing: "carry" }))
+      : normalizedLiveSelection(pendingCarry.plannedSelection).filter((entry) => (entry.timing || "now") === "carry").map((entry) => ({ ...entry, timing: "carry" })))
     : [];
   const arrivalPendingItems = pendingCarry && Number(pendingLoopNumber) === Number(timing.currentRound)
     ? pendingIntakeSelection
@@ -446,6 +471,10 @@ export default function PitCrewLive({ race, onClose = null, syncStatus = "", sha
   const activePlanSummary = summarizePitSelection(activeSelection, productCatalog);
   const activePitSummary = summarizePitSelection(activePitSelection, productCatalog);
   const activeLoopSummary = summarizePitSelection(activeLoopSelection, productCatalog);
+  const singlePitIntakeItem = activePitSelection.length === 1 ? activePitSelection[0] : null;
+  const pitIntakePartialRated = activePitSelection.length === 1 || (activePitSelection.length > 1 && activePitSelection.every((entry, index) =>
+    Object.prototype.hasOwnProperty.call(pitIntakeAdjust, `pit:${saveRound}:${entry.productId}:${entry.portionId}:${index}`),
+  ));
   const activeCaffeineSource = caffeineSourceForSelection(activeSelection, productCatalog);
   const activeCaffeineProducts = [...new Set(activeSelection
     .filter((entry) => caffeineMgForEntry(entry, productCatalog) > 0)
@@ -470,7 +499,7 @@ export default function PitCrewLive({ race, onClose = null, syncStatus = "", sha
     : null;
   const savedLoopReady = Boolean(savedCurrentPit && !loopMustClose && !selectionDirty);
   const assessment = assessPitSelection(activeSelection, planningHistory, { weather: effectiveWeather, products: productCatalog });
-  const confirmedHistory = history.filter((record) => record.carryStatus !== "pending");
+  const confirmedHistory = history.filter((record) => record.carryStatus !== "pending" || normalizedLiveSelection(record.selection).length > 0);
   const historyRolling = rollingPitAverage(confirmedHistory, null, 3, productCatalog);
   const caffeineSourceLabel = activeCaffeineSource === "gel" ? "Gel" : activeCaffeineSource === "drink" ? "Getränk" : activeCaffeineSource === "mixed" ? "gemischt" : "kein Koffein";
   const caffeinePromptRecommended = effectiveAthleteFlags.includes("tired") && Number(historyRolling.caffeineMg || 0) < 45 && Number(activePlanSummary.caffeineMg || 0) <= 0;
@@ -702,10 +731,57 @@ export default function PitCrewLive({ race, onClose = null, syncStatus = "", sha
     setSaveMessage("Eigenes Vorrats-Produkt entfernt.");
   }
 
-  function savePit() {
+  function pitResultKey(entry, index) {
+    return `pit:${saveRound}:${String(entry?.productId || "unknown")}:${String(entry?.portionId || "unknown")}:${index}`;
+  }
+
+  function setPitResult(entry, index, intakeFactor) {
+    const key = pitResultKey(entry, index);
+    setPitIntakeAdjust((current) => ({ ...current, [key]: intakeFactor }));
+  }
+
+  function intakeSelectionFromPlan(plan = [], mode = "planned", adjustments = {}, keyBuilder = () => "") {
+    return normalizedLiveSelection(plan).flatMap((entry, index) => {
+      const factor = mode === "planned"
+        ? 1
+        : mode === "none"
+          ? 0
+          : mode === "half"
+            ? 0.5
+            : Number(adjustments[keyBuilder(entry, index)]);
+      if (!Number.isFinite(factor) || factor <= 0) return [];
+      return [{ ...entry, intakeFactor: Math.max(0, Math.min(1, factor)) }];
+    });
+  }
+
+  function requestPitReady() {
+    if (editingRound != null || !activePitSelection.length) {
+      savePit(editingRound != null ? null : []);
+      return;
+    }
+    setPitIntakeMode("planned");
+    setPitIntakeAdjust({});
+    setPitIntakeOpen(true);
+    setSaveMessage("");
+  }
+
+  function confirmPitIntakeAndSave() {
+    const consumedPit = intakeSelectionFromPlan(
+      activePitSelection,
+      pitIntakeMode === "partial" ? (activePitSelection.length === 1 ? "half" : "rated") : pitIntakeMode,
+      pitIntakeAdjust,
+      pitResultKey,
+    );
+    setPitIntakeOpen(false);
+    setPitIntakeMode("planned");
+    setPitIntakeAdjust({});
+    savePit(consumedPit);
+  }
+
+  function savePit(confirmedPitSelection = null) {
     const unresolvedCarry = [...history].reverse().find((record) =>
       record.carryStatus === "pending"
-      && (normalizedLiveSelection(record.plannedSelection).length || normalizedLiveSelection(record.carrySelection).length)
+      && normalizedLiveSelection(record.carrySelection).length
       && Number(record.round) < Number(saveRound),
     );
     if (unresolvedCarry) {
@@ -724,18 +800,24 @@ export default function PitCrewLive({ race, onClose = null, syncStatus = "", sha
       quantity: quantity({ quantity: count }),
       timing: itemTiming || "now",
     }));
+    const pitPlan = plannedSelection.filter((entry) => entry.timing === "now");
     const carrySelection = plannedSelection.filter((entry) => entry.timing === "carry");
     const provisionalSummary = summarizePitSelection(plannedSelection, productCatalog);
     const correctingConfirmedPit = editingRound != null && existing && existing.carryStatus !== "pending";
-    const summary = correctingConfirmedPit ? provisionalSummary : summarizePitSelection([], productCatalog);
+    const actualPitSelection = correctingConfirmedPit
+      ? plannedSelection
+      : normalizedLiveSelection(confirmedPitSelection == null ? pitPlan : confirmedPitSelection).map((entry) => ({ ...entry, timing: "now" }));
+    const summary = summarizePitSelection(actualPitSelection, productCatalog);
     const record = {
       round: saveRound,
       recordedAt: new Date().toISOString(),
-      selection: correctingConfirmedPit ? plannedSelection : [],
+      selection: actualPitSelection,
       plannedSelection: correctingConfirmedPit ? [] : plannedSelection,
+      pitSelection: correctingConfirmedPit ? [] : pitPlan,
       carrySelection: correctingConfirmedPit ? [] : carrySelection,
       carriedSelection: correctingConfirmedPit ? (existing?.carriedSelection || carrySelection) : (carrySelection.length ? carrySelection : (existing?.carriedSelection || [])),
-      carryStatus: correctingConfirmedPit ? "confirmed" : (plannedSelection.length ? "pending" : "none"),
+      carryStatus: correctingConfirmedPit ? "confirmed" : (carrySelection.length ? "pending" : "confirmed"),
+      pitConfirmedAt: correctingConfirmedPit ? (existing?.pitConfirmedAt || new Date().toISOString()) : new Date().toISOString(),
       summary,
       provisionalSummary: correctingConfirmedPit ? summary : provisionalSummary,
       flags: editingRound != null && existing ? [...(existing.flags || [])] : [...flags],
@@ -743,13 +825,25 @@ export default function PitCrewLive({ race, onClose = null, syncStatus = "", sha
     };
     setHistory((current) => [...current.filter((item) => Number(item.round) !== Number(saveRound)), record]
       .sort((left, right) => Number(left.round) - Number(right.round)));
+    const pitSummary = summarizePitSelection(actualPitSelection, productCatalog);
     setSaveMessage(editingRound != null
       ? `Pit ${saveRound} korrigiert · bestätigte IST-Aufnahme aktualisiert.`
-      : `Loop ${readyLoopNumber} startklar · ${formatNumber(provisionalSummary.carbs)} g KH geplant · tatsächliche Aufnahme wird bei Rückkehr bestätigt.`);
+      : `Loop ${readyLoopNumber} startklar · im Pit ${formatNumber(pitSummary.carbs)} g KH bestätigt${carrySelection.length ? " · Loop-Verpflegung wird erst bei Rückkehr als IST gebucht." : "."}`);
     setSelection(plannedSelection);
     setSelectionMode("manual");
     setSelectionDirty(false);
     setEditingRound(null);
+  }
+
+  function undoReadyPit() {
+    if (!savedCurrentPit || editingRound != null) return;
+    const restored = selectionWithTiming(savedCurrentPit);
+    setHistory((current) => current.filter((record) => Number(record.round) !== Number(saveRound)));
+    setSelection(restored);
+    setSelectionMode("manual");
+    setSelectionDirty(false);
+    setPitIntakeOpen(false);
+    setSaveMessage(`Loop ${readyLoopNumber}: Startklar aufgehoben · Auswahl kann wieder geändert werden.`);
   }
 
   function carryResultKey(entry, index) {
@@ -780,10 +874,12 @@ export default function PitCrewLive({ race, onClose = null, syncStatus = "", sha
     const carriedSelection = intakePlan.filter((entry) => entry.timing === "carry").map((entry) => ({ ...entry }));
     setHistory((current) => current.map((record) => {
       if (Number(record.round) !== Number(pendingCarry.round)) return record;
-      const summary = summarizePitSelection(consumedPlan, productCatalog);
+      const confirmedPit = normalizedLiveSelection(record.selection).filter((entry) => (entry.timing || "now") === "now");
+      const actualSelection = [...confirmedPit, ...consumedPlan.map((entry) => ({ ...entry, timing: "carry" }))];
+      const summary = summarizePitSelection(actualSelection, productCatalog);
       return {
         ...record,
-        selection: consumedPlan,
+        selection: actualSelection,
         plannedSelection: [],
         carriedSelection,
         carrySelection: [],
@@ -809,28 +905,33 @@ export default function PitCrewLive({ race, onClose = null, syncStatus = "", sha
   function beginDemo() {
     if (!demoActive) {
       liveSnapshotBeforeDemo.current = {
-        selection,
-        selectionMode,
-        selectionDirty,
-        arrivalRound,
-        arrivalAt,
+        anchorAt,
+        history,
+        flags,
         incomingFlags,
         incomingAt,
         incomingRound,
         athleteFeedback,
-        carryAdjust,
-        editingRound,
-        saveMessage,
+        weather,
+        arrivalRound,
+        arrivalAt,
         stockIds,
         stockTargets,
+        packingChecked,
         customProducts,
         gelPriority,
         fuelMode,
+        selection,
+        selectionMode,
+        selectionDirty,
+        carryAdjust,
+        editingRound,
+        saveMessage,
       };
     }
     if (typeof window !== "undefined") {
-      if (!demoActive) safePitCrewStorageWrite(baseStorageKey, { anchorAt, history, flags, incomingFlags, incomingAt, incomingRound, weather, arrivalRound, arrivalAt, stockIds, stockTargets, customProducts, gelPriority, fuelMode });
-      safePitCrewStorageRemove(`${baseStorageKey}:demo`);
+      if (!demoActive && !sharedMode) safePitCrewStorageWrite(baseStorageKey, { anchorAt, history, flags, incomingFlags, incomingAt, incomingRound, athleteFeedback, weather, arrivalRound, arrivalAt, stockIds, stockTargets, packingChecked, customProducts, gelPriority, fuelMode });
+      if (!sharedMode) safePitCrewStorageRemove(`${baseStorageKey}:demo`);
     }
     setDemoActive(true);
     setDemoRound(0);
@@ -850,38 +951,45 @@ export default function PitCrewLive({ race, onClose = null, syncStatus = "", sha
     setSelectionMode("suggestion");
     setSelectionDirty(false);
     setCarryAdjust({});
+    setPitIntakeOpen(false);
+    setPitIntakeMode("planned");
+    setPitIntakeAdjust({});
     setEditingRound(null);
     setSaveMessage("Demo-Modus aktiv · echte Live-Daten bleiben unverändert.");
     loadedPitRound.current = null;
   }
 
   function endDemo() {
-    const liveStored = safeStoredSession(baseStorageKey);
+    const liveStored = sharedMode
+      ? (liveSnapshotBeforeDemo.current || normalizePitCrewSnapshot())
+      : safeStoredSession(baseStorageKey);
     const transient = liveSnapshotBeforeDemo.current || {};
     setDemoActive(false);
-    setHistory(Array.isArray(liveStored?.history) ? liveStored.history : []);
-    setFlags(Array.isArray(liveStored?.flags) ? liveStored.flags : []);
-    setIncomingFlags(Array.isArray(liveStored?.incomingFlags) ? liveStored.incomingFlags : (Array.isArray(transient.incomingFlags) ? transient.incomingFlags : []));
+    setDemoRound(0);
+    setDemoMinutesToStart(10);
+    setHistory(normalizedLiveHistory(liveStored?.history ?? transient.history));
+    setFlags(Array.isArray(liveStored?.flags) ? liveStored.flags : (transient.flags || []));
+    setIncomingFlags(Array.isArray(liveStored?.incomingFlags) ? liveStored.incomingFlags : (transient.incomingFlags || []));
     setIncomingAt(String(liveStored?.incomingAt || transient.incomingAt || ""));
-    setIncomingRound(Math.max(0, Number(liveStored?.incomingRound || transient.incomingRound || 0)));
-    setSignalDraft([]);
-    setCheckInOpen(false);
-    setAthleteFeedback(liveStored?.athleteFeedback && typeof liveStored.athleteFeedback === "object" ? liveStored.athleteFeedback : (transient.athleteFeedback || null));
-    setWeather(Array.isArray(liveStored?.weather) ? liveStored.weather : []);
-    setAnchorAt(liveStored?.anchorAt || plannedAnchor(race)?.toISOString() || "");
-    setArrivalRound(Math.max(0, Number(liveStored?.arrivalRound || transient.arrivalRound || 0)));
+    setIncomingRound(Math.max(0, Number(liveStored?.incomingRound ?? transient.incomingRound ?? 0)));
+    setAthleteFeedback(liveStored?.athleteFeedback || transient.athleteFeedback || null);
+    setWeather(Array.isArray(liveStored?.weather) ? liveStored.weather : (transient.weather || []));
+    setArrivalRound(Math.max(0, Number(liveStored?.arrivalRound ?? transient.arrivalRound ?? 0)));
     setArrivalAt(String(liveStored?.arrivalAt || transient.arrivalAt || ""));
-    setCustomProducts(Array.isArray(liveStored?.customProducts) ? liveStored.customProducts : (Array.isArray(transient.customProducts) ? transient.customProducts : []));
     setStockIds(Array.isArray(liveStored?.stockIds) ? liveStored.stockIds : (Array.isArray(transient.stockIds) ? transient.stockIds : PIT_CREW_DEFAULT_STOCK_IDS));
     setStockTargets(liveStored?.stockTargets && typeof liveStored.stockTargets === "object" ? liveStored.stockTargets : (transient.stockTargets && typeof transient.stockTargets === "object" ? transient.stockTargets : {}));
-    setGelPriority(normalizeGelPriority(liveStored?.gelPriority || transient.gelPriority || PIT_CREW_DEFAULT_GEL_PRIORITY));
-    setFuelMode((liveStored?.fuelMode || transient.fuelMode) === "liquid-only" ? "liquid-only" : "normal");
-    setSelection(Array.isArray(transient.selection) ? transient.selection : []);
+    setPackingChecked(liveStored?.packingChecked && typeof liveStored.packingChecked === "object" ? liveStored.packingChecked : (transient.packingChecked || {}));
+    setCustomProducts(normalizedCustomProducts(liveStored?.customProducts?.length ? liveStored.customProducts : transient.customProducts));
+    setGelPriority(normalizeGelPriority(liveStored?.gelPriority?.length ? liveStored.gelPriority : transient.gelPriority));
+    setFuelMode(liveStored?.fuelMode === "liquid-only" || transient.fuelMode === "liquid-only" ? "liquid-only" : "normal");
+    setSelection(transient.selection || []);
     setSelectionMode(transient.selectionMode || "suggestion");
     setSelectionDirty(Boolean(transient.selectionDirty));
     setCarryAdjust(transient.carryAdjust || {});
     setEditingRound(transient.editingRound ?? null);
-    setSaveMessage("Demo beendet · zurück in der echten Live-Session.");
+    setSaveMessage("Testmodus beendet · Live-Session wiederhergestellt.");
+    setCheckInOpen(false);
+    setAnchorAt(String(liveStored?.anchorAt || transient.anchorAt || plannedAnchor(race)?.toISOString() || ""));
     liveSnapshotBeforeDemo.current = null;
     loadedPitRound.current = null;
   }
@@ -1223,6 +1331,9 @@ export default function PitCrewLive({ race, onClose = null, syncStatus = "", sha
     setSelectionMode("suggestion");
     setSelectionDirty(false);
     setCarryAdjust({});
+    setPitIntakeOpen(false);
+    setPitIntakeMode("planned");
+    setPitIntakeAdjust({});
     setEditingRound(null);
     setAnchorAt(plannedAnchor(race)?.toISOString() || "");
     setSaveMessage("Live-Session zurückgesetzt. Vorrat & Startplan bleiben erhalten.");
@@ -1457,12 +1568,12 @@ export default function PitCrewLive({ race, onClose = null, syncStatus = "", sha
         </details>
 
         {saveMessage && <p className="pit-live-save-message">{saveMessage}</p>}
-        <section className="pit-live-mini-bar" aria-label="Pit Aktion">
+        <section className={`pit-live-mini-bar${savedLoopReady && !athleteNeedsArrival ? " has-undo" : ""}`} aria-label="Pit Aktion">
           <button
             type="button"
             className={`pit-live-main-action${athleteNeedsArrival ? " needs-arrival" : savedLoopReady ? " is-ready" : ""}`}
             disabled={athleteNeedsArrival ? false : savedLoopReady || !activeSelection.length}
-            onClick={athleteNeedsArrival ? markAthleteReturned : savePit}
+            onClick={athleteNeedsArrival ? markAthleteReturned : requestPitReady}
           >
             {athleteNeedsArrival
               ? `ATHLET ZURÜCK · LOOP ${timing.currentRound}`
@@ -1472,8 +1583,36 @@ export default function PitCrewLive({ race, onClose = null, syncStatus = "", sha
                   ? `✓ LOOP ${readyLoopNumber} STARTKLAR`
                   : `LOOP ${readyLoopNumber} STARTKLAR MACHEN`}
           </button>
+          {savedLoopReady && !athleteNeedsArrival && editingRound == null && (
+            <button type="button" className="pit-live-ready-undo" onClick={undoReadyPit} aria-label={`Startklar für Loop ${readyLoopNumber} aufheben`} title="Startklar aufheben und Auswahl bearbeiten">×<span>ändern</span></button>
+          )}
         </section>
       </main>
+
+      {pitIntakeOpen && <div className="pit-live-checkin-backdrop" role="presentation">
+        <section className="pit-live-checkin pit-live-pit-intake-confirm" role="dialog" aria-modal="true" aria-label="Pit-Verzehr vor dem Start bestätigen">
+          <div className="pit-live-checkin-head"><div><small>PIT: LOOP {readyLoopNumber}</small><h3>Was wurde im Pit wirklich eingenommen?</h3><p>Jetzt bestätigen, solange es frisch ist. Nur die Mitgabe auf die Runde bleibt bis zur nächsten Rückkehr offen.</p></div></div>
+          <div className="pit-live-checkin-intake">
+            <div className="pit-live-checkin-subhead"><small>IM PIT</small><span>{singlePitIntakeItem ? selectionLabel(singlePitIntakeItem, productCatalog) : activePitSelection.map((entry) => selectionLabel(entry, productCatalog)).join(" · ")}</span></div>
+            <div className="pit-live-checkin-intake-modes">
+              <button type="button" className={pitIntakeMode === "planned" ? "active" : ""} onClick={() => { setPitIntakeMode("planned"); setPitIntakeAdjust({}); }}>{singlePitIntakeItem ? "✓ Komplett" : "✓ Alles wie geplant"}</button>
+              <button type="button" className={pitIntakeMode === "partial" ? "active" : ""} onClick={() => { setPitIntakeMode("partial"); if (singlePitIntakeItem) setPitIntakeAdjust({}); }}>½ Teilweise</button>
+              <button type="button" className={pitIntakeMode === "none" ? "active" : ""} onClick={() => { setPitIntakeMode("none"); setPitIntakeAdjust({}); }}>○ Nichts</button>
+            </div>
+            {pitIntakeMode === "partial" && activePitSelection.length > 1 && <div className="pit-live-loop-items pit-live-checkin-intake-items">
+              {activePitSelection.map((entry, index) => {
+                const key = pitResultKey(entry, index);
+                const selectedFactor = pitIntakeAdjust[key];
+                return <div className="pit-live-loop-item" key={key}><b>{selectionLabel(entry, productCatalog)}</b><div>{[[1, "✓ alles"], [0.5, "½ etwa halb"], [0, "nicht"]].map(([factor, label]) => <button type="button" key={factor} className={Number(selectedFactor) === factor ? "active" : ""} onClick={() => setPitResult(entry, index, factor)}>{label}</button>)}</div></div>;
+              })}
+            </div>}
+          </div>
+          <div className="pit-live-checkin-actions pit-live-checkin-actions-split">
+            <button type="button" className="pit-live-secondary" onClick={() => setPitIntakeOpen(false)}>Zurück</button>
+            <button type="button" className="pit-live-primary" disabled={pitIntakeMode === "partial" && !pitIntakePartialRated} onClick={confirmPitIntakeAndSave}>BESTÄTIGEN & STARTKLAR</button>
+          </div>
+        </section>
+      </div>}
 
       {checkInOpen && <div className="pit-live-checkin-backdrop" role="presentation">
         <section className="pit-live-checkin" role="dialog" aria-modal="true" aria-label="Athletenstatus und Loop-Verpflegung nach Rückkehr">
@@ -1495,7 +1634,7 @@ export default function PitCrewLive({ race, onClose = null, syncStatus = "", sha
 
           {arrivalPendingItems.length > 0 && (
             <div className="pit-live-checkin-intake">
-              <div className="pit-live-checkin-subhead"><small>AUFNAHME FÜR LOOP {timing.currentRound}</small><span>{singleArrivalItem ? selectionLabel(singleArrivalItem, productCatalog) : "Was vom kompletten Pit-/Loop-Plan wurde tatsächlich eingenommen?"}</span></div>
+              <div className="pit-live-checkin-subhead"><small>AUF DER RUNDE · LOOP {timing.currentRound}</small><span>{singleArrivalItem ? selectionLabel(singleArrivalItem, productCatalog) : "Was von der mitgegebenen Loop-Verpflegung wurde tatsächlich eingenommen? Pit-Verzehr wurde bereits vor dem Start bestätigt."}</span></div>
               <div className="pit-live-checkin-intake-modes">
                 <button type="button" className={arrivalIntakeMode === "planned" ? "active" : ""} onClick={() => { setArrivalIntakeMode("planned"); setCarryAdjust({}); }}>{singleArrivalItem ? "✓ Komplett" : "✓ Alles wie geplant"}</button>
                 <button type="button" className={arrivalIntakeMode === "partial" ? "active" : ""} onClick={() => { setArrivalIntakeMode("partial"); if (singleArrivalItem) setCarryAdjust({}); }}>½ Teilweise</button>

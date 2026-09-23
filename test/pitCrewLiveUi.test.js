@@ -10,11 +10,13 @@ test("Pit Crew keeps test controls out of the normal live flow", () => {
   assert.match(source, /Testmodus starten/);
 });
 
-test("Pit Crew only books loop intake after explicit return confirmation", () => {
+test("Pit Crew confirms pit intake before start-ready and books carried fuel only after return", () => {
+  assert.match(source, /pitIntakeMode === "planned"/);
+  assert.match(source, /Was wurde im Pit wirklich eingenommen/);
+  assert.match(source, /BESTÄTIGEN & STARTKLAR/);
   assert.match(source, /arrivalIntakeMode === "planned"/);
-  assert.match(source, /Alles wie geplant/);
   assert.match(source, /confirmPendingCarry\("planned"\)/);
-  assert.match(source, /const confirmedHistory = history\.filter\(\(record\) => record\.carryStatus !== "pending"\)/);
+  assert.match(source, /record\.carryStatus !== "pending" \|\| normalizedLiveSelection\(record\.selection\)\.length > 0/);
   assert.match(source, /const lastConfirmedRecord = \[\.\.\.confirmedHistory\]/);
   assert.doesNotMatch(source, /lastRecord\.carryStatus === "pending" && lastRecord\.provisionalSummary/);
   assert.doesNotMatch(source, /wie geplant angenommen/);
@@ -73,8 +75,8 @@ test("Pit Crew main plan card uses traffic-light attention and includes all crew
   assert.doesNotMatch(source, /<div className=\{`pit-live-alert/);
 });
 
-test("Athlet zurück combines status and loop intake in one return sheet", () => {
-  assert.match(source, /AUFNAHME FÜR LOOP/);
+test("Athlet zurück combines status and only the carried loop intake in one return sheet", () => {
+  assert.match(source, /AUF DER RUNDE · LOOP/);
   assert.match(source, /Alles wie geplant/);
   assert.match(source, /½ Teilweise/);
   assert.match(source, /○ Nichts/);
@@ -85,7 +87,7 @@ test("Athlet zurück combines status and loop intake in one return sheet", () =>
 test("Pit Crew uses one sticky return action and simplifies single-item intake", () => {
   assert.match(source, /Bei Rückkehr unten einmal „Athlet zurück“ tippen/);
   assert.doesNotMatch(source, /<button type="button" onClick=\{markAthleteReturned\}>ATHLET ZURÜCK/);
-  assert.match(source, /onClick=\{athleteNeedsArrival \? markAthleteReturned : savePit\}/);
+  assert.match(source, /onClick=\{athleteNeedsArrival \? markAthleteReturned : requestPitReady\}/);
   assert.match(source, /const singleArrivalItem = arrivalPendingItems\.length === 1/);
   assert.match(source, /singleArrivalItem \? "✓ Komplett" : "✓ Alles wie geplant"/);
   assert.match(source, /arrivalPendingItems\.length > 1/);
@@ -173,8 +175,11 @@ test("Pit Crew compares on-hand stock with a visible recommendation and keeps ge
   assert.doesNotMatch(source, /<summary><span>GEL-PRIORITÄT<\/span>/);
 });
 
-test("demo reproduces the real race lifecycle from Pit Start instead of skipping Loop 1 intake", () => {
-  assert.match(source, /const \[demoRound, setDemoRound\] = useState\(0\)/);
+test("demo reproduces the real race lifecycle from Pit Start and can be synchronized through shared state", () => {
+  assert.match(source, /const \[demoRound, setDemoRound\] = useState\(\(\) => sharedMode/);
+  assert.match(source, /demoActive,/);
+  assert.match(source, /demoMinutesToStart,/);
+  assert.match(source, /liveSnapshot: demoActive \? liveSnapshotBeforeDemo\.current : null/);
   assert.match(source, /started: demoStarted/);
   assert.match(source, /demoRound === 0 \? "Loop 1 starten/);
   assert.match(source, /disabled=\{!savedLoopReady \|\| \(demoRound > 0 && \(!arrivalState\.arrived \|\| checkInOpen\)\)\}/);
@@ -184,17 +189,27 @@ test("demo reproduces the real race lifecycle from Pit Start instead of skipping
 
 
 
-test("Pit Crew materializes the default suggestion when a loop is made start-ready instead of blanking the UI", () => {
+test("Pit Crew materializes the default suggestion and immediately records confirmed pit intake", () => {
   assert.match(source, /const plannedSelection = activeSelection\.map/);
+  assert.match(source, /const actualPitSelection =/);
+  assert.match(source, /pitConfirmedAt:/);
   assert.match(source, /setSelection\(plannedSelection\);\s*setSelectionMode\("manual"\)/);
-  assert.match(source, /tatsächliche Aufnahme wird bei Rückkehr bestätigt/);
+  assert.match(source, /Loop-Verpflegung wird erst bei Rückkehr als IST gebucht/);
 });
 
-test("return confirmation audits the complete planned intake, not only the carried drink", () => {
-  assert.match(source, /plannedSelection: normalizedLiveSelection\(record\.plannedSelection\)/);
+test("return confirmation audits only carried fuel because pit intake was already confirmed before departure", () => {
   assert.match(source, /const pendingIntakeSelection = pendingCarry/);
-  assert.match(source, /Was vom kompletten Pit-\/Loop-Plan wurde tatsächlich eingenommen/);
-  assert.match(source, /const consumedPlan = intakePlan\.flatMap/);
+  assert.match(source, /normalizedLiveSelection\(pendingCarry\.carrySelection\)/);
+  assert.match(source, /Was von der mitgegebenen Loop-Verpflegung wurde tatsächlich eingenommen/);
+  assert.match(source, /const confirmedPit = normalizedLiveSelection\(record\.selection\)/);
+  assert.match(source, /actualSelection = \[\.\.\.confirmedPit, \.\.\.consumedPlan/);
+});
+
+test("start-ready can be undone before the loop starts without deleting the selected plan", () => {
+  assert.match(source, /function undoReadyPit\(\)/);
+  assert.match(source, /Startklar aufgehoben/);
+  assert.match(source, /className="pit-live-ready-undo"/);
+  assert.match(source, />×<span>ändern<\/span>/);
 });
 
 test("infrequent Pit Crew tools are nested and collapsible instead of filling the live view", () => {
