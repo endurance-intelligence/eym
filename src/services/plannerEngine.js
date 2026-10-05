@@ -118,6 +118,245 @@ function isRunningPlanEntry(entry) {
   return /run|lauf|orc|interval|schwelle|backyard|loop|track|treadmill|wettkampf|race|marathon|ultra/.test(value);
 }
 
+function plannedDistanceBounds(entry = {}) {
+  const explicitMin = Number(entry.distanceMinKm ?? entry.distanceMin);
+  const explicitMax = Number(entry.distanceMaxKm ?? entry.distanceMax);
+  if (Number.isFinite(explicitMin) && explicitMin >= 0 && Number.isFinite(explicitMax) && explicitMax >= explicitMin) {
+    return { min: explicitMin, max: explicitMax };
+  }
+  const title = String(entry.title || "").replace(/,/g, ".");
+  const range = title.match(/(\d+(?:\.\d+)?)\s*[–-]\s*(\d+(?:\.\d+)?)\s*km/i);
+  if (range) {
+    const min = Number(range[1]);
+    const max = Number(range[2]);
+    if (Number.isFinite(min) && Number.isFinite(max) && max >= min) return { min, max };
+  }
+  const distance = Math.max(0, Number(entry.distance || 0));
+  return { min: distance, max: distance };
+}
+
+function plannedRunningVolume(plan = [], { includeOptional = false, bound = "max" } = {}) {
+  return (Array.isArray(plan) ? plan : [])
+    .filter((entry) => !entry.plannedCancellation && isRunningPlanEntry(entry) && (includeOptional || !entry.optional))
+    .reduce((sum, entry) => sum + plannedDistanceBounds(entry)[bound === "min" ? "min" : "max"], 0);
+}
+
+function activityDurationMinutes(activity = {}) {
+  const explicit = Number(activity.durationMinutes);
+  if (Number.isFinite(explicit) && explicit > 0) return explicit;
+  const duration = Number(activity.duration);
+  if (Number.isFinite(duration) && duration > 0) return duration;
+  const seconds = Number(activity.durationSeconds);
+  return Number.isFinite(seconds) && seconds > 0 ? seconds / 60 : 0;
+}
+
+function daysBetweenActivityAnd(activity, referenceDate) {
+  const activityDay = new Date(`${activityDate(activity)}T12:00:00`);
+  const referenceDay = new Date(referenceDate);
+  activityDay.setHours(12, 0, 0, 0);
+  referenceDay.setHours(12, 0, 0, 0);
+  return Math.max(0, Math.round((referenceDay.getTime() - activityDay.getTime()) / DAY_MS));
+}
+
+export function postUltraRecoveryContext(activities = [], reviews = {}, referenceDate = new Date(), baselineKm = 0) {
+  const candidates = activities
+    .filter((activity) => {
+      const date = activityDate(activity);
+      if (!date || new Date(`${date}T12:00:00`) >= referenceDate) return false;
+      const text = `${activity.name || ""} ${activity.type || ""} ${activity.sportType || ""}`.toLowerCase();
+      const distance = Number(activity.distance || 0);
+      const duration = activityDurationMinutes(activity);
+      return isRun(activity) && (distance >= 50 || duration >= 360 || /backyard|ultra|100\s*km|100k/.test(text));
+    })
+    .map((activity) => ({ activity, daysSince: daysBetweenActivityAnd(activity, referenceDate) }))
+    .filter((entry) => entry.daysSince <= 14)
+    .sort((left, right) => left.daysSince - right.daysSince);
+
+  if (!candidates.length) return null;
+  const { activity, daysSince } = candidates[0];
+  const review = reviews[activity.id] || {};
+  const phase = daysSince <= 3 ? "acute" : daysSince <= 7 ? "early" : "return";
+  const base = Math.max(20, Number(baselineKm || 0));
+  const depleted = review.eventPlanningImpact === "depleted" || Number(review.rpe || 0) >= 9;
+  const factor = phase === "acute" ? 0.15 : phase === "early" ? 0.4 : 0.7;
+  const absoluteCeiling = phase === "acute" ? 8 : phase === "early" ? 22 : depleted ? 35 : 38;
+  const highKm = Math.max(phase === "acute" ? 0 : 12, Math.min(absoluteCeiling, Math.round(base * factor)));
+  const lowKm = phase === "acute" ? 0 : Math.max(8, Math.round(highKm * (phase === "early" ? 0.65 : 0.72)));
+
+  return {
+    active: true,
+    activityId: activity.id,
+    activityName: activity.name || "Ultra",
+    activityDate: activityDate(activity),
+    distanceKm: Math.round(Number(activity.distance || 0) * 10) / 10,
+    durationMinutes: Math.round(activityDurationMinutes(activity)),
+    daysSince,
+    phase,
+    lowKm,
+    highKm,
+    qualityAllowed: phase === "return",
+    longRunAllowed: false,
+    reviewImpact: review.eventPlanningImpact || "",
+    summary: phase === "acute"
+      ? "Akute Post-Ultra-Erholung: kein Laufreiz nötig. Alltag, Schlaf, Füße und Beschwerden haben Vorrang."
+      : phase === "early"
+        ? "Früher Wiedereinstieg nach Ultra: nur kurze lockere Tests, keine Qualität und kein Longrun."
+        : "Return to Training nach Ultra: maximal ein bewusst gewählter Qualitätsreiz; umliegende Tage werden aktiv entschärft und der Longrun bleibt gesperrt.",
+  };
+}
+
+function postUltraRestEntry(entry, reason) {
+  return {
+    ...entry,
+    title: "Ruhetag / Erholung",
+    type: "Ruhetag",
+    distance: 0,
+    duration: 0,
+    time: "",
+    optional: false,
+    fixed: false,
+    keySession: false,
+    goalSessionRole: "post_ultra_recovery",
+    postUltraAdjusted: true,
+    notes: reason,
+  };
+}
+
+function applyPostUltraRecoveryPlan(plan = [], context = null) {
+  if (!context?.active) return { plan, selectedQualityDate: "", adjusted: false };
+  const ordered = [...plan].sort((a, b) => `${a.date}${a.time || ""}`.localeCompare(`${b.date}${b.time || ""}`));
+  const qualityCandidates = ordered.filter((entry) => /orc track|interval|schwelle|tempo/.test(`${entry.type || ""} ${entry.title || ""}`.toLowerCase()));
+  const selectedQuality = context.qualityAllowed
+    ? qualityCandidates.find((entry) => /orc track/.test(`${entry.type || ""} ${entry.title || ""}`.toLowerCase())) || qualityCandidates[0] || null
+    : null;
+  const selectedQualityDate = selectedQuality?.date || "";
+  const selectedDate = selectedQualityDate ? new Date(`${selectedQualityDate}T12:00:00`) : null;
+
+  let adjusted = ordered.map((entry) => {
+    if (entry.raceEvent || entry.eventContinuation || entry.type === "Ruhetag") return entry;
+    const entryDate = new Date(`${entry.date}T12:00:00`);
+    const distanceFromQuality = selectedDate ? Math.round((entryDate - selectedDate) / DAY_MS) : 99;
+    const isSelectedQuality = selectedQuality && entry.id === selectedQuality.id;
+    const textValue = `${entry.type || ""} ${entry.title || ""}`.toLowerCase();
+
+    if (isSelectedQuality) {
+      return {
+        ...entry,
+        keySession: true,
+        optional: false,
+        postUltraSelectedQuality: true,
+        notes: `Post-Ultra Return to Training: Dieser Termin bleibt als einziger bewusst gesetzter Qualitätsreiz der Woche bestehen. Nur teilnehmen, wenn Gehen, Treppen, Füße, Knie, Schienbein und Achillessehne unauffällig sind; sonst auslassen. ${entry.notes || ""}`.trim(),
+      };
+    }
+
+    if (Math.abs(distanceFromQuality) === 1 && (isRunningPlanEntry(entry) || /fußball|football|soccer/.test(textValue))) {
+      return postUltraRestEntry(entry, "Post-Ultra: Der Tag direkt vor/nach dem gewählten Qualitätsreiz bleibt bewusst frei. Keine Kilometerschuld und kein Ersatztraining.");
+    }
+
+    if (/fußball|football|soccer/.test(textValue)) {
+      return {
+        ...entry,
+        optional: true,
+        readinessRestricted: true,
+        postUltraAdjusted: true,
+        notes: `Post-Ultra: Teilnahme aktuell nicht empfohlen. Richtungswechsel und Spitzenbelastungen erhöhen den orthopädischen Reiz; wenn überhaupt nur nach komplett unauffälligem Check-in. ${entry.notes || ""}`.trim(),
+      };
+    }
+
+    if (/orc track|interval|schwelle|tempo/.test(textValue)) {
+      return postUltraRestEntry(entry, "Post-Ultra: Kein zweiter Qualitätsreiz in dieser Woche. Dieser Termin wird zugunsten der strukturellen Erholung ausgesetzt.");
+    }
+
+    if (["Long Run", "Loop-Training", "Backyard Training"].includes(entry.type) || /longrun|long run/.test(textValue)) {
+      const returnPhase = context.phase === "return";
+      const minDistance = returnPhase ? 10 : 4;
+      const maxDistance = returnPhase ? 12 : 6;
+      return {
+        ...entry,
+        title: `${minDistance}–${maxDistance} km locker`,
+        type: "Easy Run",
+        distance: maxDistance,
+        distanceMinKm: minDistance,
+        distanceMaxKm: maxDistance,
+        duration: Math.round(maxDistance * 7),
+        keySession: false,
+        optional: false,
+        loopTraining: null,
+        goalSessionRole: "return_to_training",
+        postUltraAdjusted: true,
+        notes: "Post-Ultra Return to Training: locker verlängern nur, wenn die vorherigen Einheiten und die folgenden 24 Stunden symptomfrei geblieben sind.",
+      };
+    }
+
+    if (isRunningPlanEntry(entry)) {
+      const weekday = DAY_NAMES[new Date(`${entry.date}T12:00:00`).getDay()];
+      const returnPhase = context.phase === "return";
+      if (returnPhase && weekday === "Freitag") {
+        return {
+          ...entry,
+          title: "5–6 km Recovery",
+          type: "Easy Run",
+          distance: 6,
+          distanceMinKm: 5,
+          distanceMaxKm: 6,
+          duration: 40,
+          keySession: false,
+          optional: true,
+          goalSessionRole: "return_to_training",
+          postUltraAdjusted: true,
+          notes: "Post-Ultra Return to Training: optionale Recovery-Einheit. Nur laufen, wenn der Qualitätsreiz und die 24-h-Reaktion komplett unauffällig waren; Auslassen ist vollständig planmäßig.",
+        };
+      }
+      const minDistance = returnPhase ? 8 : 3;
+      const maxDistance = returnPhase ? 10 : 6;
+      const original = Math.max(minDistance, Number(entry.distance || minDistance));
+      const upper = Math.min(maxDistance, Math.max(minDistance, Math.round(original)));
+      const lower = returnPhase ? Math.min(8, upper) : Math.min(4, upper);
+      return {
+        ...entry,
+        title: lower === upper ? `${upper} km locker` : `${lower}–${upper} km locker`,
+        type: "Easy Run",
+        distance: upper,
+        distanceMinKm: lower,
+        distanceMaxKm: upper,
+        duration: Math.round(upper * 7),
+        keySession: false,
+        optional: context.phase !== "return",
+        goalSessionRole: "return_to_training",
+        postUltraAdjusted: true,
+        notes: "Post-Ultra Return to Training: rein locker, keine Pace erzwingen. Bei lokalem Schmerz, verändertem Gangbild, Schwellung oder deutlicher Verschlechterung abbrechen.",
+      };
+    }
+
+    return entry;
+  });
+
+  if (context.phase === "acute") {
+    adjusted = adjusted.map((entry) => isRunningPlanEntry(entry) ? postUltraRestEntry(entry, "Akute Post-Ultra-Erholung: heute kein Laufreiz nötig.") : entry);
+  }
+
+  const requiredRunningKm = () => plannedRunningVolume(adjusted, { includeOptional: false, bound: "max" });
+  if (requiredRunningKm() > context.highKm) {
+    const removable = adjusted
+      .filter((entry) => isRunningPlanEntry(entry) && !entry.postUltraSelectedQuality)
+      .sort((left, right) => {
+        const leftDay = DAY_NAMES[new Date(`${left.date}T12:00:00`).getDay()];
+        const rightDay = DAY_NAMES[new Date(`${right.date}T12:00:00`).getDay()];
+        const removalPriority = (entry, day) => day === "Freitag" ? 0 : entry.optional && day !== "Sonntag" ? 1 : day === "Montag" ? 2 : day === "Donnerstag" ? 3 : day === "Sonntag" ? 5 : 4;
+        const leftScore = removalPriority(left, leftDay);
+        const rightScore = removalPriority(right, rightDay);
+        return leftScore - rightScore || right.date.localeCompare(left.date);
+      });
+    for (const entry of removable) {
+      if (requiredRunningKm() <= context.highKm) break;
+      const index = adjusted.findIndex((candidate) => candidate.id === entry.id);
+      if (index >= 0) adjusted[index] = postUltraRestEntry(entry, "Post-Ultra: Diese zusätzliche Laufeinheit entfällt, damit der Wiedereinstieg innerhalb des Recovery-Korridors bleibt.");
+    }
+  }
+
+  return { plan: adjusted, selectedQualityDate, adjusted: true };
+}
+
 function parseGoalTimeSeconds(value = "") {
   const match = String(value || "").trim().match(/^(\d{1,3}):([0-5]\d):([0-5]\d)$/);
   if (!match) return 0;
@@ -1815,6 +2054,7 @@ export function generateWeekPlan({
   const starterFallback = Math.max(6, Math.min(28, startingRunCount * 4));
   const goalFallback = Math.max(25, Math.min(45, Number(goal?.targetKm || mission?.targetKm || 50) * 0.4));
   const fallbackBase = recentAverage || (reportedWeeklyKmAvailable ? (reportedWeeklyKm || starterFallback) : goalFallback);
+  const postUltraRecovery = postUltraRecoveryContext(activities, reviews, weekStart, Math.max(fallbackBase, reportedWeeklyKm || 0));
   const protectedEventTarget = eventWeekTarget(fallbackBase, readiness, protectedEventWeek);
   const weekPrescription = buildWeekPrescription({
     history,
@@ -2202,6 +2442,12 @@ export function generateWeekPlan({
   // Hard safety net: nothing after the first constraint pass may re-introduce a
   // run, quality session or long session on a day restricted by the planning note.
   plan = applyDailyAvailabilityConstraints(plan, effectiveAvailabilityExceptions, weekStart);
+  let postUltraPlanResult = { plan, selectedQualityDate: "", adjusted: false };
+  if (postUltraRecovery?.active && !protectedEventWeek) {
+    postUltraPlanResult = applyPostUltraRecoveryPlan(plan, postUltraRecovery);
+    plan = postUltraPlanResult.plan;
+    target = postUltraRecovery.highKm;
+  }
   plan = applyPlanPaceGuidance(plan);
   plan.sort((a, b) => `${a.date}${a.time || ""}`.localeCompare(`${b.date}${b.time || ""}`));
   const finalPlanningConstraintViolations = planningConstraintViolations(plan, effectiveAvailabilityExceptions);
@@ -2218,23 +2464,60 @@ export function generateWeekPlan({
   const rawRoadCyclingAerobicMinutes = crossTrainingDetails
     .filter((detail) => detail.kind === "roadCycling")
     .reduce((sum, detail) => sum + Number(detail.aerobicMinutes || 0), 0);
-  const plannedFutureRunningKm = plan
-    .filter((entry) => !entry.plannedCancellation && isRunningPlanEntry(entry))
-    .reduce((sum, entry) => sum + Number(entry.distance || 0), 0);
-  const projectedRunningKm = Number(completedRunningKm || 0) + plannedFutureRunningKm;
-  const corridorLowKm = Number(weekPrescription.corridor?.lowKm || target);
-  const corridorHighKm = Number(weekPrescription.corridor?.highKm || target);
-  const withinCorridor = projectedRunningKm >= corridorLowKm - 1
+  const plannedRequiredMinKm = plannedRunningVolume(plan, { includeOptional: false, bound: "min" });
+  const plannedRequiredMaxKm = plannedRunningVolume(plan, { includeOptional: false, bound: "max" });
+  const plannedAllMinKm = plannedRunningVolume(plan, { includeOptional: true, bound: "min" });
+  const plannedAllMaxKm = plannedRunningVolume(plan, { includeOptional: true, bound: "max" });
+  const plannedOptionalMinKm = Math.max(0, plannedAllMinKm - plannedRequiredMinKm);
+  const plannedOptionalMaxKm = Math.max(0, plannedAllMaxKm - plannedRequiredMaxKm);
+  // The coach target is the mandatory range. Optional kilometres are a genuine
+  // extra and must never look like kilometres the athlete "failed" to complete.
+  const plannedFutureRunningKm = plannedRequiredMinKm;
+  const projectedRunningKm = Number(completedRunningKm || 0) + plannedRequiredMinKm;
+  const projectedRunningMaxKm = Number(completedRunningKm || 0) + plannedRequiredMaxKm;
+  const corridorLowKm = postUltraRecovery?.active && !protectedEventWeek
+    ? postUltraRecovery.lowKm
+    : Number(weekPrescription.corridor?.lowKm || target);
+  const corridorHighKm = postUltraRecovery?.active && !protectedEventWeek
+    ? postUltraRecovery.highKm
+    : Number(weekPrescription.corridor?.highKm || target);
+  const withinCorridor = projectedRunningMaxKm >= corridorLowKm - 1
     && projectedRunningKm <= corridorHighKm + 1;
   const finalWeekPrescription = {
     ...weekPrescription,
+    ...(postUltraRecovery?.active && !protectedEventWeek ? {
+      weekType: {
+        key: "post_ultra_return",
+        label: "Post-Ultra · Return to Training",
+        tone: "recovery",
+        summary: postUltraRecovery.summary,
+      },
+      corridor: {
+        lowKm: corridorLowKm,
+        highKm: corridorHighKm,
+        label: corridorLowKm === corridorHighKm ? `${corridorLowKm} km` : `${corridorLowKm}–${corridorHighKm} km`,
+      },
+      focus: `Tag ${postUltraRecovery.daysSince} nach ${postUltraRecovery.activityName}: strukturelle Erholung und belastbaren Wiedereinstieg priorisieren. Kein Longrun; maximal ein bewusst gewählter Qualitätsreiz.`,
+      why: [
+        ...(weekPrescription.why || []),
+        `${postUltraRecovery.distanceKm} km / ${Math.round(postUltraRecovery.durationMinutes / 60 * 10) / 10} h vor ${postUltraRecovery.daysSince} Tagen lösen den Post-Ultra-Schutz aus.`,
+      ],
+      nextStep: "Die nächste Belastungsstufe wird erst nach symptomfreien Easy-Einheiten und unauffälliger 24-h-Reaktion freigegeben.",
+    } : {}),
     targetKm: target,
     plannedFutureRunningKm: Math.round(plannedFutureRunningKm * 10) / 10,
+    plannedRequiredMinKm: Math.round(plannedRequiredMinKm * 10) / 10,
+    plannedRequiredMaxKm: Math.round(plannedRequiredMaxKm * 10) / 10,
+    plannedOptionalMinKm: Math.round(plannedOptionalMinKm * 10) / 10,
+    plannedOptionalMaxKm: Math.round(plannedOptionalMaxKm * 10) / 10,
     completedRunningKm: Math.round(Number(completedRunningKm || 0) * 10) / 10,
     projectedRunningKm: Math.round(projectedRunningKm * 10) / 10,
-    projectedLoadEquivalentKm: Math.round(projectedRunningKm * 10) / 10,
+    projectedRunningMaxKm: Math.round(projectedRunningMaxKm * 10) / 10,
+    projectedLoadEquivalentKm: Math.round(projectedRunningMaxKm * 10) / 10,
     withinCorridor,
-    deliveryNote: withinCorridor
+    deliveryNote: postUltraRecovery?.active && !protectedEventWeek
+      ? `Post-Ultra-Schutz aktiv: ${postUltraRecovery.summary} Fixtermine bleiben nur als bewusst gewählte Ausnahme erhalten; zusätzliche Qualität und Longrun werden blockiert.`
+      : withinCorridor
       ? crossTrainingImpactLevel === "adjust" && crossTrainingAdjustedEntryIds.length
         ? "Der Laufumfang bleibt im Wochenkorridor; eine flexible Folgeeinheit wurde wegen deines Reviews zur Zusatzbelastung angepasst."
         : "Der konkrete Laufplan liegt im automatisch berechneten Wochenkorridor. Zusatzsport wird separat als Belastung geführt."
@@ -2280,6 +2563,10 @@ export function generateWeekPlan({
       adjustedEntryIds: crossTrainingAdjustedEntryIds,
       details: crossTrainingDetails,
     },
+    postUltraRecovery: postUltraRecovery?.active && !protectedEventWeek ? {
+      ...postUltraRecovery,
+      selectedQualityDate: postUltraPlanResult.selectedQualityDate || "",
+    } : null,
     recentAverage: Math.round(recentAverage),
     weekStart: isoDate(weekStart),
     phase,

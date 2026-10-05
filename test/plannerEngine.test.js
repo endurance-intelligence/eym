@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   generateWeekPlan,
   planningConstraintViolations,
+  postUltraRecoveryContext,
   reviewGuidance,
   suggestRoadCyclingAlternative,
 } from "../src/services/plannerEngine.js";
@@ -675,7 +676,8 @@ test("the travel-and-C-event acceptance week counts the race and keeps the actua
     .reduce((sum, item) => sum + Number(item.distance || 0), 0);
 
   assert.equal(Number(runningKm.toFixed(1)), 30);
-  assert.equal(result.weekPrescription.projectedRunningKm, 30);
+  assert.ok(result.weekPrescription.projectedRunningKm < 30);
+  assert.ok(result.weekPrescription.plannedOptionalMaxKm > 0);
   assert.equal(result.plan.find((item) => item.raceEvent)?.distance, 9.6);
   assert.match(result.weekPrescription.deliveryNote, /keine Kilometerschuld/i);
 });
@@ -1174,4 +1176,64 @@ test("36 h Backyard reserves Sunday as a possible event continuation instead of 
   assert.ok(sunday.some((item) => item.eventContinuation));
   assert.ok(sunday.some((item) => /mögliche Fortsetzung/.test(item.title)));
   assert.equal(sunday.some((item) => !item.eventContinuation && ["Long Run", "Loop-Training", "Backyard Training", "Easy Run"].includes(item.type)), false);
+});
+
+test("post-ultra recovery detects a 100 km-class event and caps the return week", () => {
+  const ultra = {
+    id: "backyard-102",
+    type: "Run",
+    name: "1. Backyard OWL",
+    date: "2026-09-26",
+    distance: 102.8,
+    duration: 696,
+  };
+  const context = postUltraRecoveryContext([ultra], {
+    "backyard-102": { isEvent: true, eventPlanningImpact: "depleted", rpe: 10 },
+  }, new Date("2026-10-05T12:00:00"), 50);
+
+  assert.ok(context);
+  assert.equal(context.daysSince, 9);
+  assert.equal(context.phase, "return");
+  assert.equal(context.longRunAllowed, false);
+  assert.equal(context.qualityAllowed, true);
+  assert.ok(context.highKm <= 35);
+});
+
+test("post-ultra return week keeps one ORC Track and removes the longrun", () => {
+  const result = generateWeekPlan({
+    activities: [{
+      id: "backyard-102",
+      type: "Run",
+      name: "1. Backyard OWL",
+      date: "2026-09-26",
+      distance: 102.8,
+      duration: 696,
+    }],
+    reviews: {
+      "backyard-102": { isEvent: true, eventPlanningImpact: "depleted", rpe: 10 },
+    },
+    mission: { id: "next-goal", name: "Ausdauerziel", date: "2026-11-21", targetKm: 50, milestones: [] },
+    profile: { selfReportedRunsPerWeek: 4, selfReportedWeeklyKm: 50, selfReportedLongestRunKm: 25 },
+    today: new Date("2026-10-05T12:00:00"),
+    config: {
+      recurringCommitments: [],
+      fixedAppointments: { football: false, orcRun: false, saturdayMode: "off", extraOrcTrackDay: "Dienstag" },
+      orcTrackTime: "19:00",
+      targetRunCount: 4,
+      stabiCount: 0,
+      rowingCount: 0,
+      runDays: ["Montag", "Dienstag", "Donnerstag", "Freitag", "Sonntag"],
+      maxLongRun: 30,
+    },
+  });
+
+  assert.equal(result.weekPrescription.weekType.key, "post_ultra_return");
+  assert.ok(result.weekPrescription.corridor.highKm <= 35);
+  assert.equal(result.plan.filter((entry) => entry.type === "ORC Track").length, 1);
+  assert.equal(result.plan.some((entry) => ["Long Run", "Loop-Training", "Backyard Training"].includes(entry.type)), false);
+  assert.equal(result.plan.some((entry) => entry.date === "2026-10-05" && entry.type === "Easy Run"), false);
+  assert.equal(result.plan.some((entry) => entry.date === "2026-10-07" && entry.type === "Easy Run"), false);
+  assert.ok(result.weekPrescription.plannedRequiredMaxKm <= result.weekPrescription.corridor.highKm);
+  assert.ok(result.weekPrescription.plannedOptionalMaxKm > 0);
+  assert.equal(result.plan.find((entry) => entry.goalSessionRole === "return_to_training" && entry.date === "2026-10-11")?.keySession, false);
 });

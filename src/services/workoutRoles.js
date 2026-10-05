@@ -241,10 +241,12 @@ export function workoutRoleAssessment(item = {}, context = {}) {
     }
     : item;
   const family = sportFamily(roleItem);
-  const keySession = Boolean(roleItem.keySession || roleItem.raceEvent);
+  const returnToTraining = String(roleItem.goalSessionRole || "") === "return_to_training";
+  const keySession = returnToTraining ? false : Boolean(roleItem.keySession || roleItem.raceEvent);
   let classificationKey;
 
-  if (family === "football" || family === "cycling") classificationKey = "additional";
+  if (returnToTraining) classificationKey = "easy";
+  else if (family === "football" || family === "cycling") classificationKey = "additional";
   else if (["rowing", "support", "swimming"].includes(family)) classificationKey = "support";
   else classificationKey = secondaryRole(roleItem, family) || "steady";
 

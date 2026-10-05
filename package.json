@@ -1,7 +1,7 @@
 {
   "name": "endurance-intelligence",
   "private": true,
-  "version": "4.1.47",
+  "version": "4.1.49",
   "type": "module",
   "scripts": {
     "dev": "vite",

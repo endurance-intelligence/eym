@@ -78,6 +78,15 @@ function fuelProductIdentity(item = {}) {
   return manual ? `manual:${manual}` : `row:${item.id || "unknown"}`;
 }
 
+function ReviewBooleanChoice({ checked, onChange, label }) {
+  return (
+    <div className="review-boolean-choice" role="group" aria-label={label}>
+      <button type="button" className={!checked ? "selected" : ""} aria-pressed={!checked} onClick={() => onChange(false)}>Nein</button>
+      <button type="button" className={checked ? "selected" : ""} aria-pressed={checked} onClick={() => onChange(true)}>Ja</button>
+    </div>
+  );
+}
+
 function fuelAmountLabel(items = [], index = 0) {
   const current = items[index] || {};
   const unit = current.unit || "Portion(en)";
@@ -778,10 +787,10 @@ export default function ReviewModal({ activity, onClose }) {
                   <small>Geplante Produkte und Trinkmenge sind vorausgefüllt. Bitte auf den tatsächlichen Verbrauch korrigieren; erst beim Speichern wird Bestand reduziert.</small>
                 </div>
               )}
-              <label className="review-toggle-row fuel-review-toggle">
+              <div className="review-toggle-row fuel-review-toggle">
                 <span><b>Fueling Review</b><small>Wie beim Backyard: Zeitpunkt, Produkt, Menge und deine echte Race-Day-Erfahrung in einem Ablauf.</small></span>
-                <input type="checkbox" checked={review.usedNutrition} onChange={(event) => toggleNutrition(event.target.checked)} />
-              </label>
+                <ReviewBooleanChoice checked={review.usedNutrition} onChange={toggleNutrition} label="Fueling Review" />
+              </div>
               {review.usedNutrition && (
                 <div className="nutrition-review-list fuel-review-flow">
                   <div className="fuel-review-overall">
@@ -897,10 +906,10 @@ export default function ReviewModal({ activity, onClose }) {
             </section>
 
             <section className={`review-feature-box event-review-box ${review.isEvent ? "active" : ""}`}>
-              <label className="review-toggle-row">
+              <div className="review-toggle-row">
                 <span><b>Event / offizieller Lauf</b><small>Die Einheit erscheint danach unter Mission → Achievements.</small></span>
-                <input type="checkbox" checked={review.isEvent} onChange={(event) => toggleEvent(event.target.checked)} />
-              </label>
+                <ReviewBooleanChoice checked={review.isEvent} onChange={toggleEvent} label="Event / offizieller Lauf" />
+              </div>
               {review.isEvent && (
                 <div className="event-review-fields">
                   <label>Eventname<input value={review.eventTitle} onChange={(event) => set("eventTitle", event.target.value)} placeholder={activity.name || activity.sourceName} /></label>

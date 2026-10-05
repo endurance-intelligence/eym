@@ -200,7 +200,8 @@ function planChangeDateLabel(value) {
 
 function planChangeMetricLabel(item = {}) {
   const parts = [];
-  if (Number(item.distance || 0) > 0) parts.push(`${Number(item.distance).toFixed(1).replace(".0", "")} km`);
+  const distanceLabel = plannedDistanceLabel(item);
+  if (distanceLabel) parts.push(distanceLabel);
   if (Number(item.duration || 0) > 0) parts.push(`${Math.round(Number(item.duration))} min`);
   if (item.time) parts.push(`${item.time} Uhr`);
   return parts.join(" · ") || "ohne Distanzvorgabe";
@@ -435,6 +436,33 @@ function normalizedType(value = "") {
   if (type.includes("rest") || type.includes("ruhe") || type.includes("erholungstag")) return "rest";
   if (type.includes("run") || type.includes("lauf") || type.includes("treadmill") || type.includes("orc") || type.includes("backyard") || type.includes("interval") || type.includes("schwelle") || type.includes("wettkampf") || type.includes("race") || type.includes("marathon") || type.includes("ultra")) return "running";
   return type;
+}
+
+function plannedDistanceBounds(item = {}) {
+  const explicitMin = Number(item.distanceMinKm ?? item.distanceMin);
+  const explicitMax = Number(item.distanceMaxKm ?? item.distanceMax);
+  if (Number.isFinite(explicitMin) && explicitMin >= 0 && Number.isFinite(explicitMax) && explicitMax >= explicitMin) {
+    return { min: explicitMin, max: explicitMax };
+  }
+  const range = String(item.title || "").replace(/,/g, ".").match(/(\d+(?:\.\d+)?)\s*[–-]\s*(\d+(?:\.\d+)?)\s*km/i);
+  if (range) return { min: Number(range[1]), max: Number(range[2]) };
+  const distance = Math.max(0, Number(item.distance || 0));
+  return { min: distance, max: distance };
+}
+
+function compactKm(value) {
+  return Number(value || 0).toFixed(1).replace(".0", "");
+}
+
+function plannedDistanceLabel(item = {}) {
+  const { min, max } = plannedDistanceBounds(item);
+  if (!(max > 0)) return "";
+  return Math.abs(max - min) > 0.05 ? `${compactKm(min)}–${compactKm(max)} km` : `${compactKm(max)} km`;
+}
+
+function kmRangeLabel(min, max) {
+  if (Math.abs(Number(max || 0) - Number(min || 0)) <= 0.05) return `${compactKm(max)} km`;
+  return `${compactKm(min)}–${compactKm(max)} km`;
 }
 
 function weeklyClosureSummary({ weekStart, plan, activities, allActivities, reviews, activityGroups }) {
@@ -682,13 +710,23 @@ export default function Planner() {
   const saturdayEditable = saturdayDate >= todayKey && !saturdaySlot?.completed;
   const missed = weekPlan.filter((item) => item.date < todayKey && !item.completed && !matches.has(item.id) && !item.missedReason && !isPassiveRecoveryWorkout(item));
   const actualRunningKm = weekActivities.filter(isRunningActivity).reduce((sum, activity) => sum + Number(activity.distance || 0), 0);
-  const plannedKm = weekPlan
-    .filter((item) => !item.completed && !item.missedReason && normalizedType(`${item.type || ""} ${item.title || ""}`) === "running")
-    .reduce((sum, item) => sum + Number(item.distance || 0), 0);
+  const openRunningPlan = weekPlan.filter((item) => !item.completed && !item.missedReason && normalizedType(`${item.type || ""} ${item.title || ""}`) === "running");
+  const requiredOpenRuns = openRunningPlan.filter((item) => !item.optional);
+  const optionalOpenRuns = openRunningPlan.filter((item) => item.optional);
+  const plannedRequiredMinKm = requiredOpenRuns.reduce((sum, item) => sum + plannedDistanceBounds(item).min, 0);
+  const plannedRequiredMaxKm = requiredOpenRuns.reduce((sum, item) => sum + plannedDistanceBounds(item).max, 0);
+  const plannedOptionalMinKm = optionalOpenRuns.reduce((sum, item) => sum + plannedDistanceBounds(item).min, 0);
+  const plannedOptionalMaxKm = optionalOpenRuns.reduce((sum, item) => sum + plannedDistanceBounds(item).max, 0);
   const completedKm = actualRunningKm || weekPlan
     .filter((item) => item.completed && normalizedType(`${item.type || ""} ${item.title || ""}`) === "running")
-    .reduce((sum, item) => sum + Number(item.distance || 0), 0);
-  const weekRunningKm = completedKm + plannedKm;
+    .reduce((sum, item) => sum + Number(item.actualDistance || item.distance || 0), 0);
+  const weekRunningMinKm = completedKm + plannedRequiredMinKm;
+  const weekRunningMaxKm = completedKm + plannedRequiredMaxKm;
+  const plannedRequiredLabel = kmRangeLabel(plannedRequiredMinKm, plannedRequiredMaxKm);
+  const weekRunningLabel = kmRangeLabel(weekRunningMinKm, weekRunningMaxKm);
+  const optionalKmLabel = plannedOptionalMaxKm > 0
+    ? `+${kmRangeLabel(plannedOptionalMinKm, plannedOptionalMaxKm)} optional`
+    : "";
   const previousWeekHasPlan = useMemo(() => {
     const previousStart = startOfWeek(new Date(), offsetWeeks - 1);
     const previousEnd = dateForDay(previousStart, 6);
@@ -2585,7 +2623,7 @@ export default function Planner() {
                 <small>{loadComparisonLabel} · {scienceAssessment.loadBand?.label || "Wird eingeordnet"}</small>
               </div>
               <div className="planner-week-logic-metrics">
-                <span><b>{weekRunningKm.toFixed(1).replace(".0", "")} km</b> diese Woche</span>
+                <span><b>{weekRunningLabel}</b> diese Woche</span>
                 <span><b>{fixedSessionCount}</b> Termine</span>
                 <span><b>{scienceAssessment.hardCount ?? keySessionCount}</b> Reize</span>
               </div>
@@ -2600,7 +2638,7 @@ export default function Planner() {
               </article>
               <article>
                 <span>Wochenumfang</span>
-                <strong>{weekRunningKm.toFixed(1).replace(".0", "")} km aktuell · {completedKm.toFixed(1).replace(".0", "")} km erledigt · {plannedKm.toFixed(1).replace(".0", "")} km offen</strong>
+                <strong>{weekRunningLabel} geplant · {compactKm(completedKm)} km erledigt · {plannedRequiredLabel} regulär offen{optionalKmLabel ? ` · ${optionalKmLabel}` : ""}</strong>
                 <p>{weekPrescription?.corridor?.label
                   ? `Der normale Coach-Rahmen liegt aktuell bei ${weekPrescription.corridor.label}. Er ist kein Wochen-Soll, sondern ein Belastungskorridor aus deiner Entwicklung. Die konkrete Woche darf durch Wettkampf, Verfügbarkeit und Erholung darunter liegen; die Differenz ist keine Kilometerschuld.`
                   : "Die konkrete Wochenplanung zählt erledigte und noch offene Laufeinheiten. Nicht gelaufene Differenzen werden nicht als Kilometerschuld nachgeholt."}</p>
@@ -2671,8 +2709,8 @@ export default function Planner() {
       <section className="planner-overview-strip">
         <div className="planner-overview-volume">
           <span>Wochenumfang</span>
-          <strong>{weekRunningKm.toFixed(1).replace(".0", "")} km</strong>
-          <small>{completedKm.toFixed(1).replace(".0", "")} km erledigt · {plannedKm.toFixed(1).replace(".0", "")} km offen</small>
+          <strong>{weekRunningLabel}</strong>
+          <small>{compactKm(completedKm)} km erledigt · {plannedRequiredLabel} regulär offen{optionalKmLabel ? ` · ${optionalKmLabel}` : ""}</small>
         </div>
         <div title={crossTrainingLabel || "Keine zusätzliche sportübergreifende Belastung erkannt"}><span>Zusatzlast</span><strong>{crossTrainingSummary.details.length ? (crossTrainingSummary.impactLevel === "adjust" ? "Prüfen" : crossTrainingSummary.impactLevel === "review" ? "Review offen" : "Im Rahmen") : "–"}</strong></div>
         <div><span>Erledigt</span><strong>{weekActivities.length} Einheiten</strong></div>
@@ -2974,7 +3012,7 @@ export default function Planner() {
                 });
                 const compactMetrics = [
                   trackTemplateLabel,
-                  item.distance ? `${Number(item.distance).toFixed(1).replace(".0", "")} km` : "",
+                  plannedDistanceLabel(item),
                   matched && Number(matched.distance || item.actualDistance || 0) ? `${Number(matched.distance || item.actualDistance).toFixed(1).replace(".0", "")} km erledigt` : "",
                   item.duration ? `${Math.round(Number(item.duration))} min` : "",
                   paceLabel,

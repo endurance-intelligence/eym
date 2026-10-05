@@ -51,7 +51,8 @@ test("weekly overview names the affected unit and separates concrete volume from
   assert.match(plannerSource, /Plan anpassen/);
   assert.doesNotMatch(plannerSource, />Auswirkung prüfen<\/button>/);
   assert.match(plannerSource, /<span>Wochenumfang<\/span>/);
-  assert.match(plannerSource, /km erledigt · \{plannedKm/);
+  assert.match(plannerSource, /regulär offen/);
+  assert.match(plannerSource, /optionalKmLabel/);
   assert.match(plannerSource, /Der normale Coach-Rahmen liegt aktuell bei/);
   assert.match(plannerSource, /kein Wochen-Soll/);
   assert.doesNotMatch(plannerSource, /<span><b>\{weekPrescription\?\.corridor\?\.label \|\| \(config\.lastTarget/);

@@ -774,3 +774,37 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* v4.1.48 – explicit review yes/no controls */
+.review-boolean-choice {
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(54px, 1fr));
+  gap: 4px;
+  flex: 0 0 auto;
+  padding: 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--bg-input);
+}
+.review-boolean-choice button {
+  min-height: 36px;
+  padding: 7px 12px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted-bright);
+  box-shadow: none;
+  font-size: 12px;
+  font-weight: 850;
+}
+.review-boolean-choice button:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.review-boolean-choice button.selected {
+  background: var(--accent-surface);
+  color: var(--accent-bright);
+  box-shadow: inset 0 0 0 1px var(--accent-border-strong);
+}
+@media(max-width:600px) {
+  .review-toggle-row { align-items: stretch!important; flex-direction: column; }
+  .review-boolean-choice { width: 100%; grid-template-columns: 1fr 1fr; }
+  .review-boolean-choice button { min-height: 44px; font-size: 14px; }
+}

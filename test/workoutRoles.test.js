@@ -180,3 +180,20 @@ test("rest day uses a dedicated recovery marker and never inherits shake-out sem
   assert.match(assessment.title, /Erholung/);
   assert.doesNotMatch(assessment.explanation, /Shake-out|Strides/i);
 });
+
+test("post-ultra return run stays easy even when its explanatory note mentions longrun", () => {
+  const assessment = workoutRoleAssessment({
+    id: "return-run",
+    title: "10–12 km locker",
+    type: "Easy Run",
+    distance: 12,
+    duration: 84,
+    keySession: false,
+    goalSessionRole: "return_to_training",
+    notes: "Post-Ultra Return to Training: kein Longrun. Nur bei unauffälliger Reaktion verlängern.",
+  });
+
+  assert.equal(assessment.isKeySession, false);
+  assert.equal(assessment.classificationKey, "easy");
+  assert.deepEqual(assessment.markers.map((marker) => marker.key), ["easy"]);
+});

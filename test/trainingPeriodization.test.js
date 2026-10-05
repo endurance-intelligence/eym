@@ -80,13 +80,21 @@ test("the same periodization architecture changes its focus with the athlete goa
 });
 
 test("next-week planning excludes the unfinished current week from the established capacity", () => {
+  // The historical values represent weekly totals, not single ultra activities.
+  // Split them into ordinary runs so this periodization test does not accidentally
+  // trigger the separate post-ultra recovery safety layer.
   const activities = [
     { id: "current", type: "Run", date: "2026-08-05", distance: 5, duration: 32 },
-    { id: "w1", type: "Run", date: "2026-07-30", distance: 63.9, duration: 400 },
-    { id: "w2", type: "Run", date: "2026-07-23", distance: 56.6, duration: 360 },
-    { id: "w3", type: "Run", date: "2026-07-16", distance: 48.2, duration: 310 },
-    { id: "w4", type: "Run", date: "2026-07-09", distance: 51.2, duration: 330 },
-    { id: "w5", type: "Run", date: "2026-07-02", distance: 51.4, duration: 332 },
+    { id: "w1a", type: "Run", date: "2026-07-28", distance: 30, duration: 180 },
+    { id: "w1b", type: "Run", date: "2026-07-30", distance: 33.9, duration: 210 },
+    { id: "w2a", type: "Run", date: "2026-07-21", distance: 28, duration: 170 },
+    { id: "w2b", type: "Run", date: "2026-07-23", distance: 28.6, duration: 175 },
+    { id: "w3a", type: "Run", date: "2026-07-14", distance: 24, duration: 145 },
+    { id: "w3b", type: "Run", date: "2026-07-16", distance: 24.2, duration: 150 },
+    { id: "w4a", type: "Run", date: "2026-07-07", distance: 25, duration: 150 },
+    { id: "w4b", type: "Run", date: "2026-07-09", distance: 26.2, duration: 160 },
+    { id: "w5a", type: "Run", date: "2026-06-30", distance: 25, duration: 150 },
+    { id: "w5b", type: "Run", date: "2026-07-02", distance: 26.4, duration: 162 },
   ];
   const result = generateWeekPlan({
     activities,
