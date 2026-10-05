@@ -5,6 +5,10 @@ import { completedLegacyOnboarding } from "./onboarding.js";
 const LEGACY_KEY = "endurance-intelligence.v1";
 const ACCOUNT_KEY_PREFIX = `${LEGACY_KEY}.user`;
 const RECOVERY_KEY_SUFFIX = ".recovery";
+const DURABLE_DB_NAME = "endurance-intelligence-state";
+const DURABLE_DB_VERSION = 1;
+const DURABLE_STORE = "account-state";
+let durableWriteQueue = Promise.resolve();
 
 function storageKey(userId) {
   const accountId = String(userId || "").trim();
@@ -22,12 +26,98 @@ function isQuotaError(error) {
     || /quota has been exceeded|quota_exceeded/i.test(String(error?.message || ""));
 }
 
-function stripEmbeddedImages(value) {
+export function stripEmbeddedImages(value) {
   if (Array.isArray(value)) return value.map(stripEmbeddedImages);
   if (!value || typeof value !== "object") {
     return /^data:image\//i.test(String(value || "")) ? "" : value;
   }
   return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, stripEmbeddedImages(child)]));
+}
+
+
+
+function durableRecordKey(userId) {
+  return String(userId || "legacy").trim() || "legacy";
+}
+
+function openDurableDb(factory = globalThis.indexedDB) {
+  if (!factory) return Promise.resolve(null);
+  return new Promise((resolve, reject) => {
+    let request;
+    try {
+      request = factory.open(DURABLE_DB_NAME, DURABLE_DB_VERSION);
+    } catch (error) {
+      reject(error);
+      return;
+    }
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(DURABLE_STORE)) db.createObjectStore(DURABLE_STORE, { keyPath: "key" });
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error("IndexedDB konnte nicht geöffnet werden."));
+    request.onblocked = () => reject(new Error("IndexedDB ist durch eine ältere EI-Version blockiert."));
+  });
+}
+
+function transactionDone(transaction) {
+  return new Promise((resolve, reject) => {
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error || new Error("IndexedDB-Transaktion fehlgeschlagen."));
+    transaction.onabort = () => reject(transaction.error || new Error("IndexedDB-Transaktion wurde abgebrochen."));
+  });
+}
+
+export function saveDurableState(state, userId = "", { dirty = true, baseCloudUpdatedAt = null } = {}) {
+  const record = {
+    key: durableRecordKey(userId),
+    savedAt: new Date().toISOString(),
+    dirty: Boolean(dirty),
+    baseCloudUpdatedAt: baseCloudUpdatedAt || null,
+    data: stripEmbeddedImages(state),
+  };
+  durableWriteQueue = durableWriteQueue.catch(() => {}).then(async () => {
+    const db = await openDurableDb();
+    if (!db) return { ok: false, unsupported: true };
+    try {
+      const transaction = db.transaction(DURABLE_STORE, "readwrite");
+      transaction.objectStore(DURABLE_STORE).put(record);
+      await transactionDone(transaction);
+      return { ok: true, record };
+    } finally {
+      db.close();
+    }
+  });
+  return durableWriteQueue;
+}
+
+export async function loadDurableState(userId = "") {
+  const db = await openDurableDb();
+  if (!db) return null;
+  try {
+    const transaction = db.transaction(DURABLE_STORE, "readonly");
+    const request = transaction.objectStore(DURABLE_STORE).get(durableRecordKey(userId));
+    const record = await new Promise((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => reject(request.error || new Error("IndexedDB-Stand konnte nicht gelesen werden."));
+    });
+    await transactionDone(transaction);
+    return record;
+  } finally {
+    db.close();
+  }
+}
+
+export async function clearDurableState(userId = "") {
+  const db = await openDurableDb();
+  if (!db) return;
+  try {
+    const transaction = db.transaction(DURABLE_STORE, "readwrite");
+    transaction.objectStore(DURABLE_STORE).delete(durableRecordKey(userId));
+    await transactionDone(transaction);
+  } finally {
+    db.close();
+  }
 }
 
 function recoveryState(state = {}) {
@@ -182,11 +272,17 @@ export function saveState(state, userId = "") {
   }
 
   // Last resort: keep the recovery snapshot rather than losing reviews and the
-  // freshly generated plan. Imported activities can be restored from Cloud or
-  // Intervals.icu once storage is available again.
-  localStorage.removeItem(key);
-  localStorage.setItem(recoveryKey, recovery);
-  return { mode: "recovery", reason: "quota" };
+  // freshly generated plan. If Safari refuses even this small localStorage
+  // write, IndexedDB remains the durable primary fallback and this function must
+  // not turn a browser quota issue into a Cloud error.
+  try {
+    localStorage.removeItem(key);
+    localStorage.setItem(recoveryKey, recovery);
+    return { mode: "recovery", reason: "quota" };
+  } catch (error) {
+    if (!isQuotaError(error)) throw error;
+    return { mode: "unavailable", reason: "quota", error };
+  }
 }
 
 export function createStateBackup(state) {
@@ -232,8 +328,13 @@ export async function readStateBackup(file, defaults) {
   return parseStateBackup(await file.text(), defaults);
 }
 
-export function resetState(userId = "") {
+export async function resetState(userId = "") {
   localStorage.removeItem(storageKey(userId));
   localStorage.removeItem(recoveryStorageKey(userId));
+  try {
+    await clearDurableState(userId);
+  } catch (error) {
+    console.warn("IndexedDB reset failed", error);
+  }
   location.reload();
 }

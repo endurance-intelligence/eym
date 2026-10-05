@@ -139,6 +139,33 @@ test("recovery snapshot remains usable when Safari refuses the full account key 
   }
 });
 
+
+test("Safari quota errors never escape into Cloud hydration when even the recovery key is full", () => {
+  const previousStorage = globalThis.localStorage;
+  globalThis.localStorage = {
+    getItem: () => null,
+    setItem: () => {
+      const error = new Error("The quota has been exceeded.");
+      error.name = "QuotaExceededError";
+      throw error;
+    },
+    removeItem: () => {},
+  };
+
+  try {
+    const result = saveState({
+      ...defaults,
+      plan: [{ id: "plan-quota", title: "Keep me" }],
+      reviews: { "review-quota": { feeling: 9 } },
+    }, "hard-quota-user");
+    assert.equal(result.mode, "unavailable");
+    assert.equal(result.reason, "quota");
+  } finally {
+    if (previousStorage === undefined) delete globalThis.localStorage;
+    else globalThis.localStorage = previousStorage;
+  }
+});
+
 test("unrelated JSON is rejected as a backup", () => {
   assert.throws(() => parseStateBackup('{"hello":"world"}', defaults), /keine gültige App-Sicherung/);
 });

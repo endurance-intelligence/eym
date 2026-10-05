@@ -1,7 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { defaultState } from "../data/defaults";
-import { hasStoredState, loadState, saveState } from "../services/storage";
+import { hasStoredState, loadDurableState, loadState, saveDurableState, saveState } from "../services/storage";
 import { CloudConflictError, loadCloudState, saveCloudState, signOut, supabase } from "../services/supabase";
 import { fetchIntervalsStatus, mapIntervalsActivities, mergeIntervalsActivities, syncIntervalsActivities } from "../services/intervals";
 import { migrateConfiguration } from "../services/configuration";
@@ -200,6 +200,7 @@ export function AppProvider({ children }) {
   const [calendarToken, setCalendarToken] = useState(null);
   const [intervalsSyncStatus, setIntervalsSyncStatus] = useState("idle");
   const cloudHydrated = useRef(false);
+  const cloudStatusRef = useRef(cloudStatus);
   const skipNextCloudSave = useRef(false);
   const intervalsAutoSyncStarted = useRef(false);
   const cloudUpdatedAtRef = useRef(null);
@@ -213,24 +214,63 @@ export function AppProvider({ children }) {
   const stateRef = useRef(state);
   const sessionUserIdRef = useRef(null);
   const localStateUserIdRef = useRef(null);
+  const localStorageFallbackOnly = useRef(false);
 
   useEffect(() => { stateRef.current = state; }, [state]);
+  useEffect(() => { cloudStatusRef.current = cloudStatus; }, [cloudStatus]);
   useEffect(() => {
     const userId = session?.user?.id || "";
-    if (!userId || localStateUserIdRef.current !== userId) return;
-    try {
-      const result = saveState(state, userId);
-      queueMicrotask(() => {
-        setLocalStorageMode(result?.mode || "full");
-        setLocalStorageError("");
-      });
-    } catch (error) {
-      console.error("Local state save failed", error);
-      queueMicrotask(() => {
-        setLocalStorageMode("error");
-        setLocalStorageError(error instanceof Error ? error.message : String(error));
-      });
+    if (!userId || localStateUserIdRef.current !== userId) return undefined;
+    let cancelled = false;
+    const dirty = Boolean(cloudHydrated.current && !skipNextCloudSave.current);
+    let localResult = null;
+
+    if (!localStorageFallbackOnly.current) {
+      try {
+        localResult = saveState(state, userId);
+        if (["compact", "recovery", "unavailable"].includes(localResult?.mode)) localStorageFallbackOnly.current = true;
+      } catch (error) {
+        console.warn("Legacy localStorage save failed", error);
+        localStorageFallbackOnly.current = true;
+        localResult = { mode: "unavailable", error };
+      }
     }
+
+    saveDurableState(state, userId, {
+      dirty,
+      baseCloudUpdatedAt: cloudUpdatedAtRef.current,
+    }).then((result) => {
+      if (cancelled) return;
+      if (result?.ok) {
+        if (localResult?.mode === "full" && !localStorageFallbackOnly.current) {
+          setLocalStorageMode("full");
+          setLocalStorageError("");
+        } else {
+          setLocalStorageMode("indexeddb");
+          setLocalStorageError("");
+        }
+        return;
+      }
+      if (localResult?.mode === "full") {
+        setLocalStorageMode("full");
+        setLocalStorageError("");
+      } else {
+        setLocalStorageMode(localResult?.mode || "error");
+        setLocalStorageError(localResult?.error instanceof Error ? localResult.error.message : "Lokale Sicherung nicht verfügbar.");
+      }
+    }).catch((error) => {
+      if (cancelled) return;
+      console.error("Durable IndexedDB save failed", error);
+      if (localResult?.mode === "full") {
+        setLocalStorageMode("full");
+        setLocalStorageError("");
+      } else {
+        setLocalStorageMode(localResult?.mode || "error");
+        setLocalStorageError(error instanceof Error ? error.message : String(error));
+      }
+    });
+
+    return () => { cancelled = true; };
   }, [state, session?.user?.id]);
 
   useEffect(() => {
@@ -245,6 +285,7 @@ export function AppProvider({ children }) {
       if (sessionUserIdRef.current !== nextUserId) {
         sessionUserIdRef.current = nextUserId;
         localStateUserIdRef.current = null;
+        localStorageFallbackOnly.current = false;
         cloudHydrated.current = false;
         skipNextCloudSave.current = false;
         cloudUpdatedAtRef.current = null;
@@ -280,59 +321,137 @@ export function AppProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    if (!session?.user?.id || cloudHydrated.current) return;
+    if (!session?.user?.id || cloudHydrated.current) return undefined;
     let cancelled = false;
     async function hydrate() {
       const userId = session.user.id;
-      const hasAccountState = hasStoredState(userId);
-      const local = hasAccountState ? loadState(defaultState, userId) : mergeState(defaultState, {});
+      const hasLegacyState = hasStoredState(userId);
+      const legacyLocal = hasLegacyState ? loadState(defaultState, userId) : mergeState(defaultState, {});
+      let durable = null;
+      try {
+        durable = await loadDurableState(userId);
+      } catch (error) {
+        console.warn("IndexedDB restore unavailable", error);
+      }
+      if (cancelled || sessionUserIdRef.current !== userId) return;
+
+      const local = durable?.data
+        ? mergeState(legacyLocal, durable.data)
+        : legacyLocal;
+      const localPending = Boolean(durable?.dirty);
       localStateUserIdRef.current = userId;
-      if (hasAccountState) {
+      if (hasLegacyState || durable?.data) {
         setState(withAccountReviewTrackingStart(local, session.user.created_at));
       }
       setCloudStatus("loading");
       setCloudError("");
+
       try {
         const cloud = await loadCloudState(userId);
         if (cancelled || sessionUserIdRef.current !== userId) return;
+
         let hydratedState;
-        if (cloud?.app_data && Object.keys(cloud.app_data).length > 0) {
+        let effectiveUpdatedAt = cloud?.updated_at || null;
+        let hydrationConflict = false;
+        const cloudHasData = Boolean(cloud?.app_data && Object.keys(cloud.app_data).length > 0);
+
+        if (cloudHasData && localPending) {
+          const localSnapshot = stateForCloud(local);
+          const remoteSnapshot = cloud.app_data;
+          const samePayload = stableCloudSignature(localSnapshot) === stableCloudSignature(remoteSnapshot);
+          const basedOnCurrentCloud = Boolean(durable?.baseCloudUpdatedAt)
+            && durable.baseCloudUpdatedAt === cloud.updated_at;
+
+          if (samePayload) {
+            hydratedState = withAccountReviewTrackingStart(mergeState(local, remoteSnapshot), session.user.created_at);
+          } else if (basedOnCurrentCloud) {
+            const saved = await saveCloudState(userId, localSnapshot, { expectedUpdatedAt: cloud.updated_at });
+            if (cancelled || sessionUserIdRef.current !== userId) return;
+            hydratedState = withAccountReviewTrackingStart(local, session.user.created_at);
+            effectiveUpdatedAt = saved.updated_at;
+            setCalendarToken(saved.calendar_token);
+          } else {
+            // Both sides changed while the handheld was offline/asleep. Keep the
+            // local state visible and require an explicit conflict decision.
+            hydratedState = withAccountReviewTrackingStart(local, session.user.created_at);
+            hydrationConflict = true;
+          }
+        } else if (cloudHasData) {
           hydratedState = withAccountReviewTrackingStart(
             mergeState(local, cloud.app_data),
             session.user.created_at,
           );
-          setCalendarToken(cloud.calendar_token);
-          setCloudUpdatedAt(cloud.updated_at);
-          cloudUpdatedAtRef.current = cloud.updated_at;
-          flushQueuedImageDeletions(userId, cloud.app_data).catch((error) => console.warn("Image cleanup postponed", error));
         } else {
           hydratedState = withAccountReviewTrackingStart(local, session.user.created_at);
           const snapshot = stateForCloud(hydratedState);
           const saved = await saveCloudState(userId, snapshot);
           if (cancelled || sessionUserIdRef.current !== userId) return;
+          effectiveUpdatedAt = saved.updated_at;
           setCalendarToken(saved.calendar_token);
-          setCloudUpdatedAt(saved.updated_at);
-          cloudUpdatedAtRef.current = saved.updated_at;
-          flushQueuedImageDeletions(userId, snapshot).catch((error) => console.warn("Image cleanup postponed", error));
         }
+
+        if (!hydrationConflict) {
+          setCalendarToken((current) => cloud?.calendar_token || current);
+        }
+        setCloudUpdatedAt(effectiveUpdatedAt);
+        cloudUpdatedAtRef.current = effectiveUpdatedAt;
+        if (cloudHasData) flushQueuedImageDeletions(userId, cloud.app_data).catch((error) => console.warn("Image cleanup postponed", error));
+
         skipNextCloudSave.current = true;
         localStateUserIdRef.current = userId;
-        const localSave = saveState(hydratedState, userId);
-        setLocalStorageMode(localSave?.mode || "full");
-        setLocalStorageError("");
         setState(hydratedState);
         cloudHydrated.current = true;
-        cloudConflict.current = false;
-        localDirtySinceCloud.current = false;
+        cloudConflict.current = hydrationConflict;
+        localDirtySinceCloud.current = hydrationConflict;
         cloudSaveGeneration.current += 1;
-        setCloudStatus("synced");
+
+        // Local persistence is intentionally isolated from Cloud status. Safari
+        // quota errors must never make a successful Supabase hydration look broken.
+        try {
+          const localSave = saveState(hydratedState, userId);
+          if (["compact", "recovery", "unavailable"].includes(localSave?.mode)) localStorageFallbackOnly.current = true;
+          setLocalStorageMode(localSave?.mode === "full" ? "full" : "indexeddb");
+          setLocalStorageError("");
+        } catch (error) {
+          localStorageFallbackOnly.current = true;
+          setLocalStorageMode("indexeddb");
+          setLocalStorageError("");
+          console.warn("Legacy localStorage hydration save skipped", error);
+        }
+
+        try {
+          await saveDurableState(hydratedState, userId, {
+            dirty: hydrationConflict,
+            baseCloudUpdatedAt: effectiveUpdatedAt,
+          });
+        } catch (error) {
+          console.warn("IndexedDB hydration save failed", error);
+        }
+
+        if (hydrationConflict) {
+          setCloudStatus("conflict");
+          setCloudError("Cloud und dieses Gerät wurden beide geändert. Der lokale Stand bleibt erhalten; bitte in Settings entscheiden.");
+        } else {
+          setCloudStatus("synced");
+          setCloudError("");
+        }
       } catch (error) {
         console.error("Supabase hydration failed", error);
         if (cancelled || sessionUserIdRef.current !== userId) return;
-        if (hasAccountState) {
+        if (hasLegacyState || durable?.data) {
           localStateUserIdRef.current = userId;
           setState(withAccountReviewTrackingStart(local, session.user.created_at));
+          try {
+            await saveDurableState(local, userId, {
+              dirty: true,
+              baseCloudUpdatedAt: durable?.baseCloudUpdatedAt || cloudUpdatedAtRef.current,
+            });
+          } catch (durableError) {
+            console.warn("Offline durable save failed", durableError);
+          }
         }
+        cloudHydrated.current = true;
+        localDirtySinceCloud.current = Boolean(hasLegacyState || durable?.data);
         setCloudError(error instanceof Error ? error.message : String(error));
         setCloudStatus("error");
       }
@@ -342,7 +461,7 @@ export function AppProvider({ children }) {
   }, [session?.user?.created_at, session?.user?.id]);
 
   useEffect(() => {
-    if (!session?.user?.id || !cloudHydrated.current || cloudConflict.current) return;
+    if (!session?.user?.id || !cloudHydrated.current || cloudConflict.current || cloudStatusRef.current === "error") return;
     if (skipNextCloudSave.current) {
       skipNextCloudSave.current = false;
       localDirtySinceCloud.current = false;
@@ -378,7 +497,11 @@ export function AppProvider({ children }) {
           setCalendarToken(saved.calendar_token);
           setCloudUpdatedAt(saved.updated_at);
           cloudUpdatedAtRef.current = saved.updated_at;
-          if (localChangeVersion.current === changeVersion) localDirtySinceCloud.current = false;
+          if (localChangeVersion.current === changeVersion) {
+            localDirtySinceCloud.current = false;
+            saveDurableState(snapshot, userId, { dirty: false, baseCloudUpdatedAt: saved.updated_at })
+              .catch((error) => console.warn("IndexedDB sync marker failed", error));
+          }
           setCloudStatus(localDirtySinceCloud.current ? "pending" : "synced");
           flushQueuedImageDeletions(userId, snapshot).catch((error) => console.warn("Image cleanup postponed", error));
         } catch (error) {
@@ -440,6 +563,8 @@ export function AppProvider({ children }) {
           setCloudUpdatedAt(remoteUpdatedAt);
           cloudUpdatedAtRef.current = remoteUpdatedAt;
           localDirtySinceCloud.current = false;
+          saveDurableState(hydrated, userId, { dirty: false, baseCloudUpdatedAt: remoteUpdatedAt })
+            .catch((error) => console.warn("IndexedDB sync marker failed", error));
           setCloudStatus("synced");
           return;
         }
@@ -449,6 +574,8 @@ export function AppProvider({ children }) {
           setCloudUpdatedAt(remoteUpdatedAt);
           cloudUpdatedAtRef.current = remoteUpdatedAt;
           localDirtySinceCloud.current = false;
+          saveDurableState(localSnapshot, userId, { dirty: false, baseCloudUpdatedAt: remoteUpdatedAt })
+            .catch((error) => console.warn("IndexedDB sync marker failed", error));
           setCloudStatus("synced");
           return;
         }
@@ -460,7 +587,11 @@ export function AppProvider({ children }) {
           setCalendarToken(saved.calendar_token);
           setCloudUpdatedAt(saved.updated_at);
           cloudUpdatedAtRef.current = saved.updated_at;
-          if (localChangeVersion.current === changeVersion) localDirtySinceCloud.current = false;
+          if (localChangeVersion.current === changeVersion) {
+            localDirtySinceCloud.current = false;
+            saveDurableState(localSnapshot, userId, { dirty: false, baseCloudUpdatedAt: saved.updated_at })
+              .catch((error) => console.warn("IndexedDB sync marker failed", error));
+          }
           setCloudStatus(localDirtySinceCloud.current ? "pending" : "synced");
           return;
         }
@@ -486,6 +617,12 @@ export function AppProvider({ children }) {
     const onVisibilityChange = () => {
       if (document.visibilityState === "hidden") {
         cloudSaveGeneration.current += 1;
+        if (localDirtySinceCloud.current) {
+          saveDurableState(stateRef.current, userId, {
+            dirty: true,
+            baseCloudUpdatedAt: cloudUpdatedAtRef.current,
+          }).catch((error) => console.warn("Background IndexedDB save failed", error));
+        }
         if (localDirtySinceCloud.current && !cloudConflict.current) {
           setCloudStatus("pending");
           setCloudError("Änderungen sind lokal gesichert. Cloud-Abgleich beim Öffnen der App.");
@@ -633,6 +770,8 @@ export function AppProvider({ children }) {
       cloudHydrated.current = true;
       localDirtySinceCloud.current = false;
       cloudSaveGeneration.current += 1;
+      saveDurableState(stateForCloud(state), session.user.id, { dirty: false, baseCloudUpdatedAt: saved.updated_at })
+        .catch((error) => console.warn("IndexedDB sync marker failed", error));
       setCloudStatus("synced");
       flushQueuedImageDeletions(session.user.id, stateForCloud(state)).catch((error) => console.warn("Image cleanup postponed", error));
       return { ok: true, saved };
@@ -657,10 +796,13 @@ export function AppProvider({ children }) {
       const cloud = await loadCloudState(session.user.id);
       if (cloud?.app_data) {
         skipNextCloudSave.current = true;
-        setState((local) => mergeState(local, cloud.app_data));
+        const reloaded = mergeState(stateRef.current, cloud.app_data);
+        setState(reloaded);
         setCalendarToken(cloud.calendar_token);
         setCloudUpdatedAt(cloud.updated_at);
         cloudUpdatedAtRef.current = cloud.updated_at;
+        saveDurableState(reloaded, session.user.id, { dirty: false, baseCloudUpdatedAt: cloud.updated_at })
+          .catch((error) => console.warn("IndexedDB sync marker failed", error));
         flushQueuedImageDeletions(session.user.id, cloud.app_data).catch((error) => console.warn("Image cleanup postponed", error));
       }
       cloudHydrated.current = true;
