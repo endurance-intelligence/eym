@@ -617,7 +617,7 @@ export default function Mission() {
         {goalPath.length > 0 && <Card className="wide mission-goal-path">
           <div className="mission-goal-path-heading">
             <p className="eyebrow">Auf dem Weg zum Hauptziel</p>
-            <h2>{mainTarget ? `Nächste Stationen bis ${mainTarget.name}` : "Nächste Stationen"}</h2>
+            <h2>{mainTarget ? `Auf dem Weg zum Hauptziel ${mainTarget.name}` : "Nächste Stationen"}</h2>
           </div>
           <div className="mission-goal-path-list">
             {goalPath.map((item) => {

@@ -9,7 +9,6 @@ import {
 } from "../services/activityUtils";
 import ReviewModal from "../components/ReviewModal";
 import ExerciseGuide from "../components/ExerciseGuide";
-import RaceCoach from "../components/RaceCoach";
 import { activitiesWithGroups } from "../services/activityGroups";
 import { fmtDate } from "../utils/format";
 import { playWorkoutAudioDemo, playWorkoutCountdown, playWorkoutCue, primeWorkoutAudio, speakWorkoutCue, workoutAudioCapabilities, workoutVoiceOptions } from "../services/workoutAudio";
@@ -51,8 +50,8 @@ const DEFAULT_MOBILITY_EQUIPMENT = ["mat", "band"];
 const coachTabs = [
   ["today", "Heute"],
   ["development", "Entwicklung"],
-  ["race", "Race"],
-  ["mobility", "Stabi & Mobility"],
+  
+  
 ];
 
 function SignalCard({ eyebrow, signal }) {
@@ -88,11 +87,13 @@ function mobilitySectionDescription(sectionId) {
   }[sectionId] || "";
 }
 
-export default function Coach() {
+export default function Coach({ embeddedTab = "" } = {}) {
   const { state, setState } = useApp();
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedTab = searchParams.get("tab");
-  const activeTab = coachTabs.some(([key]) => key === requestedTab) ? requestedTab : "today";
+  const activeTab = embeddedTab === "mobility"
+    ? "mobility"
+    : coachTabs.some(([key]) => key === requestedTab) ? requestedTab : "today";
   const [selected, setSelected] = useState(null);
   const [selectedGuide, setSelectedGuide] = useState(null);
   const [runner, setRunner] = useState(null);
@@ -663,10 +664,14 @@ export default function Coach() {
 
   return (
     <>
-      <PageTitle eyebrow="Coach Engine" title="Dein Coach">{activeTab === "mobility" && <Link className="button-link" to="/coach/exercises">Übungen verwalten</Link>}</PageTitle>
-      <div className="section-tabs coach-tabs" role="tablist" aria-label="Coach-Bereiche">
-        {coachTabs.map(([key, label]) => <button type="button" className={activeTab === key ? "selected" : ""} onClick={() => selectCoachTab(key)} key={key}>{label}</button>)}
-      </div>
+      {!embeddedTab && (
+        <>
+          <PageTitle eyebrow="Coach Engine" title="Dein Coach" />
+          <div className="section-tabs coach-tabs" role="tablist" aria-label="Coach-Bereiche">
+            {coachTabs.map(([key, label]) => <button type="button" className={activeTab === key ? "selected" : ""} onClick={() => selectCoachTab(key)} key={key}>{label}</button>)}
+          </div>
+        </>
+      )}
 
       {activeTab === "today" && (
         <div className="grid coach-dashboard-grid">
@@ -807,14 +812,6 @@ export default function Coach() {
             </details>
           )}
           <SignalCard eyebrow="Schlüsseleinheiten" signal={analysis.keySessions} />
-        </div>
-      )}
-
-      {activeTab === "race" && (
-        <div className="grid coach-race-grid">
-          <Card className="wide coach-race-shell">
-            <RaceCoach />
-          </Card>
         </div>
       )}
 

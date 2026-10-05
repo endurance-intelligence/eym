@@ -2,6 +2,7 @@ export const MAIN_NAV_ITEMS = [
   { key: "briefing", to: "/", label: "Briefing", icon: "◉", paths: ["/"] },
   { key: "training", to: "/planner", label: "Training", icon: "↗", paths: ["/planner", "/training", "/mission", "/analytics"] },
   { key: "coach", to: "/coach", label: "Coach", icon: "✦", paths: ["/coach"] },
+  { key: "race", to: "/race", label: "Race", icon: "⚑", paths: ["/race"] },
   { key: "fuel", to: "/fuel", label: "Fuel Lab", icon: "◒", paths: ["/fuel"] },
   { key: "settings", to: "/settings", label: "Settings", icon: "⚙", paths: ["/settings", "/equipment"] },
 ];
@@ -9,6 +10,7 @@ export const MAIN_NAV_ITEMS = [
 export const TRAINING_SECTIONS = [
   { key: "week", to: "/planner", label: "Woche" },
   { key: "sessions", to: "/training", label: "Einheiten" },
+  { key: "mobility", to: "/training/mobility", label: "Kraft & Mobility" },
   { key: "goals", to: "/mission", label: "Ziele" },
   { key: "analysis", to: "/analytics", label: "Analyse" },
 ];

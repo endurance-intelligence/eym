@@ -494,6 +494,115 @@ function contextSummary(activity, load, execution, environment, review, heat, fo
   return sentences.join(" ");
 }
 
+
+function runKindForNarrative(activity) {
+  const text = `${activity?.name || ""} ${activity?.type || ""} ${activity?.sportType || ""}`.toLowerCase();
+  if (/race|wettkampf|laufveranstaltung/.test(text)) return "race";
+  if (/intervall|interval|track|tempo|schwelle|threshold|vo2/.test(text)) return "quality";
+  if (/long|lang|backyard|ultra|loop/.test(text) || numeric(activity?.distance) >= 20) return "long";
+  return "easy";
+}
+
+function paceSecondsForNarrative(activity) {
+  const distance = numeric(activity?.distance);
+  const seconds = numeric(activity?.durationSeconds) || numeric(activity?.duration) * 60;
+  return distance > 0 && seconds > 0 ? seconds / distance : 0;
+}
+
+function medianForNarrative(values = []) {
+  const safe = values.map(Number).filter((value) => Number.isFinite(value) && value > 0).sort((a, b) => a - b);
+  if (!safe.length) return 0;
+  const middle = Math.floor(safe.length / 2);
+  return safe.length % 2 ? safe[middle] : (safe[middle - 1] + safe[middle]) / 2;
+}
+
+function specificRunNarrative(state, activity, review, load, execution, heat) {
+  if (!isRunningActivity(activity)) {
+    return {
+      summary: null,
+      good: [],
+      watch: [],
+      nextAction: "Keine lauf-spezifische Detailbewertung nötig.",
+    };
+  }
+
+  const kind = runKindForNarrative(activity);
+  const timestamp = activityTimestamp(activity);
+  const history = preferredActivities(state?.activities || [], { hideStrava: Boolean(state?.intervals?.connected) })
+    .filter((candidate) => isRunningActivity(candidate) && activityTimestamp(candidate) < timestamp)
+    .filter((candidate) => runKindForNarrative(candidate) === kind)
+    .sort((left, right) => activityTimestamp(right) - activityTimestamp(left))
+    .slice(0, 8);
+
+  const currentHr = numeric(activity?.avgHr || activity?.averageHeartRate);
+  const currentPace = paceSecondsForNarrative(activity);
+  const medianHr = medianForNarrative(history.map((candidate) => numeric(candidate?.avgHr || candidate?.averageHeartRate)));
+  const medianPace = medianForNarrative(history.map(paceSecondsForNarrative));
+  const good = [];
+  const watch = [];
+
+  if (execution?.value === "Im Planrahmen") {
+    good.push("Umfang und Dauer lagen im geplanten Rahmen");
+  }
+
+  if (heat?.hot) {
+    if (heat.status === "above_heat_expectation") {
+      watch.push("die HF lag heute über deiner bisher gelernten persönlichen Heat Response");
+    } else if (["heat_explains", "stable_despite_heat"].includes(heat.status)) {
+      good.push("Pace/HF blieben unter Hitze im Rahmen deiner persönlichen Heat Response");
+    } else {
+      watch.push("Hitze erschwert den HF-Vergleich; für eine belastbare persönliche Heat Response fehlen noch Vergleichsläufe");
+    }
+  } else if (currentHr > 0 && medianHr > 0 && currentPace > 0 && medianPace > 0) {
+    const paceRatio = currentPace / medianPace;
+    const hrDelta = currentHr - medianHr;
+    if (paceRatio <= 1.03 && hrDelta <= 2) {
+      good.push(`Pace/HF waren gegenüber vergleichbaren ${kind === "easy" ? "lockeren Läufen" : "Einheiten"} effizient`);
+    } else if (paceRatio >= 0.98 && hrDelta >= 6) {
+      watch.push(`Ø-HF lag trotz ähnlicher Pace etwa ${Math.round(hrDelta)} bpm über deinem Vergleichsbereich`);
+    }
+  }
+
+  const legs = numeric(review?.legs);
+  const energy = numeric(review?.energy);
+  const feeling = numeric(review?.overallFeeling);
+  if ((legs && legs <= 4) || (energy && energy <= 4) || (feeling && feeling <= 4)) {
+    watch.push("das subjektive Review zeigt noch keine stabile Erholung");
+  } else if ((legs >= 7 && energy >= 7) || feeling >= 8) {
+    good.push("dein Review bestätigt eine gute Belastungsverträglichkeit");
+  }
+
+  const symptoms = [
+    ...(Array.isArray(review?.painAreas) ? review.painAreas : []),
+    ...(Array.isArray(review?.stomachSymptoms) ? review.stomachSymptoms : []),
+  ].filter((item) => item && item !== "Keine Beschwerden" && item !== "Keine");
+  if (symptoms.length) watch.push(`Review-Hinweis: ${symptoms.slice(0, 2).join(", ")}`);
+
+  if (kind === "quality" && load?.tone === "bad") {
+    watch.push("der Qualitätsreiz war bereits hoch – zusätzliche Intensität bringt heute keinen Bonus");
+  }
+  if (kind === "long" && numeric(activity?.distance) >= 30 && !watch.length) {
+    good.push("der lange Reiz wurde ohne auffälliges Warnsignal abgeschlossen");
+  }
+
+  const goodText = good.length ? good.slice(0, 2).join("; ") : "keine einzelne Kennzahl sticht positiv heraus, die Einheit liegt aber im persönlichen Rahmen";
+  const watchText = watch.length ? watch.slice(0, 2).join("; ") : "keine relevante Abweichung in den verfügbaren Signalen";
+  const nextAction = watch.length
+    ? "Beim nächsten lockeren Lauf dieselben Signale erneut prüfen und Umfang oder Intensität nicht vorschnell erhöhen."
+    : kind === "quality"
+      ? "Reiz abhaken; die Anpassung entsteht in der Erholung, nicht durch spontanes Draufpacken."
+      : kind === "long"
+        ? "Belastung jetzt verarbeiten; der nächste spezifische Schritt bleibt nur dann bestehen, wenn das Folge-Review stabil bleibt."
+        : "Kein Änderungsbedarf aus dieser Einheit; Plan kontrolliert fortsetzen.";
+
+  return {
+    summary: `Gut: ${goodText}. Auffällig: ${watchText}. Konsequenz: ${nextAction}`,
+    good,
+    watch,
+    nextAction,
+  };
+}
+
 function dataConfidence(activity, weather, heat) {
   const checks = [
     numeric(activity.durationSeconds || numeric(activity.duration) * 60) > 0,
@@ -540,6 +649,7 @@ export function activityCoachAssessment(state, activity, review = {}, weatherOve
   if (heat.baselineSamples) factors.push(`${heat.baselineSamples} ähnliche milde Läufe`);
   if (heat.heatPairs) factors.push(`Heat Response ${Math.round(heat.expectedHeatDelta) >= 0 ? "+" : ""}${Math.round(heat.expectedHeatDelta)} bpm · ${heat.heatPairs} Vergleichspaare`);
   factors.push(`Vergleich mit ${athlete.metrics.activeWeeks} aktiven Wochen`);
+  const narrative = specificRunNarrative(state, activity, review, load, execution, heat);
   return {
     generatedAt: new Date().toISOString(),
     load,
@@ -553,7 +663,14 @@ export function activityCoachAssessment(state, activity, review = {}, weatherOve
     signal,
     followUp,
     confidence,
-    summary: contextSummary(activity, load, execution, environment, review, heat, followUp),
+    summary: [
+      contextSummary(activity, load, execution, environment, review, heat, followUp),
+      narrative.summary,
+    ].filter(Boolean).join(" "),
+    coachNarrative: narrative.summary || "",
+    good: narrative.good,
+    watch: narrative.watch,
+    nextAction: narrative.nextAction,
     comparison: subjectiveComparison(load, review, heat),
     factors,
   };

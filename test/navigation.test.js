@@ -9,11 +9,12 @@ import {
   TRAINING_SECTIONS,
 } from "../src/services/navigation.js";
 
-test("main navigation is reduced to five clear areas", () => {
+test("main navigation exposes the six clear product areas", () => {
   assert.deepEqual(MAIN_NAV_ITEMS.map((item) => item.label), [
     "Briefing",
     "Training",
     "Coach",
+    "Race",
     "Fuel Lab",
     "Settings",
   ]);
@@ -21,10 +22,10 @@ test("main navigation is reduced to five clear areas", () => {
 
 test("all former training pages belong to the Training area", () => {
   const training = MAIN_NAV_ITEMS.find((item) => item.key === "training");
-  ["/planner", "/training", "/mission", "/analytics"].forEach((pathname) => {
+  ["/planner", "/training", "/training/mobility", "/mission", "/analytics"].forEach((pathname) => {
     assert.equal(isMainNavigationActive(pathname, training), true);
   });
-  assert.deepEqual(TRAINING_SECTIONS.map((item) => item.label), ["Woche", "Einheiten", "Ziele", "Analyse"]);
+  assert.deepEqual(TRAINING_SECTIONS.map((item) => item.label), ["Woche", "Einheiten", "Kraft & Mobility", "Ziele", "Analyse"]);
 });
 
 test("equipment is a Settings section and old route stays grouped with Settings", () => {

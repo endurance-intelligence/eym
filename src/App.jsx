@@ -10,10 +10,12 @@ import ErrorBoundary from "./components/ErrorBoundary";
 
 const Mission = lazy(() => import("./pages/Mission"));
 const Training = lazy(() => import("./pages/Training"));
+const TrainingMobility = lazy(() => import("./pages/TrainingMobility"));
 const Coach = lazy(() => import("./pages/Coach"));
+const Race = lazy(() => import("./pages/Race"));
 const Exercises = lazy(() => import("./pages/Exercises"));
 const Fuel = lazy(() => import("./pages/Fuel"));
-const Analytics = lazy(() => import("./pages/Analytics"));
+const AnalyticsSummary = lazy(() => import("./pages/AnalyticsSummary"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Planner = lazy(() => import("./pages/Planner"));
 
@@ -43,5 +45,5 @@ export default function App() {
   if (cloudStatus === "local" || cloudStatus === "loading") return <main className="auth-shell"><section className="auth-card"><p className="eyebrow">Endurance Intelligence</p><h1>Dein Profil wird geladen …</h1><p className="muted">Dein vorhandener Stand wird zuerst geprüft, damit nichts überschrieben wird.</p></section></main>;
   if (cloudStatus === "error" && state.onboarding?.status !== "completed") return <main className="auth-shell"><section className="auth-card"><p className="eyebrow">Endurance Intelligence</p><h1>Dein Profil konnte nicht geladen werden</h1><p className="muted">Deine Anmeldung ist noch aktiv. Die App startet kein neues Onboarding, solange der bestehende Cloud-Stand nicht geprüft werden konnte.</p>{cloudError && <p className="connection-message cloud-error-message">{cloudError}</p>}<div className="button-row"><button onClick={reloadCloudState}>Cloud erneut laden</button><button className="secondary" onClick={logout}>Abmelden</button></div></section></main>;
   if (state.onboarding?.status !== "completed") return <ErrorBoundary><Onboarding /></ErrorBoundary>;
-  return <ErrorBoundary><HashRouter useTransitions={false}><Routes><Route element={<Layout />}><Route index element={<Briefing />} /><Route path="mission" element={deferredPage(Mission)} /><Route path="training" element={deferredPage(Training)} /><Route path="planner" element={deferredPage(Planner)} /><Route path="coach" element={deferredPage(Coach)} /><Route path="coach/exercises" element={deferredPage(Exercises)} /><Route path="fuel" element={deferredPage(Fuel)} /><Route path="equipment" element={<Navigate to="/settings?section=equipment" replace />} /><Route path="analytics" element={deferredPage(Analytics)} /><Route path="settings" element={deferredPage(Settings)} /></Route></Routes></HashRouter></ErrorBoundary>;
+  return <ErrorBoundary><HashRouter useTransitions={false}><Routes><Route element={<Layout />}><Route index element={<Briefing />} /><Route path="mission" element={deferredPage(Mission)} /><Route path="training" element={deferredPage(Training)} /><Route path="planner" element={deferredPage(Planner)} /><Route path="training/mobility" element={deferredPage(TrainingMobility)} /><Route path="coach" element={deferredPage(Coach)} /><Route path="race" element={deferredPage(Race)} /><Route path="coach/exercises" element={deferredPage(Exercises)} /><Route path="fuel" element={deferredPage(Fuel)} /><Route path="equipment" element={<Navigate to="/settings?section=equipment" replace />} /><Route path="analytics" element={deferredPage(AnalyticsSummary)} /><Route path="settings" element={deferredPage(Settings)} /></Route></Routes></HashRouter></ErrorBoundary>;
 }

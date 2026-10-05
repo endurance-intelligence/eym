@@ -277,10 +277,16 @@ export default function Training() {
         ) : (
           <div className="training-history">
             {grouped.map((month) => {
-              const isMonthOpen = openMonths.has(month.key);
+              const [archiveYear, archiveMonth] = month.key.split("-").map(Number);
+              const monthArchiveReady = new Date() >= new Date(archiveYear, archiveMonth, 8);
+              const isMonthOpen = month.key === currentMonth || !monthArchiveReady || openMonths.has(month.key);
               const monthActivities = month.weeks.flatMap(([, weekActivities]) => weekActivities);
               const monthDistance = monthActivities.reduce((sum, activity) => sum + Number(activity.distance || 0), 0);
               const monthDuration = monthActivities.reduce((sum, activity) => sum + Number(activity.duration || 0), 0);
+              const monthWeekKm = month.weeks.map(([, weekActivities]) => weekActivities.reduce((sum, activity) => sum + Number(activity.distance || 0), 0));
+              const monthWeekMax = Math.max(1, ...monthWeekKm);
+              const monthPeakKm = Math.max(0, ...monthWeekKm);
+              const monthLongest = Math.max(0, ...monthActivities.map((activity) => Number(activity.distance || 0)));
               return (
                 <section className={`training-month ${isMonthOpen ? "open" : "collapsed"}`} key={month.key}>
                   <button
@@ -296,6 +302,10 @@ export default function Training() {
                       <small>{monthActivities.length} {monthActivities.length === 1 ? "Einheit" : "Einheiten"} · {monthDistance.toLocaleString("de-DE", { maximumFractionDigits: 1 })} km · {hours(monthDuration)}</small>
                     </div>
                     <div className="training-month-toggle-meta">
+                      {monthArchiveReady && <div className="training-month-pulse" aria-label="Wochenverlauf des Monats">
+                        <div>{monthWeekKm.map((km, index) => <i key={index} style={{ "--month-bar": `${Math.max(5, km / monthWeekMax * 100)}%` }} title={`${km.toFixed(1)} km`} />)}</div>
+                        <small>Peak ${monthPeakKm.toFixed(1)} km · längste Einheit ${monthLongest.toFixed(1)} km</small>
+                      </div>}
                       <div className="training-month-chips">{month.summary.map((item) => <span key={item.key}>{item.label}: <b>{item.count}</b>{item.distance > 0 ? ` · ${item.distance.toFixed(1)} km` : ""}</span>)}</div>
                       <b className="training-month-chevron" aria-hidden="true">{isMonthOpen ? "−" : "+"}</b>
                     </div>

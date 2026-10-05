@@ -54,7 +54,7 @@ function statusFromSignals(recoveryState, week) {
     level: "ok",
     tone: "good",
       label: "Plan passt",
-    title: "Die aktuellen Signale passen zum bestehenden Plan",
+    title: "Stabil – der nächste geplante Reiz bleibt sinnvoll",
   };
 }
 
@@ -84,9 +84,18 @@ export function buildCoachState(state = {}, now = new Date()) {
     mobility?.reason,
   ]);
 
+  const signalLead = [
+    analytics.trend?.text,
+    recoveryState.reviewed
+      ? `Erholung zuletzt: Beine ${recoveryState.legs}/10, Energie ${recoveryState.energy}/10, RPE ${recoveryState.rpe}/10.`
+      : null,
+    analytics.specificity?.text,
+  ].filter(Boolean).slice(0, 2).join(" ");
   const recommendationText = status.level === "open"
     ? "Bestehende Einheiten bleiben wie geplant. Ergänze nach dem nächsten relevanten Lauf ein kurzes Review, damit dein Coach Belastung und Erholung persönlicher einordnen kann."
-    : dashboard.recommendation;
+    : status.level === "ok"
+      ? `${signalLead} Konsequenz: keine Planänderung nötig; der nächste geplante Reiz bleibt bestehen, solange das nächste Review keine neue Abweichung zeigt.`
+      : `${signalLead} ${dashboard.recommendation}`;
   const action = status.level === "adjust"
     ? { key: "review-week", label: "Woche gezielt prüfen", href: "/planner" }
     : status.level === "watch"
