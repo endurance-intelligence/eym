@@ -5,6 +5,7 @@ import { AppProvider } from "./context/AppContext";
 import { removeRecoveryMarker } from "./services/appRecovery";
 import "./styles/main.css";
 import "./styles/visualRefresh.css";
+import "./styles/neoUi.css";
 
 function removeLegacyVersionQuery() {
   if (typeof window === "undefined") return;

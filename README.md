@@ -1,8 +1,17 @@
 # Endurance Intelligence
 
-Current app version: **4.2.0**
+Current app version: **4.2.1**
 
 **Eat your miles.**
+
+
+## Neo UI 2026 · v4.2.1
+
+- Cross-app visual system refresh: floating desktop rail, mobile bottom dock, glassy surfaces, stronger hierarchy and calmer typography.
+- Briefing, Training, Coach, Ziele, Analyse, Race, Fuel Lab, Settings and Kraft & Mobility now share one modern visual language.
+- Race Intelligence receives dedicated phase, VP, supply and nutrition cards instead of generic dashboard styling.
+- Historical training months read as visual archives rather than spreadsheet-like rows.
+- No training, coach, race, fuel or synchronization logic changes are introduced by this release.
 
 Endurance Intelligence is a personal endurance dashboard with adaptive weekly planning, Intervals.icu activity sync, Garmin ZIP import, workout reviews, equipment tracking, Fuel Lab and a Supabase-backed calendar subscription.
 
@@ -654,7 +663,7 @@ supabase functions deploy event-search
 - Makes the weekly disclosure repeat the coach-controlled week type and corridor instead of a static target.
 
 
-## Coach & Race Intelligence v4.2.0
+## Coach & Race Intelligence v4.2.1
 
 - Race is the single place for race setup, route/strategy, nutrition/aid stations and race weather. Fuel Lab remains the product and tolerance laboratory.
 - Coach Today starts from today's planned session and names purpose, signals to watch and the concrete adjustment rule instead of repeating generic plan-status copy.

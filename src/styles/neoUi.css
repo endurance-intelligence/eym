@@ -1,0 +1,579 @@
+/* v4.2.1 – Neo UI 2026
+   Cross-app presentation layer only. Keeps coach/planner/race logic intact. */
+
+:root{
+  --neo-canvas:color-mix(in srgb,var(--bg-body) 96%,#0d1728);
+  --neo-glass:color-mix(in srgb,var(--bg-card) 84%,transparent);
+  --neo-glass-strong:color-mix(in srgb,var(--bg-card) 94%,var(--bg-body));
+  --neo-panel:color-mix(in srgb,var(--bg-card-alt) 80%,var(--bg-body));
+  --neo-line:color-mix(in srgb,var(--border) 68%,transparent);
+  --neo-line-strong:color-mix(in srgb,var(--accent) 25%,var(--border));
+  --neo-highlight:color-mix(in srgb,var(--accent) 10%,transparent);
+  --neo-highlight-strong:color-mix(in srgb,var(--accent) 17%,transparent);
+  --neo-shadow:0 18px 55px rgba(0,0,0,.20);
+  --neo-shadow-soft:0 8px 26px rgba(0,0,0,.13);
+  --neo-shadow-float:0 28px 80px rgba(0,0,0,.35);
+  --neo-radius:22px;
+  --neo-radius-sm:15px;
+}
+
+html{background:var(--neo-canvas)}
+body{
+  background:
+    radial-gradient(circle at 76% -8%,rgba(var(--accent-rgb),.105),transparent 38rem),
+    radial-gradient(circle at 3% 72%,rgba(var(--accent-secondary-rgb),.05),transparent 34rem),
+    linear-gradient(rgba(255,255,255,.012) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,255,255,.012) 1px,transparent 1px),
+    var(--neo-canvas);
+  background-size:auto,auto,38px 38px,38px 38px,auto;
+  background-attachment:fixed;
+}
+
+/* ---------- App chrome ---------- */
+.shell{
+  grid-template-columns:264px minmax(0,1fr);
+  gap:16px;
+  min-height:100vh;
+  padding:16px;
+}
+.shell>aside{
+  top:16px;
+  height:calc(100vh - 32px);
+  padding:18px 14px 20px;
+  border:1px solid var(--neo-line);
+  border-radius:26px;
+  background:linear-gradient(180deg,color-mix(in srgb,var(--bg-sidebar) 90%,transparent),color-mix(in srgb,var(--bg-sidebar) 97%,transparent));
+  box-shadow:var(--neo-shadow);
+  backdrop-filter:blur(28px) saturate(135%);
+  overflow:hidden;
+}
+.shell>aside::before{
+  content:"";
+  position:absolute;
+  inset:0 0 auto;
+  height:120px;
+  pointer-events:none;
+  background:radial-gradient(circle at 20% 0,rgba(var(--accent-rgb),.14),transparent 72%);
+}
+.brand{position:relative;padding:10px 12px 24px}
+.brand b{font-size:20px;letter-spacing:-.045em}
+.brand span{color:var(--muted-bright);font-size:11px;font-weight:700}
+.brand small{
+  margin-top:10px;
+  padding:4px 8px;
+  border:1px solid var(--neo-line);
+  border-radius:999px;
+  background:rgba(255,255,255,.025);
+  font-size:9px;
+  letter-spacing:.08em;
+}
+.shell nav{position:relative;gap:4px}
+.shell nav a{
+  position:relative;
+  min-height:46px;
+  padding:8px 10px;
+  border-radius:14px;
+  font-size:13px;
+  font-weight:760;
+}
+.shell nav a i{
+  width:31px;height:31px;margin-right:9px;
+  border:1px solid transparent;
+  border-radius:10px;
+  background:rgba(255,255,255,.025);
+}
+.shell nav a.active{
+  border-color:var(--neo-line-strong);
+  background:linear-gradient(100deg,var(--neo-highlight-strong),rgba(255,255,255,.018));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.035);
+}
+.shell nav a.active::after{
+  content:"";
+  position:absolute;
+  right:8px;
+  width:5px;height:5px;
+  border-radius:999px;
+  background:var(--accent);
+  box-shadow:0 0 14px rgba(var(--accent-rgb),.8);
+}
+.shell nav a.active i{border-color:color-mix(in srgb,var(--accent) 22%,transparent);background:var(--neo-highlight-strong)}
+.aside-foot{left:22px;right:22px;bottom:20px;padding-top:15px;border-top:1px solid var(--neo-line)}
+.aside-cloud-status{margin-bottom:10px}
+
+.content{max-width:1450px;padding:28px clamp(18px,2.7vw,42px) 70px;margin:0 auto}
+.route-loading{
+  min-height:34vh;
+  display:grid;
+  place-items:center;
+  border:1px dashed var(--neo-line);
+  border-radius:var(--neo-radius);
+  background:rgba(255,255,255,.015);
+}
+
+/* ---------- Titles + hierarchy ---------- */
+.page-title{
+  position:relative;
+  align-items:center;
+  gap:24px;
+  margin:4px 0 26px;
+  padding:10px 0 18px;
+}
+.page-title::after{
+  content:"";
+  position:absolute;
+  left:0;right:0;bottom:0;
+  height:1px;
+  background:linear-gradient(90deg,var(--neo-line-strong),var(--neo-line) 34%,transparent 82%);
+}
+.page-title p,.eyebrow{
+  color:color-mix(in srgb,var(--accent-bright) 62%,var(--muted-bright));
+  font-size:10px;
+  font-weight:900;
+  letter-spacing:.145em;
+}
+.page-title h1{
+  font-size:clamp(38px,4.2vw,58px);
+  font-weight:860;
+  letter-spacing:-.062em;
+  background:linear-gradient(110deg,var(--text),color-mix(in srgb,var(--text) 72%,var(--accent-bright)));
+  -webkit-background-clip:text;
+  background-clip:text;
+  color:transparent;
+}
+.page-title-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.card h2{letter-spacing:-.035em;line-height:1.12}
+.card h3{letter-spacing:-.02em}
+.metric strong,.big,.training-sport-summary strong,.race-intel-facts b{font-variant-numeric:tabular-nums}
+
+/* ---------- Surfaces ---------- */
+.card{
+  border:1px solid var(--neo-line);
+  border-radius:var(--neo-radius);
+  background:
+    linear-gradient(145deg,rgba(255,255,255,.026),rgba(255,255,255,.008)),
+    var(--neo-glass-strong);
+  box-shadow:var(--neo-shadow-soft);
+  backdrop-filter:blur(16px);
+}
+.card:hover{border-color:color-mix(in srgb,var(--accent) 18%,var(--border-strong));box-shadow:0 12px 34px rgba(0,0,0,.16)}
+.hero,.card.hero{
+  background:
+    radial-gradient(circle at 88% 4%,rgba(var(--accent-rgb),.19),transparent 32rem),
+    linear-gradient(145deg,rgba(255,255,255,.035),rgba(255,255,255,.008)),
+    var(--neo-glass-strong);
+}
+.grid{gap:16px}
+
+/* ---------- Controls ---------- */
+button,.button-link,.page-title button{
+  min-height:42px;
+  padding:9px 14px;
+  border-radius:13px;
+  border-color:var(--neo-line);
+  background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,.018));
+  font-weight:780;
+  transition:transform .16s ease,border-color .16s ease,background .16s ease,box-shadow .16s ease;
+}
+button:hover,.button-link:hover,.page-title button:hover{transform:translateY(-1px);border-color:var(--neo-line-strong);background:var(--neo-highlight)}
+button:active,.button-link:active{transform:translateY(0) scale(.985)}
+.primary,button.primary,.button-link.primary{
+  border-color:color-mix(in srgb,var(--accent) 76%,white 7%);
+  background:linear-gradient(135deg,var(--accent),color-mix(in srgb,var(--accent-secondary) 86%,white 7%));
+  box-shadow:0 10px 24px rgba(var(--accent-rgb),.16);
+}
+.primary:hover,button.primary:hover,.button-link.primary:hover{box-shadow:0 14px 28px rgba(var(--accent-rgb),.21)}
+
+input,select,textarea,.modal input,.modal select,.modal textarea,.editor-form input,.editor-form select,.calendar-url-label input{
+  border-radius:13px;
+  border-color:var(--neo-line);
+  background:linear-gradient(180deg,color-mix(in srgb,var(--bg-input) 91%,white 1%),var(--bg-input));
+}
+input:focus,select:focus,textarea:focus{box-shadow:0 0 0 4px rgba(var(--accent-rgb),.075)}
+
+/* ---------- Tabs / sub navigation ---------- */
+.section-tabs{
+  width:max-content;
+  max-width:100%;
+  gap:4px;
+  margin-bottom:22px;
+  padding:5px;
+  border:1px solid var(--neo-line);
+  border-radius:16px;
+  background:color-mix(in srgb,var(--bg-sidebar) 72%,transparent);
+  box-shadow:0 7px 22px rgba(0,0,0,.11);
+  backdrop-filter:blur(18px);
+  overflow-x:auto;
+  scrollbar-width:none;
+}
+.section-tabs::-webkit-scrollbar{display:none}
+.section-tabs button,.section-tabs a{
+  min-height:38px;
+  padding:8px 13px;
+  border:0;
+  border-radius:11px;
+  background:transparent;
+  color:var(--muted-bright);
+  white-space:nowrap;
+}
+.section-tabs button:hover,.section-tabs a:hover{transform:none;background:rgba(255,255,255,.035)}
+.section-tabs button.selected,.section-tabs a.selected{
+  background:var(--neo-highlight-strong);
+  color:var(--text);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 25%,transparent),0 6px 18px rgba(0,0,0,.12);
+}
+
+/* ---------- Briefing ---------- */
+.briefing-grid{gap:16px}
+.today-card.premium-briefing-card .today-hero-column,
+.today-card.premium-briefing-card .today-side-panel{
+  border-radius:24px;
+  border-color:var(--neo-line);
+  background:
+    radial-gradient(circle at 90% -10%,rgba(var(--accent-rgb),.085),transparent 55%),
+    var(--neo-glass-strong);
+  box-shadow:var(--neo-shadow-soft);
+}
+.today-card.premium-briefing-card .today-workout-row,
+.today-card.premium-briefing-card .today-upcoming-item{
+  border-radius:17px;
+  border-color:var(--neo-line);
+  background:linear-gradient(145deg,rgba(255,255,255,.026),rgba(255,255,255,.008)),var(--neo-panel);
+}
+.today-card.premium-briefing-card .today-workout-row:hover,
+.today-card.premium-briefing-card .today-upcoming-item:hover{border-color:var(--neo-line-strong);background:var(--neo-highlight)}
+.briefing-coach-status{
+  border-color:color-mix(in srgb,var(--accent) 22%,var(--neo-line));
+  background:linear-gradient(100deg,var(--neo-highlight),transparent 42%),var(--neo-glass-strong);
+}
+.briefing-hub-card{
+  position:relative;
+  overflow:hidden;
+  min-height:210px;
+}
+.briefing-hub-card::before{
+  content:"";
+  position:absolute;
+  width:120px;height:120px;
+  right:-50px;top:-55px;
+  border-radius:50%;
+  background:rgba(var(--accent-rgb),.06);
+  pointer-events:none;
+}
+.briefing-card-arrow{display:grid;place-items:center;width:31px;height:31px;border:1px solid var(--neo-line);border-radius:10px;background:rgba(255,255,255,.025)}
+.briefing-race-weather-banner{border-radius:18px;border-color:var(--neo-line);background:linear-gradient(110deg,var(--neo-highlight),transparent 60%),var(--neo-glass-strong);box-shadow:var(--neo-shadow-soft)}
+
+/* ---------- Planner ---------- */
+.planner-week-dashboard{position:relative}
+.shell main .planner-week-focus-card,
+.shell main .planner-week-dashboard>.planner-plan-approval,
+.shell main .planner-overview-strip,
+.shell main .planner-event-week-card,
+.shell main .planner-day{
+  border-color:var(--neo-line);
+  background:var(--neo-glass-strong);
+}
+.shell main .planner-week-focus-card{
+  background:linear-gradient(105deg,var(--neo-highlight),transparent 48%),var(--neo-glass-strong);
+  box-shadow:var(--neo-shadow-soft);
+}
+.shell main .planner-overview-strip{overflow:hidden;box-shadow:var(--neo-shadow-soft)}
+.shell main .planner-overview-strip>div+div,.shell main .planner-overview-strip>button{border-left-color:var(--neo-line)}
+.shell main .planner-days{gap:13px}
+.shell main .planner-day{border-radius:20px;overflow:hidden;box-shadow:0 8px 22px rgba(0,0,0,.10)}
+.shell main .planner-day>header{background:linear-gradient(180deg,rgba(255,255,255,.025),transparent),var(--neo-panel)}
+.shell main .planner-workout{transition:background .16s ease}
+.shell main .planner-workout:hover{background:rgba(var(--accent-rgb),.025)}
+.shell main .planner-workout-main h3{font-weight:790}
+.shell main .planner-check{border-radius:10px!important}
+.shell main .planner-coach-alert,
+.shell main .planner-week-logic,
+.shell main .planner-cross-training-alert{border-radius:17px;border-color:var(--neo-line);background:var(--neo-panel)}
+
+/* ---------- Training history ---------- */
+.training-month-overview{background:linear-gradient(105deg,var(--neo-highlight),transparent 42%),var(--neo-glass-strong)}
+.training-sport-summary>div{border-radius:16px;background:rgba(255,255,255,.025);box-shadow:inset 0 1px 0 rgba(255,255,255,.025)}
+.training-history-card{padding:18px}
+.training-month{
+  overflow:hidden;
+  border:1px solid var(--neo-line)!important;
+  border-left:1px solid var(--neo-line)!important;
+  border-radius:20px!important;
+  background:rgba(255,255,255,.012)!important;
+}
+.training-month.open{background:var(--neo-glass-strong)!important;box-shadow:var(--neo-shadow-soft)}
+.training-month-toggle{border-left:0!important;background:transparent!important;padding:17px 18px}
+.training-month.open>.training-month-toggle{background:linear-gradient(90deg,var(--neo-highlight),transparent 48%)!important}
+.training-month-pulse{gap:4px}
+.training-month-pulse i{border-radius:999px;background:linear-gradient(180deg,var(--accent),color-mix(in srgb,var(--accent) 65%,transparent));box-shadow:0 0 10px rgba(var(--accent-rgb),.09)}
+.training-month-chips span{border-radius:999px;background:rgba(255,255,255,.025)}
+.training-month-weeks{padding:0 14px 14px!important}
+.training-week{
+  margin-top:9px;
+  border:1px solid var(--neo-line)!important;
+  border-left:1px solid var(--neo-line)!important;
+  border-radius:16px;
+  background:rgba(255,255,255,.012)!important;
+  overflow:hidden;
+}
+.training-week.open{background:var(--neo-panel)!important}
+.training-week-toggle{padding:13px 14px!important;background:transparent}
+.training-week-title>span{color:var(--muted-bright)!important}
+.training-week .activity-list{border:0!important;border-radius:0!important}
+.activity-row{border-top:1px solid var(--neo-line)}
+.activity-row .activity-main{background:transparent}
+.activity-row:hover{background:var(--neo-highlight)}
+.activity-stat{background:rgba(255,255,255,.022);border-color:var(--neo-line)}
+
+/* ---------- Analytics ---------- */
+.analytics-brief{
+  overflow:hidden;
+  padding:28px;
+  background:
+    radial-gradient(circle at 96% -12%,rgba(var(--accent-rgb),.15),transparent 36rem),
+    var(--neo-glass-strong);
+}
+.analytics-brief-head{max-width:760px}
+.analytics-brief-head h2{font-size:clamp(27px,3vw,38px);margin-bottom:8px}
+.analytics-signal-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:22px}
+.analytics-signal-grid article{
+  position:relative;
+  display:grid;
+  gap:7px;
+  min-height:155px;
+  padding:18px;
+  border:1px solid var(--neo-line);
+  border-radius:18px;
+  background:rgba(255,255,255,.025);
+  overflow:hidden;
+}
+.analytics-signal-grid article::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--muted)}
+.analytics-signal-grid article.good::before{background:var(--success)}
+.analytics-signal-grid article.watch::before{background:var(--warning)}
+.analytics-signal-grid article small{color:var(--muted);font-size:10px;font-weight:900;letter-spacing:.11em;text-transform:uppercase}
+.analytics-signal-grid article strong{font-size:19px;letter-spacing:-.025em}
+.analytics-signal-grid article span{color:var(--muted-bright);font-size:12px;line-height:1.5}
+.analytics-consequence{margin-top:13px;padding:19px;border:1px solid var(--neo-line-strong);border-radius:18px;background:linear-gradient(110deg,var(--neo-highlight),transparent 65%)}
+.analytics-consequence small{display:block;color:var(--accent-bright);font-weight:900;letter-spacing:.1em;text-transform:uppercase}
+.analytics-consequence strong{display:block;margin:5px 0 4px;font-size:21px}
+.analytics-consequence p{margin:0;color:var(--muted-bright)}
+.analytics-detail-toggle{margin-top:14px}
+.analytics-detail-shell{margin-top:18px;padding-top:18px;border-top:1px solid var(--neo-line)}
+
+/* ---------- Coach ---------- */
+.coach-dashboard-grid{gap:16px}
+.coach-today-session-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.coach-today-session-grid>article,
+.coach-today-data-grid>div,
+.coach-outlook-metrics>div,
+.coach-athlete-model-metrics>div,
+.coach-roadmap article{
+  border:1px solid var(--neo-line);
+  border-radius:17px;
+  background:rgba(255,255,255,.02);
+}
+.coach-today-session-grid>article{padding:17px}
+.coach-today-session-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.coach-today-session-heading strong{font-size:18px;letter-spacing:-.025em}
+.coach-today-data{
+  background:linear-gradient(105deg,var(--neo-highlight),transparent 54%),var(--neo-glass-strong)!important;
+}
+.coach-recommendation-heading{gap:14px}
+.coach-recommendation-copy{font-size:14px;line-height:1.6}
+.coach-readiness-copy{border-radius:17px!important}
+.coach-readiness-factors{gap:10px}
+.coach-readiness-factor{border-radius:16px!important}
+.coach-roadmap{gap:10px}
+.coach-roadmap article.current{border-color:var(--neo-line-strong);background:var(--neo-highlight)}
+.coach-athlete-model{background:linear-gradient(105deg,rgba(var(--accent-rgb),.06),transparent 48%),var(--neo-glass-strong)!important}
+
+/* ---------- Mission / goals ---------- */
+.mission-main-hero{
+  overflow:hidden;
+  background:
+    radial-gradient(circle at 91% 4%,rgba(var(--accent-rgb),.19),transparent 33rem),
+    linear-gradient(145deg,rgba(255,255,255,.025),transparent),
+    var(--neo-glass-strong)!important;
+}
+.mission-main-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}
+.main-target-badge{padding:6px 10px;border:1px solid var(--neo-line-strong);border-radius:999px;background:var(--neo-highlight);font-size:10px;font-weight:900}
+.mission-hero-stats{gap:12px}
+.mission-hero-stats .metric{min-width:145px;padding:14px;border:1px solid var(--neo-line);border-radius:16px;background:rgba(255,255,255,.022)}
+.mission-goal-path{background:var(--neo-glass-strong)!important}
+.mission-goal-path-list{position:relative;gap:10px}
+.mission-goal-path-list::before{content:"";position:absolute;left:20px;top:16px;bottom:16px;width:1px;background:linear-gradient(var(--accent),var(--neo-line) 30%,var(--neo-line))}
+.mission-goal-path-list>article{position:relative;border-radius:17px;border-color:var(--neo-line);background:var(--neo-panel)}
+.mission-training-roadmap{display:grid;gap:10px}
+.mission-training-step{border:1px solid var(--neo-line);border-radius:17px;background:rgba(255,255,255,.02)}
+.mission-training-step.race{border-color:var(--neo-line-strong);background:var(--neo-highlight)}
+.achievement-card{border-radius:17px!important}
+
+/* ---------- Race ---------- */
+.race-hub-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:18px}
+.race-hub-tabs{margin:0}
+.race-event-select{display:grid;gap:5px;min-width:min(330px,100%);color:var(--muted);font-size:10px;font-weight:900;letter-spacing:.09em;text-transform:uppercase}
+.race-event-select select{min-height:50px;font-size:14px;font-weight:760;letter-spacing:0;text-transform:none}
+.race-intelligence-stack{display:grid;gap:16px}
+.race-intel-hero{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(360px,.8fr);
+  gap:24px;
+  align-items:center;
+  overflow:hidden;
+  padding:30px;
+  background:
+    radial-gradient(circle at 90% 0,rgba(var(--accent-rgb),.21),transparent 28rem),
+    linear-gradient(120deg,var(--neo-highlight),transparent 50%),
+    var(--neo-glass-strong)!important;
+}
+.race-intel-hero h2{font-size:clamp(30px,3.6vw,46px);margin-bottom:10px}
+.race-intel-hero p{max-width:64ch;color:var(--muted-bright);line-height:1.6}
+.race-intel-targets{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.race-intel-targets article{display:grid;align-content:start;gap:5px;min-height:150px;padding:17px;border:1px solid var(--neo-line);border-radius:18px;background:rgba(255,255,255,.025)}
+.race-intel-targets span,.race-intel-facts span{color:var(--muted);font-size:10px;font-weight:900;letter-spacing:.09em;text-transform:uppercase}
+.race-intel-targets strong{font-size:24px;letter-spacing:-.04em}
+.race-intel-targets small{color:var(--muted-bright);line-height:1.45}
+.race-intel-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:18px}
+.race-intel-heading>span{padding:6px 9px;border:1px solid var(--neo-line);border-radius:999px;background:rgba(255,255,255,.025);color:var(--muted-bright);font-size:9px;font-weight:900;letter-spacing:.09em}
+.race-intel-facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:9px}
+.race-intel-facts span{display:grid;gap:4px;padding:15px;border:1px solid var(--neo-line);border-radius:16px;background:rgba(255,255,255,.02)}
+.race-intel-facts b{color:var(--text);font-size:21px;letter-spacing:-.03em;text-transform:none}
+.race-intel-note{margin:14px 0 0;padding:12px 14px;border-left:2px solid var(--accent);border-radius:0 12px 12px 0;background:var(--neo-highlight);color:var(--muted-bright);font-size:12px;line-height:1.55}
+.race-mode-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.race-mode-grid button{display:grid;gap:5px;min-height:106px;padding:16px;text-align:left;background:rgba(255,255,255,.018)}
+.race-mode-grid button.selected{border-color:var(--neo-line-strong);background:var(--neo-highlight-strong);box-shadow:inset 0 0 0 1px rgba(var(--accent-rgb),.08)}
+.race-mode-grid button strong{font-size:15px}.race-mode-grid button span{color:var(--muted);font-size:11px;line-height:1.45}
+.race-resource-box{display:grid;gap:12px;margin-top:15px;padding:16px;border:1px solid var(--neo-line);border-radius:17px;background:rgba(255,255,255,.018)}
+.race-resource-box>div:first-child{display:grid;gap:3px}.race-resource-box span{color:var(--muted);font-size:11px}
+.race-resource-chips{display:flex;flex-wrap:wrap;gap:7px}.race-resource-chips button{min-height:34px;padding:6px 9px;border-radius:999px;font-size:11px}.race-resource-chips button.selected{border-color:var(--neo-line-strong);background:var(--neo-highlight-strong);color:var(--accent-bright)}
+.race-phase-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.race-phase-grid article{position:relative;display:grid;align-content:start;gap:6px;min-height:220px;padding:18px;border:1px solid var(--neo-line);border-radius:18px;background:linear-gradient(180deg,rgba(255,255,255,.028),transparent),var(--neo-panel);overflow:hidden}
+.race-phase-grid article::before{content:"";position:absolute;left:0;right:0;top:0;height:3px;background:linear-gradient(90deg,var(--accent),transparent)}
+.race-phase-grid small{color:var(--accent-bright);font-weight:900;letter-spacing:.08em;text-transform:uppercase}.race-phase-grid strong{font-size:18px}.race-phase-grid span,.race-phase-grid em{color:var(--muted-bright);font-size:11px;font-style:normal}.race-phase-grid b{font-size:14px}.race-phase-grid p{margin:5px 0 0;color:var(--muted);font-size:11px;line-height:1.5}
+.race-vp-list{display:grid;gap:10px}.race-vp-list>article{padding:15px;border:1px solid var(--neo-line);border-radius:17px;background:rgba(255,255,255,.018)}
+.race-vp-fields{display:grid;grid-template-columns:minmax(180px,1fr) 120px auto;gap:9px;align-items:end}.race-vp-fields label{display:grid;gap:5px;color:var(--muted)}
+.race-vp-note{width:100%;margin-top:10px}.race-empty-vp{display:grid;gap:5px;padding:24px;border:1px dashed var(--neo-line);border-radius:17px;background:rgba(255,255,255,.01);text-align:center}.race-empty-vp span{color:var(--muted)}
+.race-segment-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px;margin-top:12px}.race-segment-list span{display:grid;gap:3px;padding:12px 13px;border:1px solid var(--neo-line);border-radius:14px;background:var(--neo-panel);color:var(--muted);font-size:11px}.race-segment-list b{color:var(--text);font-size:12px}
+.race-intel-footnote{display:flex;align-items:center;justify-content:space-between;gap:16px}.race-intel-footnote>div{display:grid;gap:3px}.race-intel-footnote span{color:var(--muted);font-size:12px}
+.race-weather-hub,.race-setup-shell{overflow:hidden}
+
+/* ---------- Fuel Lab ---------- */
+.fuel-grid{gap:14px}
+.fuel-product-card-compact{border-radius:20px;background:var(--neo-glass-strong);box-shadow:var(--neo-shadow-soft)}
+.fuel-product-card-compact:hover{transform:translateY(-2px);box-shadow:0 15px 36px rgba(0,0,0,.18)}
+.fuel-product-head .fuel-product-image{border-radius:15px;background:rgba(255,255,255,.96);box-shadow:0 6px 20px rgba(0,0,0,.16)}
+.fuel-stats b,.fuel-stats span{border-color:var(--neo-line);background:rgba(255,255,255,.025)}
+.fuel-stock-row{border-color:var(--neo-line);border-radius:16px;background:var(--neo-panel)}
+.fuel-partner-hero{background:linear-gradient(110deg,var(--neo-highlight),transparent 48%),var(--neo-glass-strong)!important}
+.fuel-form-section{border-radius:18px!important;border-color:var(--neo-line)!important;background:rgba(255,255,255,.018)!important}
+
+/* ---------- Settings ---------- */
+.settings-overview-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+.settings-overview-card{position:relative;overflow:hidden;min-height:178px!important}
+.settings-overview-card::after{content:"";position:absolute;right:-36px;bottom:-42px;width:110px;height:110px;border-radius:50%;background:rgba(var(--accent-rgb),.045);pointer-events:none}
+.settings-overview-card h2{font-size:21px}
+.settings-overview-card .muted{font-size:12px}
+.settings-profile-card,.settings-commitments-card,.settings-replacements-card,.planner-principles-card,.intervals-setup-card,.appearance-live-card{border-radius:22px!important}
+.settings-section-heading>span,.settings-migration-badge{border-radius:999px!important}
+.athlete-experience-grid button,.theme-preset-visual,.appearance-custom-card,.appearance-glow-card,.intervals-setup-step{border-radius:16px!important;border-color:var(--neo-line)!important;background:rgba(255,255,255,.018)!important}
+.athlete-experience-grid button.selected{border-color:var(--neo-line-strong)!important;background:var(--neo-highlight)!important}
+
+/* ---------- Mobility ---------- */
+.training-mobility-embed>.page-title,.training-mobility-embed>.coach-tabs{display:none}
+.training-mobility-embed .coach-tabs{display:none}
+.mobility-session-hero,.mobility-workout-plan,.mobility-library-summary,.mobility-coach-suggestion{border-radius:22px!important;border-color:var(--neo-line)!important;background:var(--neo-glass-strong)!important}
+.mobility-session-hero{background:linear-gradient(105deg,var(--neo-highlight),transparent 52%),var(--neo-glass-strong)!important}
+.mobility-session-sections>section,.mobility-program-settings,.mobility-timer-settings.nested,.mobility-voice-settings{border-radius:16px!important;border-color:var(--neo-line)!important;background:var(--neo-panel)!important}
+.mobility-focus-picker button,.mobility-equipment-picker button{border-radius:14px!important}
+.mobility-runner{background:radial-gradient(circle at 82% 0,rgba(var(--accent-rgb),.2),transparent 46%),var(--bg-body)!important}
+
+/* ---------- Modals / overlays ---------- */
+.modal-backdrop{background:rgba(1,4,7,.72);backdrop-filter:blur(12px)}
+.modal,.review-modal,.mission-editor-modal,.mission-goal-path-modal{border-radius:26px!important;border-color:var(--neo-line)!important;background:var(--neo-glass-strong)!important;box-shadow:var(--neo-shadow-float)!important}
+.review-summary-coach,.review-coach-columns>article{border-radius:17px!important;border-color:var(--neo-line)!important}
+
+/* ---------- Details / menus ---------- */
+details>summary{transition:color .16s ease,background .16s ease}
+.action-menu-panel{border-radius:16px;background:var(--neo-glass-strong);backdrop-filter:blur(22px)}
+
+/* ---------- Scrollbars ---------- */
+*{scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--accent) 28%,var(--border)) transparent}
+*::-webkit-scrollbar{width:9px;height:9px}
+*::-webkit-scrollbar-thumb{border:2px solid transparent;border-radius:999px;background-clip:padding-box;background:color-mix(in srgb,var(--accent) 23%,var(--border))}
+*::-webkit-scrollbar-track{background:transparent}
+
+/* ---------- Responsive ---------- */
+@media(max-width:1100px){
+  .settings-overview-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .race-intel-hero{grid-template-columns:1fr}
+  .race-phase-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .analytics-signal-grid{grid-template-columns:1fr}
+}
+
+@media(max-width:800px){
+  body{background-size:auto,auto,28px 28px,28px 28px,auto}
+  .shell{display:block;padding:0}
+  .shell>aside{
+    position:fixed;
+    left:10px;right:10px;top:auto;bottom:max(10px,env(safe-area-inset-bottom));
+    z-index:1000;
+    height:auto;
+    padding:6px;
+    border:1px solid var(--neo-line);
+    border-radius:20px;
+    background:color-mix(in srgb,var(--bg-sidebar) 86%,transparent);
+    box-shadow:0 18px 55px rgba(0,0,0,.42);
+    backdrop-filter:blur(26px) saturate(150%);
+    overflow:visible;
+  }
+  .shell>aside::before,.brand,.aside-foot{display:none}
+  .shell nav{display:flex;gap:2px;width:100%;padding:0;overflow:visible}
+  .shell nav a{
+    flex:1 1 0;
+    min-width:0;
+    min-height:58px;
+    padding:6px 3px;
+    flex-direction:column;
+    justify-content:center;
+    gap:3px;
+    border-radius:14px;
+    font-size:9px;
+    line-height:1.1;
+    text-align:center;
+  }
+  .shell nav a i{width:26px;height:26px;margin:0;border-radius:9px;font-size:13px}
+  .shell nav a.active::after{right:auto;left:50%;bottom:3px;transform:translateX(-50%);width:14px;height:2px;border-radius:999px}
+  .content{padding:22px max(14px,env(safe-area-inset-left)) calc(98px + env(safe-area-inset-bottom)) max(14px,env(safe-area-inset-right))}
+  .page-title{align-items:flex-start;margin-top:0;padding-top:2px}
+  .page-title h1{font-size:clamp(34px,9vw,45px)}
+  .section-tabs{width:100%;padding:4px;overflow-x:auto}
+  .section-tabs button,.section-tabs a{flex:0 0 auto}
+  .race-hub-head{display:grid}
+  .race-event-select{min-width:0;width:100%}
+  .race-mode-grid{grid-template-columns:1fr}
+  .race-vp-fields{grid-template-columns:1fr 100px}.race-vp-fields .danger{grid-column:1/-1}
+  .race-intel-footnote{align-items:flex-start;flex-direction:column}
+  .settings-overview-grid{grid-template-columns:1fr}
+  .mission-main-heading{flex-direction:column}
+}
+
+@media(max-width:540px){
+  .content{padding-left:max(11px,env(safe-area-inset-left));padding-right:max(11px,env(safe-area-inset-right))}
+  .card{padding:17px;border-radius:18px}
+  .page-title{margin-bottom:18px;padding-bottom:14px}
+  .page-title h1{font-size:34px}
+  .today-card.premium-briefing-card .today-hero-column,.today-card.premium-briefing-card .today-side-panel{border-radius:18px}
+  .training-history-card{padding:10px}
+  .training-month-toggle{padding:14px 13px}
+  .training-month-weeks{padding:0 8px 8px!important}
+  .race-intel-hero{padding:19px}
+  .race-intel-targets{grid-template-columns:1fr}
+  .race-phase-grid{grid-template-columns:1fr}
+  .race-intel-facts{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .race-segment-list{grid-template-columns:1fr}
+  .mission-hero-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+  .mission-hero-stats .metric{min-width:0}
+}
+
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{scroll-behavior:auto!important;transition:none!important;animation:none!important}
+}
