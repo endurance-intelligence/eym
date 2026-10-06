@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **3.9.44**
+Current app version: **4.2.0**
 
 **Eat your miles.**
 
@@ -652,3 +652,14 @@ supabase functions deploy event-search
 - Shows completed running volume as context without treating it as a debt or progress score.
 - Uses the same key-session classification introduced in v3.9.43.
 - Makes the weekly disclosure repeat the coach-controlled week type and corridor instead of a static target.
+
+
+## Coach & Race Intelligence v4.2.0
+
+- Race is the single place for race setup, route/strategy, nutrition/aid stations and race weather. Fuel Lab remains the product and tolerance laboratory.
+- Coach Today starts from today's planned session and names purpose, signals to watch and the concrete adjustment rule instead of repeating generic plan-status copy.
+- Completed run reviews expose Good / Watch / Consequence as separate coach decisions while retaining personal heat-response context.
+- Ultra target confidence credits transferable long-distance evidence; a near-target ultra does not automatically force a like-for-like benchmark.
+- Goal timelines create preparation milestones when no intermediate events exist.
+- Loop races derive their race-round horizon from official distance and standard lap length while keeping the official distance authoritative.
+- Aid-station segments estimate time, carbohydrate and fluid carry corridors from race duration and personal race-fuel targets.

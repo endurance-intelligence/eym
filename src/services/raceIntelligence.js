@@ -65,6 +65,14 @@ export function raceLoopDistance(event = {}) {
   return positive(candidates.find((value) => positive(value)) || 0);
 }
 
+function durationStringHours(value) {
+  const text = String(value || "").trim();
+  if (!/^\d{1,3}:\d{2}(?::\d{2})?$/.test(text)) return 0;
+  const [hours, minutes, seconds = "0"] = text.split(":").map(Number);
+  if (![hours, minutes, seconds].every(Number.isFinite)) return 0;
+  return hours + minutes / 60 + seconds / 3600;
+}
+
 export function raceDurationHours(event = {}) {
   const directHours = positive(event.durationHours || event.timeLimitHours || event.profile?.durationHours);
   if (directHours) return directHours;
@@ -79,7 +87,8 @@ export function raceDurationHours(event = {}) {
   const hours = positive(event.targetHours);
   const mins = positive(event.targetMinutes);
   if (hours || mins) return hours + mins / 60;
-  return 0;
+  const stringHours = durationStringHours(event.eventTimeLimit || event.targetTime || event.profile?.eventTimeLimit || event.profile?.targetTime);
+  return stringHours;
 }
 
 export function raceFormat(event = {}) {
@@ -184,10 +193,10 @@ export function raceFuelTargets({ event = {}, state = {}, temperatureC = null } 
   let carbReason = "Für kurze Rennen ist DURING-Fuel optional.";
 
   if (hours >= 2.5 || officialRaceDistance(event) >= 30) {
-    if (evidence.proven70) {
+    if (evidence.proven70 || evidence.count >= 3) {
       carbLow = 70;
       carbHigh = 90;
-      carbReason = `${evidence.count} gut verträgliche Fuel-Reviews stützen einen höheren Ultra-Korridor.`;
+      carbReason = `${evidence.count} gut verträgliche Fuel-Reviews stützen den etablierten Ultra-Korridor; die konkrete Quelle wird aus getesteten Produkten gewählt.`;
     } else if (evidence.count) {
       carbLow = 60;
       carbHigh = clamp(Math.round(evidence.upper + 10), 70, 90);
@@ -234,6 +243,20 @@ export function raceFuelTargets({ event = {}, state = {}, temperatureC = null } 
   };
 }
 
+export function raceRoundCount(event = {}) {
+  const explicit = positive(event.planningHorizonRounds || event.rounds || event.laps || event.profile?.planningHorizonRounds || event.profile?.rounds);
+  if (explicit) return Math.max(1, Math.ceil(explicit));
+  const format = raceFormat(event);
+  if (format === "backyard") {
+    const horizonHours = positive(event.planningHorizonHours || event.profile?.planningHorizonHours);
+    const intervalMinutes = positive(event.loopIntervalMinutes || event.profile?.loopIntervalMinutes) || 60;
+    if (horizonHours) return Math.max(1, Math.ceil(horizonHours * 60 / intervalMinutes));
+  }
+  const distance = officialRaceDistance(event);
+  const loop = raceLoopDistance(event);
+  return distance > 0 && loop > 0 ? Math.max(1, Math.round(distance / loop)) : 0;
+}
+
 export function buildRacePhases({ event = {}, state = {}, temperatureC = null } = {}) {
   const targets = raceFuelTargets({ event, state, temperatureC });
   const format = raceFormat(event);
@@ -243,12 +266,12 @@ export function buildRacePhases({ event = {}, state = {}, temperatureC = null } 
     { key: "stabilize", label: "Stabilisieren", from: 0.5, to: 0.78, effort: "Formcheck statt Pace erzwingen", carbDelta: 0, note: "Magen, HF/RPE und Ermüdung entscheiden über Anpassungen." },
     { key: "finish", label: "Finish", from: 0.78, to: 1, effort: "einfach und zuverlässig", carbDelta: 0, note: "Verträgliche Quellen priorisieren; Koffein nur nach geplantem Einsatz." },
   ];
-  const rounds = Math.max(0, Math.round(positive(event.planningHorizonRounds || event.rounds || event.laps || event.profile?.planningHorizonRounds)));
+  const rounds = raceRoundCount(event);
   return base.map((phase, index) => {
     const low = targets.carbs.low ? Math.max(30, targets.carbs.low + phase.carbDelta) : 0;
     const high = targets.carbs.high ? Math.max(low, targets.carbs.high + (index === 0 ? -10 : 0)) : 0;
     const roundFrom = rounds ? Math.max(1, Math.floor(phase.from * rounds) + 1) : null;
-    const roundTo = rounds ? Math.max(roundFrom, Math.ceil(phase.to * rounds)) : null;
+    const roundTo = rounds ? Math.max(roundFrom, index === base.length - 1 ? rounds : Math.floor(phase.to * rounds)) : null;
     return {
       ...phase,
       title: rounds ? `Runde ${roundFrom}–${roundTo}` : `${Math.round(phase.from * 100)}–${Math.round(phase.to * 100)} %`,
@@ -306,21 +329,38 @@ export function supplyModeCopy(mode) {
   return "Eigene, getestete Gels bilden die Basis; Wasser, Drinks und Essen können gezielt vom VP kommen.";
 }
 
-export function aidStationSegments(event = {}, plan = {}) {
+export function aidStationSegments(event = {}, plan = {}, state = {}, temperatureC = null) {
   const distance = officialRaceDistance(event);
   const stations = normalizeRaceSupplyPlan(plan).aidStations.filter((station) => station.km > 0);
   const points = [{ km: 0, name: "Start" }, ...stations];
   if (distance > 0) points.push({ km: distance, name: "Ziel" });
+  const totalHours = raceDurationHours(event);
+  const targets = raceFuelTargets({ event, state, temperatureC });
   return points.slice(0, -1).map((point, index) => {
     const next = points[index + 1];
     const delta = Math.max(0, next.km - point.km);
+    const hours = distance > 0 && totalHours > 0 ? totalHours * delta / distance : 0;
+    const minutes = hours > 0 ? Math.round(hours * 60) : 0;
+    const carbLow = hours > 0 ? Math.round(targets.carbs.low * hours) : 0;
+    const carbHigh = hours > 0 ? Math.round(targets.carbs.high * hours) : 0;
+    const fluidLow = hours > 0 ? Math.round(targets.hydration.low * hours / 50) * 50 : 0;
+    const fluidHigh = hours > 0 ? Math.round(targets.hydration.high * hours / 50) * 50 : 0;
+    const carryHint = hours > 0
+      ? `${minutes} min · ${carbHigh ? `${carbLow}–${carbHigh} g KH` : "Fuel nach Bedarf"} · ${fluidLow}–${fluidHigh} ml Trinkkorridor`
+      : delta >= 15 ? "langer Abschnitt · Flüssigkeit und Fuel bewusst auffüllen"
+        : delta >= 8 ? "mittlerer Abschnitt · normalen Carry planen"
+          : "kurzer Abschnitt · keine unnötige Reserve mitschleppen";
     return {
       from: point.name,
       to: next.name,
       km: delta,
-      carryHint: delta >= 15 ? "langer Abschnitt · Flüssigkeit und Fuel bewusst auffüllen"
-        : delta >= 8 ? "mittlerer Abschnitt · normalen Carry planen"
-          : "kurzer Abschnitt · keine unnötige Reserve mitschleppen",
+      hours,
+      minutes,
+      carbLow,
+      carbHigh,
+      fluidLow,
+      fluidHigh,
+      carryHint,
     };
   });
 }

@@ -568,7 +568,7 @@ export default function RaceCoach() {
       <div className="race-coach-empty">
         <p className="eyebrow">Race Strategy</p>
         <h2>Erst Rennen vorbereiten</h2>
-        <p>Lege im Fuel Lab → Race Prep ein Rennen an oder hinterlege ein Wettkampfziel. Danach baut Race Strategy daraus deine Rennstrategie.</p>
+        <p>Öffne Race → Rennbasis oder hinterlege unter Ziele ein Wettkampfziel. Danach baut EI daraus Strecke, Pace, Versorgung und Wetterstrategie.</p>
       </div>
     );
   }
@@ -692,7 +692,7 @@ export default function RaceCoach() {
 
       <div className="race-coach-summary">
         <article><span>Rennen</span><strong>{plan.trackPlan ? `${exactNumberLabel(plan.profile.distanceKm)} km` : plan.summary.distance}</strong><small>{source.label}</small></article>
-        <article><span>Zielzeit</span><strong>{plan.summary.duration}</strong><small>{setup.targetDurationMinutes > 0 ? "von dir festgelegt" : plan.profile.durationEstimated ? "aus Race Prep geschätzt" : "aus Race Prep"}</small></article>
+        <article><span>Zielzeit</span><strong>{plan.summary.duration}</strong><small>{setup.targetDurationMinutes > 0 ? "von dir festgelegt" : plan.profile.durationEstimated ? "aus Rennbasis geschätzt" : "aus Rennbasis"}</small></article>
         <article><span>{plan.profile.format === "loop" ? "Starttakt" : "Ø Ziel-Schnitt"}</span><strong>{plan.profile.format === "loop" ? plan.summary.loopInterval : plan.routePlan ? paceLabel(plan.routePlan.averagePaceSecondsPerKm) : plan.summary.pace}</strong><small>{plan.trackPlan ? "Rennziel zählt · nicht die GPS-Abweichung" : plan.routePlan ? "Splits werden ans Profil angepasst" : "Race-Plan"}</small></article>
         <article className="race-coach-strategy-status"><span>Strategie</span><strong>{plan.trackPlan ? `${plan.trackPlan.lapsLabel} Runden` : plan.routePlan ? `${plan.routePlan.segments.length} Splits` : "Basisplan"}</strong><small>{plan.trackPlan ? `${plan.trackPlan.lapDistanceM} m Bahn · Track Race` : plan.routePlan ? "Kilometerweise vorbereitet" : "GPX ergänzt die exakten Splits"}</small></article>
       </div>

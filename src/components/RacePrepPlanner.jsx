@@ -96,9 +96,15 @@ export default function RacePrepPlanner() {
   function update(field, value) {
     setDraft((current) => {
       const next = { ...current, [field]: value };
-      if (field === "distanceKm" && current.durationEstimated) next.durationMinutes = 0;
+      if (field === "distanceKm") {
+        if (current.durationEstimated) next.durationMinutes = 0;
+        if (current.format === "loop" && Number(current.loopKm || 0) > 0) next.rounds = Math.max(1, Math.ceil(Number(value || 0) / Number(current.loopKm)));
+      }
+      if (field === "loopKm" && current.format === "loop" && Number(value || 0) > 0 && Number(current.distanceKm || 0) > 0) {
+        next.rounds = Math.max(1, Math.ceil(Number(current.distanceKm) / Number(value)));
+      }
       if (field === "durationMinutes") next.durationEstimated = false;
-      if (["loopKm", "loopIntervalMinutes", "rounds"].includes(field)) next.durationMinutes = 0;
+      if (["loopIntervalMinutes", "rounds"].includes(field)) next.durationMinutes = 0;
       return next;
     });
   }
@@ -193,8 +199,8 @@ export default function RacePrepPlanner() {
     <div className="race-prep-planner">
       <div className="race-prep-heading">
         <div>
-          <p className="eyebrow">Race Prep</p>
-          <h2>Verpflegung aus deinem Training planen</h2>
+          <p className="eyebrow">Race · Rennbasis</p>
+          <h2>Rennen und Versorgung gemeinsam vorbereiten</h2>
           <p>Der Coach priorisiert Produkte, die du tatsächlich eingesetzt und gut vertragen hast. Bestand spielt für die sportliche Empfehlung keine Rolle.</p>
         </div>
         <label>
@@ -204,14 +210,14 @@ export default function RacePrepPlanner() {
             {events.length > 0 && <optgroup label="Meine Ziele">
               {events.map((event) => <option value={`event:${event.id}`} key={event.id}>{event.name} · {event.date}</option>)}
             </optgroup>}
-            {savedPlans.length > 0 && <optgroup label="Gespeicherte Race-Prep-Pläne">
+            {savedPlans.length > 0 && <optgroup label="Gespeicherte Rennpläne">
               {savedPlans.map((item) => <option value={`saved:${item.id}`} key={item.id}>{item.name}</option>)}
             </optgroup>}
           </select>
         </label>
       </div>
 
-      <div className="race-prep-presets" aria-label="Race-Prep-Schnellwahl">
+      <div className="race-prep-presets" aria-label="Rennbasis-Schnellwahl">
         {RACE_PREP_PRESETS.map((preset) => <button type="button" key={preset.key} onClick={() => applyPreset(preset.key)}>{preset.label}</button>)}
       </div>
 
@@ -223,7 +229,7 @@ export default function RacePrepPlanner() {
         <div className="race-prep-editor-grid">
           <label>Rennen / Name<input value={draft.name} onChange={(event) => update("name", event.target.value)} /></label>
           <label>Format<select value={draft.format} onChange={(event) => update("format", event.target.value)}>{RACE_PREP_FORMATS.map((item) => <option value={item.key} key={item.key}>{item.label}</option>)}</select></label>
-          {draft.format !== "time" && <label>Distanz (km)<input type="number" min="0.1" step="0.1" value={draft.format === "loop" ? Number(draft.loopKm || 0) * Number(draft.rounds || 0) : draft.distanceKm || ""} disabled={draft.format === "loop"} onChange={(event) => update("distanceKm", event.target.value)} /></label>}
+          {draft.format !== "time" && <label>{draft.format === "loop" ? "Offizielle Renndistanz (km)" : "Distanz (km)"}<input type="number" min="0.1" step="0.1" value={draft.distanceKm || ""} onChange={(event) => update("distanceKm", event.target.value)} />{draft.format === "loop" && <small>Die offizielle Distanz bleibt führend. Rundenlänge × Rundenzahl überschreibt sie nicht.</small>}</label>}
           <div className="race-prep-duration-field">
             <span>Erwartete Dauer</span>
             <div className="race-prep-duration-inputs">
@@ -235,7 +241,7 @@ export default function RacePrepPlanner() {
           {draft.format === "loop" && <>
             <label>Rundenlänge (km)<input type="number" min="0.1" step="0.1" value={draft.loopKm} onChange={(event) => update("loopKm", event.target.value)} /></label>
             <label>Starttakt je Runde (min)<input type="number" min="10" step="1" value={draft.loopIntervalMinutes} onChange={(event) => update("loopIntervalMinutes", event.target.value)} /></label>
-            <label>Planungshorizont (Runden)<input type="number" min="1" step="1" value={draft.rounds} onChange={(event) => update("rounds", event.target.value)} /><small>Beim offenen Backyard legst du damit fest, wie weit die Strategie vorbereitet wird.</small></label>
+            <label>{draft.eventLimitMode === "open" ? "Planungshorizont (Runden)" : "Rennrunden"}<input type="number" min="1" step="1" value={draft.rounds} onChange={(event) => update("rounds", event.target.value)} /><small>{draft.eventLimitMode === "open" ? "Beim offenen Backyard legst du damit fest, wie weit die Strategie vorbereitet wird." : "Aus offizieller Distanz und Standardrunde abgeleitet; die letzte Runde darf kürzer sein."}</small></label>
           </>}
         </div>
       </section>

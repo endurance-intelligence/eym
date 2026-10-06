@@ -184,7 +184,7 @@ test("mission loop events can seed Race Prep without a special Backyard-only mod
   assert.equal(profile.format, "loop");
   assert.equal(profile.durationMinutes, 840);
   assert.equal(profile.rounds, 18);
-  assert.equal(profile.distanceKm, 111.6);
+  assert.equal(profile.distanceKm, 112);
 });
 
 test("1000 km Race Prep remains calculable without turning inventory into a planning constraint", () => {

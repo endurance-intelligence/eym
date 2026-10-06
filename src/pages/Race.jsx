@@ -1,7 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Card, PageTitle } from "../components/UI";
 import RaceCoach from "../components/RaceCoach";
+import RacePrepPlanner from "../components/RacePrepPlanner";
+import RaceWeatherStrategy from "../components/RaceWeatherStrategy";
 import { useApp } from "../context/AppContext";
 import {
   aidStationSegments,
@@ -16,15 +18,19 @@ import {
   raceFormatLabel,
   raceFuelTargets,
   raceLoopDistance,
+  raceRoundCount,
   resourceLabel,
   resourceOptions,
   supplyModeCopy,
 } from "../services/raceIntelligence";
+import { fetchRaceWeatherForecast, raceForecastConfidence, resolveRaceWeatherDuration } from "../services/raceWeatherStrategy";
 import "./Race.css";
 
 const tabs = [
+  ["setup", "Rennbasis"],
   ["strategy", "Strategie & Strecke"],
   ["fuel", "Verpflegung & VP"],
+  ["weather", "Wetter"],
 ];
 
 function eventLabel(event) {
@@ -36,7 +42,9 @@ function RaceNutrition({ event }) {
   const key = raceEventKey(event);
   const stored = state.racePlanningByEvent?.[key];
   const supply = normalizeRaceSupplyPlan(stored?.supply || defaultRaceSupplyPlan());
-  const temperatureC = stored?.temperatureC ?? null;
+  const [forecastTemperature, setForecastTemperature] = useState({ key: "", value: null });
+  const forecastTemperatureC = forecastTemperature.key === key ? forecastTemperature.value : null;
+  const temperatureC = forecastTemperatureC ?? stored?.temperatureC ?? null;
   const targets = useMemo(
     () => raceFuelTargets({ event, state, temperatureC }),
     [event, state, temperatureC],
@@ -45,8 +53,26 @@ function RaceNutrition({ event }) {
     () => buildRacePhases({ event, state, temperatureC }),
     [event, state, temperatureC],
   );
-  const segments = aidStationSegments(event, supply);
+  const segments = aidStationSegments(event, supply, state, temperatureC);
   const resources = resourceOptions();
+
+  useEffect(() => {
+    const confidence = raceForecastConfidence(event?.date);
+    if (!event?.date || !event?.time || ["missing", "too-early"].includes(confidence.key)) return undefined;
+    let active = true;
+    const duration = resolveRaceWeatherDuration({ race: event, targetDurationMinutes: raceDurationHours(event) * 60 });
+    fetchRaceWeatherForecast({ race: event, raceDistanceKm: officialRaceDistance(event), targetDurationMinutes: duration.minutes })
+      .then((result) => {
+        if (!active || result.status !== "ready") return;
+        const values = result.forecasts.flatMap((forecast) => forecast.rows || [])
+          .filter((row) => row.epoch >= result.startEpoch && row.epoch <= result.endEpoch)
+          .map((row) => Number(row.temperature))
+          .filter(Number.isFinite);
+        if (values.length) setForecastTemperature({ key, value: Math.round(values.reduce((sum, value) => sum + value, 0) / values.length) });
+      })
+      .catch(() => { if (active) setForecastTemperature({ key, value: null }); });
+    return () => { active = false; };
+  }, [event, key]);
 
   function updatePlan(patch) {
     setState((current) => {
@@ -106,6 +132,8 @@ function RaceNutrition({ event }) {
   const distance = officialRaceDistance(event);
   const loop = raceLoopDistance(event);
   const hours = raceDurationHours(event);
+  const rounds = raceRoundCount(event);
+  const finalLoopKm = rounds > 0 && loop > 0 && distance > 0 ? Math.max(0, distance - loop * (rounds - 1)) : 0;
 
   return (
     <div className="race-intelligence-stack">
@@ -117,7 +145,7 @@ function RaceNutrition({ event }) {
         </div>
         <div className="race-intel-targets">
           <article><span>KH-Korridor</span><strong>{targets.carbs.label}</strong><small>{targets.carbs.reason}</small></article>
-          <article><span>Trinkorientierung</span><strong>{targets.hydration.label}</strong><small>{targets.hydration.reason}</small></article>
+          <article><span>Trinkorientierung</span><strong>{targets.hydration.label}</strong><small>{targets.hydration.reason}{temperatureC != null ? ` · Rennwetter ca. ${temperatureC} °C eingerechnet.` : ""}</small></article>
         </div>
       </Card>
 
@@ -129,6 +157,8 @@ function RaceNutrition({ event }) {
         <div className="race-intel-facts">
           <span><b>{distance ? `${compactNumber(distance)} km` : "offen"}</b> offizielle Distanz</span>
           {loop > 0 && <span><b>{compactNumber(loop, 2)} km</b> Standardrunde</span>}
+          {rounds > 0 && <span><b>{rounds}</b> Rennrunden</span>}
+          {finalLoopKm > 0 && Math.abs(finalLoopKm - loop) > 0.05 && <span><b>{compactNumber(finalLoopKm, 2)} km</b> rechnerische Schlussrunde</span>}
           {hours > 0 && <span><b>{compactNumber(hours, 1)} h</b> Ziel-/Zeitfenster</span>}
         </div>
         <p className="race-intel-note">
@@ -244,7 +274,7 @@ function RaceNutrition({ event }) {
 export default function Race() {
   const { state } = useApp();
   const events = useMemo(() => raceEventsFromState(state), [state]);
-  const [activeTab, setActiveTab] = useState("strategy");
+  const [activeTab, setActiveTab] = useState("setup");
   const [selectedKey, setSelectedKey] = useState(() => raceEventKey(events[0] || {}));
   const selected = events.find((event, index) => raceEventKey(event, index) === selectedKey) || events[0] || null;
 
@@ -255,7 +285,7 @@ export default function Race() {
         <div className="section-tabs race-hub-tabs" role="tablist" aria-label="Race-Bereiche">
           {tabs.map(([key, label]) => <button type="button" className={activeTab === key ? "selected" : ""} onClick={() => setActiveTab(key)} key={key}>{label}</button>)}
         </div>
-        {activeTab === "fuel" && events.length > 0 && (
+        {events.length > 0 && (
           <label className="race-event-select">Rennen
             <select value={raceEventKey(selected)} onChange={(event) => setSelectedKey(event.target.value)}>
               {events.map((item, index) => <option value={raceEventKey(item, index)} key={raceEventKey(item, index)}>{eventLabel(item)}{item.date ? ` · ${item.date}` : ""}</option>)}
@@ -264,12 +294,20 @@ export default function Race() {
         )}
       </div>
 
+      {activeTab === "setup" && <Card className="wide race-setup-shell"><RacePrepPlanner /></Card>}
+
       {activeTab === "strategy" && <RaceCoach />}
 
       {activeTab === "fuel" && (
         selected
           ? <RaceNutrition event={selected} />
           : <Card className="wide"><p className="eyebrow">Race Intelligence</p><h2>Noch kein Zielrennen hinterlegt</h2><p className="muted">Lege unter Ziele ein Rennen an. Danach verbindet Race Strecke, Strategie, Fuel, VPs und Wetter.</p><Link className="button-link" to="/mission">Ziel anlegen →</Link></Card>
+      )}
+
+      {activeTab === "weather" && (
+        selected
+          ? <Card className="wide race-weather-hub"><RaceWeatherStrategy race={selected} raceDistanceKm={officialRaceDistance(selected)} targetDurationMinutes={raceDurationHours(selected) * 60} /></Card>
+          : <Card className="wide"><p className="eyebrow">Race Weather</p><h2>Noch kein Zielrennen hinterlegt</h2><p className="muted">Ort, Datum und Startzeit werden für eine rennspezifische Stundenprognose benötigt.</p></Card>
       )}
     </>
   );

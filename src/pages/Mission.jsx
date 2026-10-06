@@ -26,6 +26,7 @@ import {
   parseGoalDurationSeconds,
 } from "../services/goalEngine";
 import { LOOP_MODES, formatLoopDuration, loopMatchPlan } from "../services/loopWorkout";
+import { buildPreparationRoadmap } from "../services/goalRoadmap";
 import {
   eventSourceStatusLabel,
   eventSuggestionMissionPatch,
@@ -138,6 +139,11 @@ export default function Mission() {
     ? loopMatchPlan({ ...mainCourseProfile, targetKm: Number(mainTarget?.targetKm || 0) })
     : null;
   const goalPath = useMemo(() => buildGoalPath(activeMilestones, mainTarget, new Date()), [activeMilestones, mainTarget]);
+  const preparationRoadmap = useMemo(() => buildPreparationRoadmap({
+    goal: mainTarget || {},
+    intermediateEvents: goalPath,
+    now: new Date(),
+  }), [goalPath, mainTarget]);
   const selectedMilestone = goalPath.find((item) => String(item.id) === String(requestedMilestoneId)) || null;
   const archivedMilestones = milestones.filter((item) => item.archived);
 
@@ -619,6 +625,13 @@ export default function Mission() {
             <p className="eyebrow">Auf dem Weg zum Hauptziel</p>
             <h2>{mainTarget ? `Auf dem Weg zum Hauptziel ${mainTarget.name}` : "Nächste Stationen"}</h2>
           </div>
+          {preparationRoadmap.length > 0 && <div className="mission-training-roadmap">
+            {preparationRoadmap.map((step) => <article className={`mission-training-step ${step.tone}`} key={step.id}>
+              <time dateTime={step.date}>{eventDateLabel(step.date)}</time>
+              <div><small>{step.label}</small><h3>{step.title}</h3><p>{step.text}</p></div>
+            </article>)}
+            <div className="mission-training-step race"><time dateTime={mainTarget?.date}>{eventDateLabel(mainTarget?.date)}</time><div><small>RACE DAY</small><h3>{mainTarget?.name}</h3><p>Bis hierhin trainiert EI die noch offenen Fähigkeiten – nicht die volle Distanz als Pflicht-Generalprobe.</p></div></div>
+          </div>}
           <div className="mission-goal-path-list">
             {goalPath.map((item) => {
               const days = daysUntil(item.date);

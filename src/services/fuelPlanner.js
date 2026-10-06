@@ -110,7 +110,7 @@ function carbohydrateRange(mode, durationMinutes, ultraRace) {
   if (durationMinutes < 45) return { low: 0, high: 0, optional: true };
 
   if (mode === "race") {
-    if (ultraRace) return { low: 60, high: 90, center: 70, optional: false };
+    if (ultraRace) return { low: 60, high: 90, center: 70, optional: false, ultra: true };
     if (durationMinutes < 75) return { low: 0, high: 30, optional: true };
     if (durationMinutes < 150) return { low: 45, high: 60, optional: false };
     return { low: 60, high: 75, optional: false };
@@ -251,6 +251,9 @@ function selectedCarbohydrateRate(range, mode, experience) {
 
   const progression = mode === "normal" ? 0 : 5;
   const learned = experience.medianCarbsPerHour + progression;
+  if (mode === "race" && range.ultra && experience.successfulFuelReviews >= 3) {
+    return roundTo(clamp(Math.max(70, learned), 70, range.high), 5);
+  }
   return roundTo(clamp(learned, range.low, range.high), 5);
 }
 

@@ -166,7 +166,8 @@ export function normalizeRacePrepProfile(input = {}) {
   let durationEstimated = Boolean(input.durationEstimated);
 
   if (format === "loop") {
-    distanceKm = Number(roundTo(loopKm * rounds, 0.1).toFixed(1));
+    const operationalOpenBackyard = String(input.eventLimitMode || "") === "open" && numeric(input.planningHorizonHours) > 0;
+    if (operationalOpenBackyard || !(distanceKm > 0)) distanceKm = Number(roundTo(loopKm * rounds, 0.1).toFixed(1));
     if (!(durationMinutes > 0)) durationMinutes = loopIntervalMinutes * rounds;
   } else if (!(durationMinutes > 0) && distanceKm > 0) {
     durationMinutes = estimateDurationMinutes(distanceKm);

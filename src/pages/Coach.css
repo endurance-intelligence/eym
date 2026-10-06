@@ -1,0 +1,13 @@
+
+/* v4.2.0 – today's coaching starts with today's actual session */
+.coach-today-session{border-color:color-mix(in srgb,var(--accent) 42%,var(--border))}
+.coach-today-session.key{box-shadow:inset 3px 0 0 var(--accent-bright)}
+.coach-today-session-heading{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;margin-bottom:12px}
+.coach-today-session-heading h2{margin:2px 0 0}
+.coach-today-session-heading>span{padding:5px 8px;border:1px solid var(--border);border-radius:999px;color:var(--accent-bright);font-size:9px;font-weight:900;letter-spacing:.08em}
+.coach-today-session-grid{display:grid;grid-template-columns:1.15fr 1fr 1.15fr;gap:10px}
+.coach-today-session-grid article{padding:12px;border:1px solid var(--border);border-radius:12px;background:var(--bg-card-alt)}
+.coach-today-session-grid small{display:block;margin-bottom:5px;color:var(--muted);font-size:9px;font-weight:900;letter-spacing:.08em;text-transform:uppercase}
+.coach-today-session-grid p,.coach-today-session-grid ul{margin:0;color:var(--text-soft);font-size:11px;line-height:1.5}
+.coach-today-session-grid ul{padding-left:17px}
+@media(max-width:760px){.coach-today-session-grid{grid-template-columns:1fr}.coach-today-session-heading{flex-direction:column}}

@@ -1,0 +1,13 @@
+
+/* v4.2.0 – preparation milestones when no intermediate races exist */
+.mission-training-roadmap{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:14px 0 18px}
+.mission-training-step{position:relative;display:grid;gap:8px;min-width:0;padding:13px;border:1px solid var(--border);border-radius:14px;background:var(--bg-card-alt)}
+.mission-training-step:after{content:"→";position:absolute;right:-9px;top:50%;z-index:2;color:var(--muted);font-weight:900;transform:translateY(-50%)}
+.mission-training-step:last-child:after{display:none}
+.mission-training-step time{font-size:11px;font-weight:900;color:var(--accent-bright)}
+.mission-training-step small{font-size:9px;font-weight:900;letter-spacing:.08em;color:var(--muted);text-transform:uppercase}
+.mission-training-step h3{margin:3px 0 0;font-size:14px;line-height:1.25}
+.mission-training-step p{margin:0;color:var(--text-soft);font-size:11px;line-height:1.45}
+.mission-training-step.race{border-color:var(--success-border);background:var(--success-soft)}
+@media(max-width:980px){.mission-training-roadmap{grid-template-columns:1fr 1fr}.mission-training-step:after{display:none}.mission-training-step.race{grid-column:1/-1}}
+@media(max-width:620px){.mission-training-roadmap{grid-template-columns:1fr}.mission-training-step.race{grid-column:auto}}

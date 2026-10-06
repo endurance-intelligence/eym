@@ -13,7 +13,7 @@ test("Fuel Partner keeps recommendation modes compact and exposes orientation me
   assert.match(fuelPartnerSource, /fuel-metric hydration/);
 });
 
-test("Race Prep presents setup and summary before product selection", () => {
+test("Race Rennbasis presents setup and summary before product selection", () => {
   const setupIndex = racePrepSource.indexOf('className="race-prep-editor-heading"');
   const summaryIndex = racePrepSource.indexOf('className="race-prep-summary race-prep-summary-primary"');
   const builderIndex = racePrepSource.indexOf('className="race-prep-fuel-builder"');
@@ -25,7 +25,7 @@ test("Race Prep presents setup and summary before product selection", () => {
   assert.match(racePrepSource, /selectedSourceCount/);
 });
 
-test("Fuel Lab polish styles compact tabs, semantic metrics and race-prep setup", () => {
+test("Fuel Lab polish styles compact tabs while Race keeps the shared race setup styles", () => {
   assert.match(fuelCss, /v3\.9\.84 – Fuel Lab information hierarchy and visual cleanup/);
   assert.match(fuelCss, /\.fuel-tabs \{/);
   assert.match(fuelCss, /\.fuel-partner-metrics > \.fuel-metric/);

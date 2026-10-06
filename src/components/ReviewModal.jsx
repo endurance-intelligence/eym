@@ -675,7 +675,12 @@ export default function ReviewModal({ activity, onClose }) {
               <div><small>Coach-Einschätzung</small><strong>Das sagt dein Coach</strong></div>
               <span className={`tone-${coachAssessment.confidence.tone}`}>Datengrundlage {coachAssessment.confidence.value}</span>
             </div>
-            <p>{coachAssessment.summary}</p>
+            <div className="coach-decision-grid">
+              <article className="good"><small>Das war gut</small><p>{coachAssessment.good?.length ? coachAssessment.good.join(" · ") : "Die Einheit lag in den verfügbaren Signalen im persönlichen Rahmen."}</p></article>
+              <article className={coachAssessment.watch?.length ? "watch" : "neutral"}><small>Darauf achten</small><p>{coachAssessment.watch?.length ? coachAssessment.watch.join(" · ") : "Keine relevante Abweichung erkannt."}</p></article>
+              <article className="next"><small>Konsequenz</small><p>{coachAssessment.nextAction}</p></article>
+            </div>
+            {coachAssessment.signal?.text && <p className="coach-decision-context"><b>Kontext:</b> {coachAssessment.signal.text}</p>}
             <div className="review-summary-coach-metrics">
               {coachMetrics.map(([label, entry]) => (
                 <article className={`tone-${entry.tone}`} key={label}>
@@ -769,7 +774,12 @@ export default function ReviewModal({ activity, onClose }) {
 
             <section className="review-feature-box coach-activity-assessment">
               <div className="coach-activity-heading"><div><b>Coach-Einschätzung</b><small>Was die Einheit bedeutet und was jetzt sinnvoll ist</small></div><span className={`tone-${coachAssessment.confidence.tone}`}>Datengrundlage {coachAssessment.confidence.value}</span></div>
-              <p className="coach-activity-summary">{coachAssessment.summary}</p>
+              <div className="coach-decision-grid">
+                <article className="good"><small>Das war gut</small><p>{coachAssessment.good?.length ? coachAssessment.good.join(" · ") : "Die Einheit lag in den verfügbaren Signalen im persönlichen Rahmen."}</p></article>
+                <article className={coachAssessment.watch?.length ? "watch" : "neutral"}><small>Darauf achten</small><p>{coachAssessment.watch?.length ? coachAssessment.watch.join(" · ") : "Keine relevante Abweichung erkannt."}</p></article>
+                <article className="next"><small>Konsequenz</small><p>{coachAssessment.nextAction}</p></article>
+              </div>
+              <p className="coach-activity-summary"><b>Kontext:</b> {coachAssessment.signal?.text || coachAssessment.summary}</p>
               <div className="coach-activity-metrics">
                 {coachMetrics.map(([label, entry]) => <article className={`tone-${entry.tone}`} key={label}><small>{label}</small><strong>{entry.value}</strong><span>{entry.text}</span></article>)}
               </div>

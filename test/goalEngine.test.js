@@ -467,3 +467,31 @@ test("goal durations support ultra targets beyond 24 hours", () => {
   assert.equal(formatGoalDurationInput("30:15:00"), "30:15:00");
   assert.equal(parseGoalDurationSeconds("02:75:00"), 0);
 });
+
+test("near-target ultra evidence prevents a false mandatory benchmark for a timed ultra", () => {
+  const engine = buildGoalEngine({
+    mission: {
+      id: "heartbeat-2026",
+      name: "Heartbeat Ultra Fulda",
+      date: "2026-11-21",
+      targetKm: 112,
+      goalType: "time",
+      targetTime: "15:00:00",
+      goalDiscipline: "ultra",
+      isMainTarget: true,
+    },
+    activities: [
+      run("backyard-102", "2026-09-26", 102.2, 695, { name: "1. Backyard OWL" }),
+      run("week-1", "2026-09-07", 18, 118),
+      run("week-2", "2026-09-14", 22, 145),
+      run("week-3", "2026-09-21", 16, 105),
+    ],
+    profile: { selfReportedRunsPerWeek: 4, selfReportedWeeklyKm: 48, selfReportedLongestRunKm: 102.2 },
+    planner: { targetRunCount: 4 },
+    referenceDate: new Date("2026-10-05T12:00:00"),
+  });
+
+  assert.notEqual(engine.feasibility.status, "needs_benchmark");
+  assert.match(engine.targetGap.summary, /Langzeitausdauer.*102,2 km|102,2 km.*stark belegt/i);
+  assert.match(engine.feasibility.reasons.join(" "), /übertragbare Langzeitausdauer/i);
+});

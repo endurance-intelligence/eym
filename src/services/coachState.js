@@ -25,6 +25,63 @@ function uniqueEvidence(values) {
   return [...new Set(values.filter(Boolean).map((value) => String(value).replace(/\.+$/, "")))].slice(0, 5);
 }
 
+function todaySessionGuidance(state = {}, now = new Date()) {
+  const today = localDateKey(now);
+  const planned = (state.plan || [])
+    .filter((item) => item && item.date === today && !item.archived && !item.cancelled && !item.completedAt)
+    .sort((left, right) => Number(Boolean(right.keySession || right.isKeySession)) - Number(Boolean(left.keySession || left.isKeySession)))[0];
+  if (!planned) {
+    return {
+      planned: false,
+      title: "Heute kein fester Trainingsreiz",
+      purpose: "Erholung und Alltag gehören zur Planung dazu. Kein Zusatztraining nur deshalb einschieben, weil der Kalender leer ist.",
+      watch: ["Beine und Energie", "ungewöhnliche Beschwerden", "Erholung vor dem nächsten Schlüsselreiz"],
+      adjust: "Nur spontan trainieren, wenn es zum Wochenziel passt und die Erholung stabil ist.",
+    };
+  }
+
+  const text = `${planned.title || ""} ${planned.type || ""} ${planned.description || ""}`.toLowerCase();
+  const distance = Number(planned.distance || planned.targetKm || 0);
+  const duration = Number(planned.duration || planned.durationMinutes || 0);
+  const label = planned.title || planned.name || planned.type || "Geplante Einheit";
+  const detail = [distance > 0 ? `${distance.toLocaleString("de-DE", { maximumFractionDigits: 1 })} km` : "", duration > 0 ? `${Math.round(duration)} min` : ""].filter(Boolean).join(" · ");
+  let purpose = "Den geplanten Trainingsreiz sauber setzen, ohne unnötig darüber hinauszugehen.";
+  let watch = ["subjektive Belastung", "Beine und Energie", "Abweichung vom geplanten Umfang"];
+  let adjust = "Wenn sich die Einheit deutlich härter als geplant anfühlt, Umfang reduzieren statt Intensität erzwingen.";
+
+  if (/easy|locker|recovery|regeneration/.test(text)) {
+    purpose = "Aerobe Arbeit mit niedrigen Kosten: locker bleiben und Erholung nicht in einen versteckten Tempolauf verwandeln.";
+    watch = ["HF im Verhältnis zur gewohnten Easy-Pace", "RPE / Atemgefühl", "Beine und Energie"];
+    adjust = "Ist die HF bei ähnlicher Pace ungewöhnlich hoch oder wirken die Beine klar schwerer, Tempo herausnehmen oder verkürzen.";
+  } else if (/intervall|interval|track|tempo|schwelle|threshold|vo2/.test(text)) {
+    purpose = "Qualität vor Menge: die vorgesehenen schnellen Abschnitte kontrolliert und möglichst gleichmäßig treffen.";
+    watch = ["Pace-/Leistungsabfall zwischen Wiederholungen", "HF und RPE", "Technik / muskuläre Warnsignale"];
+    adjust = "Bricht die Qualität deutlich ein, den Reiz beenden statt schlechte Wiederholungen zu sammeln.";
+  } else if (/long|lang|ultra|backyard|loop/.test(text) || distance >= 18 || duration >= 90) {
+    purpose = "Ermüdungsresistenz, Zeit auf den Beinen und – wenn vorgesehen – Fueling unter langer Belastung trainieren.";
+    watch = ["Pace/HF-Drift", "Fueling und Magenverträglichkeit", "muskuläre Stabilität in der zweiten Hälfte"];
+    adjust = "Bei deutlicher Drift plus schlechtem Gefühl nicht auf Distanz bestehen; den spezifischen Reiz sichern und gesund beenden.";
+  } else if (/fußball|football|soccer/.test(text)) {
+    purpose = "Zusatzbelastung aus Beschleunigungen und Richtungswechseln aufnehmen, ohne daraus noch einen Laufreiz machen zu müssen.";
+    watch = ["muskuläre Müdigkeit", "Waden/Adduktoren", "Folgeerholung bis zum nächsten Lauf"];
+    adjust = "Bei ungewöhnlicher muskulärer Belastung den nächsten Lauf konservativer behandeln.";
+  } else if (/kraft|stabi|mobility/.test(text)) {
+    purpose = "Bewegungsqualität und robuste Kraft ergänzen, ohne relevante Laufmüdigkeit zu erzeugen.";
+    watch = ["saubere Bewegung", "Schmerzfreiheit", "lokale Ermüdung"];
+    adjust = "Qualität vor Wiederholungszahl; schmerzhafte Bewegungen nicht erzwingen.";
+  }
+
+  return {
+    planned: true,
+    id: planned.id,
+    title: detail ? `${label} · ${detail}` : label,
+    purpose,
+    watch,
+    adjust,
+    keySession: Boolean(planned.keySession || planned.isKeySession),
+  };
+}
+
 function statusFromSignals(recoveryState, week) {
   if (recoveryState.tone === "bad" || week.level === "adjust") {
     return {
@@ -73,6 +130,7 @@ export function buildCoachState(state = {}, now = new Date()) {
   const mobility = mobilityCoachSuggestion(activities, state.reviews || {}, now);
   const goal = goalRequirements(state);
   const status = statusFromSignals(recoveryState, week);
+  const todaySession = todaySessionGuidance(state, now);
 
   const evidence = uniqueEvidence([
     ...week.reasons,
@@ -126,6 +184,7 @@ export function buildCoachState(state = {}, now = new Date()) {
     outlook,
     mobility,
     goal,
+    todaySession,
     protectionNote: "Dein Coach ändert keinen bestehenden Wochenplan automatisch. Vorschläge werden erst nach deiner ausdrücklichen Auswahl wirksam.",
   };
 }

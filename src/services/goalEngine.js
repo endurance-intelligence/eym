@@ -866,7 +866,12 @@ function targetGapForGoal({
     summary = "Ohne konkrete Rundenzahl oder Distanz erfindet der Coach kein 100-km-Ziel. Er entwickelt die erreichbare Backyard-Distanz aus Form, Loopblöcken und Reviews.";
   } else if (mode === "time") {
     if (!observed) {
-      summary = `Die Distanzbasis reicht bis ${distanceLabel(experience.longestDistanceKm)}; für die Zielpace fehlt noch ein belastbarer Vergleichslauf.`;
+      const transferableUltraEvidence = ["ultra", "backyard"].includes(discipline)
+        && targetKm >= 50
+        && experience.longestDistanceKm >= targetKm * 0.75;
+      summary = transferableUltraEvidence
+        ? `Die Langzeitausdauer ist durch ${distanceLabel(experience.longestDistanceKm)} bereits stark belegt. Offen ist nicht die reine Distanzfähigkeit, sondern wie stabil Zielpace, Rennrhythmus, Pausen und Fueling im konkreten Format zusammenpassen.`
+        : `Die Distanzbasis reicht bis ${distanceLabel(experience.longestDistanceKm)}; für die Zielpace fehlt noch ein belastbarer Vergleichslauf.`;
     } else {
       summary = paceGapSeconds > 0
         ? `Die aktuelle Hochrechnung liegt etwa ${compactNumber(paceGapSeconds, 0)} Sek./km über der Zielpace. Der Coach entwickelt die Pace schrittweise und prüft sie erneut.`
@@ -967,9 +972,18 @@ function feasibilityForGoal({
       };
     }
     if (!observed) {
-      status = highSeverity >= 2 ? "stretch" : "needs_benchmark";
-      checkpointNeeded = true;
-      addReason("noch kein ausreichend langer Vergleichslauf für eine belastbare Zielzeit-Prognose");
+      const transferableUltraEvidence = ["ultra", "backyard"].includes(discipline)
+        && targetKm >= 50
+        && experience.longestDistanceKm >= targetKm * 0.75;
+      if (transferableUltraEvidence) {
+        status = highSeverity >= 2 ? "stretch" : highSeverity || mediumSeverity ? "ambitious" : "realistic";
+        checkpointNeeded = true;
+        addReason(`starke übertragbare Langzeitausdauer bis ${distanceLabel(experience.longestDistanceKm)}; die konkrete Zielpace im Rennformat bleibt noch zu validieren`, "medium");
+      } else {
+        status = highSeverity >= 2 ? "stretch" : "needs_benchmark";
+        checkpointNeeded = true;
+        addReason("noch kein ausreichend langer Vergleichslauf für eine belastbare Zielzeit-Prognose");
+      }
     } else {
       const ratio = observed.projectedSeconds / targetSeconds;
       if (ratio > 1.18) status = "stretch";

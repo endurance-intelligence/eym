@@ -808,3 +808,14 @@
   .review-boolean-choice { width: 100%; grid-template-columns: 1fr 1fr; }
   .review-boolean-choice button { min-height: 44px; font-size: 14px; }
 }
+
+/* v4.2.0 – coach review is a decision, not one generic paragraph */
+.coach-decision-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:10px 0}
+.coach-decision-grid article{padding:11px;border:1px solid var(--border);border-radius:12px;background:var(--bg-card-alt)}
+.coach-decision-grid article.good{border-color:var(--success-border)}
+.coach-decision-grid article.watch{border-color:var(--warning-border)}
+.coach-decision-grid article.next{border-color:color-mix(in srgb,var(--accent) 45%,var(--border))}
+.coach-decision-grid small{display:block;margin-bottom:5px;color:var(--muted);font-size:9px;font-weight:900;letter-spacing:.08em;text-transform:uppercase}
+.coach-decision-grid p{margin:0;font-size:11px;line-height:1.5}
+.coach-decision-context{margin:8px 0 12px;color:var(--text-soft);font-size:11px;line-height:1.5}
+@media(max-width:720px){.coach-decision-grid{grid-template-columns:1fr}}

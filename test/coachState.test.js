@@ -81,3 +81,14 @@ test("recommendation feedback is stable and can be linked to the next reviewed r
   assert.equal(outcome.status, "stable");
   assert.equal(outcome.activityId, "next");
 });
+
+test("Coach Today starts from the actual planned session and names what to watch", () => {
+  const state = stateWithRuns();
+  state.plan = [{ id: "today-easy", date: "2026-07-24", title: "10 km locker", type: "Easy Run", distance: 10, duration: 62 }];
+  const result = buildCoachState(state, new Date("2026-07-24T12:00:00"));
+  assert.equal(result.todaySession.planned, true);
+  assert.match(result.todaySession.title, /10 km locker/);
+  assert.match(result.todaySession.purpose, /Aerobe Arbeit|locker/i);
+  assert.ok(result.todaySession.watch.some((item) => /HF/i.test(item)));
+  assert.match(result.todaySession.adjust, /verkürzen|Tempo/i);
+});

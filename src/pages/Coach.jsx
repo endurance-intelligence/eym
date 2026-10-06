@@ -675,6 +675,17 @@ export default function Coach({ embeddedTab = "" } = {}) {
 
       {activeTab === "today" && (
         <div className="grid coach-dashboard-grid">
+          <Card className={`wide coach-today-session ${unifiedCoach.todaySession?.keySession ? "key" : ""}`}>
+            <div className="coach-today-session-heading">
+              <div><p className="eyebrow">Heute konkret</p><h2>{unifiedCoach.todaySession?.title}</h2></div>
+              <span>{unifiedCoach.todaySession?.planned ? (unifiedCoach.todaySession?.keySession ? "SCHLÜSSELREIZ" : "GEPLANT") : "FREI"}</span>
+            </div>
+            <div className="coach-today-session-grid">
+              <article><small>Zweck</small><p>{unifiedCoach.todaySession?.purpose}</p></article>
+              <article><small>Coach beobachtet</small><ul>{(unifiedCoach.todaySession?.watch || []).map((item) => <li key={item}>{item}</li>)}</ul></article>
+              <article><small>Wenn etwas kippt</small><p>{unifiedCoach.todaySession?.adjust}</p></article>
+            </div>
+          </Card>
           <Card className={`wide insight coach-recommendation unified-${unifiedCoach.level}`}>
             <div className="coach-recommendation-heading">
               <div>
