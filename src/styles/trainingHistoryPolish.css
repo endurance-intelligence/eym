@@ -95,7 +95,7 @@ body .training-month-toggle:hover{
 .training-month-identity{
   display:grid;
   align-content:center;
-  gap:8px;
+  gap:12px;
   min-width:0;
 }
 .training-month-kicker{
@@ -150,6 +150,27 @@ body .training-month-toggle:hover{
   font-size:9px;
   font-weight:750;
   letter-spacing:.02em;
+}
+.training-month-inline-highlight{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  min-width:0;
+  padding-top:4px;
+}
+.training-month-inline-highlight small{
+  color:var(--muted);
+  font-size:9px;
+  font-weight:850;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  white-space:nowrap;
+}
+.training-month-inline-highlight strong{
+  color:var(--text);
+  font-size:15px;
+  font-weight:850;
+  white-space:nowrap;
 }
 .training-month-chart{
   display:grid;
@@ -232,24 +253,16 @@ body .training-month-toggle:hover{
 }
 .training-month-highlights{
   display:grid;
-  grid-template-rows:1fr 1fr;
-  gap:8px;
   min-width:0;
-}
-.training-month-highlights>div{
-  display:grid;
-  align-content:center;
-  gap:3px;
-  min-width:0;
-  padding:11px 12px;
+  padding:14px 14px 12px;
   border:1px solid color-mix(in srgb,var(--border) 80%,transparent);
-  border-radius:13px;
+  border-radius:16px;
   background:rgba(255,255,255,.018);
 }
 .training-month-highlights strong{
   overflow:hidden;
   color:var(--text);
-  font-size:14px;
+  font-size:17px;
   font-weight:850;
   text-overflow:ellipsis;
   white-space:nowrap;
@@ -257,9 +270,32 @@ body .training-month-toggle:hover{
 .training-month-highlights span{
   overflow:hidden;
   color:var(--muted-bright);
-  font-size:9px;
+  font-size:10px;
+  line-height:1.35;
   text-overflow:ellipsis;
   white-space:nowrap;
+}
+.training-month-sportmix-card{
+  align-content:center;
+  gap:5px;
+}
+.training-month-sportmix-chips{
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  margin-top:3px;
+}
+.training-month-sportmix-chips b{
+  display:inline-flex;
+  align-items:center;
+  min-height:24px;
+  padding:4px 8px;
+  border-radius:999px;
+  background:rgba(255,255,255,.03);
+  color:var(--text-soft);
+  font-size:9px;
+  font-weight:760;
+  line-height:1;
 }
 .training-month-open-affordance{
   display:grid;
@@ -336,8 +372,6 @@ body .training-month-weeks{
   .training-month-highlights{
     grid-column:1/3;
     grid-row:2;
-    grid-template-columns:1fr 1fr;
-    grid-template-rows:none;
   }
   .training-month-open-affordance{
     grid-column:3;
@@ -368,13 +402,17 @@ body .training-month-weeks{
     grid-column:1/-1;
     grid-row:auto;
   }
+  .training-month-inline-highlight{
+    flex-wrap:wrap;
+    gap:4px 10px;
+  }
   .training-month-core-stats{gap:5px 12px}
   .training-month-bars{min-height:70px}
   .training-month-sport-detail{align-items:flex-start;flex-direction:column}
   .training-month-sport-detail>div{justify-content:flex-start}
 }
 @media(max-width:460px){
-  .training-month-highlights{grid-template-columns:1fr}
+  .training-month-highlights{padding:12px}
   .training-month-chart{padding:10px}
   .training-month-chart-head{align-items:flex-start;flex-direction:column;gap:2px}
   .training-month-bars{gap:4px}

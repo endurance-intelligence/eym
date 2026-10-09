@@ -308,6 +308,10 @@ export default function Training() {
                         <strong>{archive.distanceKm.toLocaleString("de-DE", { maximumFractionDigits: 1 })}<small>km</small></strong>
                         <strong>{hours(archive.durationMinutes).replace(" h", "")}<small>Stunden</small></strong>
                       </div>
+                      <div className="training-month-inline-highlight" aria-label="Längste Einheit im Monat">
+                        <small>Längste Einheit</small>
+                        <strong>{archive.longestKm.toLocaleString("de-DE", { maximumFractionDigits: 1 })} km</strong>
+                      </div>
                     </div>
 
                     <div className="training-month-chart" aria-label="Wochenumfang des Monats">
@@ -326,19 +330,19 @@ export default function Training() {
                       </div>
                     </div>
 
-                    <div className="training-month-highlights">
-                      <div>
-                        <small>Längste Einheit</small>
-                        <strong>{archive.longestKm.toLocaleString("de-DE", { maximumFractionDigits: 1 })} km</strong>
-                      </div>
-                      <div>
-                        <small>Sportmix</small>
-                        <strong>{archive.primarySports[0]?.label || "Training"}</strong>
-                        <span>
-                          {archive.primarySports[0]
-                            ? `${archive.primarySports[0].count}×${archive.primarySports[1] ? ` · ${archive.primarySports[1].label} ${archive.primarySports[1].count}×` : ""}${archive.remainingSportCount ? ` · +${archive.remainingSportCount}` : ""}`
-                            : "Keine Einheiten"}
-                        </span>
+                    <div className="training-month-highlights training-month-sportmix-card">
+                      <small>Sportmix im Monat</small>
+                      <strong>{archive.primarySports[0]?.label || "Training"}</strong>
+                      <span>
+                        {archive.primarySports[0]
+                          ? `${archive.primarySports[0].count} Einheiten${archive.primarySports[0].distance > 0 ? ` · ${archive.primarySports[0].distance.toFixed(1)} km` : ""}`
+                          : "Keine Einheiten"}
+                      </span>
+                      <div className="training-month-sportmix-chips">
+                        {archive.primarySports.slice(1).map((sport) => (
+                          <b key={sport.key}>{sport.label} · {sport.count}×</b>
+                        ))}
+                        {archive.remainingSportCount > 0 && <b>+{archive.remainingSportCount} weitere</b>}
                       </div>
                     </div>
 
