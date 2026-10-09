@@ -55,3 +55,329 @@
 .nutrition-intake-tolerance select {
   width: 100%;
 }
+
+/* v4.2.3 – training archive as visual monthly cards instead of spreadsheet rows */
+.training-history{
+  gap:14px!important;
+  padding:14px;
+}
+body .training-month{
+  overflow:hidden;
+  border:1px solid var(--neo-line,var(--border))!important;
+  border-radius:20px!important;
+  background:
+    radial-gradient(circle at 12% 0,color-mix(in srgb,var(--accent) 5%,transparent),transparent 36%),
+    color-mix(in srgb,var(--bg-card) 88%,transparent)!important;
+}
+body .training-month.archive.collapsed{
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.018);
+}
+body .training-month.open{
+  border-color:color-mix(in srgb,var(--accent) 20%,var(--neo-line,var(--border)))!important;
+}
+body .training-month-toggle{
+  display:grid;
+  grid-template-columns:minmax(210px,.82fr) minmax(280px,1.18fr) minmax(185px,.72fr) 78px;
+  gap:18px;
+  align-items:stretch;
+  width:100%;
+  min-height:150px;
+  padding:18px!important;
+  border:0!important;
+  background:transparent!important;
+  color:inherit;
+  font:inherit;
+  text-align:left;
+}
+body .training-month-toggle:hover{
+  background:linear-gradient(90deg,color-mix(in srgb,var(--accent) 5%,transparent),transparent 62%)!important;
+}
+.training-month-identity{
+  display:grid;
+  align-content:center;
+  gap:8px;
+  min-width:0;
+}
+.training-month-kicker{
+  display:flex;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:7px;
+}
+.training-month-kicker>span{
+  display:inline-flex;
+  align-items:center;
+  min-height:24px;
+  padding:4px 8px;
+  border:1px solid var(--accent-border);
+  border-radius:999px;
+  background:var(--accent-surface);
+  color:var(--accent-bright);
+  font-size:9px;
+  font-weight:900;
+  letter-spacing:.09em;
+  text-transform:uppercase;
+}
+.training-month-kicker>em{
+  color:var(--muted);
+  font-size:10px;
+  font-style:normal;
+  line-height:1.3;
+}
+.training-month-identity h2{
+  margin:0;
+  color:var(--text);
+  font-size:clamp(22px,2vw,28px);
+  line-height:1;
+  text-transform:capitalize;
+}
+.training-month-core-stats{
+  display:flex;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:5px 14px;
+}
+.training-month-core-stats strong{
+  display:flex;
+  align-items:baseline;
+  gap:4px;
+  color:var(--text-soft);
+  font-size:14px;
+  font-weight:850;
+}
+.training-month-core-stats small{
+  color:var(--muted);
+  font-size:9px;
+  font-weight:750;
+  letter-spacing:.02em;
+}
+.training-month-chart{
+  display:grid;
+  grid-template-rows:auto 1fr;
+  gap:8px;
+  min-width:0;
+  padding:12px 14px 10px;
+  border:1px solid color-mix(in srgb,var(--border) 80%,transparent);
+  border-radius:15px;
+  background:color-mix(in srgb,var(--bg-input) 64%,transparent);
+}
+.training-month-chart-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+}
+.training-month-chart-head span,
+.training-month-highlights small,
+.training-month-sport-detail>span{
+  color:var(--muted);
+  font-size:9px;
+  font-weight:850;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+}
+.training-month-chart-head b{
+  color:var(--accent-bright);
+  font-size:10px;
+  font-weight:850;
+  white-space:nowrap;
+}
+.training-month-bars{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(44px,1fr));
+  gap:7px;
+  align-items:end;
+  min-height:75px;
+}
+.training-month-bar{
+  display:grid;
+  grid-template-rows:46px auto auto;
+  gap:3px;
+  min-width:0;
+  text-align:center;
+}
+.training-month-bar>i{
+  display:flex;
+  align-items:flex-end;
+  justify-content:center;
+  width:100%;
+  height:46px;
+  padding:0 4px;
+  border-radius:8px 8px 5px 5px;
+  background:linear-gradient(180deg,rgba(255,255,255,.016),rgba(255,255,255,.035));
+  overflow:hidden;
+}
+.training-month-bar>i>b{
+  display:block;
+  width:min(22px,72%);
+  height:var(--archive-bar);
+  min-height:4px;
+  border-radius:6px 6px 2px 2px;
+  background:linear-gradient(180deg,var(--accent-bright),var(--accent));
+  box-shadow:0 0 13px color-mix(in srgb,var(--accent) 18%,transparent);
+}
+.training-month-bar small{
+  color:var(--muted);
+  font-size:8px;
+  font-weight:800;
+}
+.training-month-bar em{
+  overflow:hidden;
+  color:var(--text-soft);
+  font-size:9px;
+  font-style:normal;
+  font-weight:850;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.training-month-highlights{
+  display:grid;
+  grid-template-rows:1fr 1fr;
+  gap:8px;
+  min-width:0;
+}
+.training-month-highlights>div{
+  display:grid;
+  align-content:center;
+  gap:3px;
+  min-width:0;
+  padding:11px 12px;
+  border:1px solid color-mix(in srgb,var(--border) 80%,transparent);
+  border-radius:13px;
+  background:rgba(255,255,255,.018);
+}
+.training-month-highlights strong{
+  overflow:hidden;
+  color:var(--text);
+  font-size:14px;
+  font-weight:850;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.training-month-highlights span{
+  overflow:hidden;
+  color:var(--muted-bright);
+  font-size:9px;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.training-month-open-affordance{
+  display:grid;
+  place-content:center;
+  justify-items:center;
+  gap:6px;
+  min-width:0;
+  border-left:1px solid color-mix(in srgb,var(--border) 75%,transparent);
+}
+.training-month-open-affordance b{
+  display:grid;
+  place-items:center;
+  width:36px;
+  height:36px;
+  border:1px solid var(--accent-border);
+  border-radius:12px;
+  background:var(--accent-surface);
+  color:var(--accent-bright);
+  font-size:18px;
+  transition:transform .18s ease,background .18s ease,border-color .18s ease;
+}
+.training-month-toggle:hover .training-month-open-affordance b{
+  transform:translateY(-1px);
+  border-color:var(--accent);
+  background:var(--accent-surface-strong);
+}
+.training-month-open-affordance span{
+  max-width:60px;
+  color:var(--muted);
+  font-size:8px;
+  font-weight:800;
+  line-height:1.2;
+  text-align:center;
+}
+body .training-month-weeks{
+  padding:12px 14px 14px!important;
+  border-top:1px solid var(--border)!important;
+  background:color-mix(in srgb,var(--bg-input) 42%,transparent)!important;
+}
+.training-month-sport-detail{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+  margin:0 0 4px;
+  padding:9px 11px;
+  border:1px solid color-mix(in srgb,var(--border) 78%,transparent);
+  border-radius:12px;
+  background:rgba(255,255,255,.012);
+}
+.training-month-sport-detail>div{
+  display:flex;
+  justify-content:flex-end;
+  flex-wrap:wrap;
+  gap:6px;
+}
+.training-month-sport-detail b{
+  padding:4px 7px;
+  border-radius:999px;
+  background:rgba(255,255,255,.025);
+  color:var(--muted-bright);
+  font-size:9px;
+  font-weight:750;
+}
+.training-month.current .training-month-kicker>span{
+  border-color:color-mix(in srgb,var(--success) 36%,var(--accent-border));
+  background:color-mix(in srgb,var(--success) 8%,var(--accent-surface));
+}
+
+@media(max-width:1120px){
+  body .training-month-toggle{
+    grid-template-columns:minmax(205px,.9fr) minmax(260px,1.25fr) 72px;
+  }
+  .training-month-highlights{
+    grid-column:1/3;
+    grid-row:2;
+    grid-template-columns:1fr 1fr;
+    grid-template-rows:none;
+  }
+  .training-month-open-affordance{
+    grid-column:3;
+    grid-row:1/3;
+  }
+}
+@media(max-width:760px){
+  .training-history{padding:8px;gap:10px!important}
+  body .training-month-toggle{
+    grid-template-columns:1fr 54px;
+    gap:12px;
+    min-height:0;
+    padding:15px!important;
+  }
+  .training-month-identity{grid-column:1}
+  .training-month-open-affordance{
+    grid-column:2;
+    grid-row:1;
+    align-self:start;
+    border-left:0;
+  }
+  .training-month-open-affordance span{display:none}
+  .training-month-chart{
+    grid-column:1/-1;
+    grid-row:auto;
+  }
+  .training-month-highlights{
+    grid-column:1/-1;
+    grid-row:auto;
+  }
+  .training-month-core-stats{gap:5px 12px}
+  .training-month-bars{min-height:70px}
+  .training-month-sport-detail{align-items:flex-start;flex-direction:column}
+  .training-month-sport-detail>div{justify-content:flex-start}
+}
+@media(max-width:460px){
+  .training-month-highlights{grid-template-columns:1fr}
+  .training-month-chart{padding:10px}
+  .training-month-chart-head{align-items:flex-start;flex-direction:column;gap:2px}
+  .training-month-bars{gap:4px}
+  .training-month-bar>i{padding:0 2px}
+  .training-month-kicker>em{display:none}
+}

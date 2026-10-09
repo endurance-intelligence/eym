@@ -1,9 +1,17 @@
 # Endurance Intelligence
 
-Current app version: **4.2.2**
+Current app version: **4.2.3**
 
 **Eat your miles.**
 
+## Training Archive Redesign · v4.2.3
+
+- Completed months are presented as visual archive cards instead of long spreadsheet-like rows.
+- Each month surfaces three things at a glance: core totals, a chronological weekly-volume chart, and the most useful highlights such as peak week and longest session.
+- Historical months receive a compact, data-derived profile such as Ultra-Fokus, Umfangsstark, Vielseitig or Peak-Woche; no coach narrative is invented.
+- The collapsed archive shows only the two dominant sports plus a remainder count. The complete sport breakdown moves into the expanded month details.
+- Current-month detail stays expandable, while historical cards remain calm and scannable on desktop and mobile.
+- No training-plan, review, sync or coach decision logic changes are introduced by this release.
 
 ## Data Integrity, Coach & Race simplification · v4.2.2
 

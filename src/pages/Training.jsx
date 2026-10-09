@@ -32,6 +32,7 @@ import {
 import { goalRequirements } from "../services/scienceCoach";
 import "../styles/trainingHistoryPolish.css";
 import { workoutRoleAssessment } from "../services/workoutRoles";
+import { buildTrainingArchiveSnapshot } from "../services/trainingArchive";
 
 const monthFormatter = new Intl.DateTimeFormat("de-DE", { month: "long", year: "numeric" });
 const shortDateFormatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit" });
@@ -281,14 +282,14 @@ export default function Training() {
               const monthArchiveReady = new Date() >= new Date(archiveYear, archiveMonth, 8);
               const isMonthOpen = month.key === currentMonth || !monthArchiveReady || openMonths.has(month.key);
               const monthActivities = month.weeks.flatMap(([, weekActivities]) => weekActivities);
-              const monthDistance = monthActivities.reduce((sum, activity) => sum + Number(activity.distance || 0), 0);
-              const monthDuration = monthActivities.reduce((sum, activity) => sum + Number(activity.duration || 0), 0);
-              const monthWeekKm = month.weeks.map(([, weekActivities]) => weekActivities.reduce((sum, activity) => sum + Number(activity.distance || 0), 0));
-              const monthWeekMax = Math.max(1, ...monthWeekKm);
-              const monthPeakKm = Math.max(0, ...monthWeekKm);
-              const monthLongest = Math.max(0, ...monthActivities.map((activity) => Number(activity.distance || 0)));
+              const archive = buildTrainingArchiveSnapshot({
+                activities: monthActivities,
+                weeks: month.weeks,
+                sportSummary: month.summary,
+              });
+              const isCurrentMonth = month.key === currentMonth;
               return (
-                <section className={`training-month ${isMonthOpen ? "open" : "collapsed"}`} key={month.key}>
+                <section className={`training-month ${isMonthOpen ? "open" : "collapsed"} ${isCurrentMonth ? "current" : "archive"}`} key={month.key}>
                   <button
                     type="button"
                     className="training-month-toggle"
@@ -296,21 +297,63 @@ export default function Training() {
                     aria-expanded={isMonthOpen}
                     aria-controls={`training-month-${month.key}`}
                   >
-                    <div className="training-month-title">
-                      <span>{month.key === currentMonth ? "Aktueller Monat" : "Monat"}</span>
+                    <div className="training-month-identity">
+                      <div className="training-month-kicker">
+                        <span>{isCurrentMonth ? "Aktueller Monat" : archive.profile.label}</span>
+                        {!isCurrentMonth && <em>{archive.profile.note}</em>}
+                      </div>
                       <h2>{monthTitle(month.key)}</h2>
-                      <small>{monthActivities.length} {monthActivities.length === 1 ? "Einheit" : "Einheiten"} · {monthDistance.toLocaleString("de-DE", { maximumFractionDigits: 1 })} km · {hours(monthDuration)}</small>
+                      <div className="training-month-core-stats" aria-label="Monatswerte">
+                        <strong>{archive.activityCount}<small>{archive.activityCount === 1 ? "Einheit" : "Einheiten"}</small></strong>
+                        <strong>{archive.distanceKm.toLocaleString("de-DE", { maximumFractionDigits: 1 })}<small>km</small></strong>
+                        <strong>{hours(archive.durationMinutes).replace(" h", "")}<small>Stunden</small></strong>
+                      </div>
                     </div>
-                    <div className="training-month-toggle-meta">
-                      {monthArchiveReady && <div className="training-month-pulse" aria-label="Wochenverlauf des Monats">
-                        <div>{monthWeekKm.map((km, index) => <i key={index} style={{ "--month-bar": `${Math.max(5, km / monthWeekMax * 100)}%` }} title={`${km.toFixed(1)} km`} />)}</div>
-                        <small>Peak ${monthPeakKm.toFixed(1)} km · längste Einheit ${monthLongest.toFixed(1)} km</small>
-                      </div>}
-                      <div className="training-month-chips">{month.summary.map((item) => <span key={item.key}>{item.label}: <b>{item.count}</b>{item.distance > 0 ? ` · ${item.distance.toFixed(1)} km` : ""}</span>)}</div>
-                      <b className="training-month-chevron" aria-hidden="true">{isMonthOpen ? "−" : "+"}</b>
+
+                    <div className="training-month-chart" aria-label="Wochenumfang des Monats">
+                      <div className="training-month-chart-head">
+                        <span>Wochenumfang</span>
+                        <b>Peak {archive.peakKm.toLocaleString("de-DE", { maximumFractionDigits: 1 })} km</b>
+                      </div>
+                      <div className="training-month-bars">
+                        {archive.weeks.map((week) => (
+                          <span className="training-month-bar" key={week.key} title={`KW ${week.week}: ${week.distanceKm.toLocaleString("de-DE", { maximumFractionDigits: 1 })} km`}>
+                            <i><b style={{ "--archive-bar": `${Math.round(week.share * 100)}%` }} /></i>
+                            <small>KW {week.week}</small>
+                            <em>{week.distanceKm.toLocaleString("de-DE", { maximumFractionDigits: 1 })}</em>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="training-month-highlights">
+                      <div>
+                        <small>Längste Einheit</small>
+                        <strong>{archive.longestKm.toLocaleString("de-DE", { maximumFractionDigits: 1 })} km</strong>
+                      </div>
+                      <div>
+                        <small>Sportmix</small>
+                        <strong>{archive.primarySports[0]?.label || "Training"}</strong>
+                        <span>
+                          {archive.primarySports[0]
+                            ? `${archive.primarySports[0].count}×${archive.primarySports[1] ? ` · ${archive.primarySports[1].label} ${archive.primarySports[1].count}×` : ""}${archive.remainingSportCount ? ` · +${archive.remainingSportCount}` : ""}`
+                            : "Keine Einheiten"}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="training-month-open-affordance">
+                      <b aria-hidden="true">{isMonthOpen ? "−" : "+"}</b>
+                      <span>{isMonthOpen ? "Details schließen" : "Monat öffnen"}</span>
                     </div>
                   </button>
                   {isMonthOpen && <div className="training-month-weeks" id={`training-month-${month.key}`}>
+                    {monthArchiveReady && !isCurrentMonth && (
+                      <div className="training-month-sport-detail">
+                        <span>Sportarten</span>
+                        <div>{month.summary.map((item) => <b key={item.key}>{item.label} · {item.count}{item.distance > 0 ? ` · ${item.distance.toFixed(1)} km` : ""}</b>)}</div>
+                      </div>
+                    )}
                     {month.weeks.map(([weekKey, weekActivities]) => {
                       const isOpen = openWeeks.has(weekKey);
                       const distance = weekActivities.reduce((sum, activity) => sum + Number(activity.distance || 0), 0);

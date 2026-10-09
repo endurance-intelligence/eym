@@ -5,6 +5,8 @@ import { readFileSync } from "node:fs";
 const css = readFileSync(new URL("../src/styles/main.css", import.meta.url), "utf8");
 const briefing = readFileSync(new URL("../src/pages/Briefing.jsx", import.meta.url), "utf8");
 const planner = readFileSync(new URL("../src/pages/Planner.jsx", import.meta.url), "utf8");
+const training = readFileSync(new URL("../src/pages/Training.jsx", import.meta.url), "utf8");
+const trainingPolish = readFileSync(new URL("../src/styles/trainingHistoryPolish.css", import.meta.url), "utf8");
 
 test("desktop training role/action column stays fixed so badges do not shift the activity row", () => {
   assert.match(css, /grid-template-columns:minmax\(0,1fr\) 250px/);
@@ -20,4 +22,14 @@ test("rest day pill uses explicit recovery wording and yoga marker", () => {
 test("planner refuses materially different same-day activities as automatic completions", () => {
   assert.match(planner, /plannedActivityCompatibility\(activity, plan\)\.compatible/);
   assert.match(planner, /staleLinks/);
+});
+
+
+test("completed months use visual archive cards instead of a sport-badge spreadsheet row", () => {
+  assert.match(training, /buildTrainingArchiveSnapshot/);
+  assert.match(training, /training-month-bars/);
+  assert.match(training, /training-month-highlights/);
+  assert.match(training, /archive\.primarySports/);
+  assert.doesNotMatch(training, /className="training-month-chips"/);
+  assert.match(trainingPolish, /grid-template-columns:minmax\(210px,.82fr\)/);
 });
