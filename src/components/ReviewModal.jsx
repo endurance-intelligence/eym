@@ -280,6 +280,7 @@ export default function ReviewModal({ activity, onClose }) {
   const [weatherStatus, setWeatherStatus] = useState(() => activityCoordinatesFor(activity) && !(activity.weather?.condition && activity.weather?.windSpeed != null && activity.weather?.location)
     ? "Wetter zum Aktivitätszeitpunkt wird geladen …"
     : "");
+  const [routePoints, setRoutePoints] = useState([]);
 
   const [review, setReview] = useState({
     reviewType: old.reviewType || kind,
@@ -294,15 +295,18 @@ export default function ReviewModal({ activity, onClose }) {
     backSoreness: old.backSoreness ?? 0,
     mobility: old.mobility ?? 7,
     impactOnRunning: old.impactOnRunning || "nein",
+    // Legacy PRE/POST/urine/sweat fields stay readable in old reviews but are no longer asked in the UI.
     drinkBeforeMl: old.drinkBeforeMl || "",
     drinkMl: old.drinkMl || "",
     drinkAfterMl: old.drinkAfterMl || "",
-    hydrationThirst: old.hydrationThirst || "normal",
-    hydrationNote: old.hydrationNote || "",
-    weightBefore: old.weightBefore || "",
-    weightAfter: old.weightAfter || "",
     urineMl: old.urineMl || 0,
     sweat: old.sweat || "mittel",
+    hydrationThirst: old.hydrationThirst || "normal",
+    hydrationNote: old.hydrationNote || "",
+    hydrationExtraMl: old.hydrationExtraMl ?? (Math.max(0, Number(old.drinkMl || 0) - Number(old.nutritionFluidTotal || 0)) || ""),
+    hydrationToiletDuring: Boolean(old.hydrationToiletDuring),
+    weightBefore: old.weightBefore || "",
+    weightAfter: old.weightAfter || "",
     notes: old.notes || "",
     usedNutrition: old.usedNutrition ?? (oldNutrition.length > 0 || plannedNutrition.length > 0),
     nutritionItems: oldNutrition.length > 0 ? oldNutrition : plannedNutrition,
@@ -389,7 +393,7 @@ export default function ReviewModal({ activity, onClose }) {
 
   if (!kind) return null;
 
-  const coachAssessment = activityCoachAssessment(state, activity, review, weather);
+  const coachAssessment = activityCoachAssessment(state, activity, review, weather, routePoints);
   const summaryFacts = activitySummaryFacts(activity, weather);
   const summarySymptoms = [
     ...activeSymptoms(review.legSymptoms),
@@ -410,12 +414,7 @@ export default function ReviewModal({ activity, onClose }) {
       ["Rücken", review.backSoreness],
       ["Beweglichkeit", review.mobility],
     ];
-  const coachMetrics = [
-    ["Trainingsreiz", coachAssessment.stimulus || coachAssessment.load],
-    ["Dein Signal", coachAssessment.signal || coachAssessment.execution],
-    ["Folgeplan", coachAssessment.followUp || coachAssessment.recovery],
-  ];
-  const summaryDrinkMl = Math.round(Number(review.drinkMl || nutritionSummary.totalFluidMl || 0));
+  const summaryDrinkMl = Math.round(Number(nutritionSummary.totalFluidMl || 0) + Number(review.hydrationExtraMl || 0) || Number(review.drinkMl || 0));
   const summaryFuelProducts = (review.usedNutrition ? review.nutritionItems : [])
     .map((item) => {
       const fuel = item.fuelItemId ? state.fuel.find((candidate) => candidate.id === item.fuelItemId) : null;
@@ -425,12 +424,8 @@ export default function ReviewModal({ activity, onClose }) {
     })
     .filter(Boolean);
   const set = (key, value) => setReview((current) => ({ ...current, [key]: value }));
-  const hydrationResult = kind === "endurance" ? hydration(activity, review) : null;
+  const hydrationResult = kind === "endurance" ? hydration(activity, { ...review, nutritionFluidTotal: nutritionSummary.totalFluidMl }) : null;
 
-
-  function updateDrink(value) {
-    setReview((current) => ({ ...current, drinkMl: String(value || "") }));
-  }
 
   function toggleEvent(checked) {
     setReview((current) => ({
@@ -575,12 +570,18 @@ export default function ReviewModal({ activity, onClose }) {
       return;
     }
 
+    const reviewPayload = { ...review };
+    delete reviewPayload.drinkBeforeMl;
+    delete reviewPayload.drinkAfterMl;
+    delete reviewPayload.urineMl;
+    delete reviewPayload.sweat;
+
     upsertReview(activity.id, {
-      ...review,
+      ...reviewPayload,
       reviewType: kind,
       nutritionItems: nextNutrition,
-      drinkMl: kind === "endurance" && !review.drinkMl && nutritionSummary.totalFluidMl > 0
-        ? String(Math.round(nutritionSummary.totalFluidMl))
+      drinkMl: kind === "endurance"
+        ? String(Math.round(Number(nutritionSummary.totalFluidMl || 0) + Number(review.hydrationExtraMl || 0)))
         : review.drinkMl,
       usedNutrition: kind === "endurance" && review.usedNutrition,
       isEvent: kind === "endurance" && review.isEvent,
@@ -668,28 +669,20 @@ export default function ReviewModal({ activity, onClose }) {
             {review.notes && <p className="review-summary-notes"><b>Notiz:</b> {review.notes}</p>}
           </section>
 
-          <ActivityRouteMap activity={activity} />
+          <ActivityRouteMap activity={activity} onRouteData={setRoutePoints} />
 
-          <section className="review-summary-coach">
+          <section className="review-summary-coach coach-message-card">
             <div className="review-summary-section-heading">
-              <div><small>Coach-Einschätzung</small><strong>Das sagt dein Coach</strong></div>
-              <span className={`tone-${coachAssessment.confidence.tone}`}>Datengrundlage {coachAssessment.confidence.value}</span>
+              <div><small>Coach-Einschätzung</small><strong>Das Wichtigste aus der Einheit</strong></div>
+              <span className={`tone-${coachAssessment.confidence.tone}`}>Sicherheit · {coachAssessment.confidence.value}</span>
             </div>
-            <div className="coach-decision-grid">
-              <article className="good"><small>Das war gut</small><p>{coachAssessment.good?.length ? coachAssessment.good.join(" · ") : "Die Einheit lag in den verfügbaren Signalen im persönlichen Rahmen."}</p></article>
-              <article className={coachAssessment.watch?.length ? "watch" : "neutral"}><small>Darauf achten</small><p>{coachAssessment.watch?.length ? coachAssessment.watch.join(" · ") : "Keine relevante Abweichung erkannt."}</p></article>
-              <article className="next"><small>Konsequenz</small><p>{coachAssessment.nextAction}</p></article>
-            </div>
-            {coachAssessment.signal?.text && <p className="coach-decision-context"><b>Kontext:</b> {coachAssessment.signal.text}</p>}
-            <div className="review-summary-coach-metrics">
-              {coachMetrics.map(([label, entry]) => (
-                <article className={`tone-${entry.tone}`} key={label}>
-                  <small>{label}</small>
-                  <strong>{entry.value}</strong>
-                </article>
-              ))}
-            </div>
-            <div className="review-summary-conclusion"><b>Dein Review:</b> {coachAssessment.comparison}</div>
+            <article className={`coach-message-main tone-${coachAssessment.coachMessage?.tone || "neutral"}`}>
+              <h3>{coachAssessment.coachMessage?.title || "Einheit eingeordnet."}</h3>
+              <p>{coachAssessment.coachMessage?.text || coachAssessment.summary}</p>
+              {coachAssessment.coachMessage?.tip && <div className="coach-message-tip"><b>Tipp</b><span>{coachAssessment.coachMessage.tip}</span></div>}
+              {coachAssessment.coachMessage?.anchor?.label && <small className="coach-message-anchor">Wendepunkt · {coachAssessment.coachMessage.anchor.label}</small>}
+            </article>
+            <details className="coach-message-details"><summary>Warum sagt EI das?</summary><div className="coach-activity-factors">{coachAssessment.factors.map((factor) => <span key={factor}>{factor}</span>)}</div><p>{coachAssessment.confidence.text}</p></details>
           </section>
 
           <div className="review-summary-actions">
@@ -708,7 +701,7 @@ export default function ReviewModal({ activity, onClose }) {
         <p className="eyebrow">{kind === "strength" ? reviewKindLabel(activity) : enduranceTitle}</p>
         <h2>{activity.name}</h2>
         {activity.isActivityGroup && <div className="review-group-summary"><strong>{activity.memberCount} Teilaktivitäten zusammengefasst</strong><span>{Number(activity.distance || 0).toFixed(1)} km · {activity.elevation || 0} hm · {Math.round(Number(activity.duration || 0))} min</span></div>}
-        <ActivityRouteMap activity={activity} />
+        <ActivityRouteMap activity={activity} onRouteData={setRoutePoints} />
 
         {kind === "endurance" ? (
           <>
@@ -722,17 +715,26 @@ export default function ReviewModal({ activity, onClose }) {
             <div className="review-symptom-grid">
               <SymptomPicker title="Auffälligkeiten Beine" selected={review.legSymptoms} onChange={(value) => set("legSymptoms", value)} options={["Keine Auffälligkeiten", "Schwere Beine", "Muskelkater", "Schmerzen", "Krämpfe"]} />
             </div>
-            <div className="form-grid">
-              <label>PRE · vorher getrunken (ml)<input type="number" min="0" value={review.drinkBeforeMl} onChange={(event) => set("drinkBeforeMl", event.target.value)} /></label>
-              <label>DURING · währenddessen (ml)<input type="number" min="0" value={review.drinkMl} onChange={(event) => updateDrink(event.target.value)} /></label>
-              <label>POST · danach getrunken (ml)<input type="number" min="0" value={review.drinkAfterMl} onChange={(event) => set("drinkAfterMl", event.target.value)} /></label>
-              <label>Durst währenddessen<select value={review.hydrationThirst} onChange={(event) => set("hydrationThirst", event.target.value)}><option value="gering">Gering</option><option value="normal">Normal</option><option value="stark">Stark</option></select></label>
-              <label>Schwitzen<select value={review.sweat} onChange={(event) => set("sweat", event.target.value)}><option>niedrig</option><option>mittel</option><option>hoch</option></select></label>
-              <label>Gewicht vorher (kg)<input type="number" step="0.1" value={review.weightBefore} onChange={(event) => set("weightBefore", event.target.value)} /></label>
-              <label>Gewicht nachher (kg)<input type="number" step="0.1" value={review.weightAfter} onChange={(event) => set("weightAfter", event.target.value)} /></label>
-              <label>Urin währenddessen (ml, optional)<input type="number" min="0" value={review.urineMl} onChange={(event) => set("urineMl", event.target.value)} /></label>
-            </div>
-            <label>Hydration-Notiz<input value={review.hydrationNote} onChange={(event) => set("hydrationNote", event.target.value)} placeholder="z. B. Flasche nicht leer · starker Durst ab Runde 4 · danach Recovery Drink" /></label>
+            <section className="review-feature-box hydration-review-simple active">
+              <div className="hydration-review-heading">
+                <div><b>Hydration während der Einheit</b><small>Getränke aus dem Fueling Review werden automatisch mitgerechnet.</small></div>
+                <strong>{Math.round(Number(nutritionSummary.totalFluidMl || 0) + Number(review.hydrationExtraMl || 0))} ml</strong>
+              </div>
+              <div className="hydration-review-grid">
+                <label>Durst währenddessen<select value={review.hydrationThirst} onChange={(event) => set("hydrationThirst", event.target.value)}><option value="gering">Gering</option><option value="normal">Normal</option><option value="stark">Stark</option></select></label>
+                <label>Zusätzliches Wasser / sonstiges Getränk (ml)<input type="number" min="0" step="10" value={review.hydrationExtraMl} onChange={(event) => set("hydrationExtraMl", event.target.value)} /><small>Nur eintragen, wenn es nicht schon als Produkt im Fueling Review steht.</small></label>
+              </div>
+              <details className="hydration-calibration">
+                <summary>Schweißrate messen · optional</summary>
+                <p>Für eine belastbare persönliche Kalibrierung: direkt vorher/nachher wiegen. EI nutzt bevorzugt Einheiten von 45–180 Minuten.</p>
+                <div className="form-grid">
+                  <label>Gewicht vorher (kg)<input type="number" step="0.1" value={review.weightBefore} onChange={(event) => set("weightBefore", event.target.value)} /></label>
+                  <label>Gewicht nachher (kg)<input type="number" step="0.1" value={review.weightAfter} onChange={(event) => set("weightAfter", event.target.value)} /></label>
+                </div>
+                <div className="hydration-toilet-row"><span><b>Toilettenpause während der Messung?</b><small>Dann wird die Einheit nicht zur persönlichen Schweißrate gelernt.</small></span><ReviewBooleanChoice checked={review.hydrationToiletDuring} onChange={(value) => set("hydrationToiletDuring", value)} label="Toilettenpause während der Hydrationsmessung" /></div>
+              </details>
+              <label>Hydration-Notiz <small>optional</small><input value={review.hydrationNote} onChange={(event) => set("hydrationNote", event.target.value)} placeholder="z. B. starker Durst ab km 18 · Flasche nicht leer" /></label>
+            </section>
 
             <section className={`review-feature-box activity-weather-box ${weather ? "active" : ""}`}>
               <div className="activity-weather-heading">
@@ -772,19 +774,15 @@ export default function ReviewModal({ activity, onClose }) {
               </section>
             )}
 
-            <section className="review-feature-box coach-activity-assessment">
-              <div className="coach-activity-heading"><div><b>Coach-Einschätzung</b><small>Was die Einheit bedeutet und was jetzt sinnvoll ist</small></div><span className={`tone-${coachAssessment.confidence.tone}`}>Datengrundlage {coachAssessment.confidence.value}</span></div>
-              <div className="coach-decision-grid">
-                <article className="good"><small>Das war gut</small><p>{coachAssessment.good?.length ? coachAssessment.good.join(" · ") : "Die Einheit lag in den verfügbaren Signalen im persönlichen Rahmen."}</p></article>
-                <article className={coachAssessment.watch?.length ? "watch" : "neutral"}><small>Darauf achten</small><p>{coachAssessment.watch?.length ? coachAssessment.watch.join(" · ") : "Keine relevante Abweichung erkannt."}</p></article>
-                <article className="next"><small>Konsequenz</small><p>{coachAssessment.nextAction}</p></article>
-              </div>
-              <p className="coach-activity-summary"><b>Kontext:</b> {coachAssessment.signal?.text || coachAssessment.summary}</p>
-              <div className="coach-activity-metrics">
-                {coachMetrics.map(([label, entry]) => <article className={`tone-${entry.tone}`} key={label}><small>{label}</small><strong>{entry.value}</strong><span>{entry.text}</span></article>)}
-              </div>
-              <p className="coach-activity-comparison"><b>Dein Review:</b> {coachAssessment.comparison}</p>
-              <details><summary>Berücksichtigte Daten</summary><div className="coach-activity-factors">{coachAssessment.factors.map((factor) => <span key={factor}>{factor}</span>)}</div><p>{coachAssessment.confidence.text} Der interne Belastungswert dient nur dem persönlichen Vergleich und ist weder eine medizinische Bewertung noch eine Kopie der Garmin-Kennzahl. Bei Müdigkeit, Schmerzen oder ungewöhnlich schlechtem Gefühl hat deine Rückmeldung immer Vorrang.</p></details>
+            <section className="review-feature-box coach-activity-assessment coach-message-card">
+              <div className="coach-activity-heading"><div><b>Coach-Einschätzung</b><small>Kurz, konkret und mit Bezug auf den Zweck der Einheit</small></div><span className={`tone-${coachAssessment.confidence.tone}`}>Sicherheit · {coachAssessment.confidence.value}</span></div>
+              <article className={`coach-message-main tone-${coachAssessment.coachMessage?.tone || "neutral"}`}>
+                <h3>{coachAssessment.coachMessage?.title || "Einheit eingeordnet."}</h3>
+                <p>{coachAssessment.coachMessage?.text || coachAssessment.summary}</p>
+                {coachAssessment.coachMessage?.tip && <div className="coach-message-tip"><b>Tipp</b><span>{coachAssessment.coachMessage.tip}</span></div>}
+                {coachAssessment.coachMessage?.anchor?.label && <small className="coach-message-anchor">Wendepunkt · {coachAssessment.coachMessage.anchor.label}</small>}
+              </article>
+              <details className="coach-message-details"><summary>Berücksichtigte Daten</summary><div className="coach-activity-factors">{coachAssessment.factors.map((factor) => <span key={factor}>{factor}</span>)}</div><p>{coachAssessment.confidence.text} Herzfrequenz, Pace, Höhenprofil, Wärme/Kälte, Wetter und Tagesform werden im Kontext des Einheitstyps bewertet.</p></details>
             </section>
 
             <section className={`review-feature-box fuel-review-board ${review.usedNutrition ? "active" : ""}`}>
@@ -961,14 +959,13 @@ export default function ReviewModal({ activity, onClose }) {
         )}
 
         <label>Notizen<textarea value={review.notes} onChange={(event) => set("notes", event.target.value)} /></label>
-        {kind === "endurance" && hydrationResult && (review.drinkMl || review.drinkBeforeMl || review.drinkAfterMl || (review.weightBefore && review.weightAfter)) && (
+        {kind === "endurance" && hydrationResult && (hydrationResult.during > 0 || (review.weightBefore && review.weightAfter)) && (
           <div className="hydration-box">
-            <b>Hydration V2 · PRE / DURING / POST</b>
-            <span>Vorher {hydrationResult.before} ml · währenddessen {hydrationResult.during} ml ({hydrationResult.duringRate} ml/h) · danach {hydrationResult.after} ml</span>
-            <span>{hydrationResult.measured ? "Gemessene" : "Geschätzte"} Schweißrate: ca. {hydrationResult.rate} ml/h · Defizit am Ende: {hydrationResult.deficit} ml</span>
-            {hydrationResult.reliable && <span>Orientierung währenddessen: {hydrationResult.recommendedLow}–{hydrationResult.recommendedHigh} ml/h · keine Trinkpflicht.</span>}
+            <b>Hydration</b>
+            <span>Währenddessen {hydrationResult.during} ml · {hydrationResult.duringRate} ml/h · Durst {review.hydrationThirst || "normal"}</span>
+            {hydrationResult.measured && <span>Gemessene Schweißrate: ca. {hydrationResult.rate} ml/h.</span>}
+            {hydrationResult.reliable && <span>Persönliche Orientierung: {hydrationResult.recommendedLow}–{hydrationResult.recommendedHigh} ml/h · keine Trinkpflicht.</span>}
             {!hydrationResult.reliable && hydrationResult.reason && <span>{hydrationResult.reason}</span>}
-            {hydrationResult.recoveryGap > 0 && <span>Nach POST verbleibt rechnerisch ca. {hydrationResult.recoveryGap} ml Restdefizit · ebenfalls keine Trinkpflicht.</span>}
             <span>{hydrationResult.guidance}</span>
           </div>
         )}

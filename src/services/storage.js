@@ -68,12 +68,13 @@ function transactionDone(transaction) {
   });
 }
 
-export function saveDurableState(state, userId = "", { dirty = true, baseCloudUpdatedAt = null } = {}) {
+export function saveDurableState(state, userId = "", { dirty = true, baseCloudUpdatedAt = null, baseCloudData = null } = {}) {
   const record = {
     key: durableRecordKey(userId),
     savedAt: new Date().toISOString(),
     dirty: Boolean(dirty),
     baseCloudUpdatedAt: baseCloudUpdatedAt || null,
+    baseCloudData: baseCloudData ? stripEmbeddedImages(baseCloudData) : null,
     data: stripEmbeddedImages(state),
   };
   durableWriteQueue = durableWriteQueue.catch(() => {}).then(async () => {

@@ -48,6 +48,7 @@ export function activityProfileModel(points = [], activity = {}) {
     const altitude = finiteNumber(point?.altitude);
     const speedMps = finiteNumber(point?.speedMps, 0);
     const elapsedSeconds = finiteNumber(point?.elapsedSeconds, 0);
+    const heartRate = finiteNumber(point?.heartRate, 30);
     const effort = speedMps != null && speedMps > 0.25
       ? kind === "speed"
         ? speedMps * 3.6
@@ -60,6 +61,7 @@ export function activityProfileModel(points = [], activity = {}) {
       altitude,
       speedMps,
       elapsedSeconds,
+      heartRate,
       effort,
     };
   });
@@ -75,6 +77,7 @@ export function activityProfileModel(points = [], activity = {}) {
   const axisValues = withAxis.map((point) => point.axisValue).filter(Number.isFinite);
   const altitudeValues = withAxis.map((point) => point.altitude).filter(Number.isFinite);
   const effortValues = withAxis.map((point) => point.effort).filter(Number.isFinite);
+  const heartRateValues = withAxis.map((point) => point.heartRate).filter(Number.isFinite);
   const axisMinimum = axisValues.length ? Math.min(...axisValues) : 0;
   const axisMaximum = axisValues.length ? Math.max(...axisValues) : Math.max(1, withAxis.length - 1);
 
@@ -92,10 +95,15 @@ export function activityProfileModel(points = [], activity = {}) {
       robust: true,
       floor: kind === "speed" ? 0 : 45,
     }),
+    heartRateDomain: chartDomain(heartRateValues, { minimumSpan: 20, robust: true, floor: 40 }),
     altitudeRange: altitudeValues.length
       ? { minimum: Math.min(...altitudeValues), maximum: Math.max(...altitudeValues) }
       : null,
+    heartRateRange: heartRateValues.length
+      ? { minimum: Math.min(...heartRateValues), maximum: Math.max(...heartRateValues), average: heartRateValues.reduce((sum, value) => sum + value, 0) / heartRateValues.length }
+      : null,
     hasAltitude: altitudeValues.length >= 2,
+    hasHeartRate: heartRateValues.length >= 2,
     hasEffort: effortValues.length >= 2,
   };
 }

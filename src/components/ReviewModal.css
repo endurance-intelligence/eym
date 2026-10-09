@@ -819,3 +819,26 @@
 .coach-decision-grid p{margin:0;font-size:11px;line-height:1.5}
 .coach-decision-context{margin:8px 0 12px;color:var(--text-soft);font-size:11px;line-height:1.5}
 @media(max-width:720px){.coach-decision-grid{grid-template-columns:1fr}}
+
+/* v4.2.2 – one useful coach comment + hydration from the actual fuel review */
+.hydration-review-simple{display:grid;gap:14px}
+.hydration-review-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}
+.hydration-review-heading>div{display:grid;gap:3px}
+.hydration-review-heading small{color:var(--muted);line-height:1.4}
+.hydration-review-heading>strong{padding:8px 11px;border:1px solid color-mix(in srgb,var(--accent) 38%,var(--border));border-radius:999px;background:var(--accent-surface);color:var(--accent-bright);white-space:nowrap}
+.hydration-review-grid{display:grid;grid-template-columns:minmax(180px,.7fr) minmax(260px,1.3fr);gap:10px}
+.hydration-review-grid label{display:grid;gap:5px}.hydration-review-grid label>small{color:var(--muted);font-size:10px;line-height:1.35}
+.hydration-calibration{padding:11px 12px;border:1px solid var(--border);border-radius:13px;background:color-mix(in srgb,var(--bg-input) 86%,transparent)}
+.hydration-calibration summary{cursor:pointer;color:var(--text);font-weight:850}.hydration-calibration>p{margin:8px 0 11px;color:var(--muted);font-size:11px;line-height:1.45}
+.hydration-toilet-row{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
+.hydration-toilet-row>span{display:grid;gap:3px}.hydration-toilet-row small{color:var(--muted);font-size:10px;line-height:1.35}
+.coach-message-card{display:grid;gap:11px}
+.coach-message-card .review-summary-section-heading{align-items:center}
+.coach-message-card .review-summary-section-heading>span{padding:5px 8px;border:1px solid var(--border);border-radius:999px;background:var(--bg-input);font-size:9px;font-weight:900;letter-spacing:.04em;white-space:nowrap}
+.coach-message-main{display:grid;gap:7px;padding:15px 16px;border:1px solid var(--border);border-radius:15px;background:linear-gradient(145deg,color-mix(in srgb,var(--surface-strong) 74%,transparent),var(--bg-input))}
+.coach-message-main.tone-good{border-color:color-mix(in srgb,var(--success) 34%,var(--border))}.coach-message-main.tone-watch{border-color:color-mix(in srgb,var(--warning) 42%,var(--border))}
+.coach-message-main h3{margin:0;font-size:17px;line-height:1.25}.coach-message-main p{margin:0;color:var(--text-soft);font-size:12px;line-height:1.55}
+.coach-message-tip{display:grid;grid-template-columns:auto 1fr;gap:8px;margin-top:3px;padding:9px 10px;border-left:3px solid var(--accent);border-radius:9px;background:var(--accent-surface);font-size:11px;line-height:1.5}.coach-message-tip b{color:var(--accent-bright)}
+.coach-message-anchor{width:max-content;max-width:100%;padding:5px 8px;border:1px solid var(--accent-border);border-radius:999px;color:var(--accent-bright);font-weight:800}
+.coach-message-details{padding-top:2px;color:var(--muted);font-size:11px}.coach-message-details summary{cursor:pointer;font-weight:800}.coach-message-details p{margin:8px 0 0;line-height:1.45}
+@media(max-width:700px){.hydration-review-heading,.hydration-toilet-row{align-items:stretch;flex-direction:column}.hydration-review-grid{grid-template-columns:1fr}.coach-message-card .review-summary-section-heading{align-items:flex-start}.coach-message-tip{grid-template-columns:1fr}}

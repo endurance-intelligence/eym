@@ -302,3 +302,42 @@
   .activity-profile-readout strong{font-size:13px}
   .activity-profile-note{align-items:start}
 }
+
+/* v4.2.2 · Herzfrequenz ist in der Streckenanalyse das primäre Belastungssignal. */
+.activity-profile-legend i.heart-rate{
+  background:#ff6b7a;
+  box-shadow:0 0 10px rgba(255,107,122,.48);
+}
+.activity-profile-readout{
+  grid-template-columns:repeat(5,minmax(0,1fr));
+}
+.activity-profile-readout article.heart-rate strong{
+  color:#ff9ca7;
+}
+.activity-profile-chart svg{
+  height:260px;
+}
+.activity-profile-heart-rate-line{
+  fill:none;
+  stroke:#ff6b7a;
+  stroke-width:3;
+  stroke-linecap:round;
+  stroke-linejoin:round;
+  vector-effect:non-scaling-stroke;
+  filter:drop-shadow(0 0 5px rgba(255,107,122,.38));
+}
+.activity-profile-effort-line.secondary{
+  stroke-width:1.5;
+  opacity:.68;
+  filter:none;
+}
+.activity-profile-axis.y.heart-rate{
+  fill:#ff9ca7;
+}
+.activity-profile-dot.heart-rate{
+  fill:#ff6b7a;
+}
+@media(max-width:760px){
+  .activity-profile-readout{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .activity-profile-readout article:last-child{grid-column:span 2}
+}

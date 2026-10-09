@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 import {
   activityAverageEffort,
   activityProfileModel,
@@ -10,16 +11,16 @@ import {
 } from "../src/services/activityProfile.js";
 
 const points = [
-  { lat: 52.01, lon: 8.51, distanceKm: 0, altitude: 101, speedMps: 3, elapsedSeconds: 0 },
-  { lat: 52.02, lon: 8.52, distanceKm: 1, altitude: 118, speedMps: 4, elapsedSeconds: 260 },
-  { lat: 52.03, lon: 8.53, distanceKm: 2, altitude: 109, speedMps: 0, elapsedSeconds: 520 },
+  { lat: 52.01, lon: 8.51, distanceKm: 0, altitude: 101, speedMps: 3, heartRate: 140, elapsedSeconds: 0 },
+  { lat: 52.02, lon: 8.52, distanceKm: 1, altitude: 118, speedMps: 4, heartRate: 146, elapsedSeconds: 260 },
+  { lat: 52.03, lon: 8.53, distanceKm: 2, altitude: 109, speedMps: 0, heartRate: 150, elapsedSeconds: 520 },
 ];
 
 function withoutFields(point, fields) {
   return Object.fromEntries(Object.entries(point).filter(([key]) => !fields.includes(key)));
 }
 
-test("running profiles use measured distance and convert speed into pace", () => {
+test("running profiles prioritize measured heart rate while keeping elevation and pace", () => {
   const model = activityProfileModel(points, { type: "Run" });
   assert.equal(model.kind, "pace");
   assert.equal(model.axisMode, "distance");
@@ -27,8 +28,18 @@ test("running profiles use measured distance and convert speed into pace", () =>
   assert.equal(model.points[1].effort, 250);
   assert.equal(model.points[2].effort, null);
   assert.deepEqual(model.altitudeRange, { minimum: 101, maximum: 118 });
+  assert.deepEqual(model.heartRateRange, { minimum: 140, maximum: 150, average: 436 / 3 });
   assert.equal(model.hasAltitude, true);
+  assert.equal(model.hasHeartRate, true);
   assert.equal(model.hasEffort, true);
+});
+
+test("route chart visibly leads with heart rate and still exposes pace", () => {
+  const source = readFileSync(new URL("../src/components/ActivityElevationPaceChart.jsx", import.meta.url), "utf8");
+  assert.match(source, /Höhe & Herzfrequenz/);
+  assert.match(source, />Herzfrequenz</);
+  assert.match(source, /Ø HF/);
+  assert.match(source, /Pace/);
 });
 
 test("road cycling profiles show speed instead of running pace", () => {
@@ -36,6 +47,7 @@ test("road cycling profiles show speed instead of running pace", () => {
   assert.equal(model.kind, "speed");
   assert.equal(model.points[0].effort, 10.8);
   assert.equal(model.points[1].effort, 14.4);
+  assert.equal(model.hasHeartRate, true);
 });
 
 test("profiles fall back to measured time before using neutral progress", () => {

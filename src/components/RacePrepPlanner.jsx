@@ -37,7 +37,7 @@ function evidenceToneLabel(tone) {
   return "Ungetestet";
 }
 
-export default function RacePrepPlanner() {
+export default function RacePrepPlanner({ setupOnly = false }) {
   const { state, setState } = useApp();
   const events = useMemo(() => {
     const today = new Date();
@@ -196,12 +196,12 @@ export default function RacePrepPlanner() {
   }
 
   return (
-    <div className="race-prep-planner">
+    <div className={`race-prep-planner ${setupOnly ? "setup-only" : ""}`}>
       <div className="race-prep-heading">
         <div>
           <p className="eyebrow">Race · Rennbasis</p>
-          <h2>Rennen und Versorgung gemeinsam vorbereiten</h2>
-          <p>Der Coach priorisiert Produkte, die du tatsächlich eingesetzt und gut vertragen hast. Bestand spielt für die sportliche Empfehlung keine Rolle.</p>
+          <h2>{setupOnly ? "Rennformat, Distanz und Zeit sauber festlegen" : "Rennen und Versorgung gemeinsam vorbereiten"}</h2>
+          <p>{setupOnly ? "Hier liegt nur die Rennbasis. Fuel, Elektrolyte, Gel-Prio und VP-Logik werden zentral unter Verpflegung & VP geplant." : "Der Coach priorisiert Produkte, die du tatsächlich eingesetzt und gut vertragen hast. Bestand spielt für die sportliche Empfehlung keine Rolle."}</p>
         </div>
         <label>
           Vorlage / Rennen
@@ -338,7 +338,7 @@ export default function RacePrepPlanner() {
 
         {plan.warnings.length > 0 && <div className="race-prep-warnings"><b>Vor dem Rennen klären</b>{plan.warnings.map((warning) => <span key={warning}>{warning}</span>)}</div>}
         <div className="race-prep-editor-actions">
-          <button type="button" onClick={savePlan}>Plan speichern</button>
+          <button type="button" onClick={savePlan}>{setupOnly ? "Rennbasis speichern" : "Plan speichern"}</button>
           {sourceKey.startsWith("saved:") && <button type="button" className="secondary" onClick={deletePlan}>Gespeicherten Plan löschen</button>}
         </div>
       </>}

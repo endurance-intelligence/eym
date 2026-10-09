@@ -645,6 +645,14 @@ function normalSuggestion({ round = 1, history = [], flags = [], weather = [], g
   const conditions = new Set(weather || []);
   const caffeineLast3 = recentCaffeine(history, 3);
   let recommendation = stableSuggestion(round, history);
+  const priorityGel = preferredGel(history, gelPriority);
+  recommendation = {
+    ...recommendation,
+    selection: recommendation.selection.map((entry) => {
+      const product = pitProduct(entry.productId);
+      return product?.category === "gel" ? { ...entry, productId: priorityGel, portionId: "1" } : entry;
+    }),
+  };
 
   // Athlete feedback changes only the dimension it actually describes. Food/appetite
   // signals may replace the solid fuel; thirst/temperature must not randomly reshuffle it.

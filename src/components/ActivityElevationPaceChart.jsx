@@ -8,8 +8,8 @@ import {
   formatProfilePace,
 } from "../services/activityProfile.js";
 
-const CHART_HEIGHT = 250;
-const MARGIN = { top: 14, right: 58, bottom: 35, left: 50 };
+const CHART_HEIGHT = 260;
+const MARGIN = { top: 14, right: 62, bottom: 35, left: 50 };
 
 function clamp(value, minimum, maximum) {
   return Math.max(minimum, Math.min(maximum, value));
@@ -17,10 +17,9 @@ function clamp(value, minimum, maximum) {
 
 function rangeTicks(domain, count = 3) {
   if (!domain) return [];
-  return Array.from(
-    { length: count },
-    (_entry, index) => domain.minimum + ((domain.maximum - domain.minimum) * index) / (count - 1),
-  );
+  return Array.from({ length: count }, (_entry, index) => (
+    domain.minimum + ((domain.maximum - domain.minimum) * index) / (count - 1)
+  ));
 }
 
 function pathSegments(points, valueKey, xScale, yScale) {
@@ -87,6 +86,10 @@ function altitudeLabel(altitude) {
   return Number.isFinite(altitude) ? `${Math.round(altitude)} m` : "–";
 }
 
+function heartRateLabel(value) {
+  return Number.isFinite(value) && value > 0 ? `${Math.round(value)} bpm` : "–";
+}
+
 function averageDurationSeconds(activity) {
   const direct = Number(activity?.durationSeconds || 0);
   return direct > 0 ? direct : Number(activity?.duration || 0) * 60;
@@ -109,41 +112,38 @@ export default function ActivityElevationPaceChart({
     const fraction = (value - model.axisDomain.minimum) / (model.axisDomain.maximum - model.axisDomain.minimum);
     return MARGIN.left + clamp(fraction, 0, 1) * plotWidth;
   };
-  const altitudeScale = (value) => {
-    if (!model.altitudeDomain) return plotBottom;
-    const fraction = (value - model.altitudeDomain.minimum) / (model.altitudeDomain.maximum - model.altitudeDomain.minimum);
-    return plotBottom - clamp(fraction, 0, 1) * plotHeight;
+  const normalScale = (domain, value, invert = false) => {
+    if (!domain) return plotBottom;
+    const fraction = (value - domain.minimum) / (domain.maximum - domain.minimum);
+    const clamped = clamp(fraction, 0, 1);
+    return invert ? MARGIN.top + clamped * plotHeight : plotBottom - clamped * plotHeight;
   };
-  const effortScale = (value) => {
-    if (!model.effortDomain) return plotBottom;
-    const fraction = (value - model.effortDomain.minimum) / (model.effortDomain.maximum - model.effortDomain.minimum);
-    return model.kind === "pace"
-      ? MARGIN.top + clamp(fraction, 0, 1) * plotHeight
-      : plotBottom - clamp(fraction, 0, 1) * plotHeight;
-  };
+  const altitudeScale = (value) => normalScale(model.altitudeDomain, value);
+  const heartRateScale = (value) => normalScale(model.heartRateDomain, value);
+  const effortScale = (value) => normalScale(model.effortDomain, value, model.kind === "pace");
+
   const altitudeSegments = pathSegments(model.points, "altitude", xScale, altitudeScale);
+  const heartRateSegments = pathSegments(model.points, "heartRate", xScale, heartRateScale);
   const effortSegments = pathSegments(model.points, "effort", xScale, effortScale);
   const altitudePath = linePath(altitudeSegments);
   const profileAreaPath = areaPath(altitudeSegments, plotBottom);
+  const heartRatePath = linePath(heartRateSegments);
   const effortPath = linePath(effortSegments);
   const activePoint = model.points.find((point) => point.routeIndex === activeRouteIndex) || null;
   const interactivePoints = model.points.filter((point) => Number.isFinite(point.axisValue));
   const averageEffort = activityAverageEffort(activity, model.kind);
+  const averageHeartRate = Number(activity?.avgHr || activity?.averageHeartRate || model.heartRateRange?.average || 0) || null;
   const durationSeconds = averageDurationSeconds(activity);
   const activeX = activePoint && Number.isFinite(activePoint.axisValue) ? xScale(activePoint.axisValue) : null;
-  const xTicks = Array.from(
-    { length: 5 },
-    (_entry, index) => model.axisDomain.minimum
-      + ((model.axisDomain.maximum - model.axisDomain.minimum) * index) / 4,
-  );
+  const xTicks = Array.from({ length: 5 }, (_entry, index) => (
+    model.axisDomain.minimum + ((model.axisDomain.maximum - model.axisDomain.minimum) * index) / 4
+  ));
   const altitudeTicks = rangeTicks(model.altitudeDomain);
-  const effortTicks = rangeTicks(model.effortDomain);
+  const primaryTicks = rangeTicks(model.hasHeartRate ? model.heartRateDomain : model.effortDomain);
   const defaultAltitude = model.altitudeRange
     ? `${Math.round(model.altitudeRange.minimum)}–${Math.round(model.altitudeRange.maximum)} m`
     : "Keine Messwerte";
-  const summaryDistance = Number(activity?.distance || 0) > 0
-    ? distanceLabel(Number(activity.distance))
-    : "–";
+  const summaryDistance = Number(activity?.distance || 0) > 0 ? distanceLabel(Number(activity.distance)) : "–";
   const activePosition = activePoint
     ? Number.isFinite(activePoint.distanceKm)
       ? distanceLabel(activePoint.distanceKm)
@@ -152,14 +152,10 @@ export default function ActivityElevationPaceChart({
         : formatProfileAxis(activePoint.axisValue, model.axisMode, model.axisDomain.maximum)
     : summaryDistance;
   const activePositionLabel = activePoint
-    ? Number.isFinite(activePoint.distanceKm)
-      ? "Position"
-      : model.axisMode === "time"
-        ? "Zeitpunkt"
-        : "Streckenpunkt"
+    ? Number.isFinite(activePoint.distanceKm) ? "Position" : model.axisMode === "time" ? "Zeitpunkt" : "Streckenpunkt"
     : "Strecke";
 
-  if (!model.hasAltitude && !model.hasEffort) return null;
+  if (!model.hasAltitude && !model.hasHeartRate && !model.hasEffort) return null;
 
   function selectAtClientX(clientX) {
     const bounds = chartRef.current?.getBoundingClientRect();
@@ -185,31 +181,21 @@ export default function ActivityElevationPaceChart({
       <div className="activity-profile-heading">
         <div>
           <small>Streckenanalyse</small>
-          <strong>Höhe &amp; Tempo</strong>
+          <strong>{model.hasHeartRate ? "Höhe & Herzfrequenz" : "Höhe & Tempo"}</strong>
         </div>
         <div className="activity-profile-legend" aria-label="Legende">
+          {model.hasHeartRate && <span><i className="heart-rate" />Herzfrequenz</span>}
           {model.hasAltitude && <span><i className="altitude" />Höhe</span>}
           {model.hasEffort && <span><i className="effort" />{model.kind === "pace" ? "Pace" : "Geschwindigkeit"}</span>}
         </div>
       </div>
 
       <div className={`activity-profile-readout ${activePoint ? "active" : ""}`} aria-live="polite">
-        <article>
-          <small>{activePositionLabel}</small>
-          <strong>{activePosition}</strong>
-        </article>
-        <article>
-          <small>{activePoint ? "Höhe" : "Höhenlage"}</small>
-          <strong>{activePoint ? altitudeLabel(activePoint.altitude) : defaultAltitude}</strong>
-        </article>
-        <article>
-          <small>{activePoint ? (model.kind === "pace" ? "Pace" : "Tempo") : (model.kind === "pace" ? "Ø Pace" : "Ø Tempo")}</small>
-          <strong>{formatProfileEffort(activePoint ? activePoint.effort : averageEffort, model.kind)}</strong>
-        </article>
-        <article>
-          <small>{activePoint ? "Laufzeit" : "Dauer"}</small>
-          <strong>{formatProfileElapsed(activePoint ? activePoint.elapsedSeconds : durationSeconds)}</strong>
-        </article>
+        <article><small>{activePositionLabel}</small><strong>{activePosition}</strong></article>
+        <article><small>{activePoint ? "Höhe" : "Höhenlage"}</small><strong>{activePoint ? altitudeLabel(activePoint.altitude) : defaultAltitude}</strong></article>
+        <article className="heart-rate"><small>{activePoint ? "Herzfrequenz" : "Ø HF"}</small><strong>{heartRateLabel(activePoint ? activePoint.heartRate : averageHeartRate)}</strong></article>
+        <article><small>{activePoint ? (model.kind === "pace" ? "Pace" : "Tempo") : (model.kind === "pace" ? "Ø Pace" : "Ø Tempo")}</small><strong>{formatProfileEffort(activePoint ? activePoint.effort : averageEffort, model.kind)}</strong></article>
+        <article><small>{activePoint ? "Laufzeit" : "Dauer"}</small><strong>{formatProfileElapsed(activePoint ? activePoint.elapsedSeconds : durationSeconds)}</strong></article>
       </div>
 
       <div className="activity-profile-chart" ref={chartRef}>
@@ -218,34 +204,24 @@ export default function ActivityElevationPaceChart({
           height={CHART_HEIGHT}
           viewBox={`0 0 ${width} ${CHART_HEIGHT}`}
           role="img"
-          aria-label={`Interaktiver Verlauf von Höhe und ${model.kind === "pace" ? "Pace" : "Geschwindigkeit"}`}
+          aria-label={`Interaktiver Verlauf von Höhe, ${model.hasHeartRate ? "Herzfrequenz und " : ""}${model.kind === "pace" ? "Pace" : "Geschwindigkeit"}`}
           tabIndex="0"
           onPointerDown={(event) => selectAtClientX(event.clientX)}
           onPointerMove={(event) => selectAtClientX(event.clientX)}
-          onPointerLeave={(event) => {
-            if (event.pointerType !== "touch") onActiveRouteIndexChange(null);
-          }}
+          onPointerLeave={(event) => { if (event.pointerType !== "touch") onActiveRouteIndexChange(null); }}
           onBlur={() => onActiveRouteIndexChange(null)}
           onFocus={() => {
-            if (activeRouteIndex == null && interactivePoints.length) {
-              onActiveRouteIndexChange(interactivePoints[Math.floor(interactivePoints.length / 2)].routeIndex);
-            }
+            if (activeRouteIndex == null && interactivePoints.length) onActiveRouteIndexChange(interactivePoints[Math.floor(interactivePoints.length / 2)].routeIndex);
           }}
           onKeyDown={(event) => {
-            if (event.key === "ArrowLeft") {
-              event.preventDefault();
-              moveSelection(-1);
-            }
-            if (event.key === "ArrowRight") {
-              event.preventDefault();
-              moveSelection(1);
-            }
+            if (event.key === "ArrowLeft") { event.preventDefault(); moveSelection(-1); }
+            if (event.key === "ArrowRight") { event.preventDefault(); moveSelection(1); }
           }}
         >
           <defs>
             <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#5ee494" stopOpacity=".34" />
-              <stop offset="100%" stopColor="#5ee494" stopOpacity=".025" />
+              <stop offset="0%" stopColor="#5ee494" stopOpacity=".28" />
+              <stop offset="100%" stopColor="#5ee494" stopOpacity=".02" />
             </linearGradient>
           </defs>
 
@@ -259,33 +235,31 @@ export default function ActivityElevationPaceChart({
             return (
               <g key={value}>
                 <line className="activity-profile-grid vertical" x1={x} x2={x} y1={MARGIN.top} y2={plotBottom} />
-                <text className="activity-profile-axis x" x={x} y={CHART_HEIGHT - 10} textAnchor="middle">
-                  {formatProfileAxis(value, model.axisMode, model.axisDomain.maximum)}
-                </text>
+                <text className="activity-profile-axis x" x={x} y={CHART_HEIGHT - 10} textAnchor="middle">{formatProfileAxis(value, model.axisMode, model.axisDomain.maximum)}</text>
               </g>
             );
           })}
 
           {profileAreaPath && <path d={profileAreaPath} fill={`url(#${gradientId})`} />}
           {altitudePath && <path className="activity-profile-altitude-line" d={altitudePath} />}
-          {effortPath && <path className="activity-profile-effort-line" d={effortPath} />}
+          {effortPath && <path className={`activity-profile-effort-line ${model.hasHeartRate ? "secondary" : ""}`} d={effortPath} />}
+          {heartRatePath && <path className="activity-profile-heart-rate-line" d={heartRatePath} />}
 
           {altitudeTicks.map((value) => (
-            <text className="activity-profile-axis y altitude" x={MARGIN.left - 8} y={altitudeScale(value) + 3} textAnchor="end" key={value}>
-              {Math.round(value)} m
-            </text>
+            <text className="activity-profile-axis y altitude" x={MARGIN.left - 8} y={altitudeScale(value) + 3} textAnchor="end" key={value}>{Math.round(value)} m</text>
           ))}
-          {effortTicks.map((value) => (
-            <text className="activity-profile-axis y effort" x={width - MARGIN.right + 8} y={effortScale(value) + 3} textAnchor="start" key={value}>
-              {model.kind === "pace" ? formatProfilePace(value).replace(" /km", "") : Math.round(value)}
+          {primaryTicks.map((value) => (
+            <text className={`activity-profile-axis y ${model.hasHeartRate ? "heart-rate" : "effort"}`} x={width - MARGIN.right + 8} y={(model.hasHeartRate ? heartRateScale(value) : effortScale(value)) + 3} textAnchor="start" key={value}>
+              {model.hasHeartRate ? Math.round(value) : model.kind === "pace" ? formatProfilePace(value).replace(" /km", "") : Math.round(value)}
             </text>
           ))}
 
           {activeX != null && (
             <>
               <line className="activity-profile-crosshair" x1={activeX} x2={activeX} y1={MARGIN.top} y2={plotBottom} />
-              {Number.isFinite(activePoint.altitude) && <circle className="activity-profile-dot altitude" cx={activeX} cy={altitudeScale(activePoint.altitude)} r="5" />}
-              {Number.isFinite(activePoint.effort) && <circle className="activity-profile-dot effort" cx={activeX} cy={effortScale(activePoint.effort)} r="5" />}
+              {Number.isFinite(activePoint.altitude) && <circle className="activity-profile-dot altitude" cx={activeX} cy={altitudeScale(activePoint.altitude)} r="4.5" />}
+              {Number.isFinite(activePoint.effort) && <circle className="activity-profile-dot effort" cx={activeX} cy={effortScale(activePoint.effort)} r="4.5" />}
+              {Number.isFinite(activePoint.heartRate) && <circle className="activity-profile-dot heart-rate" cx={activeX} cy={heartRateScale(activePoint.heartRate)} r="5.5" />}
             </>
           )}
           <rect className="activity-profile-hit-area" x={MARGIN.left} y={MARGIN.top} width={plotWidth} height={plotHeight} />
@@ -295,7 +269,7 @@ export default function ActivityElevationPaceChart({
       <p className="activity-profile-note">
         <span>↔</span>
         Mit Maus, Finger oder Pfeiltasten durch die Strecke fahren. Der Marker folgt auf der Karte.
-        <small>Originalmesswerte aus Intervals.icu · keine geschätzten Höhen.</small>
+        <small>Originalmesswerte aus Intervals.icu · Herzfrequenz, Höhe und Pace synchron zur Route.</small>
       </p>
     </section>
   );

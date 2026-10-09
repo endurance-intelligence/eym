@@ -577,3 +577,14 @@ details>summary{transition:color .16s ease,background .16s ease}
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{scroll-behavior:auto!important;transition:none!important;animation:none!important}
 }
+
+
+/* v4.2.2: native select menus must remain readable in the dark UI. */
+select {
+  color-scheme: dark;
+}
+select option,
+select optgroup {
+  background: #101a15;
+  color: #eff8f2;
+}

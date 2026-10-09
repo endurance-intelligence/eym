@@ -307,8 +307,8 @@ test("Long Energy label nutrients scale with actual intake instead of staying at
 test("stable Backyard rotation deliberately schedules gels instead of relying on food and Isostar forever", () => {
   const round4 = recommendPitCrew({ round: 4, minutesToStart: 10, history: [] });
   const round7 = recommendPitCrew({ round: 7, minutesToStart: 10, history: [] });
-  assert.equal(round4.selection.some((item) => item.productId === "226ers-high"), true);
-  assert.equal(round7.selection.some((item) => item.productId === "226ers-high-strawberry"), true);
+  assert.equal(round4.selection.some((item) => PIT_CREW_DEFAULT_GEL_PRIORITY.includes(item.productId)), true);
+  assert.equal(round7.selection.some((item) => PIT_CREW_DEFAULT_GEL_PRIORITY.includes(item.productId)), true);
   assert.ok(round4.summary.carbs >= 60);
   assert.ok(round7.summary.carbs >= 60);
 });
@@ -551,4 +551,16 @@ test("KNAX cucumber uses the actual jar and label nutrition instead of a fresh c
   assert.equal(stock24?.unit, "Glas à 360 g Abtropfgewicht");
   assert.match(stock24?.note || "", /7 × 50-g-Portionen/);
   assert.equal(stock36?.quantity, 2);
+});
+
+test("normal Pit Crew gel slots honor the athlete gel priority", () => {
+  const recommendation = recommendPitCrew({
+    round: 4,
+    minutesToStart: 10,
+    history: [],
+    gelPriority: ["maurten100", "sis-beta", "226ers-high", "226ers-high-strawberry"],
+  });
+  const gels = recommendation.selection.filter((item) => PIT_CREW_DEFAULT_GEL_PRIORITY.includes(item.productId));
+  assert.equal(gels.length, 1);
+  assert.equal(gels[0].productId, "maurten100");
 });

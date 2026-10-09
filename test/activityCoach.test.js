@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { activityCoachAssessment } from "../src/services/activityCoach.js";
+import { activityCoachAssessment, cardiacDriftAssessment } from "../src/services/activityCoach.js";
 
 function run(id, date, { distance = 10, duration = 62, avgHr = 122, temperature = 18, name = "10 km locker", elevation = 40 } = {}) {
   return {
@@ -46,10 +46,11 @@ test("activity coach leads with contextual evidence instead of a generic recover
 
   assert.match(result.summary, /28 °C/);
   assert.match(result.summary, /Beine 8\/10/);
-  assert.match(result.summary, /Plan bleibt bestehen/);
+  assert.doesNotMatch(result.summary, /Plan bleibt bestehen/);
+  assert.match(result.coachMessage.title, /Ausdauerreiz/);
   assert.doesNotMatch(result.comparison, /bestätigt die objektive Einordnung weitgehend/i);
   assert.equal(result.signal.value, "Gut verarbeitet");
-  assert.equal(result.followUp.value, "Plan bleibt bestehen");
+  assert.equal(result.followUp.value, "Kein Zusatzsignal");
 });
 
 test("activity coach calls out selected stomach symptoms instead of claiming good tolerance", () => {
@@ -121,7 +122,7 @@ test("training-like C event does not create an automatic event recovery pause", 
   });
 
   assert.equal(result.recovery.value, "Normal weiter");
-  assert.equal(result.followUp.value, "Plan bleibt bestehen");
+  assert.equal(result.followUp.value, "Wie Training verarbeitet");
   assert.match(result.comparison, /Eventstatus allein bremst die Folgewoche nicht/);
 });
 
@@ -161,7 +162,7 @@ test("depleted event review overrides a generic recovery estimate without imposi
   });
 
   assert.equal(result.recovery.value, "48 h+ prüfen");
-  assert.equal(result.followUp.value, "Folgetage neu prüfen");
+  assert.equal(result.followUp.value, "Erholung beobachten");
   assert.match(result.recovery.text, /nicht nach einer pauschalen Eventpause/i);
   assert.doesNotMatch(result.summary, /5 Tage/i);
 });
@@ -230,7 +231,7 @@ test("coach escalates when heart rate is materially above the athlete's learned 
 
   assert.equal(result.heat.status, "above_heat_expectation");
   assert.equal(result.signal.value, "HF über Erwartung");
-  assert.equal(result.followUp.value, "Schlüsselreiz prüfen");
+  assert.equal(result.followUp.value, "HF beobachten");
   assert.match(result.summary, /heute lag die HF darüber/i);
 });
 
@@ -259,4 +260,62 @@ test("activity coach ignores legacy stomach fields when no fueling was used", ()
   const review = { legs: 7, energy: 7, overallFeeling: 7, rpe: 5, usedNutrition: false, stomach: 3, stomachSymptoms: ["Übelkeit"] };
   const result = activityCoachAssessment(state, activity, review, null);
   assert.doesNotMatch(result.comparison, /Magenauffälligkeiten|Gel-Timing|Produktkombination/);
+});
+
+function steadyRoute({ minutes = 70, driftStartMinute = null, hillStartMinute = null } = {}) {
+  let distanceKm = 0;
+  let altitude = 100;
+  return Array.from({ length: minutes + 1 }, (_, minute) => {
+    const speedMps = 2.78;
+    if (minute > 0) distanceKm += speedMps * 60 / 1000;
+    const inHill = hillStartMinute != null && minute >= hillStartMinute && minute < hillStartMinute + 10;
+    altitude += inHill ? 8 : 0;
+    const heartRate = driftStartMinute != null && minute >= driftStartMinute ? 150 : inHill ? 151 : 140;
+    return {
+      elapsedSeconds: minute * 60,
+      distanceKm,
+      speedMps,
+      heartRate,
+      altitude,
+    };
+  });
+}
+
+test("cardiac drift locates a sustained flat-run turning point instead of reacting to one spike", () => {
+  const activity = { id: "drift", type: "Run", name: "Easy Run", distance: 11.7, duration: 70, avgHr: 144, elevation: 20 };
+  const result = cardiacDriftAssessment(steadyRoute({ driftStartMinute: 48 }), activity, { temperature: 18 }, { legs: 7, energy: 7, rpe: 5 });
+  assert.equal(result.available, true);
+  assert.equal(result.status, "clear");
+  assert.ok(result.onset?.distanceKm > 5);
+  assert.match(result.onset?.label || "", /km .* \/ .*min/);
+  assert.match(result.text, /nahezu gleich blieb/);
+});
+
+test("a heart-rate rise on a climb is not mislabeled as cardiac drift", () => {
+  const activity = { id: "hill", type: "Run", name: "Easy Run", distance: 11.7, duration: 70, avgHr: 143, elevation: 500 };
+  const result = cardiacDriftAssessment(steadyRoute({ hillStartMinute: 45 }), activity, { temperature: 18 }, { legs: 7, energy: 7, rpe: 5 });
+  assert.notEqual(result.status, "clear");
+});
+
+test("quality sessions do not use cardiac drift as their primary judgement", () => {
+  const activity = { id: "track-drift", type: "Run", name: "ORC Track Intervalle", distance: 12, duration: 75, avgHr: 155 };
+  const result = cardiacDriftAssessment(steadyRoute({ driftStartMinute: 45 }), activity, { temperature: 18 }, {});
+  assert.equal(result.status, "not-applicable");
+  assert.equal(result.relevant, false);
+});
+
+test("compact coach turns a real drift into one localized coaching tip", () => {
+  const activity = { id: "drift-coach", type: "Run", name: "10 km locker", date: "2026-10-08", distance: 11.7, duration: 70, avgHr: 144, elevation: 20 };
+  const state = {
+    activities: [activity],
+    reviews: {},
+    plan: [{ id: "easy-plan", date: "2026-10-08", title: "Easy Run", type: "Easy Run", distance: 11.7, duration: 70 }],
+    profile: {},
+    mission: { type: "ultra", name: "Heartbeat Ultra" },
+  };
+  const result = activityCoachAssessment(state, activity, { legs: 7, energy: 7, overallFeeling: 7, rpe: 5 }, { temperature: 18 }, steadyRoute({ driftStartMinute: 48 }));
+  assert.match(result.coachMessage.title, /zu teuer/);
+  assert.match(result.coachMessage.text, /Bis etwa km/);
+  assert.match(result.coachMessage.tip, /Heute wäre ab etwa km/);
+  assert.equal(Boolean(result.coachMessage.anchor?.label), true);
 });

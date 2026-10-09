@@ -18,7 +18,6 @@ import { lookupOpenPrices, productPriceSearchLinks } from "../services/productPr
 import { extractNutritionLabel } from "../services/nutritionOcr";
 import { isManagedImage, queueEntityImageDeletion, resolveImageUrl, uploadEntityImages } from "../services/imageStorage";
 import { FUEL_LAB_TABS, fuelLabTabSearchParams, resolveFuelLabTab } from "../services/fuelLabTabs";
-import FuelPartner from "../components/FuelPartner";
 
 const categories = ["Gel", "Drink Mix", "Elektrolyte", "Riegel", "Recovery", "Kapseln", "Sonstiges"];
 const stockUnits = ["Stück", "Portionen", "Tabletten", "Beutel"];
@@ -619,7 +618,7 @@ export default function Fuel() {
       {activeTab === "products" && <button onClick={openNewProduct}>+ Produkt</button>}
     </PageTitle>
 
-    <div className="section-tabs fuel-tabs" role="tablist" aria-label="Fuel-Lab-Bereiche">
+    {FUEL_LAB_TABS.length > 1 && <div className="section-tabs fuel-tabs" role="tablist" aria-label="Fuel-Lab-Bereiche">
       {FUEL_LAB_TABS.map(([key, label]) => <button
         type="button"
         id={`fuel-tab-${key}`}
@@ -630,12 +629,7 @@ export default function Fuel() {
         onClick={() => selectTab(key)}
         key={key}
       >{label}</button>)}
-    </div>
-
-    {activeTab === "partner" && <div className="fuel-tab-panel" id="fuel-panel-partner" role="tabpanel" aria-labelledby="fuel-tab-partner">
-      <FuelPartner />
     </div>}
-
 
     {activeTab === "products" && <div className="fuel-tab-panel" id="fuel-panel-products" role="tabpanel" aria-labelledby="fuel-tab-products">
     {notice && <div className={`fuel-toast ${notice.tone}`} role="status"><b>{notice.message}</b><button type="button" aria-label="Hinweis schließen" onClick={() => setNotice(null)}>×</button></div>}

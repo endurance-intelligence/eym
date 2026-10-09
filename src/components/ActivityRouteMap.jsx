@@ -20,7 +20,7 @@ function routeAvailable(activity = {}) {
   return true;
 }
 
-function ActivityRouteMapContent({ activity }) {
+function ActivityRouteMapContent({ activity, onRouteData }) {
   const mapElement = useRef(null);
   const mapInstance = useRef(null);
   const focusMarker = useRef(null);
@@ -59,6 +59,10 @@ function ActivityRouteMapContent({ activity }) {
       });
     return () => { cancelled = true; };
   }, [available, cacheKey]);
+
+  useEffect(() => {
+    if (status === "ready" && route?.length) onRouteData?.(route);
+  }, [onRouteData, route, status]);
 
   useEffect(() => {
     if (status !== "ready" || !mapElement.current || !route?.length) return undefined;
@@ -145,7 +149,7 @@ function ActivityRouteMapContent({ activity }) {
         </div>
         {status === "ready" && <span>Interaktiv · Start ● · Ziel ●</span>}
       </div>
-      {status === "loading" && <div className="activity-route-placeholder">Route, Höhe und Tempo werden aus Intervals.icu geladen …</div>}
+      {status === "loading" && <div className="activity-route-placeholder">Route, Herzfrequenz, Höhe und Tempo werden aus Intervals.icu geladen …</div>}
       {status === "error" && (
         <div className="activity-route-error">
           <strong>Route derzeit nicht verfügbar</strong>
@@ -165,7 +169,7 @@ function ActivityRouteMapContent({ activity }) {
   );
 }
 
-export default function ActivityRouteMap({ activity }) {
+export default function ActivityRouteMap({ activity, onRouteData }) {
   const activityKey = String(activity?.intervalsId || activity?.id || "activity");
-  return <ActivityRouteMapContent activity={activity} key={activityKey} />;
+  return <ActivityRouteMapContent activity={activity} onRouteData={onRouteData} key={activityKey} />;
 }

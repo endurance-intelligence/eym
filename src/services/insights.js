@@ -93,15 +93,21 @@ export function hydration(activity, review) {
   const h = durationHours(activity);
   if (!h) return null;
 
-  const before = Math.max(0, Number(review.drinkBeforeMl || 0));
-  const during = Math.max(0, Number(review.drinkMl || 0));
-  const after = Math.max(0, Number(review.drinkAfterMl || 0));
-  const urine = Math.max(0, Number(review.urineMl || 0));
-  const measured = Boolean(Number(review.weightBefore) > 0 && Number(review.weightAfter) > 0);
+  // Fueling Review is the primary source for DURING fluids. drinkMl remains a
+  // backwards-compatible/manual fallback for plain water or unlisted drinks.
+  const nutritionDuring = Math.max(0, Number(review.nutritionFluidTotal || 0));
+  const extraDuring = Math.max(0, Number(review.hydrationExtraMl || 0));
+  const legacyDuring = Math.max(0, Number(review.drinkMl || 0));
+  const during = nutritionDuring > 0 || extraDuring > 0
+    ? nutritionDuring + extraDuring
+    : legacyDuring;
+  const hasWeights = Boolean(Number(review.weightBefore) > 0 && Number(review.weightAfter) > 0);
+  const toiletDuring = Boolean(review.hydrationToiletDuring);
+  const measured = hasWeights && !toiletDuring;
 
   let loss;
   if (measured) {
-    loss = (Number(review.weightBefore) - Number(review.weightAfter)) * 1000 + during - urine;
+    loss = (Number(review.weightBefore) - Number(review.weightAfter)) * 1000 + during;
   } else {
     const temp = Number(reviewWeather(activity, review)?.temperature ?? 18);
     const effort = Math.min(10, Math.max(1, Number(review.rpe || 5)));
@@ -112,19 +118,20 @@ export function hydration(activity, review) {
   const rate = Math.max(0, loss / h);
   const duringRate = during / h;
   const deficit = loss - during;
-  const recoveryGap = Math.max(0, deficit - after);
-  const reliableDuration = h >= 0.5;
+  const reliableDuration = h >= 0.75 && h <= 3;
   const plausibleRate = rate >= 200 && rate <= 2500;
-  const reliable = reliableDuration && plausibleRate;
+  const reliable = measured && reliableDuration && plausibleRate;
 
   let reason = "";
-  if (!reliableDuration) reason = "Einheit zu kurz für eine belastbare Hydrationsauswertung.";
-  else if (!plausibleRate) reason = "Hydrationswert unplausibel – Gewicht, Trinkmenge und Dauer bitte prüfen.";
+  if (hasWeights && toiletDuring) reason = "Toilettenpause während der Messung: Diese Einheit wird nicht zur persönlichen Schweißrate gelernt.";
+  else if (hasWeights && !reliableDuration) reason = "Für eine Schweißraten-Kalibrierung nutzt EI bevorzugt kontrollierbare Einheiten von 45–180 Minuten.";
+  else if (hasWeights && !plausibleRate) reason = "Schweißratenwert unplausibel – Gewicht, Trinkmenge und Dauer bitte prüfen.";
+  else if (!hasWeights) reason = "Keine Schweißmessung hinterlegt; Trinkmenge und Durst bleiben trotzdem als Erfahrungswert erhalten.";
 
   const thirst = review.hydrationThirst || "normal";
   const thirstAdjustment = thirst === "stark" ? 0.1 : thirst === "gering" ? -0.1 : 0;
-  const lowShare = (measured ? 0.55 : 0.5) + thirstAdjustment;
-  const highShare = (measured ? 0.8 : 0.7) + thirstAdjustment;
+  const lowShare = 0.55 + thirstAdjustment;
+  const highShare = 0.8 + thirstAdjustment;
   const roundTo50 = (value) => Math.round(value / 50) * 50;
   const upperRateLimit = Math.max(200, Math.min(900, roundTo50(rate)));
   const recommendedLow = reliable
@@ -136,8 +143,8 @@ export function hydration(activity, review) {
 
   const overdrinking = measured && during > 0 && duringRate > rate * 1.05;
   let guidance = measured
-    ? "Die Schweißrate basiert auf Gewicht vorher/nachher und der während der Einheit getrunkenen Menge."
-    : "Die Schweißrate ist geschätzt. Nutze die Trinkspanne als Orientierung, nicht als Trinkpflicht.";
+    ? "Die Schweißrate basiert auf Gewicht vorher/nachher und der tatsächlich erfassten Trinkmenge während der Einheit."
+    : "Trinkmenge und Durst werden als Erfahrung gespeichert; ohne belastbare Gewichtsmessung lernt EI daraus keine Schweißrate.";
   if (overdrinking) {
     guidance = "Die Trinkrate lag über dem gemessenen Flüssigkeitsverlust. Nicht weiter steigern; Durst und Verträglichkeit beachten.";
   } else if (thirst === "stark" && recommendedLow && duringRate < recommendedLow) {
@@ -145,19 +152,21 @@ export function hydration(activity, review) {
   }
 
   return {
-    before: Math.round(before),
+    before: 0,
     during: Math.round(during),
-    after: Math.round(after),
-    phaseTotal: Math.round(before + during + after),
+    after: 0,
+    phaseTotal: Math.round(during),
     loss: Math.round(loss),
     rate: Math.round(rate),
     duringRate: Math.round(duringRate),
     deficit: Math.round(deficit),
-    recoveryGap: Math.round(recoveryGap),
+    recoveryGap: 0,
     recommendedLow,
     recommendedHigh,
     reliable,
     measured,
+    calibrationEligible: reliable,
+    toiletDuring,
     overdrinking,
     reason,
     guidance,

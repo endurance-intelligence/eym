@@ -11,6 +11,7 @@ import { consumedInventoryUnits } from "../services/fuelNutrition";
 import { applyImageMigrations, embeddedImageCount, flushQueuedImageDeletions, migrateEmbeddedImages } from "../services/imageStorage";
 import { completedLegacyOnboarding } from "../services/onboarding";
 import { accountReviewTrackingStartDate } from "../services/reviewCoverage";
+import { mergeCloudStates } from "../services/cloudMerge";
 
 const AppContext = createContext(null);
 
@@ -209,6 +210,7 @@ export function AppProvider({ children }) {
   const cloudSaveGeneration = useRef(0);
   const localChangeVersion = useRef(0);
   const localDirtySinceCloud = useRef(false);
+  const cloudBaseSnapshot = useRef(null);
   const resumeSyncBusy = useRef(false);
   const imageMigrationStarted = useRef(false);
   const stateRef = useRef(state);
@@ -239,6 +241,7 @@ export function AppProvider({ children }) {
     saveDurableState(state, userId, {
       dirty,
       baseCloudUpdatedAt: cloudUpdatedAtRef.current,
+      baseCloudData: cloudBaseSnapshot.current,
     }).then((result) => {
       if (cancelled) return;
       if (result?.ok) {
@@ -293,6 +296,7 @@ export function AppProvider({ children }) {
         cloudSaveGeneration.current += 1;
         localChangeVersion.current = 0;
         localDirtySinceCloud.current = false;
+        cloudBaseSnapshot.current = null;
         resumeSyncBusy.current = false;
         imageMigrationStarted.current = false;
         intervalsAutoSyncStarted.current = false;
@@ -352,6 +356,7 @@ export function AppProvider({ children }) {
 
         let hydratedState;
         let effectiveUpdatedAt = cloud?.updated_at || null;
+        let effectiveBaseSnapshot = cloud?.app_data || null;
         let hydrationConflict = false;
         const cloudHasData = Boolean(cloud?.app_data && Object.keys(cloud.app_data).length > 0);
 
@@ -364,15 +369,29 @@ export function AppProvider({ children }) {
 
           if (samePayload) {
             hydratedState = withAccountReviewTrackingStart(mergeState(local, remoteSnapshot), session.user.created_at);
+            effectiveBaseSnapshot = remoteSnapshot;
           } else if (basedOnCurrentCloud) {
             const saved = await saveCloudState(userId, localSnapshot, { expectedUpdatedAt: cloud.updated_at });
             if (cancelled || sessionUserIdRef.current !== userId) return;
             hydratedState = withAccountReviewTrackingStart(local, session.user.created_at);
             effectiveUpdatedAt = saved.updated_at;
+            effectiveBaseSnapshot = localSnapshot;
             setCalendarToken(saved.calendar_token);
+          } else if (durable?.baseCloudData) {
+            const merged = mergeCloudStates(durable.baseCloudData, localSnapshot, remoteSnapshot);
+            if (merged.clean) {
+              const saved = await saveCloudState(userId, merged.value, { expectedUpdatedAt: cloud.updated_at });
+              if (cancelled || sessionUserIdRef.current !== userId) return;
+              hydratedState = withAccountReviewTrackingStart(mergeState(defaultState, merged.value), session.user.created_at);
+              effectiveUpdatedAt = saved.updated_at;
+              effectiveBaseSnapshot = merged.value;
+              setCalendarToken(saved.calendar_token);
+            } else {
+              hydratedState = withAccountReviewTrackingStart(local, session.user.created_at);
+              hydrationConflict = true;
+              effectiveBaseSnapshot = durable.baseCloudData;
+            }
           } else {
-            // Both sides changed while the handheld was offline/asleep. Keep the
-            // local state visible and require an explicit conflict decision.
             hydratedState = withAccountReviewTrackingStart(local, session.user.created_at);
             hydrationConflict = true;
           }
@@ -381,12 +400,14 @@ export function AppProvider({ children }) {
             mergeState(local, cloud.app_data),
             session.user.created_at,
           );
+          effectiveBaseSnapshot = cloud.app_data;
         } else {
           hydratedState = withAccountReviewTrackingStart(local, session.user.created_at);
           const snapshot = stateForCloud(hydratedState);
           const saved = await saveCloudState(userId, snapshot);
           if (cancelled || sessionUserIdRef.current !== userId) return;
           effectiveUpdatedAt = saved.updated_at;
+          effectiveBaseSnapshot = snapshot;
           setCalendarToken(saved.calendar_token);
         }
 
@@ -395,6 +416,7 @@ export function AppProvider({ children }) {
         }
         setCloudUpdatedAt(effectiveUpdatedAt);
         cloudUpdatedAtRef.current = effectiveUpdatedAt;
+        cloudBaseSnapshot.current = effectiveBaseSnapshot;
         if (cloudHasData) flushQueuedImageDeletions(userId, cloud.app_data).catch((error) => console.warn("Image cleanup postponed", error));
 
         skipNextCloudSave.current = true;
@@ -423,6 +445,7 @@ export function AppProvider({ children }) {
           await saveDurableState(hydratedState, userId, {
             dirty: hydrationConflict,
             baseCloudUpdatedAt: effectiveUpdatedAt,
+            baseCloudData: effectiveBaseSnapshot,
           });
         } catch (error) {
           console.warn("IndexedDB hydration save failed", error);
@@ -445,6 +468,7 @@ export function AppProvider({ children }) {
             await saveDurableState(local, userId, {
               dirty: true,
               baseCloudUpdatedAt: durable?.baseCloudUpdatedAt || cloudUpdatedAtRef.current,
+              baseCloudData: durable?.baseCloudData || cloudBaseSnapshot.current,
             });
           } catch (durableError) {
             console.warn("Offline durable save failed", durableError);
@@ -497,9 +521,10 @@ export function AppProvider({ children }) {
           setCalendarToken(saved.calendar_token);
           setCloudUpdatedAt(saved.updated_at);
           cloudUpdatedAtRef.current = saved.updated_at;
+          cloudBaseSnapshot.current = snapshot;
           if (localChangeVersion.current === changeVersion) {
             localDirtySinceCloud.current = false;
-            saveDurableState(snapshot, userId, { dirty: false, baseCloudUpdatedAt: saved.updated_at })
+            saveDurableState(snapshot, userId, { dirty: false, baseCloudUpdatedAt: saved.updated_at, baseCloudData: snapshot })
               .catch((error) => console.warn("IndexedDB sync marker failed", error));
           }
           setCloudStatus(localDirtySinceCloud.current ? "pending" : "synced");
@@ -534,7 +559,7 @@ export function AppProvider({ children }) {
         return;
       }
       resumeSyncBusy.current = true;
-      const generation = ++cloudSaveGeneration.current;
+      const generation = cloudSaveGeneration.current;
       setCloudStatus("reconciling");
       setCloudError("");
       try {
@@ -549,9 +574,37 @@ export function AppProvider({ children }) {
         const samePayload = stableCloudSignature(localSnapshot) === stableCloudSignature(remoteSnapshot);
 
         if (remoteChanged && localDirty && !samePayload) {
-          cloudConflict.current = true;
-          setCloudStatus("conflict");
-          setCloudError("Cloud und dieses Gerät wurden beide geändert. Lokal bleibt alles erhalten; bitte in Settings entscheiden.");
+          const baseSnapshot = cloudBaseSnapshot.current;
+          const merged = baseSnapshot ? mergeCloudStates(baseSnapshot, localSnapshot, remoteSnapshot) : null;
+          if (!merged?.clean) {
+            cloudConflict.current = true;
+            setCloudStatus("conflict");
+            const conflictHint = merged?.conflicts?.length ? ` Betroffen: ${merged.conflicts.slice(0, 3).join(", ")}.` : "";
+            setCloudError(`Dasselbe Objekt wurde auf zwei Geräten unterschiedlich geändert.${conflictHint} Lokal bleibt alles erhalten.`);
+            return;
+          }
+
+          const changeVersion = localChangeVersion.current;
+          const saved = await saveCloudState(userId, merged.value, { expectedUpdatedAt: remoteUpdatedAt });
+          if (!active || generation !== cloudSaveGeneration.current) return;
+          setCalendarToken(saved.calendar_token);
+          setCloudUpdatedAt(saved.updated_at);
+          cloudUpdatedAtRef.current = saved.updated_at;
+          cloudBaseSnapshot.current = merged.value;
+
+          if (localChangeVersion.current === changeVersion) {
+            skipNextCloudSave.current = true;
+            const hydrated = withAccountReviewTrackingStart(mergeState(defaultState, merged.value), session?.user?.created_at);
+            setState(hydrated);
+            localDirtySinceCloud.current = false;
+            saveDurableState(hydrated, userId, { dirty: false, baseCloudUpdatedAt: saved.updated_at, baseCloudData: merged.value })
+              .catch((error) => console.warn("IndexedDB merge marker failed", error));
+            setCloudStatus("synced");
+          } else {
+            localDirtySinceCloud.current = true;
+            setCloudStatus("pending");
+            setCloudError("Cloud-Änderungen wurden zusammengeführt; neuere lokale Änderungen werden noch synchronisiert.");
+          }
           return;
         }
 
@@ -562,8 +615,9 @@ export function AppProvider({ children }) {
           setCalendarToken(cloud.calendar_token);
           setCloudUpdatedAt(remoteUpdatedAt);
           cloudUpdatedAtRef.current = remoteUpdatedAt;
+          cloudBaseSnapshot.current = remoteSnapshot;
           localDirtySinceCloud.current = false;
-          saveDurableState(hydrated, userId, { dirty: false, baseCloudUpdatedAt: remoteUpdatedAt })
+          saveDurableState(hydrated, userId, { dirty: false, baseCloudUpdatedAt: remoteUpdatedAt, baseCloudData: remoteSnapshot })
             .catch((error) => console.warn("IndexedDB sync marker failed", error));
           setCloudStatus("synced");
           return;
@@ -573,8 +627,9 @@ export function AppProvider({ children }) {
           setCalendarToken(cloud?.calendar_token || null);
           setCloudUpdatedAt(remoteUpdatedAt);
           cloudUpdatedAtRef.current = remoteUpdatedAt;
+          cloudBaseSnapshot.current = remoteSnapshot;
           localDirtySinceCloud.current = false;
-          saveDurableState(localSnapshot, userId, { dirty: false, baseCloudUpdatedAt: remoteUpdatedAt })
+          saveDurableState(localSnapshot, userId, { dirty: false, baseCloudUpdatedAt: remoteUpdatedAt, baseCloudData: remoteSnapshot })
             .catch((error) => console.warn("IndexedDB sync marker failed", error));
           setCloudStatus("synced");
           return;
@@ -587,9 +642,10 @@ export function AppProvider({ children }) {
           setCalendarToken(saved.calendar_token);
           setCloudUpdatedAt(saved.updated_at);
           cloudUpdatedAtRef.current = saved.updated_at;
+          cloudBaseSnapshot.current = localSnapshot;
           if (localChangeVersion.current === changeVersion) {
             localDirtySinceCloud.current = false;
-            saveDurableState(localSnapshot, userId, { dirty: false, baseCloudUpdatedAt: saved.updated_at })
+            saveDurableState(localSnapshot, userId, { dirty: false, baseCloudUpdatedAt: saved.updated_at, baseCloudData: localSnapshot })
               .catch((error) => console.warn("IndexedDB sync marker failed", error));
           }
           setCloudStatus(localDirtySinceCloud.current ? "pending" : "synced");
@@ -598,6 +654,7 @@ export function AppProvider({ children }) {
 
         setCloudUpdatedAt(remoteUpdatedAt);
         cloudUpdatedAtRef.current = remoteUpdatedAt;
+        cloudBaseSnapshot.current = remoteSnapshot;
         setCloudStatus("synced");
       } catch (error) {
         if (!active || generation !== cloudSaveGeneration.current) return;
@@ -616,11 +673,11 @@ export function AppProvider({ children }) {
 
     const onVisibilityChange = () => {
       if (document.visibilityState === "hidden") {
-        cloudSaveGeneration.current += 1;
         if (localDirtySinceCloud.current) {
           saveDurableState(stateRef.current, userId, {
             dirty: true,
             baseCloudUpdatedAt: cloudUpdatedAtRef.current,
+            baseCloudData: cloudBaseSnapshot.current,
           }).catch((error) => console.warn("Background IndexedDB save failed", error));
         }
         if (localDirtySinceCloud.current && !cloudConflict.current) {
@@ -634,7 +691,6 @@ export function AppProvider({ children }) {
     const onPageShow = () => void reconcileAfterResume();
     const onOnline = () => void reconcileAfterResume();
     const onOffline = () => {
-      cloudSaveGeneration.current += 1;
       setCloudStatus("pending");
       setCloudError("Offline · Änderungen sind lokal gesichert.");
     };
@@ -766,11 +822,12 @@ export function AppProvider({ children }) {
       setCalendarToken(saved.calendar_token);
       setCloudUpdatedAt(saved.updated_at);
       cloudUpdatedAtRef.current = saved.updated_at;
+      cloudBaseSnapshot.current = stateForCloud(state);
       cloudConflict.current = false;
       cloudHydrated.current = true;
       localDirtySinceCloud.current = false;
       cloudSaveGeneration.current += 1;
-      saveDurableState(stateForCloud(state), session.user.id, { dirty: false, baseCloudUpdatedAt: saved.updated_at })
+      saveDurableState(stateForCloud(state), session.user.id, { dirty: false, baseCloudUpdatedAt: saved.updated_at, baseCloudData: stateForCloud(state) })
         .catch((error) => console.warn("IndexedDB sync marker failed", error));
       setCloudStatus("synced");
       flushQueuedImageDeletions(session.user.id, stateForCloud(state)).catch((error) => console.warn("Image cleanup postponed", error));
@@ -801,7 +858,8 @@ export function AppProvider({ children }) {
         setCalendarToken(cloud.calendar_token);
         setCloudUpdatedAt(cloud.updated_at);
         cloudUpdatedAtRef.current = cloud.updated_at;
-        saveDurableState(reloaded, session.user.id, { dirty: false, baseCloudUpdatedAt: cloud.updated_at })
+        cloudBaseSnapshot.current = cloud.app_data;
+        saveDurableState(reloaded, session.user.id, { dirty: false, baseCloudUpdatedAt: cloud.updated_at, baseCloudData: cloud.app_data })
           .catch((error) => console.warn("IndexedDB sync marker failed", error));
         flushQueuedImageDeletions(session.user.id, cloud.app_data).catch((error) => console.warn("Image cleanup postponed", error));
       }

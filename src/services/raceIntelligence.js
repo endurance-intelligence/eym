@@ -1,3 +1,12 @@
+import { hydration as hydrationAssessment } from "./insights.js";
+import {
+  PIT_CREW_DEFAULT_GEL_PRIORITY,
+  normalizeGelPriority,
+  pitPortion,
+  pitProduct,
+  recommendPitCrew,
+} from "./pitCrewCoach.js";
+
 const RESOURCE_LABELS = {
   water: "Wasser",
   iso: "Iso / Sportdrink",
@@ -171,17 +180,30 @@ export function raceFuelEvidence(state = {}) {
 }
 
 export function raceHydrationEvidence(state = {}) {
-  const reviews = Object.values(state.reviews || {});
-  const values = reviews.map((review) => {
+  const activities = new Map((state.activities || []).map((activity) => [String(activity.id), activity]));
+  const calibrated = [];
+  const observed = [];
+
+  Object.entries(state.reviews || {}).forEach(([activityId, review]) => {
+    const activity = activities.get(String(activityId));
+    if (activity) {
+      const result = hydrationAssessment(activity, review);
+      if (result?.reliable && result.recommendedLow && result.recommendedHigh) {
+        calibrated.push((result.recommendedLow + result.recommendedHigh) / 2);
+      }
+      if (result?.duringRate >= 200 && result.duringRate <= 1500) observed.push(result.duringRate);
+      return;
+    }
     const explicit = positive(review.hydrationMlPerHour || review.drinkMlPerHour);
-    if (explicit) return explicit;
-    const drink = positive(review.drinkMl || review.nutritionFluidTotal);
-    const hours = reviewHours(review);
-    return drink && hours > 0 ? drink / hours : 0;
-  }).filter((value) => value >= 200 && value <= 1500);
+    if (explicit >= 200 && explicit <= 1500) observed.push(explicit);
+  });
+
+  const values = calibrated.length ? calibrated : observed;
   return {
-    count: values.length,
+    count: calibrated.length,
+    observedCount: observed.length,
     median: median(values),
+    source: calibrated.length ? "sweat-calibration" : observed.length ? "observed-intake" : "default",
   };
 }
 
@@ -235,9 +257,11 @@ export function raceFuelTargets({ event = {}, state = {}, temperatureC = null } 
       low: hydrationLow,
       high: hydrationHigh,
       label: `${hydrationLow}–${hydrationHigh} ml/h`,
-      reason: hydration.count
-        ? `Orientierung aus ${hydration.count} dokumentierten Trink-Reviews; Wetter und Durst dürfen den Wert verschieben.`
-        : "Startkorridor ohne persönliche Schweißmessung. Kein Trinkzwang pro Runde.",
+      reason: hydration.source === "sweat-calibration"
+        ? `Orientierung aus ${hydration.count} belastbaren Schweißraten-Messung${hydration.count === 1 ? "" : "en"}; Wetter und Durst dürfen den Wert verschieben.`
+        : hydration.source === "observed-intake"
+          ? `Vorläufig aus ${hydration.observedCount} dokumentierten Trink-Erfahrungen abgeleitet; noch keine belastbare Schweißraten-Kalibrierung.`
+          : "Startkorridor ohne persönliche Schweißmessung. Kein Trinkzwang pro Runde.",
       evidence: hydration,
     },
   };
@@ -287,6 +311,7 @@ export function defaultRaceSupplyPlan() {
     mode: "hybrid",
     organizerResources: ["water", "iso", "cola", "banana", "savory"],
     organizerGelApproved: false,
+    gelPriority: [...PIT_CREW_DEFAULT_GEL_PRIORITY],
     aidStations: [],
     note: "",
   };
@@ -303,6 +328,7 @@ export function normalizeRaceSupplyPlan(value = {}) {
     mode: ["own", "vp", "hybrid"].includes(value.mode) ? value.mode : defaults.mode,
     organizerResources: resources,
     organizerGelApproved: Boolean(value.organizerGelApproved),
+    gelPriority: normalizeGelPriority(value.gelPriority),
     aidStations: Array.isArray(value.aidStations)
       ? value.aidStations.map((station, index) => ({
           id: String(station.id || `vp-${index + 1}`),
@@ -313,6 +339,94 @@ export function normalizeRaceSupplyPlan(value = {}) {
         })).sort((a, b) => a.km - b.km)
       : [],
   };
+}
+
+
+export function raceGelOptions() {
+  return normalizeGelPriority(PIT_CREW_DEFAULT_GEL_PRIORITY).map((id) => ({
+    id,
+    label: pitProduct(id)?.label || id,
+  }));
+}
+
+function weatherFlagsForRace(temperatureC) {
+  const temperature = Number(temperatureC);
+  if (!Number.isFinite(temperature)) return [];
+  if (temperature >= 24) return ["hot"];
+  if (temperature <= 7) return ["cold"];
+  return [];
+}
+
+function closestDrinkPortion(productId, targetMl) {
+  const product = pitProduct(productId);
+  const portions = (product?.portions || []).filter((portion) => Number(portion.fluidMl || 0) > 0);
+  if (!portions.length || !(targetMl > 0)) return null;
+  return [...portions].sort((left, right) => Math.abs(Number(left.fluidMl) - targetMl) - Math.abs(Number(right.fluidMl) - targetMl))[0];
+}
+
+function adaptPitDrinkToRace(selection = [], targetMl = 0) {
+  let adapted = false;
+  return selection.map((entry) => {
+    const product = pitProduct(entry.productId);
+    const current = pitPortion(entry.productId, entry.portionId);
+    if (adapted || product?.category !== "drink" || (entry.timing || "now") !== "carry" || !(Number(current?.fluidMl || 0) > 0)) return entry;
+    const portion = closestDrinkPortion(entry.productId, targetMl);
+    if (!portion) return entry;
+    adapted = true;
+    return { ...entry, portionId: String(portion.id) };
+  });
+}
+
+export function buildRaceFuelRotation({ event = {}, state = {}, supply = {}, temperatureC = null } = {}) {
+  const normalizedSupply = normalizeRaceSupplyPlan(supply);
+  const rounds = raceRoundCount(event);
+  if (!rounds || !["loop", "backyard"].includes(raceFormat(event))) return [];
+  const targets = raceFuelTargets({ event, state, temperatureC });
+  const hours = raceDurationHours(event);
+  const format = raceFormat(event);
+  const loopIntervalMinutes = positive(event.loopIntervalMinutes || event.profile?.loopIntervalMinutes) || 60;
+  const roundHours = hours > 0 ? hours / rounds : format === "backyard" ? loopIntervalMinutes / 60 : 1;
+  const fluidMid = (targets.hydration.low + targets.hydration.high) / 2;
+  const fluidPerRound = clamp(Math.round((fluidMid * roundHours) / 50) * 50, 150, 750);
+  const weather = weatherFlagsForRace(temperatureC);
+  const history = [];
+  const rows = [];
+
+  for (let round = 1; round <= rounds; round += 1) {
+    const recommendation = recommendPitCrew({
+      round,
+      minutesToStart: 10,
+      history,
+      weather,
+      gelPriority: normalizedSupply.gelPriority,
+    });
+    const selection = adaptPitDrinkToRace(recommendation.selection, fluidPerRound);
+    const items = selection.map((entry) => {
+      const product = pitProduct(entry.productId);
+      const portion = pitPortion(entry.productId, entry.portionId);
+      return {
+        ...entry,
+        label: product?.label || entry.productId,
+        category: product?.category || "fuel",
+        portionLabel: portion?.label || "",
+        carbs: Number(portion?.carbs || 0) * Number(entry.quantity || 1),
+        fluidMl: Number(portion?.fluidMl || 0) * Number(entry.quantity || 1),
+        sodiumMg: Number(portion?.sodiumMg || 0) * Number(entry.quantity || 1),
+      };
+    });
+    const carbs = Math.round(items.reduce((sum, item) => sum + item.carbs, 0));
+    const fluidMl = Math.round(items.reduce((sum, item) => sum + item.fluidMl, 0));
+    rows.push({
+      round,
+      items,
+      carbs,
+      fluidMl,
+      why: recommendation.why,
+      gelIds: items.filter((item) => item.category === "gel").map((item) => item.productId),
+    });
+    history.push({ round, selection, confirmedAt: `plan-${round}` });
+  }
+  return rows;
 }
 
 export function resourceLabel(key) {

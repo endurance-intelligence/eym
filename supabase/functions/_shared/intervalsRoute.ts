@@ -4,6 +4,7 @@ export type RoutePoint = {
   distanceKm?: number;
   altitude?: number;
   speedMps?: number;
+  heartRate?: number;
   elapsedSeconds?: number;
 };
 
@@ -91,6 +92,7 @@ export function intervalsRouteSamples(payload: unknown): RoutePoint[] {
   const distance = streamData(payload, ["distance"]);
   const altitude = streamData(payload, ["altitude", "elevation"]);
   const speed = streamData(payload, ["velocity_smooth", "velocity", "speed"]);
+  const heartRate = streamData(payload, ["heartrate", "heart_rate", "hr"]);
   const elapsed = streamData(payload, ["time"]);
 
   return coordinates.flatMap((coordinate, index) => {
@@ -98,12 +100,14 @@ export function intervalsRouteSamples(payload: unknown): RoutePoint[] {
     const distanceMeters = finiteNumber(distance[index], 0);
     const altitudeMeters = finiteNumber(altitude[index]);
     const speedMetersPerSecond = finiteNumber(speed[index], 0);
+    const heartRateBpm = finiteNumber(heartRate[index], 30);
     const elapsedSeconds = finiteNumber(elapsed[index], 0);
     return [{
       ...coordinate,
       ...(distanceMeters == null ? {} : { distanceKm: rounded(distanceMeters / 1000, 4) }),
       ...(altitudeMeters == null ? {} : { altitude: rounded(altitudeMeters, 1) }),
       ...(speedMetersPerSecond == null ? {} : { speedMps: rounded(speedMetersPerSecond, 3) }),
+      ...(heartRateBpm == null ? {} : { heartRate: Math.round(heartRateBpm) }),
       ...(elapsedSeconds == null ? {} : { elapsedSeconds: Math.round(elapsedSeconds) }),
     }];
   });
@@ -134,6 +138,7 @@ export function intervalsRoutePayload(payload: unknown, maximumPoints = 900) {
       distance: fullRoute.some((point) => point.distanceKm != null),
       altitude: fullRoute.some((point) => point.altitude != null),
       speed: fullRoute.some((point) => point.speedMps != null),
+      heartRate: fullRoute.some((point) => point.heartRate != null),
       time: fullRoute.some((point) => point.elapsedSeconds != null),
     },
   };

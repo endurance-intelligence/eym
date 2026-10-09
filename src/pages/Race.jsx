@@ -8,6 +8,7 @@ import { useApp } from "../context/AppContext";
 import {
   aidStationSegments,
   buildRacePhases,
+  buildRaceFuelRotation,
   compactNumber,
   defaultRaceSupplyPlan,
   normalizeRaceSupplyPlan,
@@ -17,6 +18,7 @@ import {
   raceEventsFromState,
   raceFormatLabel,
   raceFuelTargets,
+  raceGelOptions,
   raceLoopDistance,
   raceRoundCount,
   resourceLabel,
@@ -55,6 +57,8 @@ function RaceNutrition({ event }) {
   );
   const segments = aidStationSegments(event, supply, state, temperatureC);
   const resources = resourceOptions();
+  const gelOptions = useMemo(() => raceGelOptions(), []);
+  const fuelRotation = buildRaceFuelRotation({ event, state, supply, temperatureC });
 
   useEffect(() => {
     const confidence = raceForecastConfidence(event?.date);
@@ -96,6 +100,15 @@ function RaceNutrition({ event }) {
       ? supply.organizerResources.filter((item) => item !== resource)
       : [...supply.organizerResources, resource];
     updateSupply({ organizerResources: next });
+  }
+
+  function moveGelPriority(productId, direction) {
+    const current = [...supply.gelPriority];
+    const index = current.indexOf(productId);
+    const nextIndex = index + direction;
+    if (index < 0 || nextIndex < 0 || nextIndex >= current.length) return;
+    [current[index], current[nextIndex]] = [current[nextIndex], current[index]];
+    updateSupply({ gelPriority: current });
   }
 
   function addStation() {
@@ -202,6 +215,31 @@ function RaceNutrition({ event }) {
         </div>
       </Card>
 
+      <Card className="wide race-fuel-priority-card">
+        <div className="race-intel-heading">
+          <div><p className="eyebrow">Persönliche Fuel-Prio</p><h2>Gel ist ein Werkzeug – nicht der ganze Ernährungsplan.</h2></div>
+          <span>GEL-PRIO</span>
+        </div>
+        <div className="race-fuel-priority-layout">
+          <div className="race-gel-priority-list">
+            {supply.gelPriority.map((productId, index) => {
+              const option = gelOptions.find((item) => item.id === productId);
+              return <article key={productId}>
+                <b>#{index + 1}</b>
+                <span><strong>{option?.label || productId}</strong><small>Wenn ein Gel-Slot sinnvoll ist, startet EI hier – Verträglichkeit und jüngste Nutzung bleiben Teil der Entscheidung.</small></span>
+                <div><button type="button" onClick={() => moveGelPriority(productId, -1)} disabled={index === 0} aria-label={`${option?.label || productId} nach oben`}>↑</button><button type="button" onClick={() => moveGelPriority(productId, 1)} disabled={index === supply.gelPriority.length - 1} aria-label={`${option?.label || productId} nach unten`}>↓</button></div>
+              </article>;
+            })}
+          </div>
+          <aside className="race-drink-basis">
+            <small>DRINK-BASIS</small>
+            <strong>Elektrolyt-/Carb-Drink zählt mit.</strong>
+            <p>Hydrate & Perform, Long Energy oder eine andere erprobte Drink-Quelle wird als Flüssigkeit <b>und</b> Kohlenhydratquelle gerechnet. Deshalb erzeugt EI nicht zusätzlich für jeden Slot ein Gel.</p>
+            <span>{targets.hydration.label} · Orientierung, keine Trinkpflicht pro Runde</span>
+          </aside>
+        </div>
+      </Card>
+
       <Card className="wide">
         <div className="race-intel-heading">
           <div><p className="eyebrow">Race Blocks</p><h2>Nicht jede Runde bekommt denselben Plan.</h2></div>
@@ -220,6 +258,27 @@ function RaceNutrition({ event }) {
           ))}
         </div>
       </Card>
+
+      {fuelRotation.length > 0 && <Card className="wide race-fuel-rotation-card">
+        <div className="race-intel-heading">
+          <div><p className="eyebrow">Pit-Crew-Logik</p><h2>Rotation statt Gel-Tapete.</h2></div>
+          <span>{fuelRotation.length} RUNDEN</span>
+        </div>
+        <p className="race-intel-note">Früh echte Nahrung und Drink nutzen, Gel-Slots gezielt nach deiner Prio setzen und Geschmack/Elektrolyte rotieren. Wetter und persönlicher Trinkkorridor verändern die Menge – nicht jede Runde bekommt stumpf dieselben 500 ml.</p>
+        <div className="race-fuel-rotation">
+          {fuelRotation.map((row) => <article key={row.round}>
+            <header><b>Runde {row.round}</b><span>{row.carbs} g KH · {row.fluidMl} ml</span></header>
+            <div className="race-fuel-rotation-items">
+              {row.items.map((item, index) => <span className={`${item.category} ${item.timing || "now"}`} key={`${item.productId}-${index}`}>
+                <small>{(item.timing || "now") === "carry" ? "AUF DIE RUNDE" : "IM PIT"}</small>
+                <strong>{item.label}</strong>
+                <em>{item.portionLabel}</em>
+              </span>)}
+            </div>
+            <p>{row.why}</p>
+          </article>)}
+        </div>
+      </Card>}
 
       <Card className="wide">
         <div className="race-intel-heading">
@@ -264,7 +323,7 @@ function RaceNutrition({ event }) {
       </Card>
 
       <Card className="wide race-intel-footnote">
-        <div><strong>Fuel Lab bleibt das Labor.</strong><span>Produkte, Verträglichkeit und Trainingsreviews werden dort gepflegt. Race Intelligence nutzt diese Evidenz für den konkreten Renntag.</span></div>
+        <div><strong>Fuel Lab bleibt das Labor.</strong><span>Produkte, Bestand und Verträglichkeit werden dort gepflegt. Die konkrete Rennplanung passiert ausschließlich hier in Race.</span></div>
         <Link to="/fuel">Fuel Lab öffnen →</Link>
       </Card>
     </div>
@@ -294,7 +353,7 @@ export default function Race() {
         )}
       </div>
 
-      {activeTab === "setup" && <Card className="wide race-setup-shell"><RacePrepPlanner /></Card>}
+      {activeTab === "setup" && <Card className="wide race-setup-shell"><RacePrepPlanner setupOnly /></Card>}
 
       {activeTab === "strategy" && <RaceCoach />}
 

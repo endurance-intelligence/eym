@@ -3,43 +3,61 @@ import assert from "node:assert/strict";
 import { hydration } from "../src/services/insights.js";
 import { fuelRecommendationForWorkout } from "../src/services/fuelPlanner.js";
 
-test("Hydration V2 keeps PRE and POST separate from DURING sweat-rate math", () => {
+test("Hydration uses Fueling Review fluid as DURING source and weight only for optional sweat calibration", () => {
   const result = hydration(
     { duration: 60, weather: { temperature: 18 } },
     {
       weightBefore: 80,
       weightAfter: 79.5,
-      drinkBeforeMl: 500,
-      drinkMl: 300,
-      drinkAfterMl: 300,
-      urineMl: 0,
+      nutritionFluidTotal: 300,
+      hydrationExtraMl: 0,
       hydrationThirst: "normal",
       rpe: 5,
     },
   );
 
   assert.equal(result.measured, true);
-  assert.equal(result.before, 500);
+  assert.equal(result.reliable, true);
+  assert.equal(result.before, 0);
   assert.equal(result.during, 300);
-  assert.equal(result.after, 300);
+  assert.equal(result.after, 0);
   assert.equal(result.rate, 800);
   assert.equal(result.duringRate, 300);
-  assert.equal(result.deficit, 500);
-  assert.equal(result.recoveryGap, 200);
   assert.equal(result.recommendedLow, 450);
   assert.equal(result.recommendedHigh, 650);
 });
 
-test("Hydration V2 estimates conservatively when no sweat-rate measurement exists", () => {
+test("toilet stop invalidates sweat calibration without losing observed drinking", () => {
+  const result = hydration(
+    { duration: 90, weather: { temperature: 18 } },
+    {
+      weightBefore: 80,
+      weightAfter: 79.2,
+      nutritionFluidTotal: 450,
+      hydrationToiletDuring: true,
+      hydrationThirst: "normal",
+      rpe: 5,
+    },
+  );
+
+  assert.equal(result.measured, false);
+  assert.equal(result.reliable, false);
+  assert.equal(result.during, 450);
+  assert.equal(result.recommendedLow, null);
+  assert.match(result.reason, /Toilettenpause/);
+});
+
+test("Hydration stores an experience but no personal corridor without sweat-rate measurement", () => {
   const result = hydration(
     { duration: 60, weather: { temperature: 15 } },
-    { drinkMl: 300, hydrationThirst: "normal", rpe: 5 },
+    { nutritionFluidTotal: 300, hydrationThirst: "normal", rpe: 5 },
   );
 
   assert.equal(result.measured, false);
   assert.equal(result.rate, 460);
-  assert.equal(result.recommendedLow, 250);
-  assert.equal(result.recommendedHigh, 300);
+  assert.equal(result.during, 300);
+  assert.equal(result.recommendedLow, null);
+  assert.equal(result.recommendedHigh, null);
 });
 
 test("Fuel Planner reduces the generic three-hour long-run hydration target", () => {
@@ -64,7 +82,7 @@ test("Fuel Planner reduces the generic three-hour long-run hydration target", ()
   assert.equal(result.target.fluidTotal, 1200);
 });
 
-test("Fuel Planner uses the conservative end of a reliable personal hydration range as plan basis", () => {
+test("Fuel Planner uses a reliable 45-180 minute sweat calibration as personal plan basis", () => {
   const result = fuelRecommendationForWorkout({
     workout: {
       id: "race-personal-hydration",
@@ -81,8 +99,7 @@ test("Fuel Planner uses the conservative end of a reliable personal hydration ra
       "sweat-test": {
         weightBefore: 80,
         weightAfter: 78.8,
-        drinkMl: 600,
-        urineMl: 0,
+        nutritionFluidTotal: 600,
         hydrationThirst: "normal",
       },
     },

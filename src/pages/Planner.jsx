@@ -2988,7 +2988,7 @@ export default function Planner() {
                 const matched = matches.get(item.id) || (item.matchedActivityId ? activityById.get(item.matchedActivityId) : null);
                 const isCancelled = Boolean(item.plannedCancellation);
                 const passiveRecoveryDone = !isCancelled && isPassiveRecoveryWorkout(item) && item.date < todayKey;
-                const isMissed = !isCancelled && !passiveRecoveryDone && item.date < todayKey && !item.completed && !matched;
+                const isMissed = !isCancelled && !passiveRecoveryDone && !item.missedReason && item.date < todayKey && !item.completed && !matched;
                 const completed = Boolean(item.completed || matched || passiveRecoveryDone);
                 const linkedCompletion = Boolean(matched || item.matchedActivityId);
                 const reviewDestination = completed && matched && reviewKind(matched)
@@ -3020,7 +3020,7 @@ export default function Planner() {
                 ].filter(Boolean).join(" · ");
                 const compactStatus = completed
                   ? passiveRecoveryDone ? "Planmäßig" : "Erledigt"
-                  : isCancelled
+                  : (isCancelled || item.missedReason)
                     ? "Ausgefallen"
                     : isMissed
                       ? "Rückmeldung offen"
@@ -3117,7 +3117,7 @@ export default function Planner() {
         const isCancelled = Boolean(detailWorkout.plannedCancellation);
         const passiveRecoveryDone = !isCancelled && isPassiveRecoveryWorkout(detailWorkout) && detailWorkout.date < todayKey;
         const completed = Boolean(detailWorkout.completed || matched || passiveRecoveryDone);
-        const isMissed = !isCancelled && !passiveRecoveryDone && detailWorkout.date < todayKey && !completed;
+        const isMissed = !isCancelled && !passiveRecoveryDone && !detailWorkout.missedReason && detailWorkout.date < todayKey && !completed;
         const fuelRecommendation = fuelRecommendations.get(detailWorkout.id);
         const trackTemplate = trackWorkoutTemplateLabel(detailWorkout.structuredWorkout);
         const paceLabel = loopWorkoutPaceLabel(detailWorkout) || workoutPaceLabel(detailWorkout, { includeSource: true });

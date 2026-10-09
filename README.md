@@ -1,8 +1,20 @@
 # Endurance Intelligence
 
-Current app version: **4.2.1**
+Current app version: **4.2.2**
 
 **Eat your miles.**
+
+
+## Data Integrity, Coach & Race simplification · v4.2.2
+
+- Cloud synchronization now performs a three-way merge against the last known cloud snapshot. Independent edits are merged automatically; the conflict banner is reserved for genuine concurrent edits of the same value. Backgrounding the app no longer invalidates an in-flight successful save.
+- Missed-workout feedback is respected everywhere in the weekly planner, so an already reported cancelled Stabi/Mobility session no longer remains marked as “Rückmeldung offen”.
+- Fuel Lab is reduced to the product/tolerance laboratory. Race nutrition planning has one home under Race → Verpflegung & VP.
+- Race fueling uses the Pit-Crew product model, personal Gel priority and drink/electrolyte carbohydrate accounting. Loop plans rotate real food, drinks and targeted gel slots instead of repeating a gel every round or forcing a fixed bottle volume.
+- Workout reviews derive DURING fluid from the actual Fueling Review. PRE/POST drink, measured urine and the unused sweat-feeling selector are removed from the normal review. Thirst stays visible; pre/post body weight becomes an optional 45–180 minute sweat-rate calibration and a toilet stop invalidates that calibration.
+- Reliable sweat-rate calibrations feed future race-hydration corridors; ordinary observed drinking remains weaker supporting evidence.
+- Intervals route streams now include heart rate. The interactive activity profile prioritizes heart rate over pace, keeps elevation as route context and synchronizes distance, time, elevation, HR and pace with the map. Redeploy the `intervals` Supabase function after applying this release.
+- Coach review is reduced to one useful judgement, a short explanation and at most one actionable tip. Cardiac drift is detected only where it is meaningful and is interpreted together with heat, cold, elevation, wind, stop-and-go, daily form and personal comparison data. When a stable turning point is found, the Coach names its approximate distance/time instead of only reporting an average.
 
 
 ## Neo UI 2026 · v4.2.1

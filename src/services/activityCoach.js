@@ -105,19 +105,24 @@ function weatherAssessment(activity, weatherOverride) {
   const wind = weather.windSpeed;
   const factors = [];
   let score = 0;
-  const thermal = Math.max(numeric(temperature), numeric(feelsLike));
+  const rawTemperature = temperature != null ? Number(temperature) : null;
+  const rawFeelsLike = feelsLike != null ? Number(feelsLike) : null;
+  const thermal = Math.max(Number.isFinite(rawTemperature) ? rawTemperature : -99, Number.isFinite(rawFeelsLike) ? rawFeelsLike : -99);
+  const cold = thermal <= 5 && thermal > -50;
+  if (cold) { score += thermal <= 0 ? 2 : 1; factors.push(`${Math.round(rawTemperature ?? thermal)} °C Kälte`); }
   if (thermal >= 32) { score += 3; factors.push(`${Math.round(numeric(temperature || thermal))} °C`); }
   else if (thermal >= 28) { score += 2; factors.push(`${Math.round(numeric(temperature || thermal))} °C`); }
   else if (thermal >= 23) { score += 1; factors.push(`${Math.round(numeric(temperature || thermal))} °C`); }
   if (humidity != null && numeric(humidity) >= 75 && thermal >= 23) { score += 1; factors.push(`${Math.round(numeric(humidity))} % Luftfeuchte`); }
   if (wind != null && numeric(wind) >= 30) { score += 1; factors.push(`${Math.round(numeric(wind))} km/h Wind`); }
-  if (!factors.length) return { value: "Unauffällig", tone: "neutral", text: temperature != null ? `${Math.round(numeric(temperature))} °C ohne klaren Zusatzfaktor.` : "Keine ausreichenden Umgebungsdaten verfügbar.", score: 0, thermal };
+  if (!factors.length) return { value: "Unauffällig", tone: "neutral", text: temperature != null ? `${Math.round(numeric(temperature))} °C ohne klaren Zusatzfaktor.` : "Keine ausreichenden Umgebungsdaten verfügbar.", score: 0, thermal, cold: false };
   return {
     value: score >= 3 ? "Deutlich erschwert" : "Erschwert",
     tone: score >= 3 ? "watch" : "neutral",
     text: `${factors.join(" · ")} erhöhen die äußere Belastung.`,
     score,
     thermal,
+    cold,
   };
 }
 
@@ -433,21 +438,21 @@ function signalAssessment(load, review, heat) {
 function followUpAssessment(load, execution, recovery, review, heat) {
   const subjective = reviewState(review);
   if (review?.isEvent && review.eventPlanningImpact === "depleted") {
-    return { value: "Folgetage neu prüfen", tone: "watch", text: "Kein starrer Pausenblock: Die nächste Belastung folgt erst bei stabiler Erholung." };
+    return { value: "Erholung beobachten", tone: "watch", text: "Du meldest deutliche Erschöpfung; dieses Signal sollte vor dem nächsten harten Reiz erneut geprüft werden." };
   }
   if (review?.isEvent && review.eventPlanningImpact === "training" && stableEventReview(review)) {
-    return { value: "Plan bleibt bestehen", tone: "good", text: "Der Eventstatus allein verändert die Folgeplanung nicht." };
+    return { value: "Wie Training verarbeitet", tone: "good", text: "Der Wettkampfstatus allein ist kein negatives Signal; entscheidend bleibt deine tatsächliche Verarbeitung." };
   }
-  if (subjective.hasPain) return { value: "Belastung aussetzen", tone: "watch", text: "Schmerzen zuerst klären; kein automatisches Weiterziehen des Plans." };
-  if (subjective.poor) return { value: "Nächste Belastung prüfen", tone: "watch", text: "Vor der nächsten intensiven Einheit Beine und Energie erneut bewerten." };
+  if (subjective.hasPain) return { value: "Beschwerden zuerst", tone: "watch", text: "Schmerzen haben Vorrang vor Pace, Herzfrequenz und Belastungswert." };
+  if (subjective.poor) return { value: "Tagesform beobachten", tone: "watch", text: "Beine und Energie waren auffällig und sollten vor dem nächsten harten Reiz erneut eingeordnet werden." };
   if (heat?.status === "above_heat_expectation" && (subjective.rpe >= 7 || !subjective.strong)) {
-    return { value: "Schlüsselreiz prüfen", tone: "watch", text: "Die heutige HF liegt über deiner bisherigen Wärme-Erwartung; erst den nächsten lockeren Verlauf abwarten." };
+    return { value: "HF beobachten", tone: "watch", text: "Die heutige HF lag über deiner bisherigen Wärme-Erwartung; relevant ist, ob das bei einer vergleichbaren Einheit erneut passiert." };
   }
   if (execution.value === "Mehr als geplant" && ["Hoch", "Sehr hoch"].includes(load.value)) {
-    return { value: "Keinen Umfang nachholen", tone: "neutral", text: "Die Einheit war bereits größer als vorgesehen; zusätzliche Kilometer bringen aktuell keinen Vorteil." };
+    return { value: "Zusatzumfang unnötig", tone: "neutral", text: "Die Einheit war bereits größer als vorgesehen; zusätzliche Kilometer würden den Reiz nicht sinnvoller machen." };
   }
-  if (recovery.value === "36–48 h") return { value: "Regeneration priorisieren", tone: "neutral", text: "Der Reiz war groß; die nächsten Einheiten nur bei stabilen Signalen wie geplant absolvieren." };
-  return { value: "Plan bleibt bestehen", tone: "good", text: heat?.hot ? "Die Hitze wird als Kontext verbucht und löst allein keine Planänderung aus." : "Kein belastbares Signal verlangt aktuell eine Planänderung." };
+  if (recovery.value === "36–48 h") return { value: "Großer Reiz", tone: "neutral", text: "Die Einheit war belastend; die tatsächliche Erholung ist das nächste relevante Signal." };
+  return { value: "Kein Zusatzsignal", tone: "good", text: heat?.hot ? "Die Hitze ist in der Einordnung bereits berücksichtigt." : "Aus der Einheit ergibt sich kein zusätzlicher Warnhinweis." };
 }
 
 function contextSummary(activity, load, execution, environment, review, heat, followUp) {
@@ -489,7 +494,7 @@ function contextSummary(activity, load, execution, environment, review, heat, fo
     if (bits.length) sentences.push(`${bits.join(" · ")} ${subjective.strong ? "sprechen für eine stabile Verarbeitung." : subjective.poor ? "geben dem Coach ein Erholungssignal." : "werden ohne pauschale Wertung in den Verlauf eingeordnet."}`);
   }
 
-  sentences.push(followUp.value === "Plan bleibt bestehen" ? "Der Plan bleibt bestehen." : `${followUp.value}: ${followUp.text}`);
+  if (followUp.tone === "watch") sentences.push(`${followUp.value}: ${followUp.text}`);
   if (heat?.protectAerobicInterpretation && heat.status !== "above_heat_expectation") sentences.push("Dieser Hitzelauf wird nicht isoliert als aerober Formverlust gewertet.");
   return sentences.join(" ");
 }
@@ -603,6 +608,225 @@ function specificRunNarrative(state, activity, review, load, execution, heat) {
   };
 }
 
+
+function segmentAverage(points, startSecond, endSecond) {
+  const rows = points.filter((point) => (
+    Number.isFinite(point.elapsedSeconds)
+    && point.elapsedSeconds >= startSecond
+    && point.elapsedSeconds <= endSecond
+    && Number.isFinite(point.heartRate)
+    && point.heartRate >= 50
+    && point.heartRate <= 230
+    && Number.isFinite(point.speedMps)
+    && point.speedMps >= 1.1
+  ));
+  if (rows.length < 3) return null;
+  const average = (key) => rows.reduce((sum, point) => sum + Number(point[key] || 0), 0) / rows.length;
+  const first = rows[0];
+  const last = rows.at(-1);
+  const distanceMeters = Math.max(1, (Number(last.distanceKm || 0) - Number(first.distanceKm || 0)) * 1000);
+  const altitudes = rows.map((point) => Number(point.altitude)).filter(Number.isFinite);
+  const altitudeChange = Number.isFinite(first.altitude) && Number.isFinite(last.altitude) ? Number(last.altitude) - Number(first.altitude) : 0;
+  let elevationGain = 0;
+  for (let index = 1; index < rows.length; index += 1) {
+    const previous = Number(rows[index - 1].altitude);
+    const current = Number(rows[index].altitude);
+    if (Number.isFinite(previous) && Number.isFinite(current) && current > previous) elevationGain += current - previous;
+  }
+  return {
+    heartRate: average("heartRate"),
+    speedMps: average("speedMps"),
+    altitudeChange,
+    altitudeRange: altitudes.length ? Math.max(...altitudes) - Math.min(...altitudes) : 0,
+    elevationGainPerKm: elevationGain / Math.max(0.001, distanceMeters / 1000),
+    grade: altitudeChange / distanceMeters,
+    first,
+    last,
+    count: rows.length,
+  };
+}
+
+function routeAnchorLabel(point = {}) {
+  const distance = Number(point.distanceKm);
+  const seconds = Number(point.elapsedSeconds);
+  const parts = [];
+  if (Number.isFinite(distance) && distance > 0) parts.push(`km ${distance.toLocaleString("de-DE", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`);
+  if (Number.isFinite(seconds) && seconds > 0) {
+    const minutes = Math.round(seconds / 60);
+    parts.push(minutes >= 60 ? `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, "0")} h` : `${minutes} min`);
+  }
+  return parts.join(" / ");
+}
+
+export function cardiacDriftAssessment(points = [], activity = {}, weather = {}) {
+  const kind = runKindForNarrative(activity);
+  if (!isRunningActivity(activity) || ["quality", "race"].includes(kind)) {
+    return { available: false, relevant: false, status: "not-applicable", text: "Cardiac Drift ist für diese Einheit nicht das primäre Bewertungskriterium." };
+  }
+
+  const rows = (Array.isArray(points) ? points : [])
+    .map((point) => ({
+      ...point,
+      elapsedSeconds: Number(point.elapsedSeconds),
+      heartRate: Number(point.heartRate),
+      speedMps: Number(point.speedMps),
+      distanceKm: Number(point.distanceKm),
+      altitude: Number(point.altitude),
+    }))
+    .filter((point) => Number.isFinite(point.elapsedSeconds) && Number.isFinite(point.heartRate) && Number.isFinite(point.speedMps))
+    .filter((point) => point.heartRate >= 50 && point.heartRate <= 230 && point.speedMps >= 1.1)
+    .sort((left, right) => left.elapsedSeconds - right.elapsedSeconds);
+
+  if (rows.length < 20) return { available: false, relevant: true, status: "missing", text: "Für Cardiac Drift fehlen ausreichend synchronisierte HF-/Tempo-Daten." };
+  const totalSeconds = rows.at(-1).elapsedSeconds - rows[0].elapsedSeconds;
+  if (totalSeconds < 35 * 60) return { available: false, relevant: true, status: "short", text: "Die Einheit ist für eine belastbare Drift-Einordnung zu kurz." };
+
+  const start = rows[0].elapsedSeconds;
+  const baseline = segmentAverage(rows, start + totalSeconds * 0.18, start + totalSeconds * 0.43);
+  const late = segmentAverage(rows, start + totalSeconds * 0.62, start + totalSeconds * 0.9);
+  if (!baseline || !late || !(baseline.heartRate > 0) || !(late.heartRate > 0)) {
+    return { available: false, relevant: true, status: "missing", text: "Für Cardiac Drift fehlen ausreichend stabile Laufabschnitte." };
+  }
+
+  const firstEfficiency = baseline.speedMps / baseline.heartRate;
+  const lateEfficiency = late.speedMps / late.heartRate;
+  const driftPercent = firstEfficiency > 0 ? ((firstEfficiency - lateEfficiency) / firstEfficiency) * 100 : 0;
+  const thermal = Math.max(Number(weather?.temperature ?? activity?.temperature ?? -99), Number(weather?.feelsLike ?? -99));
+  const wind = Number(weather?.windSpeed || 0);
+  const contextThreshold = thermal >= 28 ? 8 : thermal >= 23 ? 6 : thermal <= 5 ? 6 : 5;
+  const speedTolerance = wind >= 25 ? 0.07 : 0.055;
+  const windowSeconds = 8 * 60;
+  const stepSeconds = 2 * 60;
+  let onset = null;
+
+  for (let second = start + totalSeconds * 0.42; second + windowSeconds <= start + totalSeconds * 0.94; second += stepSeconds) {
+    const window = segmentAverage(rows, second, second + windowSeconds);
+    if (!window) continue;
+    const hrDelta = window.heartRate - baseline.heartRate;
+    const speedDelta = (window.speedMps - baseline.speedMps) / baseline.speedMps;
+    const terrainComparable = Math.abs(window.grade - baseline.grade) <= 0.012
+      && Math.abs(window.elevationGainPerKm - baseline.elevationGainPerKm) <= 10
+      && window.altitudeRange <= Math.max(20, baseline.altitudeRange + 10);
+    const similarOutput = Math.abs(speedDelta) <= speedTolerance;
+    if (hrDelta >= contextThreshold && terrainComparable && similarOutput) {
+      onset = { ...window, hrDelta, speedDelta, point: window.first };
+      break;
+    }
+  }
+
+  const clear = Boolean(onset && driftPercent >= 3.5);
+  const mild = !clear && driftPercent >= 3 && late.heartRate - baseline.heartRate >= 3;
+  const heatContext = thermal >= 23;
+  const status = clear ? "clear" : mild ? "mild" : "stable";
+  const anchor = onset?.point ? {
+    distanceKm: Number.isFinite(onset.point.distanceKm) ? onset.point.distanceKm : null,
+    elapsedSeconds: Number.isFinite(onset.point.elapsedSeconds) ? onset.point.elapsedSeconds : null,
+    label: routeAnchorLabel(onset.point),
+  } : null;
+  const hrDelta = onset ? Math.round(onset.hrDelta) : Math.round(late.heartRate - baseline.heartRate);
+  const speedChangePercent = onset ? Math.round(onset.speedDelta * 100) : Math.round(((late.speedMps - baseline.speedMps) / baseline.speedMps) * 100);
+
+  let text = `Pace/HF blieben über die auswertbaren Abschnitte stabil; aerobe Entkopplung etwa ${Math.max(0, driftPercent).toFixed(1).replace(".", ",")} %.`;
+  if (clear) {
+    text = `Ab ${anchor?.label || "dem letzten Drittel"} stieg die HF über mehrere Minuten um etwa ${hrDelta} bpm, obwohl das Tempo nahezu gleich blieb. Aerobe Entkopplung etwa ${driftPercent.toFixed(1).replace(".", ",")} %.`;
+    if (heatContext) text += ` ${Math.round(thermal)} °C wurden dabei bereits als Wärmekontext berücksichtigt.`;
+  } else if (mild) {
+    text = `Im letzten Teil zeigt sich eine leichte aerobe Entkopplung von etwa ${driftPercent.toFixed(1).replace(".", ",")} %. Das ist ein Beobachtungssignal, noch kein klarer Knick.`;
+  } else if (heatContext && late.heartRate > baseline.heartRate + 2) {
+    text = `Die HF stieg im Verlauf leicht an, bleibt unter ${Math.round(thermal)} °C aber ohne klaren, pace-bereinigten Drift-Knick.`;
+  }
+
+  return {
+    available: true,
+    relevant: true,
+    status,
+    driftPercent: Number(driftPercent.toFixed(1)),
+    hrDelta,
+    speedChangePercent,
+    onset: anchor,
+    heatContext,
+    thermal: Number.isFinite(thermal) && thermal > -50 ? thermal : null,
+    text,
+  };
+}
+
+function coachPurpose(state, activity, relevance) {
+  const kind = runKindForNarrative(activity);
+  const goal = goalRequirements(state);
+  if (kind === "quality") return { title: "Guter Qualitätsreiz.", purpose: "Tempo und Belastungskontrolle" };
+  if (kind === "long") return { title: "Wichtiger Ausdauerreiz.", purpose: goal.discipline === "ultra" ? "Ermüdungsresistenz und Zeit auf den Beinen" : "Ausdauerrobustheit" };
+  if (kind === "race") return { title: "Starker Wettkampfreiz.", purpose: "Wettkampfspezifische Belastung" };
+  return { title: "Gute Einheit für deine aerobe Basis.", purpose: relevance?.text || "ruhige aerobe Entwicklung" };
+}
+
+function compactCoachMessage(state, activity, review, { load, execution, relevance, heat, drift, environment }) {
+  const kind = runKindForNarrative(activity);
+  const subjective = reviewState(review);
+  const purpose = coachPurpose(state, activity, relevance);
+  const goal = goalRequirements(state);
+  const goalSentence = goal.discipline === "ultra"
+    ? "Das zahlt direkt auf deinen Ultra-Aufbau ein."
+    : relevance?.tone === "good" ? relevance.text : "Der Reiz passt in den aktuellen Aufbau.";
+
+  if (subjective.hasPain) {
+    return {
+      tone: "watch",
+      title: "Die Beschwerden sind heute das wichtigste Signal.",
+      text: "Pace, Herzfrequenz und Belastungswert treten hinter deiner Rückmeldung zurück.",
+      tip: "Beobachte die betroffene Stelle vor der nächsten belastenden Laufeinheit erneut.",
+      anchor: null,
+    };
+  }
+
+  if (drift?.status === "clear" && ["easy", "long"].includes(kind)) {
+    const anchor = drift.onset?.label || "dem letzten Drittel";
+    const currentPace = paceSecondsPerKm(activity);
+    const paceStep = Math.max(5, Math.round((currentPace * 0.025) / 5) * 5);
+    return {
+      tone: "watch",
+      title: kind === "easy" ? "Heute etwas zu teuer für einen lockeren Lauf." : "Der lange Lauf wurde hinten deutlich teurer.",
+      text: `Bis etwa ${anchor} war die Belastung sauber kontrolliert. Danach stieg deine HF bei nahezu gleicher Pace und vergleichbarem Höhenprofil nachhaltig an${drift.heatContext ? " – trotz bereits berücksichtigtem Wärmekontext" : ""}.${subjective.poor ? " Deine schwächere Tagesform passt zu diesem Knick." : ""}`,
+      tip: `Heute wäre ab etwa ${anchor} der richtige Moment gewesen, ungefähr ${paceStep}–${paceStep + 5} s/km herauszunehmen und die HF wieder zu beruhigen.${kind === "long" ? " Bei einem Longrun dort zusätzlich Fueling und Flüssigkeit kurz gegenprüfen." : ""} Beim nächsten vergleichbaren Lauf auf genau dieses Signal reagieren.`,
+      anchor: drift.onset,
+    };
+  }
+
+  if (heat?.hot && ["heat_explains", "stable_despite_heat"].includes(heat.status)) {
+    return {
+      tone: "good",
+      title: "Unter den Bedingungen sauber kontrolliert.",
+      text: `${heat.text} ${goalSentence}`,
+      tip: null,
+      anchor: null,
+    };
+  }
+
+  if (subjective.poor) {
+    const bits = [subjective.legs ? `Beine ${subjective.legs}/10` : "", subjective.energy ? `Energie ${subjective.energy}/10` : "", subjective.rpe ? `RPE ${subjective.rpe}/10` : ""].filter(Boolean).join(" · ");
+    return {
+      tone: "watch",
+      title: "Der Reiz passt, die Tagesform war aber nicht ganz stabil.",
+      text: `${bits}. Das subjektive Signal ist heute wichtiger als ein unauffälliger Durchschnittswert.`,
+      tip: "Beim nächsten lockeren Lauf früh auf Beine, Energie und HF reagieren statt eine Pace zu erzwingen.",
+      anchor: null,
+    };
+  }
+
+  const stableDrift = drift?.status === "stable" && drift.available;
+  const executionText = execution?.value === "Im Planrahmen" ? "Umfang und Dauer lagen im vorgesehenen Rahmen." : execution?.text;
+  const internalText = stableDrift
+    ? "Herzfrequenz und Pace blieben über den auswertbaren Verlauf stabil."
+    : numeric(activity?.avgHr) > 0 ? "Herzfrequenz und Belastung lagen ohne klares Warnsignal im persönlichen Rahmen." : "Die verfügbaren Belastungssignale liegen im persönlichen Rahmen.";
+  const coldText = environment?.cold ? " Die Kälte wurde bei der Einordnung berücksichtigt." : "";
+  return {
+    tone: load?.tone === "watch" ? "neutral" : "good",
+    title: purpose.title,
+    text: `${executionText} ${internalText}${coldText} ${goalSentence}`.replace(/\s+/g, " ").trim(),
+    tip: drift?.status === "mild" ? "Im letzten Teil war eine leichte Entkopplung sichtbar. Beim nächsten ähnlichen Lauf darauf achten, ob sie früher oder stärker einsetzt." : null,
+    anchor: null,
+  };
+}
+
 function dataConfidence(activity, weather, heat) {
   const checks = [
     numeric(activity.durationSeconds || numeric(activity.duration) * 60) > 0,
@@ -621,7 +845,7 @@ function dataConfidence(activity, weather, heat) {
   return { value: "Eingeschränkt", tone: "watch", text: `Die Einschätzung basiert überwiegend auf Dauer, Distanz und Aktivitätstyp.${personalText}` };
 }
 
-export function activityCoachAssessment(state, activity, review = {}, weatherOverride = null) {
+export function activityCoachAssessment(state, activity, review = {}, weatherOverride = null, routePoints = []) {
   const weather = weatherOverride || activity.weather || null;
   const load = loadAssessment(state, activity);
   const execution = executionAssessment(state, activity);
@@ -638,6 +862,7 @@ export function activityCoachAssessment(state, activity, review = {}, weatherOve
     text: `${load.text}${environment.score > 0 ? ` · ${environment.value}` : ""}`,
   };
   const confidence = dataConfidence(activity, weather, heat);
+  const drift = cardiacDriftAssessment(routePoints, activity, weather || {});
   const athlete = athleteProfileAssessment(state, activityTimestamp(activity));
   const factors = [
     `${numeric(activity.distance).toFixed(1)} km · ${Math.round(durationMinutes(activity))} min`,
@@ -648,8 +873,10 @@ export function activityCoachAssessment(state, activity, review = {}, weatherOve
   if (weather?.temperature != null) factors.push(`${Math.round(numeric(weather.temperature))} °C${weather?.humidity != null ? ` · ${Math.round(numeric(weather.humidity))} % Feuchte` : ""}`);
   if (heat.baselineSamples) factors.push(`${heat.baselineSamples} ähnliche milde Läufe`);
   if (heat.heatPairs) factors.push(`Heat Response ${Math.round(heat.expectedHeatDelta) >= 0 ? "+" : ""}${Math.round(heat.expectedHeatDelta)} bpm · ${heat.heatPairs} Vergleichspaare`);
+  if (drift.available) factors.push(`Aerobe Entkopplung ${drift.driftPercent.toLocaleString("de-DE")} %${drift.onset?.label ? ` · Knick ab ${drift.onset.label}` : ""}`);
   factors.push(`Vergleich mit ${athlete.metrics.activeWeeks} aktiven Wochen`);
   const narrative = specificRunNarrative(state, activity, review, load, execution, heat);
+  const coachMessage = compactCoachMessage(state, activity, review, { load, execution, relevance, heat, drift, environment });
   return {
     generatedAt: new Date().toISOString(),
     load,
@@ -659,6 +886,8 @@ export function activityCoachAssessment(state, activity, review = {}, weatherOve
     recovery,
     relevance,
     heat,
+    drift,
+    coachMessage,
     stimulus,
     signal,
     followUp,

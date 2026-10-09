@@ -1,20 +1,21 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { fuelLabTabSearchParams, resolveFuelLabTab } from "../src/services/fuelLabTabs.js";
+import { FUEL_LAB_TABS, fuelLabTabSearchParams, resolveFuelLabTab } from "../src/services/fuelLabTabs.js";
 
-test("Fuel Lab opens the Fuel Partner by default", () => {
-  assert.equal(resolveFuelLabTab(null), "partner");
-  assert.equal(resolveFuelLabTab("unknown"), "partner");
+test("Fuel Lab opens directly on the product laboratory", () => {
+  assert.equal(resolveFuelLabTab(null), "products");
+  assert.equal(resolveFuelLabTab("unknown"), "products");
+  assert.deepEqual(FUEL_LAB_TABS, [["products", "Produkte"]]);
 });
 
-test("Fuel Lab keeps all tab destinations explicit", () => {
-  assert.equal(resolveFuelLabTab("partner"), "partner");
-  assert.equal(resolveFuelLabTab("race-prep"), "partner");
+test("legacy Fuel Partner and Race Prep routes collapse into products", () => {
+  assert.equal(resolveFuelLabTab("partner"), "products");
+  assert.equal(resolveFuelLabTab("race-prep"), "products");
   assert.equal(resolveFuelLabTab("products"), "products");
 });
 
-test("switching Fuel Lab tabs preserves the selected workout", () => {
-  const next = fuelLabTabSearchParams(new URLSearchParams("workout=orc-track-1"), "products");
+test("Fuel Lab tab normalization preserves the selected workout parameter", () => {
+  const next = fuelLabTabSearchParams(new URLSearchParams("workout=orc-track-1"), "partner");
 
   assert.equal(next.get("tab"), "products");
   assert.equal(next.get("workout"), "orc-track-1");
