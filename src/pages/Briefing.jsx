@@ -440,8 +440,6 @@ export default function Briefing() {
               <p className="eyebrow">Diese Woche</p>
               <h2>{weekSummary.typeLabel}</h2>
               <p className="briefing-corridor"><b>{weekSummary.corridorLabel}</b><span>konkreter Wochenplan</span></p>
-              <p className="briefing-compact-text">{weekSummary.focus}</p>
-              <p className="briefing-card-footnote">{weekSummary.meta}</p>
             </Card>
           </Link>
 
@@ -455,13 +453,9 @@ export default function Briefing() {
                 <div className="briefing-role-markers" aria-label="Trainingsrollen">
                   {upcomingKeySession.assessment.markers.map((marker) => <span className={marker.tone} key={marker.key}><i aria-hidden="true">{marker.icon}</i><b>{marker.label}</b></span>)}
                 </div>
-                <p className="briefing-compact-text">{upcomingKeySession.assessment.explanation}</p>
               </> : <>
                 <h2>Nach dem Wochenreview festlegen</h2>
                 <p className="briefing-key-date">Aktuell kein weiterer Schlüsselreiz offen</p>
-                <p className="briefing-compact-text">{weekPrescription?.weekType?.key === "recovery"
-                  ? "Die Entlastung ist bewusst. Der nächste zielrelevante Reiz wird nach stabilen Reviews konkret eingeplant."
-                  : "Der Coach legt den nächsten zielrelevanten Reiz anhand der abgeschlossenen Woche und deiner Reviews fest."}</p>
               </>}
             </Card>
           </Link>

@@ -1783,6 +1783,10 @@ button:focus-visible,a:focus-visible,summary:focus-visible{
 .briefing-role-markers{
   margin:0 0 12px;
 }
+.briefing-week-type-card .briefing-corridor,
+.briefing-key-session-card .briefing-role-markers{
+  margin-bottom:0;
+}
 .briefing-role-markers>span,
 .workout-role-badges>summary>span{
   display:inline-flex;

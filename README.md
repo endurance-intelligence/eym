@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **4.2.5**
+Current app version: **4.2.6**
 
 **Eat your miles.**
 
@@ -701,3 +701,9 @@ supabase functions deploy event-search
 - Planned non-optional sessions that are still unmatched on the following day are treated as missed automatically. A reason is optional and can be added later.
 - A later Intervals.icu match automatically supersedes the implicit missed state, so delayed syncs do not permanently mark a completed workout as failed.
 - Weekly review and closure logic use the same implicit-missed semantics; missing-reason forms no longer block the week.
+
+
+## Briefing compactness v4.2.6
+
+- The weekly briefing card now shows only week type and the concrete weekly distance corridor; detailed focus/meta text remains available in the week plan below.
+- The next key-session card now keeps only session, date and role markers; the longer explanation stays out of the scan-first briefing surface.

@@ -33,3 +33,12 @@ test("completed months use visual archive cards instead of a sport-badge spreads
   assert.doesNotMatch(training, /className="training-month-chips"/);
   assert.match(trainingPolish, /grid-template-columns:minmax\(210px,.82fr\)/);
 });
+
+
+test("briefing keeps weekly focus and key-session cards scan-first", () => {
+  assert.doesNotMatch(briefing, /className="briefing-compact-text">\{weekSummary\.focus\}/);
+  assert.doesNotMatch(briefing, /className="briefing-card-footnote">\{weekSummary\.meta\}/);
+  assert.doesNotMatch(briefing, /upcomingKeySession\.assessment\.explanation/);
+  assert.match(briefing, /briefing-corridor/);
+  assert.match(briefing, /briefing-role-markers/);
+});
