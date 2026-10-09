@@ -134,3 +134,19 @@ test("weekly review treats GI feedback as fueling feedback only", () => {
   });
   assert.doesNotMatch(result.watchouts.join(" "), /Magen-\/GI-Auffälligkeiten/);
 });
+
+
+test("weekly review counts an unmatched past required session as missed without demanding a reason", () => {
+  const result = weeklyReviewSummary({
+    weekStart: new Date("2026-10-05T12:00:00"),
+    now: new Date("2026-10-09T12:00:00"),
+    plan: [
+      { id: "stabi", date: "2026-10-06", title: "Stabi & Mobility", type: "Workout" },
+      { id: "optional", date: "2026-10-07", title: "6 km optional", type: "Run", optional: true, distance: 6 },
+    ],
+    activities: [],
+    reviews: {},
+  });
+  assert.equal(result.metrics.missedSessions, 1);
+  assert.match(result.watchouts.join(" "), /1 geplante Einheit ist ausgefallen/);
+});

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 
 const plannerSource = fs.readFileSync(new URL("../src/pages/Planner.jsx", import.meta.url), "utf8");
+const plannedStatusSource = fs.readFileSync(new URL("../src/services/plannedWorkoutStatus.js", import.meta.url), "utf8");
 
 test("weekly planning separates normal availability from temporary life context in plain language", () => {
   assert.match(plannerSource, /Deine normale Trainingswoche/);
@@ -87,8 +88,15 @@ test("weekly planner surfaces live mission races even when the stored week is st
 });
 
 test("coach-planned recovery days are auto-fulfilled instead of becoming open feedback", () => {
-  assert.match(plannerSource, /!isPassiveRecoveryWorkout\(item\)/);
+  assert.match(plannedStatusSource, /isPassiveRecoveryWorkout\(item\)/);
   assert.match(plannerSource, /passiveRecoveryDone = !isCancelled && isPassiveRecoveryWorkout\(item\) && item\.date < todayKey/);
   assert.match(plannerSource, /Planmäßiger Recovery-Tag/);
   assert.match(plannerSource, /keine Aktivität oder Review nötig/);
+});
+
+test("past unmatched required sessions are shown as missed without a mandatory feedback banner", () => {
+  assert.match(plannerSource, /isImplicitMissedWorkout/);
+  assert.match(plannerSource, /\? "Ausgefallen"/);
+  assert.match(plannerSource, />Grund ergänzen<\/button>/);
+  assert.doesNotMatch(plannerSource, /offene Rückmeldung/);
 });

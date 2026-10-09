@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **4.2.3**
+Current app version: **4.2.5**
 
 **Eat your miles.**
 
@@ -692,3 +692,12 @@ supabase functions deploy event-search
 - Goal timelines create preparation milestones when no intermediate events exist.
 - Loop races derive their race-round horizon from official distance and standard lap length while keeping the official distance authoritative.
 - Aid-station segments estimate time, carbohydrate and fluid carry corridors from race duration and personal race-fuel targets.
+
+
+## Week truth & automatic missed sessions v4.2.5
+
+- Briefing now shows the concrete current-week running volume from completed kilometres plus still-required runs instead of the broader periodization corridor.
+- Optional kilometres remain visible as optional and never inflate the required weekly range.
+- Planned non-optional sessions that are still unmatched on the following day are treated as missed automatically. A reason is optional and can be added later.
+- A later Intervals.icu match automatically supersedes the implicit missed state, so delayed syncs do not permanently mark a completed workout as failed.
+- Weekly review and closure logic use the same implicit-missed semantics; missing-reason forms no longer block the week.

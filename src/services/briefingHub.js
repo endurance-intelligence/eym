@@ -1,3 +1,4 @@
+import { isRunningActivity } from "./activityUtils.js";
 import { workoutRoleAssessment } from "./workoutRoles.js";
 
 function numeric(value) {
@@ -28,25 +29,77 @@ export function currentWeekPrescription(planner = {}, now = new Date()) {
   return planner?.weekPrescriptions?.[weekKey] || null;
 }
 
-export function weekHubSummary({ planner = {}, now = new Date(), openItems = 0, completedKm = 0 } = {}) {
+export function weekHubSummary({ planner = {}, now = new Date(), openItems = 0, completedKm = 0, volumeSummary = null } = {}) {
   const prescription = currentWeekPrescription(planner, now);
   if (!prescription) {
     return {
       prescription: null,
       typeLabel: "Wochensteuerung offen",
-      corridorLabel: planner?.lastTarget ? `${planner.lastTarget} km bisheriger Rahmen` : "Noch nicht berechnet",
+      corridorLabel: volumeSummary?.label || (planner?.lastTarget ? `${planner.lastTarget} km bisheriger Rahmen` : "Noch nicht berechnet"),
       focus: "Die nächste Wochenberechnung legt Trainingsphase, Umfang und Schwerpunkt transparent fest.",
-      meta: `${openItems} offene Einheit${openItems === 1 ? "" : "en"} · ${numeric(completedKm).toFixed(1).replace(".0", "")} km absolviert`,
+      meta: `${openItems} offene Einheit${openItems === 1 ? "" : "en"} · ${numeric(completedKm).toFixed(1).replace(".0", "")} km absolviert${volumeSummary?.optionalLabel ? ` · ${volumeSummary.optionalLabel}` : ""}`,
       tone: "neutral",
     };
   }
   return {
     prescription,
     typeLabel: prescription.weekType?.label || "Trainingswoche",
-    corridorLabel: prescription.corridor?.label || `${prescription.targetKm || planner?.lastTarget || "–"} km`,
+    corridorLabel: volumeSummary?.label || prescription.corridor?.label || `${prescription.targetKm || planner?.lastTarget || "–"} km`,
     focus: prescription.focus || prescription.weekType?.summary || "Der Coach steuert Umfang und Reize automatisch.",
-    meta: `${openItems} offene Einheit${openItems === 1 ? "" : "en"} · ${numeric(completedKm).toFixed(1).replace(".0", "")} km absolviert`,
+    meta: `${openItems} offene Einheit${openItems === 1 ? "" : "en"} · ${numeric(completedKm).toFixed(1).replace(".0", "")} km absolviert${volumeSummary?.optionalLabel ? ` · ${volumeSummary.optionalLabel}` : ""}`,
     tone: prescription.weekType?.tone || "neutral",
+  };
+}
+
+
+function compactKm(value) {
+  return numeric(value).toFixed(1).replace(".0", "");
+}
+
+function plannedDistanceBounds(item = {}) {
+  const explicitMin = Number(item.distanceMinKm ?? item.distanceMin);
+  const explicitMax = Number(item.distanceMaxKm ?? item.distanceMax);
+  if (Number.isFinite(explicitMin) && explicitMin >= 0 && Number.isFinite(explicitMax) && explicitMax >= explicitMin) {
+    return { min: explicitMin, max: explicitMax };
+  }
+  const range = String(item.title || "").replace(/,/g, ".").match(/(\d+(?:\.\d+)?)\s*[–-]\s*(\d+(?:\.\d+)?)\s*km/i);
+  if (range) return { min: Number(range[1]), max: Number(range[2]) };
+  const distance = Math.max(0, Number(item.distance || 0));
+  return { min: distance, max: distance };
+}
+
+function kmRangeLabel(min, max) {
+  return Math.abs(numeric(max) - numeric(min)) <= 0.05
+    ? `${compactKm(max)} km`
+    : `${compactKm(min)}–${compactKm(max)} km`;
+}
+
+export function currentWeekVolumeSummary({ plan = [], completedKm = 0, now = new Date() } = {}) {
+  const startKey = startOfWeekIso(now);
+  const weekEnd = new Date(`${startKey}T12:00:00`);
+  weekEnd.setDate(weekEnd.getDate() + 6);
+  const endKey = isoDateLocal(weekEnd);
+  const todayKey = isoDateLocal(now);
+  const openRunning = (Array.isArray(plan) ? plan : []).filter((item) => {
+    if (item.archived || item.completed || item.matchedActivityId || item.missedReason || item.plannedCancellation) return false;
+    if (item.date < todayKey || item.date < startKey || item.date > endKey) return false;
+    return isRunningActivity(item);
+  });
+  const required = openRunning.filter((item) => !item.optional);
+  const optional = openRunning.filter((item) => item.optional);
+  const requiredMin = required.reduce((sum, item) => sum + plannedDistanceBounds(item).min, 0);
+  const requiredMax = required.reduce((sum, item) => sum + plannedDistanceBounds(item).max, 0);
+  const optionalMin = optional.reduce((sum, item) => sum + plannedDistanceBounds(item).min, 0);
+  const optionalMax = optional.reduce((sum, item) => sum + plannedDistanceBounds(item).max, 0);
+  const totalMin = numeric(completedKm) + requiredMin;
+  const totalMax = numeric(completedKm) + requiredMax;
+  return {
+    label: kmRangeLabel(totalMin, totalMax),
+    completedKm: numeric(completedKm),
+    requiredOpenLabel: kmRangeLabel(requiredMin, requiredMax),
+    optionalLabel: optionalMax > 0 ? `+${kmRangeLabel(optionalMin, optionalMax)} optional` : "",
+    requiredOpenCount: required.length,
+    optionalOpenCount: optional.length,
   };
 }
 

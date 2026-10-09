@@ -13,8 +13,9 @@ import { workoutPaceLabel } from "../services/workoutPace";
 import { isLoopWorkout, loopWorkoutCompactLabel, loopWorkoutPaceLabel } from "../services/loopWorkout";
 import { summarizeCrossTrainingCredits } from "../services/crossTrainingLoad";
 import { workoutRoleAssessment } from "../services/workoutRoles";
-import { currentWeekPrescription, keySessionDateLabel, missionFocusTarget, nextKeySession, weekHubSummary } from "../services/briefingHub";
+import { currentWeekPrescription, currentWeekVolumeSummary, keySessionDateLabel, missionFocusTarget, nextKeySession, weekHubSummary } from "../services/briefingHub";
 import { raceForecastConfidence, raceWeekEvent } from "../services/raceWeatherStrategy";
+import { isImplicitMissedWorkout } from "../services/plannedWorkoutStatus";
 
 const dayLabel = new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" });
 const todayLabel = new Intl.DateTimeFormat("de-DE", { weekday: "long", day: "2-digit", month: "long" });
@@ -217,6 +218,7 @@ function weekRows(plan, activities) {
     entries.forEach((item) => {
       const matched = actuals.find((activity) => activityMatchesId(activity, item.matchedActivityId));
       if (matched) matchedIds.add(String(matched.id));
+      const implicitMissed = isImplicitMissedWorkout(item, { todayKey, matched: Boolean(matched) });
       items.push({
         id: `plan-${item.id}`,
         planItemId: item.id,
@@ -225,10 +227,10 @@ function weekRows(plan, activities) {
           item.distance ? `${Number(matched?.distance || item.actualDistance || item.distance).toFixed(1)} km` : "",
           !matched && !item.completed ? (isLoopWorkout(item) ? loopWorkoutPaceLabel(item) : workoutPaceLabel(item)) : "",
           item.optional ? "optional" : "",
-          item.missedReason ? `ausgefallen: ${item.missedReason}` : "",
+          item.missedReason ? `ausgefallen: ${item.missedReason}` : implicitMissed ? "ausgefallen" : "",
         ].filter(Boolean).join(" · "),
         roleAssessment: workoutRoleAssessment(item, { plan }),
-        tone: item.missedReason ? "missed" : item.completed || matched ? "done" : dateKey < todayKey ? "missed" : "planned",
+        tone: item.missedReason || implicitMissed ? "missed" : item.completed || matched ? "done" : "planned",
       });
     });
 
@@ -310,11 +312,13 @@ export default function Briefing() {
     .sort((a, b) => `${a.date}T${a.time || "23:59"}`.localeCompare(`${b.date}T${b.time || "23:59"}`))[0];
 
   const weekOpenItems = rows.reduce((sum, row) => sum + row.items.filter((item) => item.tone === "planned").length, 0);
+  const weekVolume = currentWeekVolumeSummary({ plan: state.plan, completedKm: weekDistance, now });
   const weekSummary = weekHubSummary({
     planner: state.planner,
     now,
     openItems: weekOpenItems,
     completedKm: weekDistance,
+    volumeSummary: weekVolume,
   });
   const upcomingKeySession = nextKeySession({
     plan: state.plan,
@@ -435,7 +439,7 @@ export default function Briefing() {
               <span className="briefing-card-arrow" aria-hidden="true">→</span>
               <p className="eyebrow">Diese Woche</p>
               <h2>{weekSummary.typeLabel}</h2>
-              <p className="briefing-corridor"><b>{weekSummary.corridorLabel}</b><span>automatisch gesteuert</span></p>
+              <p className="briefing-corridor"><b>{weekSummary.corridorLabel}</b><span>konkreter Wochenplan</span></p>
               <p className="briefing-compact-text">{weekSummary.focus}</p>
               <p className="briefing-card-footnote">{weekSummary.meta}</p>
             </Card>

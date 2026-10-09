@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   currentWeekPrescription,
+  currentWeekVolumeSummary,
   keySessionDateLabel,
   missionFocusTarget,
   nextKeySession,
@@ -30,11 +31,13 @@ test("week hub explains type, corridor and completed load without a fixed target
     now: new Date("2026-08-06T12:00:00"),
     openItems: 5,
     completedKm: 23.9,
+    volumeSummary: { label: "35.9–37.9 km", optionalLabel: "+6 km optional" },
   });
   assert.equal(summary.typeLabel, "Entlastungswoche");
-  assert.equal(summary.corridorLabel, "42–47 km");
+  assert.equal(summary.corridorLabel, "35.9–37.9 km");
   assert.equal(summary.tone, "recovery");
   assert.match(summary.meta, /23\.9 km absolviert/);
+  assert.match(summary.meta, /\+6 km optional/);
 });
 
 test("next key session is selected by date while ordinary quality is not promoted", () => {
@@ -79,4 +82,20 @@ test("key session date labels remain explicit", () => {
   assert.equal(keySessionDateLabel("2026-08-06", now), "Heute");
   assert.equal(keySessionDateLabel("2026-08-07", now), "Morgen");
   assert.match(keySessionDateLabel("2026-08-09", now), /in 3 Tagen/);
+});
+
+
+test("briefing concrete week volume matches completed plus required plan and keeps optional separate", () => {
+  const result = currentWeekVolumeSummary({
+    now: new Date("2026-10-09T10:00:00"),
+    completedKm: 26.9,
+    plan: [
+      { id: "done", date: "2026-10-08", title: "8-10 km locker", type: "Easy Run", completed: true, distance: 9 },
+      { id: "optional", date: "2026-10-09", title: "6 km Recovery", type: "Recovery Run", distance: 6, optional: true },
+      { id: "long", date: "2026-10-11", title: "10-12 km locker", type: "Long Run", distanceMinKm: 10, distanceMaxKm: 12 },
+    ],
+  });
+  assert.equal(result.label, "36.9–38.9 km");
+  assert.equal(result.optionalLabel, "+6 km optional");
+  assert.equal(result.requiredOpenCount, 1);
 });

@@ -148,6 +148,7 @@ import {
 } from "../services/plannerAvailability";
 import { plannedActivityCompatibility, workoutRoleAssessment } from "../services/workoutRoles";
 import { weeklyReviewSummary } from "../services/weeklyReview";
+import { isImplicitMissedWorkout } from "../services/plannedWorkoutStatus";
 import "./Planner.css";
 
 const dayFormatter = new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" });
@@ -481,9 +482,11 @@ function weeklyClosureSummary({ weekStart, plan, activities, allActivities, revi
   const missingReviews = weekActivities
     .filter(requiresWeeklyReview)
     .filter((activity) => !hasReviewCoverage(activity, reviews, allActivities));
+  const closureTodayKey = isoDate(new Date());
   const unresolvedItems = planEntries.filter((item) => {
     const type = normalizedType(`${item.type || ""} ${item.title || ""}`);
     if (item.optional || type === "rest") return false;
+    if (isImplicitMissedWorkout(item, { todayKey: closureTodayKey, matched: matches.has(item.id) })) return false;
     return !item.completed && !matches.has(item.id) && !item.missedReason;
   });
   return {
@@ -708,9 +711,8 @@ export default function Planner() {
   const footballEditable = mondayDate >= todayKey && !footballSlot?.completed;
   const orcRunEditable = wednesdayDate >= todayKey && !orcRunSlot?.completed;
   const saturdayEditable = saturdayDate >= todayKey && !saturdaySlot?.completed;
-  const missed = weekPlan.filter((item) => item.date < todayKey && !item.completed && !matches.has(item.id) && !item.missedReason && !isPassiveRecoveryWorkout(item));
   const actualRunningKm = weekActivities.filter(isRunningActivity).reduce((sum, activity) => sum + Number(activity.distance || 0), 0);
-  const openRunningPlan = weekPlan.filter((item) => !item.completed && !item.missedReason && normalizedType(`${item.type || ""} ${item.title || ""}`) === "running");
+  const openRunningPlan = weekPlan.filter((item) => !item.completed && !item.missedReason && !item.plannedCancellation && (offsetWeeks > 0 || item.date >= todayKey) && normalizedType(`${item.type || ""} ${item.title || ""}`) === "running");
   const requiredOpenRuns = openRunningPlan.filter((item) => !item.optional);
   const optionalOpenRuns = openRunningPlan.filter((item) => item.optional);
   const plannedRequiredMinKm = requiredOpenRuns.reduce((sum, item) => sum + plannedDistanceBounds(item).min, 0);
@@ -2869,14 +2871,6 @@ export default function Planner() {
 
 
       {status && <p className="planner-status">{status}</p>}
-      {missed.length > 0 && (
-        <button className="planner-attention" onClick={() => openMissed(missed[0])}>
-          <strong>{missed.length} offene Rückmeldung{missed.length > 1 ? "en" : ""}</strong>
-          <span>{missed[0].title} vom {new Intl.DateTimeFormat("de-DE").format(new Date(`${missed[0].date}T12:00:00`))} wurde nicht erkannt. Grund angeben →</span>
-        </button>
-      )}
-
-
 
       <div className="planner-days">
         {Array.from({ length: 7 }, (_, index) => {
@@ -2988,7 +2982,7 @@ export default function Planner() {
                 const matched = matches.get(item.id) || (item.matchedActivityId ? activityById.get(item.matchedActivityId) : null);
                 const isCancelled = Boolean(item.plannedCancellation);
                 const passiveRecoveryDone = !isCancelled && isPassiveRecoveryWorkout(item) && item.date < todayKey;
-                const isMissed = !isCancelled && !passiveRecoveryDone && !item.missedReason && item.date < todayKey && !item.completed && !matched;
+                const isMissed = Boolean(item.missedReason) || isImplicitMissedWorkout(item, { todayKey, matched: Boolean(matched) });
                 const completed = Boolean(item.completed || matched || passiveRecoveryDone);
                 const linkedCompletion = Boolean(matched || item.matchedActivityId);
                 const reviewDestination = completed && matched && reviewKind(matched)
@@ -3023,7 +3017,7 @@ export default function Planner() {
                   : (isCancelled || item.missedReason)
                     ? "Ausgefallen"
                     : isMissed
-                      ? "Rückmeldung offen"
+                      ? "Ausgefallen"
                       : item.optional
                         ? "Optional"
                         : "";
@@ -3117,7 +3111,7 @@ export default function Planner() {
         const isCancelled = Boolean(detailWorkout.plannedCancellation);
         const passiveRecoveryDone = !isCancelled && isPassiveRecoveryWorkout(detailWorkout) && detailWorkout.date < todayKey;
         const completed = Boolean(detailWorkout.completed || matched || passiveRecoveryDone);
-        const isMissed = !isCancelled && !passiveRecoveryDone && !detailWorkout.missedReason && detailWorkout.date < todayKey && !completed;
+        const isMissed = Boolean(detailWorkout.missedReason) || isImplicitMissedWorkout(detailWorkout, { todayKey, matched: Boolean(matched) });
         const fuelRecommendation = fuelRecommendations.get(detailWorkout.id);
         const trackTemplate = trackWorkoutTemplateLabel(detailWorkout.structuredWorkout);
         const paceLabel = loopWorkoutPaceLabel(detailWorkout) || workoutPaceLabel(detailWorkout, { includeSource: true });
@@ -3313,7 +3307,7 @@ export default function Planner() {
                   : detailWorkout.raceEvent || detailWorkout.eventContinuation
                     ? <button type="button" className="primary" onClick={() => { closeWorkoutDetails(); navigate("/mission"); }}>Ziel öffnen</button>
                     : <button type="button" className="primary" onClick={() => openWorkoutEditor(detailWorkout)}>Bearbeiten</button>}
-                {!detailIsSyntheticRest && !detailWorkout.eventContinuation && detailWorkout.type !== "Ruhetag" && !completed && isMissed && <button type="button" onClick={() => { closeWorkoutDetails(); openMissed(detailWorkout); }}>Grund angeben</button>}
+                {!detailIsSyntheticRest && !detailWorkout.eventContinuation && detailWorkout.type !== "Ruhetag" && !completed && isMissed && <button type="button" onClick={() => { closeWorkoutDetails(); openMissed(detailWorkout); }}>Grund ergänzen</button>}
                 {!detailIsSyntheticRest && !detailWorkout.eventContinuation && detailWorkout.type !== "Ruhetag" && !completed && isCancelled && <button type="button" onClick={() => { restoreCancelledWorkout(detailWorkout); closeWorkoutDetails(); }}>Wieder einplanen</button>}
                 {!detailIsSyntheticRest && !detailWorkout.eventContinuation && detailWorkout.type !== "Ruhetag" && !completed && !isCancelled && !isPastWeek && <button type="button" onClick={() => { closeWorkoutDetails(); openAdjustment(detailWorkout.id, "cancel"); }}>Fällt aus</button>}
                 {!detailIsSyntheticRest && canRemoveFromPlan && <button type="button" className="danger" onClick={() => { closeWorkoutDetails(); removeManualWorkout(detailWorkout); }}>Entfernen</button>}
@@ -4008,15 +4002,15 @@ export default function Planner() {
         <div className="modal-backdrop">
           <form className="modal planner-modal" onSubmit={saveMissed}>
             <button type="button" className="close" onClick={() => setMissedEditing(null)}>×</button>
-            <p className="eyebrow">Offene Rückmeldung</p>
-            <h2>Warum wurde „{missedEditing.title}“ nicht gemacht?</h2>
+            <p className="eyebrow">Ausfall dokumentieren</p>
+            <h2>Möchtest du einen Grund für „{missedEditing.title}“ ergänzen?</h2>
             <div className="planner-reasons">{reasonOptions.map((reason) => <button type="button" className={missedEditing.reason === reason ? "selected" : ""} onClick={() => setMissedEditing({ ...missedEditing, reason })} key={reason}>{reason}</button>)}</div>
             {missedEditing.reason === "Müde" && <label>Warum warst du müde?<select value={missedEditing.fatigueCause} onChange={(event) => setMissedEditing({ ...missedEditing, fatigueCause: event.target.value })}><option value="">Bitte auswählen</option><option>Schlaf</option><option>Arbeit/Stress</option><option>Training</option><option>Familie/Alltag</option><option>Unklar</option></select></label>}
             {missedEditing.reason === "Schmerzen" && <div className="form-grid"><label>Wo waren die Schmerzen?<input value={missedEditing.painArea} onChange={(event) => setMissedEditing({ ...missedEditing, painArea: event.target.value })} /></label><label>Stärke 0–10<input type="number" min="0" max="10" value={missedEditing.painLevel} onChange={(event) => setMissedEditing({ ...missedEditing, painLevel: event.target.value })} /></label></div>}
             {missedEditing.reason === "Verschoben" && <label>Neues Datum<input type="date" min={todayKey} value={missedEditing.newDate} onChange={(event) => setMissedEditing({ ...missedEditing, newDate: event.target.value })} required /></label>}
             {missedEditing.reason === "Aktivität nicht erkannt" && <label>Aktivität zuordnen<select value={missedEditing.activityId} onChange={(event) => setMissedEditing({ ...missedEditing, activityId: event.target.value })} required><option value="">Bitte auswählen</option>{weekActivities.map((activity) => <option value={activity.id} key={activity.id}>{activityDate(activity)} · {activity.name || activity.type} {Number(activity.distance || 0) ? `(${Number(activity.distance).toFixed(1)} km)` : ""}</option>)}</select></label>}
             <label>Notiz (optional)<textarea value={missedEditing.note} onChange={(event) => setMissedEditing({ ...missedEditing, note: event.target.value })} /></label>
-            <button className="primary" type="submit" disabled={!missedEditing.reason}>Rückmeldung speichern</button>
+            <button className="primary" type="submit" disabled={!missedEditing.reason}>Grund speichern</button>
           </form>
         </div>
       )}

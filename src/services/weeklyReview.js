@@ -8,6 +8,7 @@ import {
   findPlannedWorkoutForActivity,
   workoutRoleAssessment,
 } from "./workoutRoles.js";
+import { isImplicitMissedWorkout } from "./plannedWorkoutStatus.js";
 
 function dateKey(value) {
   const date = value instanceof Date ? new Date(value) : new Date(`${String(value || "").slice(0, 10)}T12:00:00`);
@@ -72,6 +73,7 @@ export function weeklyReviewSummary({
   activities = [],
   allActivities = activities,
   reviews = {},
+  now = new Date(),
 } = {}) {
   const startKey = dateKey(weekStart);
   const endKey = weekEndKey(weekStart);
@@ -101,11 +103,20 @@ export function weeklyReviewSummary({
     .filter(isRunningActivity)
     .reduce((sum, activity) => sum + number(activity.distance), 0);
 
-  const missedEntries = planEntries.filter((item) => item.missedReason);
+  const todayKey = dateKey(now);
+  const missedEntries = planEntries.filter((item) => (
+    !item.completed
+    && !matchedPlanIds.has(item.id)
+    && (Boolean(item.missedReason) || isImplicitMissedWorkout(item, { todayKey, matched: matchedPlanIds.has(item.id) }))
+  ));
   const completedEntries = planEntries.filter((item) => item.completed || matchedPlanIds.has(item.id));
   const keyEntries = planEntries.filter((item) => workoutRoleAssessment(item, { plan: planEntries }).isKeySession);
   const keyCompleted = keyEntries.filter((item) => item.completed || matchedPlanIds.has(item.id));
-  const keyMissed = keyEntries.filter((item) => item.missedReason && !item.completed && !matchedPlanIds.has(item.id));
+  const keyMissed = keyEntries.filter((item) => (
+    !item.completed
+    && !matchedPlanIds.has(item.id)
+    && (Boolean(item.missedReason) || isImplicitMissedWorkout(item, { todayKey, matched: false }))
+  ));
 
   const rows = reviewRows(weekActivities, reviews, allActivities);
   const unmatchedReviewRows = reviewRows(unmatchedActivities, reviews, allActivities);
