@@ -3766,12 +3766,12 @@ export default function Planner() {
                   </div>
                   <div>
                     <small>Warm-up & Cool-down</small>
-                    <strong>je ca. 2–3 km</strong>
-                    <span>bleiben auf Garmin per LAP offen</span>
+                    <strong>je 2,0 km</strong>
+                    <span>4,0 km Ein- und Auslaufen · Garmin bleibt per LAP offen</span>
                   </div>
                   <div>
                     <small>{editingTrackDistance.hasTimedSteps ? "Bekannte Mindestdistanz" : "Gesamt geschätzt"}</small>
-                    <strong>{editingTrackDistance.hasTimedSteps ? "ab " : ""}{trackDistanceFormatter.format(editingTrackDistance.estimatedTotalMinKm)}{editingTrackDistance.hasTimedSteps ? "" : `–${trackDistanceFormatter.format(editingTrackDistance.estimatedTotalMaxKm)}`} km</strong>
+                    <strong>{editingTrackDistance.hasTimedSteps ? "ab " : ""}{trackDistanceFormatter.format(editingTrackDistance.estimatedTotalMinKm)} km</strong>
                     <span>{editingTrackDistance.hasTimedSteps ? `plus ${trackDurationLabel(editingTrackDistance.timedSeconds)} zeitgesteuerte Abschnitte` : "inklusive Ein- und Auslaufen"}</span>
                   </div>
                 </div>

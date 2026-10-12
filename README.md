@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **4.2.7**
+Current app version: **4.2.8**
 
 **Eat your miles.**
 
@@ -715,3 +715,8 @@ supabase functions deploy event-search
 - Legacy workouts that would produce an implausibly large repeated main set show a one-click conversion to a single full sequence.
 - Every track step can carry a short Garmin cue such as `SCHNELL`, `SCHWELLE`, `LANGSAM` or `TRAB`; the target pace is appended automatically for work steps.
 - Intervals.icu receives the set repeat blocks and cues so the same wording can be surfaced on supported Garmin workout screens while the pace corridor remains the actual intensity target.
+
+## Fixed 2 km track edges v4.2.8
+
+- Track sessions now estimate warm-up and cool-down with exactly 2.0 km each instead of a 2–3 km range.
+- The total track estimate is therefore main-set distance + 4.0 km. LAP-controlled execution on Garmin stays unchanged.

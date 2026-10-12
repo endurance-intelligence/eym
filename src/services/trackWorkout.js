@@ -333,7 +333,9 @@ export function trackWorkoutDistance(input = {}) {
     mainDistanceKm,
     timedSeconds: totals.timedSeconds,
     hasTimedSteps: totals.timedSeconds > 0,
+    warmupDistanceKm: 2,
+    cooldownDistanceKm: 2,
     estimatedTotalMinKm: Number((mainDistanceKm + 4).toFixed(2)),
-    estimatedTotalMaxKm: Number((mainDistanceKm + 6).toFixed(2)),
+    estimatedTotalMaxKm: Number((mainDistanceKm + 4).toFixed(2)),
   };
 }

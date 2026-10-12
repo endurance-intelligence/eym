@@ -92,8 +92,10 @@ test("track distance separates work, recovery and the estimated LAP-controlled e
     mainDistanceKm: 8.4,
     timedSeconds: 0,
     hasTimedSteps: false,
+    warmupDistanceKm: 2,
+    cooldownDistanceKm: 2,
     estimatedTotalMinKm: 12.4,
-    estimatedTotalMaxKm: 14.4,
+    estimatedTotalMaxKm: 12.4,
   });
 
   const timed = trackWorkoutDistance({
@@ -106,6 +108,10 @@ test("track distance separates work, recovery and the estimated LAP-controlled e
   assert.equal(timed.mainDistanceKm, 2.4);
   assert.equal(timed.timedSeconds, 270);
   assert.equal(timed.hasTimedSteps, true);
+  assert.equal(timed.warmupDistanceKm, 2);
+  assert.equal(timed.cooldownDistanceKm, 2);
+  assert.equal(timed.estimatedTotalMinKm, 6.4);
+  assert.equal(timed.estimatedTotalMaxKm, 6.4);
 });
 
 
@@ -145,8 +151,10 @@ test("set-based track sessions count each block exactly once and support repeate
     mainDistanceKm: 9.4,
     timedSeconds: 0,
     hasTimedSteps: false,
+    warmupDistanceKm: 2,
+    cooldownDistanceKm: 2,
     estimatedTotalMinKm: 13.4,
-    estimatedTotalMaxKm: 15.4,
+    estimatedTotalMaxKm: 13.4,
   });
   assert.match(trackWorkoutSummary(workout), /Dreierblock 2×/);
   assert.match(trackWorkoutSummary(workout), /Finish:/);
