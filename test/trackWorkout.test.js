@@ -7,11 +7,13 @@ import {
   isTrackWorkout,
   normalizeTrackPace,
   normalizeTrackRounds,
+  normalizeTrackSet,
   normalizeTrackWorkout,
   normalizeTrackWorkoutTemplates,
   trackPaceRange,
   trackWorkoutDistance,
   trackWorkoutForEditing,
+  trackWorkoutSets,
   trackWorkoutSummary,
   trackWorkoutTemplateLabel,
   trackStepGarminCue,
@@ -104,6 +106,96 @@ test("track distance separates work, recovery and the estimated LAP-controlled e
   assert.equal(timed.mainDistanceKm, 2.4);
   assert.equal(timed.timedSeconds, 270);
   assert.equal(timed.hasTimedSteps, true);
+});
+
+
+test("set-based track sessions count each block exactly once and support repeated sets", () => {
+  const workout = normalizeTrackWorkout({
+    mainControlMode: TRACK_MAIN_CONTROL_MODES.MANUAL_LAP,
+    sets: [
+      {
+        label: "Dreierblock",
+        repeats: 2,
+        steps: [
+          { kind: "work", unit: "distance", value: 1000, targetPace: "4:30", cue: "LANGSAM" },
+          { kind: "recovery", unit: "distance", value: 200, cue: "TRAB" },
+          { kind: "work", unit: "distance", value: 1000, targetPace: "4:20", cue: "SCHWELLE" },
+          { kind: "recovery", unit: "distance", value: 200, cue: "TRAB" },
+          { kind: "work", unit: "distance", value: 1000, targetPace: "4:10", cue: "SCHNELL" },
+          { kind: "recovery", unit: "distance", value: 200, cue: "TRAB" },
+        ],
+      },
+      {
+        label: "Finish",
+        repeats: 1,
+        steps: [
+          { kind: "work", unit: "distance", value: 1000, targetPace: "4:30", cue: "LANGSAM" },
+          { kind: "recovery", unit: "distance", value: 200, cue: "TRAB" },
+          { kind: "work", unit: "distance", value: 1000, targetPace: "4:10", cue: "SCHNELL" },
+        ],
+      },
+    ],
+  });
+
+  assert.equal(workout.rounds, 1);
+  assert.equal(workout.sets.length, 2);
+  assert.deepEqual(trackWorkoutDistance(workout), {
+    workDistanceKm: 8,
+    recoveryDistanceKm: 1.4,
+    mainDistanceKm: 9.4,
+    timedSeconds: 0,
+    hasTimedSteps: false,
+    estimatedTotalMinKm: 13.4,
+    estimatedTotalMaxKm: 15.4,
+  });
+  assert.match(trackWorkoutSummary(workout), /Dreierblock 2×/);
+  assert.match(trackWorkoutSummary(workout), /Finish:/);
+});
+
+test("legacy track rounds remain explicit when opened as one editable set", () => {
+  const sets = trackWorkoutSets({
+    rounds: 8,
+    steps: [
+      { kind: "work", unit: "distance", value: 1000 },
+      { kind: "recovery", unit: "distance", value: 200 },
+    ],
+  });
+  assert.equal(sets.length, 1);
+  assert.equal(sets[0].repeats, 8);
+  assert.equal(sets[0].label, "Satz 1");
+  assert.equal(normalizeTrackSet({ label: "Block A", repeats: 3, steps: sets[0].steps }, 0).repeats, 3);
+});
+
+test("custom Garmin cues keep the exact training instruction and append target pace", () => {
+  assert.equal(trackStepGarminCue({ kind: "work", unit: "distance", value: 1000, targetPace: "4:10", cue: "SCHNELL" }), "SCHNELL · 4:10/km");
+  assert.equal(trackStepGarminCue({ kind: "work", unit: "distance", value: 1000, targetPace: "4:30", cue: "LANGSAM 4:30" }), "LANGSAM 4:30");
+  assert.equal(trackStepGarminCue({ kind: "recovery", unit: "distance", value: 200, cue: "TRAB" }), "TRAB");
+});
+
+test("Intervals exports set repetitions and Garmin-visible cues without flattening the whole workout", () => {
+  const description = intervalDescription({
+    type: "ORC Track",
+    title: "Wolf 3-3-2",
+    structuredWorkout: normalizeTrackWorkout({
+      mainControlMode: TRACK_MAIN_CONTROL_MODES.MANUAL_LAP,
+      sets: [{
+        label: "Dreierblock",
+        repeats: 2,
+        steps: [
+          { kind: "work", unit: "distance", value: 1000, targetPace: "4:30", cue: "LANGSAM" },
+          { kind: "recovery", unit: "distance", value: 200, cue: "TRAB" },
+          { kind: "work", unit: "distance", value: 1000, targetPace: "4:20", cue: "SCHWELLE" },
+          { kind: "recovery", unit: "distance", value: 200, cue: "TRAB" },
+          { kind: "work", unit: "distance", value: 1000, targetPace: "4:10", cue: "SCHNELL" },
+        ],
+      }],
+    }),
+  });
+  assert.match(description, /Dreierblock 2x/);
+  assert.match(description, /LANGSAM · 4:30\/km Press lap 270s 4:25-4:35\/km Pace intensity=interval/);
+  assert.match(description, /SCHWELLE · 4:20\/km Press lap 260s 4:15-4:25\/km Pace intensity=interval/);
+  assert.match(description, /SCHNELL · 4:10\/km Press lap 250s 4:05-4:15\/km Pace intensity=interval/);
+  assert.match(description, /TRAB Press lap 90s intensity=recovery/);
 });
 
 test("old v3.5.2 track settings migrate into the new step model", () => {

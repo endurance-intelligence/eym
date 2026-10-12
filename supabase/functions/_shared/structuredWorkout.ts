@@ -93,6 +93,11 @@ function formatPace(value: number) {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
+function safeCue(value: unknown, fallback = "") {
+  const cleaned = String(value || "").replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 36);
+  return cleaned || fallback;
+}
+
 
 function lapPlaceholderToken(step: Record<string, unknown>) {
   const meters = safeInteger(step.value, 20, 5000, step.kind === "recovery" ? 200 : 400);
@@ -120,11 +125,17 @@ function structuredSteps(input: Record<string, unknown>) {
       const unit = step.unit === "time" ? "time" : "distance";
       const value = safeInteger(step.value, unit === "time" ? 5 : 20, unit === "time" ? 3600 : 5000, recovery ? 200 : 400);
       const targetPace = paceSeconds(step.targetPace);
-      const cue = recovery
+      const automaticCue = recovery
         ? (unit === "distance" ? `${value}er Trab` : "Trabpause")
         : unit === "distance"
           ? `${value}er${targetPace == null ? " Belastung" : ` @ ${formatPace(targetPace)}/km`}`
           : targetPace == null ? "Belastung" : `Belastung @ ${formatPace(targetPace)}/km`;
+      const customCue = safeCue(step.cue);
+      const cue = customCue
+        ? (!recovery && targetPace != null && !customCue.includes(formatPace(targetPace))
+          ? `${customCue} · ${formatPace(targetPace)}/km`
+          : customCue)
+        : automaticCue;
       return {
         kind: recovery ? "recovery" : "work",
         unit,
@@ -149,7 +160,6 @@ function structuredSteps(input: Record<string, unknown>) {
 
 function structuredTrackDescription(input: Record<string, unknown>) {
   const rounds = safeInteger(input.rounds ?? input.repeats, 1, 30, 8);
-  const steps = structuredSteps(input);
   const warmupMinutes = safeInteger(input.warmupMinutes, 1, 90, 15);
   const cooldownMinutes = safeInteger(input.cooldownMinutes, 1, 60, 10);
   const warmupStep = input.warmupMode === "time"
@@ -158,24 +168,34 @@ function structuredTrackDescription(input: Record<string, unknown>) {
   const cooldownStep = input.cooldownMode === "time"
     ? `- ${cooldownMinutes}m intensity=cooldown`
     : `- Press lap ${cooldownMinutes}m intensity=cooldown`;
-  const lines = [
-    "Warm-up",
-    warmupStep,
-    "",
-    `${input.kind === "sprints" ? "Sprints" : "Hauptteil"} ${rounds}x`,
-    ...steps.map((step) => {
-      const manualDistance = input.mainControlMode === "manual_lap" && step.unit === "distance";
-      const token = manualDistance
-        ? `Press lap ${lapPlaceholderToken(step as Record<string, unknown>)}`
-        : step.token;
-      return step.kind === "recovery"
-        ? `- ${step.cue} ${token} intensity=recovery`
-        : `- ${step.cue} ${token} ${step.target} intensity=interval`;
-    }),
-    "",
-    "Cool-down",
-    cooldownStep,
-  ];
+  const lines = ["Warm-up", warmupStep, ""];
+  const rawSets = Array.isArray(input.sets) ? input.sets.slice(0, 8) : [];
+  const appendStep = (step: ReturnType<typeof structuredSteps>[number]) => {
+    const manualDistance = input.mainControlMode === "manual_lap" && step.unit === "distance";
+    const token = manualDistance
+      ? `Press lap ${lapPlaceholderToken(step as Record<string, unknown>)}`
+      : step.token;
+    lines.push(step.kind === "recovery"
+      ? `- ${step.cue} ${token} intensity=recovery`
+      : `- ${step.cue} ${token} ${step.target} intensity=interval`);
+  };
+
+  if (rawSets.length) {
+    rawSets.forEach((rawSet, index) => {
+      const set = rawSet && typeof rawSet === "object" ? rawSet as Record<string, unknown> : {};
+      const repeats = safeInteger(set.repeats, 1, 30, 1);
+      const label = safeLabel(set.label, `Satz ${index + 1}`);
+      lines.push(repeats > 1 ? `${label} ${repeats}x` : label);
+      structuredSteps(set).forEach(appendStep);
+      lines.push("");
+    });
+  } else {
+    lines.push(`${input.kind === "sprints" ? "Sprints" : "Hauptteil"} ${rounds}x`);
+    structuredSteps(input).forEach(appendStep);
+    lines.push("");
+  }
+
+  lines.push("Cool-down", cooldownStep);
   return lines.join("\n");
 }
 

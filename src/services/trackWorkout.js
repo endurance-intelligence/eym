@@ -84,10 +84,16 @@ export function trackPaceRange(input = {}) {
 
 export function trackStepGarminCue(input = {}) {
   const step = normalizeTrackStep(input, input?.kind === "recovery" ? "recovery" : "work");
+  const customCue = cleanText(step.cue, 36);
   if (step.kind === "recovery") {
-    return step.unit === "distance" ? `${step.value}er Trab` : "Trabpause";
+    return customCue || (step.unit === "distance" ? `${step.value}er Trab` : "Trabpause");
   }
   const paceRange = trackPaceRange(step);
+  if (customCue) {
+    return paceRange && !customCue.includes(paceRange.targetPace)
+      ? `${customCue} · ${paceRange.targetPace}/km`
+      : customCue;
+  }
   if (step.unit === "distance") {
     return `${step.value}er${paceRange ? ` @ ${paceRange.targetPace}/km` : " Belastung"}`;
   }
@@ -110,6 +116,7 @@ export function normalizeTrackStep(input = {}, fallbackKind = "work") {
       : fallbackKind === "recovery" ? "recovery" : "work";
   const unit = input.unit === "time" ? "time" : "distance";
   const paceRange = trackPaceRange(input);
+  const cue = cleanText(input.cue, 36);
   return {
     kind,
     unit,
@@ -123,7 +130,34 @@ export function normalizeTrackStep(input = {}, fallbackKind = "work") {
       targetPace: paceRange.targetPace,
       paceToleranceSeconds: paceRange.toleranceSeconds,
     } : {}),
+    ...(cue ? { cue } : {}),
   };
+}
+
+export function normalizeTrackSet(input = {}, index = 0) {
+  const suppliedSteps = Array.isArray(input.steps) ? input.steps.slice(0, 16) : [];
+  const steps = (suppliedSteps.length ? suppliedSteps : DEFAULT_TRACK_WORKOUT.steps)
+    .map((step, stepIndex) => normalizeTrackStep(step, stepIndex % 2 ? "recovery" : "work"));
+  return {
+    id: cleanText(input.id, 80) || `set-${index + 1}`,
+    label: cleanText(input.label, 40) || `Satz ${index + 1}`,
+    repeats: clamp(input.repeats, 1, 30, 1),
+    steps,
+  };
+}
+
+export function trackWorkoutSets(input = {}) {
+  const suppliedSets = Array.isArray(input.sets) ? input.sets.slice(0, 8) : [];
+  if (suppliedSets.length) return suppliedSets.map((set, index) => normalizeTrackSet(set, index));
+  const suppliedSteps = Array.isArray(input.steps) ? input.steps.slice(0, 16) : [];
+  const steps = (suppliedSteps.length ? suppliedSteps : legacySteps(input))
+    .map((step, index) => normalizeTrackStep(step, index % 2 ? "recovery" : "work"));
+  return [{
+    id: "set-1",
+    label: "Satz 1",
+    repeats: normalizeTrackRounds(input.rounds ?? input.repeats),
+    steps,
+  }];
 }
 
 function legacySteps(input = {}) {
@@ -146,12 +180,15 @@ export function normalizeTrackWorkout(input = {}) {
   const suppliedSteps = Array.isArray(input.steps) ? input.steps.slice(0, 16) : [];
   const steps = (suppliedSteps.length ? suppliedSteps : legacySteps(input))
     .map((step, index) => normalizeTrackStep(step, index % 2 ? "recovery" : "work"));
+  const suppliedSets = Array.isArray(input.sets) ? input.sets.slice(0, 8) : [];
+  const sets = suppliedSets.map((set, index) => normalizeTrackSet(set, index));
   const templateId = cleanText(input.templateId, 120);
   const templateName = String(input.templateName || "").slice(0, 80);
   return {
     kind,
-    rounds: normalizeTrackRounds(input.rounds ?? input.repeats),
+    rounds: sets.length ? 1 : normalizeTrackRounds(input.rounds ?? input.repeats),
     steps,
+    ...(sets.length ? { sets } : {}),
     warmupMode: input.warmupMode === "time" ? "time" : "lap",
     cooldownMode: input.cooldownMode === "time" ? "time" : "lap",
     mainControlMode: input.mainControlMode === TRACK_MAIN_CONTROL_MODES.MANUAL_LAP
@@ -201,6 +238,7 @@ export function buildTrackWorkoutTemplate({ id, name, workout, createdAt, update
     kind: normalized.kind,
     rounds: normalized.rounds,
     steps: normalized.steps,
+    ...(normalized.sets?.length ? { sets: normalized.sets } : {}),
     warmupMode: "lap",
     cooldownMode: "lap",
     mainControlMode: normalized.mainControlMode,
@@ -248,16 +286,22 @@ function unitLabel(unit, value) {
 export function trackWorkoutSummary(input = {}) {
   const workout = normalizeTrackWorkout(input);
   const lapControlled = workout.mainControlMode === TRACK_MAIN_CONTROL_MODES.MANUAL_LAP;
-  const sequence = workout.steps
+  const formatSequence = (steps) => steps
     .map((step) => {
       const paceRange = trackPaceRange(step);
       const pace = paceRange ? ` @ ${paceRange.targetPace}/km (±${paceRange.toleranceSeconds} s)` : "";
-      return `${unitLabel(step.unit, step.value)} ${step.kind === "recovery" ? "Pause" : "Belastung"}${pace}`;
+      const cue = step.cue ? ` · ${step.cue}` : "";
+      return `${unitLabel(step.unit, step.value)} ${step.kind === "recovery" ? "Pause" : "Belastung"}${pace}${cue}`;
     })
     .join(" → ");
   const mainControl = lapControlled
     ? "Bahn-LAP: Distanzschritte per LAP, Zeitabschnitte automatisch"
     : "Hauptteil automatisch";
+  if (workout.sets?.length) {
+    const sets = workout.sets.map((set) => `${set.label}${set.repeats > 1 ? ` ${set.repeats}×` : ""}: ${formatSequence(set.steps)}`).join(" · ");
+    return `Warm-up bis LAP · ${sets} · ${mainControl} · Cool-down bis LAP`;
+  }
+  const sequence = formatSequence(workout.steps);
   return `Warm-up bis LAP · ${workout.rounds} ${workout.rounds === 1 ? "Durchgang" : "Durchgänge"}: ${sequence} · ${mainControl} · Cool-down bis LAP`;
 }
 
@@ -267,14 +311,19 @@ function roundedKm(meters) {
 
 export function trackWorkoutDistance(input = {}) {
   const workout = normalizeTrackWorkout(input);
-  const totals = workout.steps.reduce((result, step) => {
-    if (step.unit === "time") {
-      result.timedSeconds += step.value * workout.rounds;
-    } else if (step.kind === "recovery") {
-      result.recoveryMeters += step.value * workout.rounds;
-    } else {
-      result.workMeters += step.value * workout.rounds;
-    }
+  const groups = workout.sets?.length
+    ? workout.sets.map((set) => ({ repeats: set.repeats, steps: set.steps }))
+    : [{ repeats: workout.rounds, steps: workout.steps }];
+  const totals = groups.reduce((result, group) => {
+    group.steps.forEach((step) => {
+      if (step.unit === "time") {
+        result.timedSeconds += step.value * group.repeats;
+      } else if (step.kind === "recovery") {
+        result.recoveryMeters += step.value * group.repeats;
+      } else {
+        result.workMeters += step.value * group.repeats;
+      }
+    });
     return result;
   }, { workMeters: 0, recoveryMeters: 0, timedSeconds: 0 });
   const mainDistanceKm = roundedKm(totals.workMeters + totals.recoveryMeters);

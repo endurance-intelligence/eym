@@ -67,17 +67,17 @@ import {
   formatTrackPaceInput,
   isProvisionalTrackWorkout,
   isTrackWorkout,
-  normalizeTrackRounds,
+  normalizeTrackSet,
   normalizeTrackStep,
   normalizeTrackWorkout,
   normalizeTrackWorkoutTemplates,
   trackWorkoutDistance,
   trackWorkoutForEditing,
+  trackWorkoutSets,
   TRACK_MAIN_CONTROL_MODES,
   trackWorkoutSummary,
   trackStepGarminCue,
   trackWorkoutTemplateLabel,
-  updateTrackStepDraft,
   updateTrackWorkoutDraft,
   workoutFromTrackTemplate,
 } from "../services/trackWorkout";
@@ -907,6 +907,16 @@ export default function Planner() {
   const editingTrackDistance = editingTrackWorkout
     ? trackWorkoutDistance(editingTrackWorkout)
     : null;
+  const editingTrackSets = editingTrackWorkout
+    ? (editingTrackWorkout.sets?.length ? editingTrackWorkout.sets : trackWorkoutSets(editingTrackWorkout))
+    : [];
+  const legacyTrackRepeatWarning = Boolean(
+    editingTrackWorkout
+      && !editingTrackWorkout.sets?.length
+      && editingTrackWorkout.steps?.length >= 6
+      && editingTrackWorkout.rounds > 1
+      && editingTrackDistance?.mainDistanceKm >= 30,
+  );
   const editingLoopWorkout = editing && isLoopWorkout(editing)
     ? normalizeLoopWorkoutItem(editing)
     : null;
@@ -2208,80 +2218,157 @@ export default function Planner() {
     }));
   }
 
-  function updateTrackStep(index, field, value) {
-    setEditing((current) => ({
-      ...current,
-      structuredWorkout: updateTrackStepDraft(current?.structuredWorkout, index, field, value),
-    }));
+  function trackSetsForDraft(workout) {
+    const source = workout || trackWorkoutForEditing();
+    return source.sets?.length ? source.sets : trackWorkoutSets(source);
   }
 
-  function commitTrackRounds() {
+  function updateTrackSet(setIndex, field, value) {
     setEditing((current) => {
       const workout = current?.structuredWorkout || trackWorkoutForEditing();
+      const sets = trackSetsForDraft(workout).map((set, index) => (
+        index === setIndex ? { ...set, [field]: value } : set
+      ));
+      return { ...current, structuredWorkout: { ...workout, rounds: 1, sets } };
+    });
+  }
+
+  function commitTrackSet(setIndex) {
+    setEditing((current) => {
+      const workout = current?.structuredWorkout || trackWorkoutForEditing();
+      const sets = trackSetsForDraft(workout).map((set, index) => (
+        index === setIndex ? normalizeTrackSet(set, index) : set
+      ));
+      return { ...current, structuredWorkout: { ...workout, rounds: 1, sets } };
+    });
+  }
+
+  function updateTrackSetStep(setIndex, stepIndex, field, value) {
+    setEditing((current) => {
+      const workout = current?.structuredWorkout || trackWorkoutForEditing();
+      const sets = trackSetsForDraft(workout).map((set, index) => (
+        index === setIndex
+          ? { ...set, steps: set.steps.map((step, currentStep) => currentStep === stepIndex ? { ...step, [field]: value } : step) }
+          : set
+      ));
+      return { ...current, structuredWorkout: { ...workout, rounds: 1, sets } };
+    });
+  }
+
+  function commitTrackSetStep(setIndex, stepIndex) {
+    setEditing((current) => {
+      const workout = current?.structuredWorkout || trackWorkoutForEditing();
+      const sets = trackSetsForDraft(workout).map((set, index) => (
+        index === setIndex
+          ? {
+            ...set,
+            steps: set.steps.map((step, currentStep) => (
+              currentStep === stepIndex ? normalizeTrackStep(step, step.kind) : step
+            )),
+          }
+          : set
+      ));
+      return { ...current, structuredWorkout: { ...workout, rounds: 1, sets } };
+    });
+  }
+
+  function addTrackSet() {
+    setEditing((current) => {
+      const workout = current?.structuredWorkout || trackWorkoutForEditing();
+      const sets = trackSetsForDraft(workout);
+      if (sets.length >= 8) return current;
+      const next = normalizeTrackSet({
+        id: crypto.randomUUID(),
+        label: `Satz ${sets.length + 1}`,
+        repeats: 1,
+        steps: [
+          { kind: "work", unit: "distance", value: 1000 },
+          { kind: "recovery", unit: "distance", value: 200 },
+        ],
+      }, sets.length);
+      return { ...current, structuredWorkout: { ...workout, rounds: 1, sets: [...sets, next] } };
+    });
+  }
+
+  function duplicateTrackSet(setIndex) {
+    setEditing((current) => {
+      const workout = current?.structuredWorkout || trackWorkoutForEditing();
+      const sets = trackSetsForDraft(workout);
+      if (sets.length >= 8 || !sets[setIndex]) return current;
+      const source = sets[setIndex];
+      const copy = normalizeTrackSet({
+        ...source,
+        id: crypto.randomUUID(),
+        label: `Satz ${sets.length + 1}`,
+        steps: source.steps.map((step) => ({ ...step })),
+      }, sets.length);
+      return { ...current, structuredWorkout: { ...workout, rounds: 1, sets: [...sets, copy] } };
+    });
+  }
+
+  function removeTrackSet(setIndex) {
+    setEditing((current) => {
+      const workout = current?.structuredWorkout || trackWorkoutForEditing();
+      const sets = trackSetsForDraft(workout);
+      if (sets.length <= 1) return current;
+      return { ...current, structuredWorkout: { ...workout, rounds: 1, sets: sets.filter((_, index) => index !== setIndex) } };
+    });
+  }
+
+  function addTrackSetStep(setIndex, kind) {
+    setEditing((current) => {
+      const workout = current?.structuredWorkout || trackWorkoutForEditing();
+      const sets = trackSetsForDraft(workout).map((set, index) => {
+        if (index !== setIndex || set.steps.length >= 16) return set;
+        return {
+          ...set,
+          steps: [...set.steps, { kind, unit: "distance", value: kind === "recovery" ? 200 : 1000 }],
+        };
+      });
+      return { ...current, structuredWorkout: { ...workout, rounds: 1, sets } };
+    });
+  }
+
+  function removeTrackSetStep(setIndex, stepIndex) {
+    setEditing((current) => {
+      const workout = current?.structuredWorkout || trackWorkoutForEditing();
+      const sets = trackSetsForDraft(workout).map((set, index) => (
+        index === setIndex && set.steps.length > 1
+          ? { ...set, steps: set.steps.filter((_, currentStep) => currentStep !== stepIndex) }
+          : set
+      ));
+      return { ...current, structuredWorkout: { ...workout, rounds: 1, sets } };
+    });
+  }
+
+  function moveTrackSetStep(setIndex, stepIndex, direction) {
+    setEditing((current) => {
+      const workout = current?.structuredWorkout || trackWorkoutForEditing();
+      const sets = trackSetsForDraft(workout).map((set, index) => {
+        if (index !== setIndex) return set;
+        const target = stepIndex + direction;
+        if (target < 0 || target >= set.steps.length) return set;
+        const steps = [...set.steps];
+        [steps[stepIndex], steps[target]] = [steps[target], steps[stepIndex]];
+        return { ...set, steps };
+      });
+      return { ...current, structuredWorkout: { ...workout, rounds: 1, sets } };
+    });
+  }
+
+  function convertLegacyTrackToSingleSet() {
+    setEditing((current) => {
+      const workout = current?.structuredWorkout || trackWorkoutForEditing();
+      const legacySteps = Array.isArray(workout.steps) ? workout.steps : [];
+      if (!legacySteps.length) return current;
       return {
         ...current,
         structuredWorkout: {
           ...workout,
-          rounds: normalizeTrackRounds(workout.rounds),
+          rounds: 1,
+          sets: [normalizeTrackSet({ id: "set-1", label: "Satz 1", repeats: 1, steps: legacySteps }, 0)],
         },
       };
-    });
-  }
-
-  function commitTrackStep(index) {
-    setEditing((current) => {
-      const workout = current?.structuredWorkout || trackWorkoutForEditing();
-      return {
-        ...current,
-        structuredWorkout: {
-          ...workout,
-          steps: workout.steps.map((step, stepIndex) => (
-            stepIndex === index ? normalizeTrackStep(step, step.kind) : step
-          )),
-        },
-      };
-    });
-  }
-
-  function addTrackStep(kind) {
-    setEditing((current) => {
-      const workout = current?.structuredWorkout || trackWorkoutForEditing();
-      if (workout.steps.length >= 16) return current;
-      return {
-        ...current,
-        structuredWorkout: {
-          ...workout,
-          steps: [
-            ...workout.steps,
-            { kind, unit: "distance", value: kind === "recovery" ? 200 : 400 },
-          ],
-        },
-      };
-    });
-  }
-
-  function removeTrackStep(index) {
-    setEditing((current) => {
-      const workout = current?.structuredWorkout || trackWorkoutForEditing();
-      if (workout.steps.length <= 1) return current;
-      return {
-        ...current,
-        structuredWorkout: {
-          ...workout,
-          steps: workout.steps.filter((_, stepIndex) => stepIndex !== index),
-        },
-      };
-    });
-  }
-
-  function moveTrackStep(index, direction) {
-    setEditing((current) => {
-      const workout = current?.structuredWorkout || trackWorkoutForEditing();
-      const target = index + direction;
-      if (target < 0 || target >= workout.steps.length) return current;
-      const steps = [...workout.steps];
-      [steps[index], steps[target]] = [steps[target], steps[index]];
-      return { ...current, structuredWorkout: { ...workout, steps } };
     });
   }
 
@@ -2305,6 +2392,7 @@ export default function Planner() {
           kind: workout.kind,
           rounds: workout.rounds,
           steps: workout.steps,
+          ...(workout.sets?.length ? { sets: workout.sets } : {}),
           warmupMode: "lap",
           cooldownMode: "lap",
           planningStatus: currentWorkout.planningStatus,
@@ -3608,39 +3696,66 @@ export default function Planner() {
                 <div className="planner-track-lap-flow" aria-label="Workout-Ablauf">
                   <span><b>Warm-up</b><small>bis LAP</small></span>
                   <strong>→</strong>
-                  <span><b>{editingTrackWorkout.rounds}× Hauptteil</b><small>{editingTrackWorkout.mainControlMode === TRACK_MAIN_CONTROL_MODES.MANUAL_LAP ? "Distanz per LAP · Zeit automatisch" : "automatisch"}</small></span>
+                  <span><b>{editingTrackSets.length} {editingTrackSets.length === 1 ? "Satz" : "Sätze"}</b><small>{editingTrackSets.reduce((sum, set) => sum + Number(set.repeats || 1), 0)} Ablaufblöcke · {editingTrackWorkout.mainControlMode === TRACK_MAIN_CONTROL_MODES.MANUAL_LAP ? "Distanz per LAP" : "automatisch"}</small></span>
                   <strong>→</strong>
                   <span><b>Cool-down</b><small>bis LAP</small></span>
                 </div>
                 <div className="planner-track-settings planner-track-compact-settings">
                   <label><span>Art</span><select value={editingTrackWorkout.kind} onChange={(event) => updateTrackWorkout("kind", event.target.value)}><option value="intervals">Intervalle</option><option value="sprints">Sprints / Strides</option></select></label>
-                  <label><span>Durchgänge</span><input type="number" min="1" max="30" value={editingTrackWorkout.rounds} onChange={(event) => updateTrackWorkout("rounds", event.target.value)} onBlur={commitTrackRounds} /></label>
+                  <div className="planner-track-set-help"><strong>Sätze statt doppelter Multiplikation</strong><small>Jeder Satz hat eigene Schritte und eine eigene Wiederholungszahl. Die Distanz wird nur daraus berechnet.</small></div>
                 </div>
-                <div className="planner-track-sequence">
-                  <div className="planner-track-sequence-heading">
-                    <div><strong>Schritte je Durchgang</strong><small>{editingTrackWorkout.mainControlMode === TRACK_MAIN_CONTROL_MODES.MANUAL_LAP ? "Auf der Bahn zeigen die Hinweise Distanz und Zielpace; du drückst am echten Runden-/Abschnittsende LAP." : "Garmin beendet die Schritte automatisch nach Distanz oder Zeit."} „510“ wird automatisch zu „5:10“.</small></div>
-                    <span>{editingTrackWorkout.steps.length}/16</span>
+                {legacyTrackRepeatWarning && (
+                  <div className="planner-track-repeat-warning">
+                    <div>
+                      <strong>Die alte Struktur wird gerade mehrfach gezählt.</strong>
+                      <small>{editingTrackWorkout.steps.length} bereits angelegte Schritte × {editingTrackWorkout.rounds} Durchgänge ergeben {trackDistanceFormatter.format(editingTrackDistance.mainDistanceKm)} km Hauptteil. Wenn die Schritte bereits den kompletten Hauptteil beschreiben, nur einmal zählen.</small>
+                    </div>
+                    <button type="button" onClick={convertLegacyTrackToSingleSet}>Als vollständigen Hauptteil übernehmen</button>
                   </div>
-                  {editingTrackWorkout.steps.map((step, index) => (
-                    <article className={step.kind} key={`${index}-${step.kind}`}>
-                      <b>{index + 1}</b>
-                      <label><span>Abschnitt</span><select value={step.kind} onChange={(event) => updateTrackStep(index, "kind", event.target.value)}><option value="work">Belastung</option><option value="recovery">Pause</option></select></label>
-                      <label><span>Einheit</span><select value={step.unit} onChange={(event) => updateTrackStep(index, "unit", event.target.value)}><option value="distance">Meter</option><option value="time">Sekunden</option></select></label>
-                      <label><span>Wert</span><input type="number" min={step.unit === "distance" ? "20" : "5"} max={step.unit === "distance" ? "5000" : "3600"} value={step.value} onChange={(event) => updateTrackStep(index, "value", event.target.value)} onBlur={() => commitTrackStep(index)} /></label>
-                      <label><span>Ziel-Pace /km</span><input type="text" inputMode="numeric" pattern="[0-9]{1,2}[:.,][0-5][0-9]" placeholder="z. B. 4:40 oder 440" title="Pace als 4:40 oder 440 eingeben" value={step.targetPace || ""} onChange={(event) => updateTrackStep(index, "targetPace", formatTrackPaceInput(event.target.value))} onBlur={() => commitTrackStep(index)} /></label>
-                      <label><span>Toleranz</span><select value={step.paceToleranceSeconds ?? 5} disabled={!step.targetPace} onChange={(event) => updateTrackStep(index, "paceToleranceSeconds", Number(event.target.value))}><option value="5">± 5 Sek.</option><option value="10">± 10 Sek.</option><option value="15">± 15 Sek.</option><option value="20">± 20 Sek.</option><option value="30">± 30 Sek.</option></select></label>
-                      <div className="planner-track-garmin-cue"><small>Auf Garmin</small><strong>{editingTrackWorkout.mainControlMode === TRACK_MAIN_CONTROL_MODES.MANUAL_LAP && step.unit === "distance" ? "LAP · " : ""}{trackStepGarminCue(step)}</strong></div>
-                      <div className="planner-track-step-actions">
-                        <button type="button" onClick={() => moveTrackStep(index, -1)} disabled={index === 0} aria-label={`Schritt ${index + 1} nach oben`}>↑</button>
-                        <button type="button" onClick={() => moveTrackStep(index, 1)} disabled={index === editingTrackWorkout.steps.length - 1} aria-label={`Schritt ${index + 1} nach unten`}>↓</button>
-                        <button type="button" className="danger" onClick={() => removeTrackStep(index)} disabled={editingTrackWorkout.steps.length === 1} aria-label={`Schritt ${index + 1} entfernen`}>×</button>
+                )}
+                <div className="planner-track-sets">
+                  {editingTrackSets.map((set, setIndex) => (
+                    <section className="planner-track-set" key={set.id || `set-${setIndex}`}>
+                      <header className="planner-track-set-heading">
+                        <div className="planner-track-set-title">
+                          <span>Satz {setIndex + 1}</span>
+                          <input maxLength="40" value={set.label || ""} onChange={(event) => updateTrackSet(setIndex, "label", event.target.value)} onBlur={() => commitTrackSet(setIndex)} aria-label={`Name von Satz ${setIndex + 1}`} />
+                        </div>
+                        <label className="planner-track-set-repeat"><span>Wiederholungen</span><input type="number" min="1" max="30" value={set.repeats} onChange={(event) => updateTrackSet(setIndex, "repeats", event.target.value)} onBlur={() => commitTrackSet(setIndex)} /></label>
+                        <div className="planner-track-set-actions">
+                          <button type="button" onClick={() => duplicateTrackSet(setIndex)} disabled={editingTrackSets.length >= 8}>Duplizieren</button>
+                          <button type="button" className="danger" onClick={() => removeTrackSet(setIndex)} disabled={editingTrackSets.length === 1}>Satz löschen</button>
+                        </div>
+                      </header>
+                      <div className="planner-track-sequence">
+                        <div className="planner-track-sequence-heading">
+                          <div><strong>Schritte in {set.label || `Satz ${setIndex + 1}`}</strong><small>Garmin-Hinweis kurz halten, z. B. „SCHNELL“, „SCHWELLE“ oder „LOCKER“. Die Zielpace wird automatisch ergänzt.</small></div>
+                          <span>{set.steps.length}/16</span>
+                        </div>
+                        {set.steps.map((step, stepIndex) => (
+                          <article className={step.kind} key={`${set.id || setIndex}-${stepIndex}-${step.kind}`}>
+                            <b>{stepIndex + 1}</b>
+                            <label><span>Abschnitt</span><select value={step.kind} onChange={(event) => updateTrackSetStep(setIndex, stepIndex, "kind", event.target.value)}><option value="work">Belastung</option><option value="recovery">Pause</option></select></label>
+                            <label><span>Einheit</span><select value={step.unit} onChange={(event) => updateTrackSetStep(setIndex, stepIndex, "unit", event.target.value)}><option value="distance">Meter</option><option value="time">Sekunden</option></select></label>
+                            <label><span>Wert</span><input type="number" min={step.unit === "distance" ? "20" : "5"} max={step.unit === "distance" ? "5000" : "3600"} value={step.value} onChange={(event) => updateTrackSetStep(setIndex, stepIndex, "value", event.target.value)} onBlur={() => commitTrackSetStep(setIndex, stepIndex)} /></label>
+                            <label><span>Ziel-Pace /km</span><input type="text" inputMode="numeric" pattern="[0-9]{1,2}[:.,][0-5][0-9]" placeholder="z. B. 4:10" title="Pace als 4:10 oder 410 eingeben" value={step.targetPace || ""} onChange={(event) => updateTrackSetStep(setIndex, stepIndex, "targetPace", formatTrackPaceInput(event.target.value))} onBlur={() => commitTrackSetStep(setIndex, stepIndex)} /></label>
+                            <label><span>Toleranz</span><select value={step.paceToleranceSeconds ?? 5} disabled={!step.targetPace || step.kind === "recovery"} onChange={(event) => updateTrackSetStep(setIndex, stepIndex, "paceToleranceSeconds", Number(event.target.value))}><option value="5">± 5 Sek.</option><option value="10">± 10 Sek.</option><option value="15">± 15 Sek.</option><option value="20">± 20 Sek.</option><option value="30">± 30 Sek.</option></select></label>
+                            <label className="planner-track-cue-input"><span>Garmin-Hinweis</span><input maxLength="36" value={step.cue || ""} onChange={(event) => updateTrackSetStep(setIndex, stepIndex, "cue", event.target.value)} onBlur={() => commitTrackSetStep(setIndex, stepIndex)} placeholder={step.kind === "recovery" ? "z. B. TRAB" : "z. B. SCHNELL"} /><small>{editingTrackWorkout.mainControlMode === TRACK_MAIN_CONTROL_MODES.MANUAL_LAP && step.unit === "distance" ? "LAP · " : ""}{trackStepGarminCue(step)}</small></label>
+                            <div className="planner-track-step-actions">
+                              <button type="button" onClick={() => moveTrackSetStep(setIndex, stepIndex, -1)} disabled={stepIndex === 0} aria-label={`Schritt ${stepIndex + 1} nach oben`}>↑</button>
+                              <button type="button" onClick={() => moveTrackSetStep(setIndex, stepIndex, 1)} disabled={stepIndex === set.steps.length - 1} aria-label={`Schritt ${stepIndex + 1} nach unten`}>↓</button>
+                              <button type="button" className="danger" onClick={() => removeTrackSetStep(setIndex, stepIndex)} disabled={set.steps.length === 1} aria-label={`Schritt ${stepIndex + 1} entfernen`}>×</button>
+                            </div>
+                          </article>
+                        ))}
+                        <div className="planner-track-add-actions">
+                          <button type="button" onClick={() => addTrackSetStep(setIndex, "work")} disabled={set.steps.length >= 16}>+ Belastung</button>
+                          <button type="button" onClick={() => addTrackSetStep(setIndex, "recovery")} disabled={set.steps.length >= 16}>+ Pause</button>
+                        </div>
                       </div>
-                    </article>
+                    </section>
                   ))}
-                  <div className="planner-track-add-actions">
-                    <button type="button" onClick={() => addTrackStep("work")} disabled={editingTrackWorkout.steps.length >= 16}>+ Belastung</button>
-                    <button type="button" onClick={() => addTrackStep("recovery")} disabled={editingTrackWorkout.steps.length >= 16}>+ Pause</button>
-                  </div>
+                  <button type="button" className="planner-track-add-set" onClick={addTrackSet} disabled={editingTrackSets.length >= 8}>+ Satz hinzufügen</button>
                 </div>
                 <strong className="planner-track-summary">{trackWorkoutSummary(editingTrackWorkout)}</strong>
                 <div className="planner-track-distance" aria-label="Berechnete Track-Distanz">

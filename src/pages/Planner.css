@@ -2795,3 +2795,93 @@
 .planner-rest-placeholder{min-height:64px;color:inherit;background:transparent}
 .planner-rest-placeholder .planner-compact-kicker>span{color:var(--muted)}
 .planner-rest-placeholder .planner-workout-compact-main>p{color:var(--muted)!important}
+
+/* v4.2.7 – set-based track builder, exact distance accounting and Garmin cues */
+.planner-track-compact-settings{
+  grid-template-columns:minmax(150px,.5fr) minmax(260px,1.5fr);
+}
+.planner-track-set-help{
+  display:grid;
+  align-content:center;
+  gap:2px;
+  min-width:0;
+  padding:8px 10px;
+  border:1px solid var(--border);
+  border-radius:10px;
+  background:color-mix(in srgb,var(--bg-input) 72%,transparent);
+}
+.planner-track-set-help strong{font-size:9px;color:var(--text-soft)}
+.planner-track-set-help small{font-size:8px;color:var(--muted);line-height:1.35}
+.planner-track-repeat-warning{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+  padding:11px 12px;
+  border:1px solid color-mix(in srgb,var(--warning,#facc15) 50%,var(--border));
+  border-radius:11px;
+  background:color-mix(in srgb,var(--warning,#facc15) 6%,transparent);
+}
+.planner-track-repeat-warning>div{display:grid;gap:3px;min-width:0}
+.planner-track-repeat-warning strong{font-size:10px;color:var(--warning,#facc15)}
+.planner-track-repeat-warning small{font-size:8.5px;color:var(--muted-bright);line-height:1.4}
+.planner-track-repeat-warning button{flex:none;min-height:34px;font-size:9px}
+.planner-track-sets{display:grid;gap:10px}
+.planner-track-set{
+  display:grid;
+  gap:10px;
+  padding:11px;
+  border:1px solid color-mix(in srgb,var(--accent-border) 72%,var(--border));
+  border-radius:12px;
+  background:color-mix(in srgb,var(--bg-sidebar) 86%,transparent);
+}
+.planner-track-set-heading{
+  display:grid;
+  grid-template-columns:minmax(190px,1fr) 120px auto;
+  gap:8px;
+  align-items:end;
+}
+.planner-track-set-title,.planner-track-set-repeat{display:grid;gap:4px;min-width:0}
+.planner-track-set-title>span,.planner-track-set-repeat>span{
+  color:var(--muted);
+  font-size:7px;
+  font-weight:850;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+}
+.planner-track-set-title input,.planner-track-set-repeat input{
+  min-height:32px;
+  padding:5px 8px;
+  font-size:10px;
+}
+.planner-track-set-actions{display:flex;justify-content:flex-end;gap:5px}
+.planner-track-set-actions button{min-height:32px;padding:6px 9px;font-size:8.5px}
+.planner-track-cue-input small{
+  overflow:hidden;
+  color:var(--accent-bright);
+  font-size:7.5px;
+  font-weight:800;
+  line-height:1.25;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.planner-track-add-set{
+  min-height:38px;
+  border-style:dashed;
+  color:var(--accent-bright);
+  font-size:9px;
+  font-weight:800;
+}
+@media(max-width:900px){
+  .planner-track-compact-settings{grid-template-columns:1fr}
+  .planner-track-set-heading{grid-template-columns:minmax(0,1fr) 110px}
+  .planner-track-set-actions{grid-column:1/-1;justify-content:flex-start}
+  .planner-track-cue-input{grid-column:2/4}
+}
+@media(max-width:620px){
+  .planner-track-repeat-warning{align-items:stretch;flex-direction:column}
+  .planner-track-repeat-warning button{width:100%}
+  .planner-track-set-heading{grid-template-columns:1fr}
+  .planner-track-set-actions{grid-column:1}
+  .planner-track-cue-input{grid-column:2}
+}

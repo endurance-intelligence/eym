@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **4.2.6**
+Current app version: **4.2.7**
 
 **Eat your miles.**
 
@@ -707,3 +707,11 @@ supabase functions deploy event-search
 
 - The weekly briefing card now shows only week type and the concrete weekly distance corridor; detailed focus/meta text remains available in the week plan below.
 - The next key-session card now keeps only session, date and role markers; the longer explanation stays out of the scan-first briefing surface.
+
+## Track sets and Garmin cues v4.2.7
+
+- Track workouts can now be structured as multiple sets, each with its own repeat count and ordered steps.
+- Distance totals are calculated from the set structure instead of multiplying an already-expanded sequence by a legacy global round count.
+- Legacy workouts that would produce an implausibly large repeated main set show a one-click conversion to a single full sequence.
+- Every track step can carry a short Garmin cue such as `SCHNELL`, `SCHWELLE`, `LANGSAM` or `TRAB`; the target pace is appended automatically for work steps.
+- Intervals.icu receives the set repeat blocks and cues so the same wording can be surfaced on supported Garmin workout screens while the pace corridor remains the actual intensity target.
