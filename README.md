@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **4.2.8**
+Current app version: **4.2.9**
 
 **Eat your miles.**
 
@@ -713,10 +713,17 @@ supabase functions deploy event-search
 - Track workouts can now be structured as multiple sets, each with its own repeat count and ordered steps.
 - Distance totals are calculated from the set structure instead of multiplying an already-expanded sequence by a legacy global round count.
 - Legacy workouts that would produce an implausibly large repeated main set show a one-click conversion to a single full sequence.
-- Every track step can carry a short Garmin cue such as `SCHNELL`, `SCHWELLE`, `LANGSAM` or `TRAB`; the target pace is appended automatically for work steps.
+- Every track step can carry a short Garmin cue such as `410`, `420`, `430` or `TRAB`; the pace target remains a separate Garmin intensity target.
 - Intervals.icu receives the set repeat blocks and cues so the same wording can be surfaced on supported Garmin workout screens while the pace corridor remains the actual intensity target.
 
 ## Fixed 2 km track edges v4.2.8
 
 - Track sessions now estimate warm-up and cool-down with exactly 2.0 km each instead of a 2–3 km range.
 - The total track estimate is therefore main-set distance + 4.0 km. LAP-controlled execution on Garmin stays unchanged.
+
+## Compact Garmin step cues v4.2.9
+
+- A manually entered Garmin step cue is now sent exactly as entered; EI no longer appends the target pace to custom text.
+- Short labels such as `410`, `420`, `430` and `TRAB` therefore stay readable on small Garmin workout screens.
+- Pace guidance remains technically separate, including the configured pace corridor, so shortening the visible cue does not remove the workout target.
+- The planner field is renamed to “Anzeige auf Garmin” and limited to 10 characters to encourage concise on-watch labels.

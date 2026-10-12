@@ -89,11 +89,7 @@ export function trackStepGarminCue(input = {}) {
     return customCue || (step.unit === "distance" ? `${step.value}er Trab` : "Trabpause");
   }
   const paceRange = trackPaceRange(step);
-  if (customCue) {
-    return paceRange && !customCue.includes(paceRange.targetPace)
-      ? `${customCue} · ${paceRange.targetPace}/km`
-      : customCue;
-  }
+  if (customCue) return customCue;
   if (step.unit === "distance") {
     return `${step.value}er${paceRange ? ` @ ${paceRange.targetPace}/km` : " Belastung"}`;
   }

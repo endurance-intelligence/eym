@@ -174,8 +174,8 @@ test("legacy track rounds remain explicit when opened as one editable set", () =
   assert.equal(normalizeTrackSet({ label: "Block A", repeats: 3, steps: sets[0].steps }, 0).repeats, 3);
 });
 
-test("custom Garmin cues keep the exact training instruction and append target pace", () => {
-  assert.equal(trackStepGarminCue({ kind: "work", unit: "distance", value: 1000, targetPace: "4:10", cue: "SCHNELL" }), "SCHNELL · 4:10/km");
+test("custom Garmin cues stay exactly as entered while pace remains a separate target", () => {
+  assert.equal(trackStepGarminCue({ kind: "work", unit: "distance", value: 1000, targetPace: "4:10", cue: "410" }), "410");
   assert.equal(trackStepGarminCue({ kind: "work", unit: "distance", value: 1000, targetPace: "4:30", cue: "LANGSAM 4:30" }), "LANGSAM 4:30");
   assert.equal(trackStepGarminCue({ kind: "recovery", unit: "distance", value: 200, cue: "TRAB" }), "TRAB");
 });
@@ -194,15 +194,15 @@ test("Intervals exports set repetitions and Garmin-visible cues without flatteni
           { kind: "recovery", unit: "distance", value: 200, cue: "TRAB" },
           { kind: "work", unit: "distance", value: 1000, targetPace: "4:20", cue: "SCHWELLE" },
           { kind: "recovery", unit: "distance", value: 200, cue: "TRAB" },
-          { kind: "work", unit: "distance", value: 1000, targetPace: "4:10", cue: "SCHNELL" },
+          { kind: "work", unit: "distance", value: 1000, targetPace: "4:10", cue: "410" },
         ],
       }],
     }),
   });
   assert.match(description, /Dreierblock 2x/);
-  assert.match(description, /LANGSAM · 4:30\/km Press lap 270s 4:25-4:35\/km Pace intensity=interval/);
-  assert.match(description, /SCHWELLE · 4:20\/km Press lap 260s 4:15-4:25\/km Pace intensity=interval/);
-  assert.match(description, /SCHNELL · 4:10\/km Press lap 250s 4:05-4:15\/km Pace intensity=interval/);
+  assert.match(description, /LANGSAM Press lap 270s 4:25-4:35\/km Pace intensity=interval/);
+  assert.match(description, /SCHWELLE Press lap 260s 4:15-4:25\/km Pace intensity=interval/);
+  assert.match(description, /410 Press lap 250s 4:05-4:15\/km Pace intensity=interval/);
   assert.match(description, /TRAB Press lap 90s intensity=recovery/);
 });
 

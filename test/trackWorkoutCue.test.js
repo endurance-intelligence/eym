@@ -23,3 +23,14 @@ test("time-based steps use compact Garmin cues", () => {
     "Trabpause",
   );
 });
+
+test("custom Garmin cue stays short and does not duplicate the pace target", () => {
+  assert.equal(
+    trackStepGarminCue({ kind: "work", unit: "distance", value: 1000, targetPace: "4:10", cue: "410" }),
+    "410",
+  );
+  assert.equal(
+    trackStepGarminCue({ kind: "recovery", unit: "distance", value: 200, cue: "TRAB" }),
+    "TRAB",
+  );
+});

@@ -131,11 +131,7 @@ function structuredSteps(input: Record<string, unknown>) {
           ? `${value}er${targetPace == null ? " Belastung" : ` @ ${formatPace(targetPace)}/km`}`
           : targetPace == null ? "Belastung" : `Belastung @ ${formatPace(targetPace)}/km`;
       const customCue = safeCue(step.cue);
-      const cue = customCue
-        ? (!recovery && targetPace != null && !customCue.includes(formatPace(targetPace))
-          ? `${customCue} · ${formatPace(targetPace)}/km`
-          : customCue)
-        : automaticCue;
+      const cue = customCue || automaticCue;
       return {
         kind: recovery ? "recovery" : "work",
         unit,
