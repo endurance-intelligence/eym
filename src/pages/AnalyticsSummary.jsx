@@ -57,11 +57,17 @@ export default function AnalyticsSummary() {
         </div>
       </Card>
 
-      <button type="button" className="analytics-detail-toggle" onClick={() => setDetailsOpen((value) => !value)} aria-expanded={detailsOpen}>
-        {detailsOpen ? "Daten & Trends schließen" : "Daten & Trends anzeigen"}
+      <button type="button" className={`analytics-detail-toggle ${detailsOpen ? "open" : ""}`} onClick={() => setDetailsOpen((value) => !value)} aria-expanded={detailsOpen}>
+        <span className="analytics-detail-toggle-icon" aria-hidden="true">↗</span>
+        <span className="analytics-detail-toggle-copy">
+          <small>Daten & Trends</small>
+          <strong>{detailsOpen ? "Detailanalyse schließen" : "Detailanalyse öffnen"}</strong>
+          <span>Wochenverlauf, Zielnähe, Sportmix und Langzeitvergleich</span>
+        </span>
+        <b aria-hidden="true">⌄</b>
       </button>
 
-      {detailsOpen && <div className="analytics-detail-shell"><Analytics /></div>}
+      {detailsOpen && <div className="analytics-detail-shell"><Analytics embedded /></div>}
     </>
   );
 }

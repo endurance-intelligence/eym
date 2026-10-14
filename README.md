@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **4.2.10**
+Current app version: **4.2.11**
 
 **Eat your miles.**
 
@@ -734,3 +734,14 @@ supabase functions deploy event-search
 - Review, workout-detail and modal action rows stay reachable at the bottom of the dialog while scrolling.
 - Save buttons in long Review and Planner forms remain visible above the device safe area.
 - The normal page keeps its existing bottom-navigation spacing; only open dialogs take visual priority.
+
+
+## Accepted-plan delta gate & Analytics glow-up v4.2.11
+
+- Ein angenommener Wochenplan ist jetzt die Coach-Baseline. Bereits bekannte Belastungen und Reviews duerfen den Coach-Check nach der Planannahme nicht erneut als Aenderungsgrund ausloesen.
+- Die Wochenannahme speichert einen Evidenz-Snapshot. Fuer bestehende Freigaben ohne Snapshot nutzt der Coach den Annahmezeitpunkt als rueckwaertskompatible Grenze.
+- Erst neue Evidenz seit der Planannahme darf wieder einen Coach-Eingriff ausloesen: z. B. zusaetzliche reale Belastung oder ein neues auffaelliges Review.
+- Coach-Check benennt eine konkrete betroffene Einheit, sobald wirklich eine Alternative existiert. Ohne konkretes Ziel wird kein pauschaler Alternativen-Button mehr erfunden.
+- Jahresstatistiken summieren Distanz nur noch fuer Distanzsportarten. Kraft & Mobility bleibt sichtbar, wird aber ueber Einheiten und Trainingszeit statt Fantasie-Kilometer dargestellt.
+- Der Langzeitvergleich nutzt fuer Year-over-Year-Deltas denselben Kalenderzeitraum und zeigt Sportarten als interaktive horizontale Balken mit sportartspezifischer Detailmetrik.
+- Analyse > Daten & Trends erhaelt eine neue eingebettete Toolbar, staerkere Kartenhierarchie und einen modernisierten Detail-/Langzeitbereich fuer Desktop und Mobile.

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { coachAlternativeFor, currentWeekAssessment, loadBandForRatio } from "../src/services/scienceCoach.js";
+import { planPublicationFingerprint } from "../src/services/workoutPublication.js";
 
 test("coach recommends a Zone-2 run instead of a hard track session", () => {
   const alternative = coachAlternativeFor(
@@ -105,4 +106,85 @@ test("weekly coach adjustments use flexible days after real additional load appe
   );
   assert.equal(assessment.candidates[0].coachAlternative.key, "preset:rest");
   assert.equal(assessment.candidates[1].coachAlternative.key, "preset:rest");
+});
+
+
+test("an accepted week treats pre-acceptance training and reviews as the baseline", () => {
+  const plan = [
+    { id: "track", date: "2026-10-13", time: "19:00", title: "ORC Track", type: "ORC Track", duration: 90, distance: 13.6, fixed: true, commitmentId: "track", completed: true },
+    { id: "orc-run", date: "2026-10-14", time: "19:00", title: "ORC Run", type: "ORC Run", duration: 62, distance: 10, fixed: true, commitmentId: "orc" },
+    { id: "stabi", date: "2026-10-14", title: "Stabi & Mobilität", type: "Stabi", duration: 25, spontaneous: true },
+    { id: "long", date: "2026-10-15", title: "24 km locker", type: "Long Run", duration: 154, distance: 24, spontaneous: true },
+    { id: "row", date: "2026-10-16", title: "2.500 m Rudern locker", type: "Rudern", duration: 40, spontaneous: true },
+    { id: "loop", date: "2026-10-18", title: "3 × 6,3 km · Heartbeat Ultra Fulda", type: "Loop-Training", duration: 150, distance: 18.9, keySession: true, spontaneous: true },
+  ];
+  const fingerprint = planPublicationFingerprint(plan);
+  const state = {
+    activities: [
+      { id: "baseline-1", startDateLocal: "2026-09-29T18:00:00", name: "10 km locker", type: "Run", duration: 60, distance: 10 },
+      { id: "baseline-2", startDateLocal: "2026-10-06T18:00:00", name: "12 km locker", type: "Run", duration: 72, distance: 12 },
+      { id: "track-actual", startDateLocal: "2026-10-13T19:00:00", name: "ORC Track", type: "Run", duration: 90, distance: 13.6 },
+    ],
+    reviews: {
+      "track-actual": { legs: 5, energy: 5, rpe: 8, updatedAt: "2026-10-13T21:15:00.000Z" },
+    },
+    planner: {
+      replacementSports: ["running", "cycling", "rowing", "mobility"],
+      weekApprovals: {
+        "2026-10-12": {
+          fingerprint,
+          acceptedAt: "2026-10-14T07:10:00.000Z",
+        },
+      },
+    },
+    plan,
+  };
+
+  const assessment = currentWeekAssessment(state, new Date("2026-10-14T12:00:00"));
+
+  assert.equal(assessment.acceptedPlan, true);
+  assert.equal(assessment.hasNewEvidence, false);
+  assert.equal(assessment.newReviewCount, 0);
+  assert.equal(assessment.level, "ok");
+  assert.deepEqual(assessment.reasons, []);
+  assert.deepEqual(assessment.candidates, []);
+});
+
+test("only a new post-acceptance review can reopen the accepted-week decision", () => {
+  const plan = [
+    { id: "track", date: "2026-10-13", time: "19:00", title: "ORC Track", type: "ORC Track", duration: 90, distance: 13.6, fixed: true, commitmentId: "track", completed: true },
+    { id: "orc-run", date: "2026-10-14", time: "19:00", title: "ORC Run", type: "ORC Run", duration: 62, distance: 10, fixed: true, commitmentId: "orc" },
+    { id: "stabi", date: "2026-10-14", title: "Stabi & Mobilität", type: "Stabi", duration: 25, spontaneous: true },
+    { id: "long", date: "2026-10-15", title: "24 km locker", type: "Long Run", duration: 154, distance: 24, spontaneous: true },
+  ];
+  const fingerprint = planPublicationFingerprint(plan);
+  const state = {
+    activities: [
+      { id: "baseline-1", startDateLocal: "2026-09-29T18:00:00", name: "10 km locker", type: "Run", duration: 60, distance: 10 },
+      { id: "baseline-2", startDateLocal: "2026-10-06T18:00:00", name: "12 km locker", type: "Run", duration: 72, distance: 12 },
+      { id: "track-actual", startDateLocal: "2026-10-13T19:00:00", name: "ORC Track", type: "Run", duration: 90, distance: 13.6 },
+    ],
+    reviews: {
+      "track-actual": { legs: 5, energy: 5, rpe: 8, updatedAt: "2026-10-14T08:00:00.000Z" },
+    },
+    planner: {
+      replacementSports: ["running", "cycling", "rowing", "mobility"],
+      weekApprovals: {
+        "2026-10-12": {
+          fingerprint,
+          acceptedAt: "2026-10-14T07:10:00.000Z",
+        },
+      },
+    },
+    plan,
+  };
+
+  const assessment = currentWeekAssessment(state, new Date("2026-10-14T12:00:00"));
+
+  assert.equal(assessment.acceptedPlan, true);
+  assert.equal(assessment.hasNewEvidence, true);
+  assert.equal(assessment.newReviewCount, 1);
+  assert.equal(assessment.level, "watch");
+  assert.match(assessment.reasons.join(" "), /seit der Planannahme/);
+  assert.ok(assessment.candidates.length > 0);
 });

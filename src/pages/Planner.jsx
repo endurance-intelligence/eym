@@ -1086,6 +1086,7 @@ export default function Planner() {
           weekKey,
           approvalFingerprint,
           acceptedAt,
+          scienceAssessment.acceptanceSnapshot,
         ),
         lastPlanChange: null,
       },

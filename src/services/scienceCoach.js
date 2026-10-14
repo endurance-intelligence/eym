@@ -1,6 +1,8 @@
 import { activityTimestamp, isRunningActivity, preferredActivities } from "./activityUtils.js";
 import { DEFAULT_REPLACEMENT_SPORTS } from "./configuration.js";
 import { buildGoalEngine } from "./goalEngine.js";
+import { WEEK_APPROVAL_STATES, weekPlanApprovalStatus } from "./plannerApproval.js";
+import { planPublicationFingerprint } from "./workoutPublication.js";
 
 const DAY = 86400000;
 
@@ -11,6 +13,29 @@ function numeric(value) {
 
 function activityDate(activity) {
   return String(activity?.startDateLocal || activity?.date || "").slice(0, 10);
+}
+
+function localDateKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function validTimestamp(value) {
+  const parsed = value ? new Date(value).getTime() : Number.NaN;
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function reviewTimestamp(review = {}, activity = {}) {
+  return validTimestamp(review.updatedAt || review.createdAt) || activityTimestamp(activity).getTime();
+}
+
+function plannedItemTimestamp(item = {}) {
+  const date = String(item.date || "").slice(0, 10);
+  if (!date) return 0;
+  const match = String(item.time || "").match(/^(\d{1,2}):(\d{2})/);
+  const time = match
+    ? `${String(match[1]).padStart(2, "0")}:${match[2]}`
+    : item.spontaneous ? "23:59" : "12:00";
+  return validTimestamp(`${date}T${time}:00`);
 }
 
 function reviewFor(reviews, activity) {
@@ -140,7 +165,9 @@ export function coachAlternativeFor(item = {}, context = {}) {
   if ((primary || preferRest) && overload) {
     let reason = alternativeDetails["preset:rest"].reason;
     if (numeric(context.ratio) >= 1.5) {
-      reason = "Die projizierte Belastung liegt deutlich über deinem jüngsten Rahmen. Ein freier Tag senkt sie am zuverlässigsten.";
+      reason = context.acceptedPlan
+        ? "Seit der Planannahme ist die prognostizierte Belastung deutlich gestiegen. Ein freier Tag senkt die zusätzliche Last am zuverlässigsten."
+        : "Die projizierte Belastung liegt deutlich über deinem jüngsten Rahmen. Ein freier Tag senkt sie am zuverlässigsten.";
     } else if (numeric(context.lowReviews) >= 2) {
       reason = "Mehrere aktuelle Reviews melden müde Beine oder wenig Energie. Ein freier Tag schützt die nächste Schlüsseleinheit.";
     }
@@ -226,6 +253,8 @@ export function currentWeekAssessment(state, now = new Date()) {
   const reference = new Date(now);
   const start = startOfWeek(reference);
   const end = new Date(start); end.setDate(end.getDate() + 7);
+  const startKey = localDateKey(start);
+  const weekEndKey = localDateKey(end);
   const previousStart = new Date(start); previousStart.setDate(previousStart.getDate() - 42);
   const activities = preferredActivities(state.activities || []);
   const recent = activities.filter((activity) => activityTimestamp(activity) >= previousStart && activityTimestamp(activity) < start);
@@ -241,13 +270,15 @@ export function currentWeekAssessment(state, now = new Date()) {
   const weekActivities = activities.filter((activity) => activityTimestamp(activity) >= start && activityTimestamp(activity) < end);
   const completed = weekActivities
     .reduce((sum, activity) => sum + activityLoad(activity, reviewFor(state.reviews, activity)), 0);
-  const todayKey = `${reference.getFullYear()}-${String(reference.getMonth() + 1).padStart(2, "0")}-${String(reference.getDate()).padStart(2, "0")}`;
-  const weekEndKey = end.toISOString().slice(0, 10);
-  const plannedWeek = (state.plan || []).filter((item) => (
+  const todayKey = localDateKey(reference);
+  const approvalPlan = (state.plan || []).filter((item) => (
     !item.archived
-    && item.date >= start.toISOString().slice(0, 10)
+    && item.date >= startKey
     && item.date < weekEndKey
-    && !item.missedReason
+  ));
+  const plannedWeek = approvalPlan.filter((item) => (
+    !item.missedReason
+    && !item.cancelled
     && item.type !== "Ruhetag"
   ));
   const open = plannedWeek.filter((item) => (
@@ -261,23 +292,82 @@ export function currentWeekAssessment(state, now = new Date()) {
   const ratio = hasBaseline ? projected / average : 1;
   const planDeltaRatio = plannedWeekLoad > 0 ? projected / plannedWeekLoad : 1;
   const hard = open.filter((item) => intensityFactor(`${item.title} ${item.type}`) >= 1.2);
+
+  const weekApprovals = state.planner?.weekApprovals || {};
+  const approvalFingerprint = planPublicationFingerprint(approvalPlan);
+  const approvalState = weekPlanApprovalStatus(weekApprovals, startKey, approvalFingerprint);
+  const approvalRecord = weekApprovals[startKey] || null;
+  const acceptedAtMs = approvalState === WEEK_APPROVAL_STATES.ACCEPTED
+    ? validTimestamp(approvalRecord?.acceptedAt)
+    : 0;
+  const acceptedPlan = Boolean(acceptedAtMs);
+
+  const observedBeforeAcceptance = acceptedPlan
+    ? weekActivities
+      .filter((activity) => activityTimestamp(activity).getTime() <= acceptedAtMs)
+      .reduce((sum, activity) => sum + activityLoad(activity, reviewFor(state.reviews, activity)), 0)
+    : 0;
+  const plannedAfterAcceptance = acceptedPlan
+    ? plannedWeek
+      .filter((item) => plannedItemTimestamp(item) > acceptedAtMs)
+      .reduce((sum, item) => sum + plannedLoad(item), 0)
+    : 0;
+  const snapshotProjectedLoad = numeric(approvalRecord?.evidenceSnapshot?.projectedLoad);
+  const acceptedProjectedLoad = acceptedPlan
+    ? snapshotProjectedLoad > 0
+      ? snapshotProjectedLoad
+      : Math.max(1, observedBeforeAcceptance + plannedAfterAcceptance || plannedWeekLoad || projected)
+    : 0;
+  const decisionDeltaRatio = acceptedPlan
+    ? projected / Math.max(1, acceptedProjectedLoad)
+    : planDeltaRatio;
+
   const currentWeekReviewed = weekActivities
     .filter((activity) => state.reviews?.[activity.id])
     .sort((left, right) => activityTimestamp(right) - activityTimestamp(left));
-  const lowReviews = currentWeekReviewed.filter((activity) => {
+  const postAcceptanceActivities = acceptedPlan
+    ? weekActivities.filter((activity) => activityTimestamp(activity).getTime() > acceptedAtMs)
+    : weekActivities;
+  const reviewSignalActivities = acceptedPlan
+    ? currentWeekReviewed.filter((activity) => reviewTimestamp(reviewFor(state.reviews, activity), activity) > acceptedAtMs)
+    : currentWeekReviewed;
+  const lowReviews = reviewSignalActivities.filter((activity) => {
     const review = reviewFor(state.reviews, activity);
     return (numeric(review.energy) > 0 && numeric(review.energy) <= 5)
       || (numeric(review.legs) > 0 && numeric(review.legs) <= 5);
   }).length;
+  const severeReviews = reviewSignalActivities.filter((activity) => {
+    const review = reviewFor(state.reviews, activity);
+    return (numeric(review.energy) > 0 && numeric(review.energy) <= 3)
+      || (numeric(review.legs) > 0 && numeric(review.legs) <= 3)
+      || (Array.isArray(review.legSymptoms) && review.legSymptoms.some((entry) => /schmerz|krampf/i.test(String(entry))));
+  }).length;
+  const hasNewEvidence = acceptedPlan
+    ? postAcceptanceActivities.length > 0 || reviewSignalActivities.length > 0
+    : weekActivities.length > 0 || currentWeekReviewed.length > 0;
+
   const reasons = [];
-  if (weekActivities.length > 0 && plannedWeekLoad > 0 && planDeltaRatio >= 1.15) {
-    reasons.push(`reale Zusatzbelastung hebt die aktuelle Wochenprognose etwa ${Math.round((planDeltaRatio - 1) * 100)} % über den angenommenen Wochenplan`);
+  if (
+    (!acceptedPlan && weekActivities.length > 0 && plannedWeekLoad > 0 && decisionDeltaRatio >= 1.15)
+    || (acceptedPlan && postAcceptanceActivities.length > 0 && decisionDeltaRatio >= 1.15)
+  ) {
+    reasons.push(acceptedPlan
+      ? `seit der Planannahme hebt reale Zusatzbelastung die Wochenprognose etwa ${Math.round((decisionDeltaRatio - 1) * 100)} % über den bestätigten Stand`
+      : `reale Zusatzbelastung hebt die aktuelle Wochenprognose etwa ${Math.round((decisionDeltaRatio - 1) * 100)} % über den angenommenen Wochenplan`);
   }
-  if (lowReviews === 1) reasons.push("ein aktuelles Review meldet müde Beine oder niedrige Energie");
-  if (lowReviews >= 2) reasons.push("mehrere Reviews aus dieser Woche melden müde Beine oder niedrige Energie");
-  const level = planDeltaRatio >= 1.3 || lowReviews >= 2 || (planDeltaRatio >= 1.15 && lowReviews >= 1)
+  if (severeReviews >= 1) reasons.push("ein neues Review meldet eine klare Erholungswarnung");
+  else if (lowReviews === 1) reasons.push(acceptedPlan
+    ? "ein neues Review seit der Planannahme meldet müde Beine oder niedrige Energie"
+    : "ein aktuelles Review meldet müde Beine oder niedrige Energie");
+  else if (lowReviews >= 2) reasons.push(acceptedPlan
+    ? "mehrere neue Reviews seit der Planannahme melden müde Beine oder niedrige Energie"
+    : "mehrere Reviews aus dieser Woche melden müde Beine oder niedrige Energie");
+
+  let level = severeReviews >= 1 || decisionDeltaRatio >= 1.3 || lowReviews >= 2 || (decisionDeltaRatio >= 1.15 && lowReviews >= 1)
     ? "adjust"
     : reasons.length ? "watch" : "ok";
+  if (acceptedPlan && !hasNewEvidence) level = "ok";
+
   const availableKeys = availableAlternativeKeys(state);
   const flexible = open.filter((item) => !item.fixed && !item.commitmentId && !item.keySession);
   const flexibleKey = open.filter((item) => !item.fixed && !item.commitmentId && item.keySession);
@@ -288,7 +378,7 @@ export function currentWeekAssessment(state, now = new Date()) {
       ...flexible,
       ...(level === "adjust" ? flexibleKey : []),
     ];
-  // Der Coach greift erst ein, nachdem die laufende Woche reale Überlastungs- oder Erholungssignale liefert.
+  // Ein angenommener Plan ist die Baseline. Erst neue Evidenz darf wieder einen Eingriff auslösen.
   // Fixtermine bleiben dabei die letzte Eskalationsstufe; flexible Einheiten werden zuerst angepasst.
   const candidatePool = flexiblePool.length > 0
     ? flexiblePool
@@ -322,8 +412,9 @@ export function currentWeekAssessment(state, now = new Date()) {
         availableKeys,
         index,
         level,
-        ratio,
+        ratio: acceptedPlan ? decisionDeltaRatio : ratio,
         lowReviews,
+        acceptedPlan,
         preferRest: level === "adjust" && !item.fixed && index <= 1,
       });
       const flexibilityReason = item.fixed
@@ -348,6 +439,7 @@ export function currentWeekAssessment(state, now = new Date()) {
     projected: Math.round(projected),
     plannedWeekLoad: Math.round(plannedWeekLoad),
     planDeltaRatio,
+    decisionDeltaRatio,
     observedCurrentWeek: weekActivities.length > 0,
     ratio,
     hasBaseline,
@@ -356,7 +448,20 @@ export function currentWeekAssessment(state, now = new Date()) {
     hardCount: hard.length,
     openCount: open.length,
     lowReviews,
+    severeReviews,
     reviewedSignals: currentWeekReviewed.length,
+    acceptedPlan,
+    acceptedAt: acceptedPlan ? approvalRecord.acceptedAt : null,
+    acceptedProjectedLoad: acceptedPlan ? Math.round(acceptedProjectedLoad) : null,
+    hasNewEvidence,
+    newActivityCount: acceptedPlan ? postAcceptanceActivities.length : weekActivities.length,
+    newReviewCount: acceptedPlan ? reviewSignalActivities.length : currentWeekReviewed.length,
     candidates,
+    acceptanceSnapshot: {
+      projectedLoad: Math.round(projected),
+      completedLoad: Math.round(completed),
+      activityIds: weekActivities.map((activity) => String(activity.id || "")).filter(Boolean),
+      latestReviewAt: currentWeekReviewed.reduce((latest, activity) => Math.max(latest, reviewTimestamp(reviewFor(state.reviews, activity), activity)), 0),
+    },
   };
 }

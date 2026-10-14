@@ -337,17 +337,19 @@ export default function Briefing() {
     : "";
   const todayKey = isoDate(now);
   const todayPlanEntries = state.plan.filter((item) => !item.archived && item.date === todayKey);
-  const coachNeedsAction = ["adjust", "watch"].includes(coach.level);
+  const coachNeedsAction = ["adjust", "watch"].includes(coach.level) && Boolean(coach.recommendation?.targetWorkoutId);
   const coachStatusTitle = coach.level === "ok"
-    ? "Alles im grünen Bereich"
+    ? coach.week?.acceptedPlan ? "Bestätigter Plan bleibt gültig" : "Alles im grünen Bereich"
     : coach.level === "open"
       ? "Plan steht – Review noch offen"
       : coach.recommendation.title;
   const coachStatusText = coach.level === "ok"
-    ? "Belastung und Erholung passen aktuell zusammen. Plan wie vorgesehen fortsetzen."
+    ? coach.week?.acceptedPlan
+      ? "Seit der Planannahme ist kein neues Signal aufgetaucht, das eine Änderung rechtfertigt."
+      : "Belastung und Erholung passen aktuell zusammen. Plan wie vorgesehen fortsetzen."
     : coach.level === "open"
       ? "Der Plan bleibt bestehen. Nach dem nächsten relevanten Lauf kurz bewerten."
-      : "Dein Coach hat Alternativen vorbereitet. Es wird nichts automatisch geändert.";
+      : coach.recommendation.text;
 
   return (
     <>
@@ -411,7 +413,7 @@ export default function Briefing() {
             <h2>{coachStatusTitle}</h2>
             <p>{coachStatusText}</p>
           </div>
-          <Link className="button-link" to="/planner">{coachNeedsAction ? "Alternativen prüfen" : "Plan ansehen"}</Link>
+          <Link className="button-link" to="/planner">{coachNeedsAction ? coach.recommendation.action.label : "Plan ansehen"}</Link>
         </Card>
 
         <div className="wide briefing-summary-grid briefing-hub-grid">

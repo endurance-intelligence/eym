@@ -54,7 +54,7 @@ test("unified coach gives recovery warnings precedence over a neutral week", () 
   assert.ok(result.recommendation.evidence.length >= 2);
 });
 
-test("watch state offers an explicit optional plan adjustment instead of vague pressure wording", () => {
+test("watch state does not invent alternatives without a concrete affected workout", () => {
   const state = stateWithRuns();
   state.reviews = {
     recent: { legs: 6, energy: 6, rpe: 5, overallFeeling: 6 },
@@ -65,10 +65,10 @@ test("watch state offers an explicit optional plan adjustment instead of vague p
   const result = buildCoachState(state, new Date("2026-08-10T12:00:00"));
 
   assert.equal(result.level, "watch");
-  assert.equal(result.title, "Plan beibehalten oder eine Einheit anpassen?");
-  assert.equal(result.recommendation.action.label, "Coach-Alternativen prüfen");
-  assert.match(result.recovery.text, /konkrete Alternative/);
-  assert.match(result.recovery.text, /übernehmen oder ändern/);
+  assert.equal(result.title, "Erholung beobachten – Plan nicht vorschnell ändern");
+  assert.equal(result.recommendation.action.label, "Plan ansehen");
+  assert.equal(result.recommendation.targetWorkoutId, null);
+  assert.match(result.recovery.text, /erst vorgeschlagen/);
   assert.doesNotMatch(`${result.title} ${result.recovery.text}`, /Druck|Tempodruck/);
 });
 

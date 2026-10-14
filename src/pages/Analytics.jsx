@@ -24,12 +24,17 @@ function compactHours(minutes) {
 
 function SportBreakdown({ year, sports, selectedKey, onSelect }) {
   const selected = sports.find((sport) => sport.key === selectedKey) || null;
+  const maxCount = Math.max(1, ...sports.map((sport) => sport.count));
+  const selectedAverageMinutes = selected?.count ? selected.duration / selected.count : 0;
 
   return (
     <div className="sport-breakdown-shell">
-      <div className="sport-breakdown" aria-label={`Sportarten ${year}`}>
+      <div className="sport-breakdown sport-breakdown-list" aria-label={`Sportarten ${year}`}>
         {sports.map((sport) => {
           const selectedSport = selected?.key === sport.key;
+          const metric = sport.distanceMeaningful
+            ? formatActivityDistance(sport.distance)
+            : compactHours(sport.duration);
           return (
             <button
               type="button"
@@ -39,7 +44,8 @@ function SportBreakdown({ year, sports, selectedKey, onSelect }) {
               aria-controls={`sport-breakdown-detail-${year}`}
               onClick={() => onSelect(selectedSport ? null : sport.key)}
             >
-              <span>{sport.label}</span>
+              <span className="sport-breakdown-copy"><b>{sport.label}</b><small>{metric}</small></span>
+              <span className="sport-breakdown-bar"><i style={{ width: `${Math.max(6, sport.count / maxCount * 100)}%` }} /></span>
               <strong>{sport.count}</strong>
             </button>
           );
@@ -49,13 +55,35 @@ function SportBreakdown({ year, sports, selectedKey, onSelect }) {
         <div className="sport-breakdown-detail" id={`sport-breakdown-detail-${year}`} role="status">
           <div>
             <small>{selected.label} · {year}</small>
-            <strong>{formatActivityDistance(selected.distance)}</strong>
+            <strong>{selected.distanceMeaningful ? formatActivityDistance(selected.distance) : compactHours(selected.duration)}</strong>
           </div>
-          <span>{selected.count} {selected.count === 1 ? "Einheit" : "Einheiten"}</span>
+          <span>
+            {selected.count} {selected.count === 1 ? "Einheit" : "Einheiten"}
+            {selected.distanceMeaningful
+              ? ` · ${compactHours(selected.duration)}`
+              : selectedAverageMinutes > 0 ? ` · Ø ${Math.round(selectedAverageMinutes)} min / Einheit` : ""}
+          </span>
         </div>
       )}
     </div>
   );
+}
+
+function relativeDelta(current, previous) {
+  const base = Number(previous || 0);
+  if (!(base > 0)) return null;
+  return (Number(current || 0) - base) / base;
+}
+
+function signedPercent(value) {
+  if (value == null || !Number.isFinite(Number(value))) return "–";
+  const percent = Math.round(Number(value) * 100);
+  return `${percent > 0 ? "+" : ""}${percent} %`;
+}
+
+function deltaTone(value) {
+  if (value == null || Math.abs(Number(value)) < 0.03) return "steady";
+  return Number(value) > 0 ? "up" : "down";
 }
 
 function IntensityRow({ label, value, total, tone, selected, onSelect }) {
@@ -97,7 +125,7 @@ function LearningPattern({ pattern }) {
   );
 }
 
-export default function Analytics() {
+export default function Analytics({ embedded = false }) {
   const { state } = useApp();
   const [weekCount, setWeekCount] = useState(8);
   const [selectedYearSports, setSelectedYearSports] = useState({});
@@ -111,6 +139,21 @@ export default function Analytics() {
     year,
     stats: buildYearStats(activities, year),
   })), [activities, currentYear]);
+  const throughMonthDay = `${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const ytdComparison = useMemo(() => {
+    const current = buildYearStats(activities, currentYear, { throughMonthDay });
+    const previous = buildYearStats(activities, currentYear - 1, { throughMonthDay });
+    return {
+      current,
+      previous,
+      deltas: {
+        count: relativeDelta(current.count, previous.count),
+        distance: relativeDelta(current.distance, previous.distance),
+        duration: relativeDelta(current.duration, previous.duration),
+      },
+    };
+  }, [activities, currentYear, throughMonthDay]);
+  const comparisonDateLabel = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit" }).format(now);
   const maxWeekKm = Math.max(1, ...analytics.weeks.flatMap((week) => [week.km, week.plannedKm]));
   const maxLongRun = Math.max(1, ...intelligence.longRun.weeks.map((week) => week.distance));
   const maxCrossMinutes = Math.max(1, ...intelligence.crossTraining.rows.map((row) => row.minutes));
@@ -127,8 +170,7 @@ export default function Analytics() {
   if (activities.length === 0) {
     return (
       <>
-        <PageTitle eyebrow="Training" title="Analyse" />
-        <TrainingSectionNav />
+        {!embedded && <><PageTitle eyebrow="Training" title="Analyse" /><TrainingSectionNav /></>}
         <Card>
           <h2>Noch keine Daten</h2>
           <p className="muted">Importiere Garmin oder synchronisiere Intervals.icu. Danach zeigt die Analyse Entwicklungen, Zusammenhänge und konkrete Coach-Erkenntnisse.</p>
@@ -137,14 +179,21 @@ export default function Analytics() {
     );
   }
 
+  const rangePicker = (
+    <div className="analytics-range-picker" aria-label="Analysezeitraum">
+      {[8, 12].map((value) => <button type="button" className={weekCount === value ? "selected" : ""} onClick={() => setWeekCount(value)} key={value}>{value} Wochen</button>)}
+    </div>
+  );
+
   return (
     <>
-      <PageTitle eyebrow="Training" title="Analyse">
-        <div className="analytics-range-picker" aria-label="Analysezeitraum">
-          {[8, 12].map((value) => <button type="button" className={weekCount === value ? "selected" : ""} onClick={() => setWeekCount(value)} key={value}>{value} Wochen</button>)}
+      {!embedded && <><PageTitle eyebrow="Training" title="Analyse">{rangePicker}</PageTitle><TrainingSectionNav /></>}
+      {embedded && (
+        <div className="analytics-detail-toolbar">
+          <div><p className="eyebrow">Daten & Trends</p><h2>Dein Training im Verlauf</h2><p>Wochenentwicklung, Zielnähe, Sportmix und Jahresvergleich – mit den relevanten Kennzahlen je Sportart.</p></div>
+          {rangePicker}
         </div>
-      </PageTitle>
-      <TrainingSectionNav />
+      )}
 
       <div className="grid analytics-grid">
         <Card className="wide analytics-intelligence-hero">
@@ -357,25 +406,51 @@ export default function Analytics() {
         </Card>
 
         <details className="wide analytics-year-disclosure">
-          <summary><div><p className="eyebrow">Langzeitvergleich</p><strong>{currentYear - 1} und {currentYear} anzeigen</strong><span>Gesamtdistanz, Zeit, Höhenmeter und Sportarten</span></div><b>⌄</b></summary>
-          <div className="analytics-year-grid">
-            {yearRows.map(({ year, stats }) => (
-              <Card key={year}>
-                <p className="eyebrow">{year}</p>
-                <div className="analytics-year-metrics">
-                  <Metric label="Einheiten" value={stats.count} />
-                  <Metric label="Distanz" value={`${stats.distance.toFixed(1)} km`} />
-                  <Metric label="Zeit" value={`${Math.round(stats.duration / 60)} h`} />
-                  <Metric label="Höhenmeter" value={`${Math.round(stats.elevation)} hm`} />
-                </div>
-                <SportBreakdown
-                  year={year}
-                  sports={stats.sports}
-                  selectedKey={selectedYearSports[year] || null}
-                  onSelect={(key) => setSelectedYearSports((current) => ({ ...current, [year]: key }))}
-                />
-              </Card>
-            ))}
+          <summary><div><p className="eyebrow">Langzeitvergleich</p><strong>{currentYear - 1} ↔ {currentYear}</strong><span>Jahresvolumen, Trainingszeit und Sportmix vergleichen</span></div><b>⌄</b></summary>
+          <div className="analytics-year-content">
+            <section className="analytics-yoy-card">
+              <div className="analytics-yoy-copy">
+                <small>Gleicher Zeitraum · bis {comparisonDateLabel}</small>
+                <strong>{currentYear} vs. {currentYear - 1}</strong>
+                <span>So vergleichst du den laufenden Jahresstand fair mit demselben Zeitraum des Vorjahres.</span>
+              </div>
+              <div className="analytics-yoy-metrics">
+                {[
+                  ["Einheiten", ytdComparison.deltas.count, `${ytdComparison.current.count} vs. ${ytdComparison.previous.count}`],
+                  ["Distanz", ytdComparison.deltas.distance, `${formatActivityDistance(ytdComparison.current.distance)} vs. ${formatActivityDistance(ytdComparison.previous.distance)}`],
+                  ["Trainingszeit", ytdComparison.deltas.duration, `${compactHours(ytdComparison.current.duration)} vs. ${compactHours(ytdComparison.previous.duration)}`],
+                ].map(([label, delta, detail]) => (
+                  <article className={deltaTone(delta)} key={label}>
+                    <small>{label}</small>
+                    <strong>{signedPercent(delta)}</strong>
+                    <span>{detail}</span>
+                  </article>
+                ))}
+              </div>
+            </section>
+            <div className="analytics-year-grid">
+              {yearRows.map(({ year, stats }) => (
+                <Card className="analytics-year-card" key={year}>
+                  <div className="analytics-year-heading">
+                    <div><p className="eyebrow">{year}</p><h3>{stats.count} Einheiten</h3></div>
+                    <span>{year === currentYear ? "Bisher" : "Gesamtjahr"}</span>
+                  </div>
+                  <div className="analytics-year-metrics">
+                    <Metric label="Distanz" value={formatActivityDistance(stats.distance)} sub="ohne Kraft & Mobility" />
+                    <Metric label="Trainingszeit" value={compactHours(stats.duration)} />
+                    <Metric label="Höhenmeter" value={`${Math.round(stats.elevation).toLocaleString("de-DE")} hm`} />
+                    <Metric label="Sportarten" value={stats.sports.length} />
+                  </div>
+                  <div className="analytics-sportmix-heading"><span>Sportmix</span><small>Antippen für passende Detailmetrik</small></div>
+                  <SportBreakdown
+                    year={year}
+                    sports={stats.sports}
+                    selectedKey={selectedYearSports[year] || null}
+                    onSelect={(key) => setSelectedYearSports((current) => ({ ...current, [year]: key }))}
+                  />
+                </Card>
+              ))}
+            </div>
           </div>
         </details>
       </div>

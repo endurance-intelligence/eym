@@ -23,6 +23,22 @@ test("an accepted fingerprint marks the week as accepted", () => {
   assert.equal(approvals["2026-08-03"].acceptedAt, "2026-08-03T08:00:00.000Z");
 });
 
+test("week acceptance can persist the evidence baseline used by the coach", () => {
+  const approvals = acceptWeekPlan(
+    {},
+    "2026-10-12",
+    "fingerprint-a",
+    "2026-10-14T07:10:00.000Z",
+    { projectedLoad: 420, completedLoad: 105, activityIds: ["track"] },
+  );
+
+  assert.deepEqual(approvals["2026-10-12"].evidenceSnapshot, {
+    projectedLoad: 420,
+    completedLoad: 105,
+    activityIds: ["track"],
+  });
+});
+
 test("a changed fingerprint requires a new acceptance", () => {
   const approvals = acceptWeekPlan({}, "2026-08-03", "fingerprint-a");
   assert.equal(

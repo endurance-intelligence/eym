@@ -12,13 +12,23 @@ export function weekPlanApprovalStatus(approvals = {}, weekKey = "", fingerprint
     : WEEK_APPROVAL_STATES.CHANGED;
 }
 
-export function acceptWeekPlan(approvals = {}, weekKey = "", fingerprint = "", acceptedAt = new Date().toISOString()) {
+export function acceptWeekPlan(
+  approvals = {},
+  weekKey = "",
+  fingerprint = "",
+  acceptedAt = new Date().toISOString(),
+  evidenceSnapshot = null,
+) {
   if (!weekKey || !fingerprint) return { ...(approvals || {}) };
+  const snapshot = evidenceSnapshot && typeof evidenceSnapshot === "object"
+    ? { ...evidenceSnapshot }
+    : null;
   return {
     ...(approvals || {}),
     [weekKey]: {
       fingerprint,
       acceptedAt,
+      ...(snapshot ? { evidenceSnapshot: snapshot } : {}),
     },
   };
 }

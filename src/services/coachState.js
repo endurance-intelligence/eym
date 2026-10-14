@@ -82,13 +82,52 @@ function todaySessionGuidance(state = {}, now = new Date()) {
   };
 }
 
+function coachTargetDateLabel(value) {
+  if (!value) return "";
+  const date = new Date(`${value}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" }).format(date);
+}
+
 function statusFromSignals(recoveryState, week) {
+  const target = week.candidates?.[0] || null;
+  const targetLabel = target?.title || "";
+  const dateLabel = coachTargetDateLabel(target?.date);
+  const targetTitle = targetLabel ? `${targetLabel}${dateLabel ? ` · ${dateLabel}` : ""}` : "";
+
+  if (week.acceptedPlan) {
+    if (week.level === "adjust") {
+      return {
+        level: "adjust",
+        tone: "bad",
+        label: "Neue Evidenz",
+        title: targetTitle ? `${targetTitle} gezielt prüfen` : "Seit der Planannahme hat sich etwas verändert",
+      };
+    }
+    if (week.level === "watch") {
+      return {
+        level: "watch",
+        tone: "warn",
+        label: "Neue Evidenz",
+        title: targetTitle ? `${targetTitle} im Blick behalten` : "Neue Belastungs- oder Erholungssignale beobachten",
+      };
+    }
+    return {
+      level: "ok",
+      tone: "good",
+      label: "Plan bestätigt",
+      title: "Plan bleibt gültig",
+    };
+  }
+
   if (recoveryState.tone === "bad" || week.level === "adjust") {
     return {
       level: "adjust",
       tone: "bad",
       label: recoveryState.tone === "bad" ? "Erholung priorisieren" : "Woche prüfen",
-      title: recoveryState.tone === "bad" ? "Heute bewusst entlasten" : "Die Wochenbelastung verdient einen Blick",
+      title: recoveryState.tone === "bad"
+        ? "Heute bewusst entlasten"
+        : targetTitle ? `${targetTitle} gezielt prüfen` : "Die Wochenbelastung verdient einen Blick",
     };
   }
   if (recoveryState.tone === "warn" || week.level === "watch") {
@@ -96,7 +135,7 @@ function statusFromSignals(recoveryState, week) {
       level: "watch",
       tone: "warn",
       label: "Aufmerksam steuern",
-      title: "Plan beibehalten oder eine Einheit anpassen?",
+      title: targetTitle ? `${targetTitle} im Blick behalten` : "Erholung beobachten – Plan nicht vorschnell ändern",
     };
   }
   if (!recoveryState.reviewed) {
@@ -110,7 +149,7 @@ function statusFromSignals(recoveryState, week) {
   return {
     level: "ok",
     tone: "good",
-      label: "Plan passt",
+    label: "Plan passt",
     title: "Stabil – der nächste geplante Reiz bleibt sinnvoll",
   };
 }
@@ -144,21 +183,34 @@ export function buildCoachState(state = {}, now = new Date()) {
 
   const signalLead = [
     analytics.trend?.text,
-    recoveryState.reviewed
+    recoveryState.reviewed && (!week.acceptedPlan || week.newReviewCount > 0)
       ? `Erholung zuletzt: Beine ${recoveryState.legs}/10, Energie ${recoveryState.energy}/10, RPE ${recoveryState.rpe}/10.`
       : null,
     analytics.specificity?.text,
   ].filter(Boolean).slice(0, 2).join(" ");
+  const primaryCandidate = week.candidates?.[0] || null;
+  const reasonText = week.reasons.length ? week.reasons.join(" · ") : "";
   const recommendationText = status.level === "open"
     ? "Bestehende Einheiten bleiben wie geplant. Ergänze nach dem nächsten relevanten Lauf ein kurzes Review, damit dein Coach Belastung und Erholung persönlicher einordnen kann."
-    : status.level === "ok"
-      ? `${signalLead} Konsequenz: keine Planänderung nötig; der nächste geplante Reiz bleibt bestehen, solange das nächste Review keine neue Abweichung zeigt.`
-      : `${signalLead} ${dashboard.recommendation}`;
-  const action = status.level === "adjust"
-    ? { key: "review-week", label: "Woche gezielt prüfen", href: "/planner" }
-    : status.level === "watch"
-      ? { key: "check-alternatives", label: "Coach-Alternativen prüfen", href: "/planner" }
-      : { key: "keep-plan", label: "Plan beibehalten", href: "/planner" };
+    : week.acceptedPlan && status.level === "ok"
+      ? week.hasNewEvidence
+        ? "Seit der Planannahme sind neue Daten hinzugekommen, aber sie verändern die Trainingsentscheidung nicht. Konsequenz: Der bestätigte Wochenplan bleibt bestehen."
+        : "Seit der Planannahme ist kein neues Belastungs- oder Erholungssignal hinzugekommen. Konsequenz: Der bestätigte Wochenplan bleibt unverändert."
+      : week.acceptedPlan && ["watch", "adjust"].includes(status.level)
+        ? `Seit der Planannahme neu: ${reasonText || "ein relevantes Signal"}.${primaryCandidate ? ` Betroffen ist zuerst ${primaryCandidate.title}${primaryCandidate.date ? ` am ${coachTargetDateLabel(primaryCandidate.date)}` : ""}.` : ""}`
+        : status.level === "ok"
+          ? `${signalLead} Konsequenz: keine Planänderung nötig; der nächste geplante Reiz bleibt bestehen, solange das nächste Review keine neue Abweichung zeigt.`
+          : `${signalLead} ${reasonText || dashboard.recommendation}`;
+  const actionable = ["adjust", "watch"].includes(status.level) && Boolean(primaryCandidate);
+  const action = actionable
+    ? {
+      key: status.level === "adjust" ? "review-week" : "check-alternatives",
+      label: `Optionen für ${primaryCandidate.title}`,
+      href: "/planner",
+      targetWorkoutId: primaryCandidate.id,
+      targetDate: primaryCandidate.date,
+    }
+    : { key: "keep-plan", label: "Plan ansehen", href: "/planner" };
   const signature = `${status.level}|${week.reasons.join("|")}|${recoveryState.label}|${analytics.trend.direction}|${mobility?.id || ""}`;
   const recommendation = {
     id: `coach-${localDateKey(now)}-${shortHash(signature)}`,
@@ -169,6 +221,8 @@ export function buildCoachState(state = {}, now = new Date()) {
     evidence,
     action,
     targetName: goal.target?.name || "",
+    targetWorkoutId: primaryCandidate?.id || null,
+    targetWorkoutDate: primaryCandidate?.date || null,
     confidence: analytics.confidence,
   };
 
