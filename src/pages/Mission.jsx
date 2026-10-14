@@ -56,6 +56,7 @@ const emptyEvent = {
   surface: "road",
   courseType: "unspecified",
   loopKm: "",
+  rounds: "",
   loopMode: "free",
   loopIntervalMinutes: 60,
   eventLimitMode: "open",
@@ -119,6 +120,7 @@ export default function Mission() {
       goalDiscipline: state.mission.goalDiscipline || "auto",
       courseType: state.mission.courseType || "",
       loopKm: state.mission.loopKm || 0,
+      rounds: state.mission.rounds || 0,
       loopMode: state.mission.loopMode || "",
       loopIntervalMinutes: state.mission.loopIntervalMinutes || 0,
       eventLimitMode: state.mission.eventLimitMode || "",
@@ -175,7 +177,7 @@ export default function Mission() {
       ...current,
       [name]: type === "checkbox" ? checked : value,
       ...(name === "location" ? { place: null } : {}),
-      ...(["name", "date", "time", "location", "targetKm", "surface", "courseType", "loopMode", "loopIntervalMinutes", "eventLimitMode", "planningHorizonHours", "eventTimeLimit", "elevationGain", "elevationLoss"].includes(name) && current.eventCatalogId
+      ...(["name", "date", "time", "location", "targetKm", "surface", "courseType", "rounds", "loopMode", "loopIntervalMinutes", "eventLimitMode", "planningHorizonHours", "eventTimeLimit", "elevationGain", "elevationLoss"].includes(name) && current.eventCatalogId
         ? { eventDataStatus: "adjusted" }
         : {}),
     }));
@@ -246,6 +248,7 @@ export default function Mission() {
         surface: draft.surface || "road",
         courseType: draft.courseType || "unspecified",
         loopKm: draft.courseType === "loop" && draft.loopKm !== "" ? Number(draft.loopKm) : 0,
+        rounds: draft.courseType === "loop" && draft.rounds !== "" ? Math.max(0, Math.round(Number(draft.rounds))) : 0,
         loopMode: draft.courseType === "loop" ? draft.loopMode || LOOP_MODES.FREE : LOOP_MODES.FREE,
         loopIntervalMinutes: draft.courseType === "loop" && draft.loopMode === LOOP_MODES.FIXED_INTERVAL ? Number(draft.loopIntervalMinutes || 60) : 0,
         eventLimitMode: draft.courseType === "loop" && draft.loopMode === LOOP_MODES.FIXED_INTERVAL ? (draft.eventLimitMode || "open") : draft.loopMode === LOOP_MODES.TIME_LIMIT ? "limited" : "",
@@ -285,6 +288,7 @@ export default function Mission() {
           goalDiscipline: mainTarget.goalDiscipline || "auto",
           courseType: mainTarget.courseType || "unspecified",
           loopKm: Number(mainTarget.loopKm) || 0,
+          rounds: Number(mainTarget.rounds) || 0,
           loopMode: mainTarget.loopMode || LOOP_MODES.FREE,
           loopIntervalMinutes: Number(mainTarget.loopIntervalMinutes) || 0,
           eventLimitMode: mainTarget.eventLimitMode || "",
@@ -327,6 +331,7 @@ export default function Mission() {
       surface: item.surface || "road",
       courseType: courseProfile.courseType,
       loopKm: courseProfile.loopKm || "",
+      rounds: courseProfile.rounds || "",
       loopMode: courseProfile.loopMode,
       loopIntervalMinutes: courseProfile.loopIntervalMinutes || 60,
       eventLimitMode: courseProfile.eventLimitMode || "open",
@@ -370,6 +375,7 @@ export default function Mission() {
             goalDiscipline: mainTarget.goalDiscipline || "auto",
             courseType: mainTarget.courseType || "unspecified",
             loopKm: Number(mainTarget.loopKm) || 0,
+            rounds: Number(mainTarget.rounds) || 0,
             loopMode: mainTarget.loopMode || LOOP_MODES.FREE,
             loopIntervalMinutes: Number(mainTarget.loopIntervalMinutes) || 0,
             eventLimitMode: mainTarget.eventLimitMode || "",
@@ -410,6 +416,7 @@ export default function Mission() {
             goalDiscipline: mainTarget.goalDiscipline || "auto",
             courseType: mainTarget.courseType || "unspecified",
             loopKm: Number(mainTarget.loopKm) || 0,
+            rounds: Number(mainTarget.rounds) || 0,
             loopMode: mainTarget.loopMode || LOOP_MODES.FREE,
             loopIntervalMinutes: Number(mainTarget.loopIntervalMinutes) || 0,
             eventLimitMode: mainTarget.eventLimitMode || "",
@@ -475,13 +482,13 @@ export default function Mission() {
         {courseProfile.courseType !== "unspecified" && <p><strong>Strecke:</strong> {courseTypeLabel(courseProfile.courseType)}{courseProfile.loopKm ? ` · ${String(courseProfile.loopKm).replace(".", ",")} km je Runde` : ""}{courseProfile.courseType === "loop" ? ` · ${loopModeLabel(courseProfile.loopMode)}` : ""}{courseProfile.aidStationMode !== "unspecified" ? ` · ${aidStationLabel(courseProfile.aidStationMode)}` : ""}</p>}
         {courseProfile.loopMode === LOOP_MODES.FIXED_INTERVAL && <div className="mission-loop-plan"><span><small>Rundenstart</small><strong>alle {courseProfile.loopIntervalMinutes} Minuten</strong></span><span><small>Event</small><strong>{courseProfile.eventLimitMode === "limited" ? `limitiert · ${formatLoopDuration(courseProfile.eventTimeLimitMinutes, { compact: true })}` : "Open End"}</strong></span>{courseProfile.eventLimitMode === "open" && courseProfile.planningHorizonHours > 0 && <span><small>Crew-/Wetterplanung</small><strong>{courseProfile.planningHorizonHours} h · ca. {Math.ceil(courseProfile.planningHorizonHours * 60 / courseProfile.loopIntervalMinutes)} Runden</strong></span>}<span><small>Garmin-Steuerung</small><strong>manuell per LAP</strong></span></div>}
         {matchPlan && <div className="mission-loop-plan match-plan">
+          <span><small>Offizielle Distanz</small><strong>{String(matchPlan.targetKm).replace(".", ",")} km</strong></span>
+          <span><small>Offizielle Runden</small><strong>{matchPlan.targetLoops}</strong></span>
+          <span><small>Standardrunde</small><strong>{String(matchPlan.loopKm).replace(".", ",")} km</strong></span>
           <span><small>Zeitlimit</small><strong>{formatLoopDuration(matchPlan.timeLimitMinutes, { compact: true })}</strong></span>
-          <span><small>Rundenbudget</small><strong>{formatLoopDuration(matchPlan.averageLoopBudgetMinutes)}</strong></span>
-          <span><small>Boxenstopp</small><strong>{String(matchPlan.plannedStopMinutes).replace(".", ",")} min</strong></span>
-          <span><small>Laufbudget je Runde</small><strong>{formatLoopDuration(matchPlan.runBudgetMinutes)}</strong></span>
-          <span><small>Späteste Ø-Pace ohne Puffer</small><strong>{matchPlan.requiredPace}/km</strong></span>
-          <span><small>Rundenziel</small><strong>{matchPlan.targetLoops} Runden · {String(matchPlan.plannedDistanceKm).replace(".", ",")} km</strong></span>
-          <p>Die Pace ist die rechnerische Obergrenze ohne Sicherheitspuffer und wird nicht automatisch an Garmin gesendet. Runde und Boxenstopp enden erst durch deine LAP-Taste.</p>
+          {matchPlan.finalSegmentKm > 0 && matchPlan.finalSegmentKm < matchPlan.loopKm - 0.05 && <span><small>Schlussrunde</small><strong>verkürzt · ca. {String(matchPlan.finalSegmentKm).replace(".", ",")} km</strong></span>}
+          <span><small>Geplanter Boxenstopp</small><strong>{String(matchPlan.plannedStopMinutes).replace(".", ",")} min</strong></span>
+          <p>Distanz, Rundenzahl und Standardrunde sind eigenständige Eventdaten. EI rechnet sie nicht gegeneinander um; eine verkürzte Schlussrunde bleibt Teil des offiziellen Rennformats.</p>
         </div>}
         {item.isMainTarget && <p><strong>Vorbereitung ab:</strong> {fmtDate(item.preparationStartDate || preparationStartDate)}</p>}
         {!archived && item.location && item.time && (
@@ -532,13 +539,13 @@ export default function Mission() {
             </div>
             {mainCourseProfile.loopMode === LOOP_MODES.FIXED_INTERVAL && <div className="mission-loop-plan mission-main-loop-plan"><span><small>Rundenformat</small><strong>{loopModeLabel(mainCourseProfile.loopMode)}</strong></span><span><small>Rundenstart</small><strong>alle {mainCourseProfile.loopIntervalMinutes} Minuten</strong></span><span><small>Event</small><strong>{mainCourseProfile.eventLimitMode === "limited" ? `limitiert · ${formatLoopDuration(mainCourseProfile.eventTimeLimitMinutes, { compact: true })}` : "Open End"}</strong></span>{mainCourseProfile.eventLimitMode === "open" && mainCourseProfile.planningHorizonHours > 0 && <span><small>Einsatzplanung</small><strong>{mainCourseProfile.planningHorizonHours} h</strong></span>}<span><small>Garmin</small><strong>Runde & Pause per LAP</strong></span></div>}
             {mainLoopMatchPlan && <div className="mission-loop-plan match-plan mission-main-loop-plan">
+              <span><small>Offizielle Distanz</small><strong>{String(mainLoopMatchPlan.targetKm).replace(".", ",")} km</strong></span>
+              <span><small>Offizielle Runden</small><strong>{mainLoopMatchPlan.targetLoops}</strong></span>
+              <span><small>Standardrunde</small><strong>{String(mainLoopMatchPlan.loopKm).replace(".", ",")} km</strong></span>
               <span><small>Zeitlimit</small><strong>{formatLoopDuration(mainLoopMatchPlan.timeLimitMinutes, { compact: true })}</strong></span>
-              <span><small>Rundenlänge</small><strong>{String(mainLoopMatchPlan.loopKm).replace(".", ",")} km</strong></span>
-              <span><small>Budget je Runde</small><strong>{formatLoopDuration(mainLoopMatchPlan.averageLoopBudgetMinutes)}</strong></span>
-              <span><small>Boxenstopp</small><strong>{String(mainLoopMatchPlan.plannedStopMinutes).replace(".", ",")} min</strong></span>
-              <span><small>Laufbudget je Runde</small><strong>{formatLoopDuration(mainLoopMatchPlan.runBudgetMinutes)}</strong></span>
-              <span><small>Späteste Ø-Pace ohne Puffer</small><strong>{mainLoopMatchPlan.requiredPace}/km</strong></span>
-              <p>{mainLoopMatchPlan.targetLoops} offizielle Runden ergeben {String(mainLoopMatchPlan.plannedDistanceKm).replace(".", ",")} km{Math.abs(mainLoopMatchPlan.distanceDeltaKm) >= 0.05 ? ` und bilden dein ${String(mainLoopMatchPlan.targetKm).replace(".", ",")}-km-Ziel damit praxisnah ab` : ""}. Die angezeigte Pace ist die rechnerische Obergrenze ohne Sicherheitspuffer. Garmin beendet keine Runde automatisch nach GPS-Distanz; der offizielle Rundenpunkt und deine LAP-Taste entscheiden.</p>
+              {mainLoopMatchPlan.finalSegmentKm > 0 && mainLoopMatchPlan.finalSegmentKm < mainLoopMatchPlan.loopKm - 0.05 && <span><small>Schlussrunde</small><strong>verkürzt · ca. {String(mainLoopMatchPlan.finalSegmentKm).replace(".", ",")} km</strong></span>}
+              <span><small>Boxenstopp</small><strong>{String(mainLoopMatchPlan.plannedStopMinutes).replace(".", ",")} min geplant</strong></span>
+              <p>Diese Werte kommen aus dem Event. Die offizielle Distanz bleibt führend; EI ersetzt weder Rundenzahl noch Distanz durch eine eigene Multiplikation.</p>
             </div>}
           </Card>
         )}
@@ -599,7 +606,8 @@ export default function Mission() {
             <label>Untergrund<select name="surface" value={draft.surface} onChange={change}><option value="road">Straße</option><option value="trail">Trail</option><option value="mixed">Gemischt</option><option value="track">Bahn</option></select></label>
             <label>Streckenformat<select name="courseType" value={draft.courseType} onChange={change}><option value="unspecified">Noch offen / nicht relevant</option><option value="loop">Rundenkurs</option><option value="out_and_back">Hin und zurück</option><option value="point_to_point">A nach B</option></select><small>Damit erkennt dein Coach, welche Abläufe im Training geprobt werden sollen.</small></label>
             {draft.courseType === "loop" && <>
-              <label>Rundenlänge (km)<input name="loopKm" type="number" min="0.1" step="0.1" value={draft.loopKm} onChange={change} required /><small>Backyard: 6,7 km. Heartbeat Ultra: 6,2 km. Die Distanz dient der Planung, nicht als automatischer Garmin-Rundenabschluss.</small></label>
+              <label>Rundenlänge (km)<input name="loopKm" type="number" min="0.1" step="0.1" value={draft.loopKm} onChange={change} required /><small>Standardrunde des Veranstalters. Sie wird niemals mit der Rundenzahl multipliziert, um deine offizielle Distanz zu überschreiben.</small></label>
+              <label>Offizielle Runden<input name="rounds" type="number" min="1" step="1" value={draft.rounds} onChange={change} placeholder="z. B. 19" /><small>Wenn bekannt, exakt vom Veranstalter übernehmen. Eine verkürzte Schlussrunde ist erlaubt.</small></label>
               <label>Rundenformat<select name="loopMode" value={draft.loopMode} onChange={change}><option value={LOOP_MODES.FIXED_INTERVAL}>Fester Starttakt · Backyard</option><option value={LOOP_MODES.TIME_LIMIT}>Gesamtzeitlimit · Stunden-/Heartbeat-Lauf</option><option value={LOOP_MODES.FREE}>Freier Rundkurs</option></select><small>Der Coach nutzt je nach Format eine andere Pausen- und Matchplan-Logik.</small></label>
               {draft.loopMode === LOOP_MODES.FIXED_INTERVAL && <>
                 <label>Starttakt je Runde (Minuten)<input name="loopIntervalMinutes" type="number" min="10" max="240" step="1" value={draft.loopIntervalMinutes} onChange={change} required /><small>Beim Backyard normalerweise 60 Minuten.</small></label>

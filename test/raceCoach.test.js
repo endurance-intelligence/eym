@@ -83,6 +83,7 @@ test("loop race coach uses round cadence instead of a fake average running pace"
   const plan = buildRaceCoachPlan({
     name: "Backyard Ultra",
     format: "loop",
+    loopMode: "fixed_interval",
     loopKm: 6.7,
     loopIntervalMinutes: 60,
     rounds: 15,
@@ -103,6 +104,27 @@ test("loop race coach uses round cadence instead of a fake average running pace"
   assert.equal(result.tone, "caution");
   assert.equal(result.headline, "Puffer wird knapp");
   assert.match(result.position, /Runde 5 von 15/);
+});
+
+
+
+test("time-limit loop races use official rounds without inventing a 60-minute start cadence", () => {
+  const plan = buildRaceCoachPlan({
+    name: "Heartbeat Ultra Fulda",
+    format: "loop",
+    loopMode: "time_limit",
+    loopKm: 6.2,
+    loopIntervalMinutes: 60,
+    rounds: 19,
+    distanceKm: 112,
+    durationMinutes: 900,
+  });
+  assert.equal(plan.profile.rounds, 19);
+  assert.equal(plan.summary.loopInterval, "47 min");
+  assert.match(plan.checkpoints[0].target, /bis ca\./);
+  assert.doesNotMatch(plan.checkpoints[0].target, /Start \+/);
+  const status = evaluateRaceCoach({ plan, status: { ...emptyRaceCoachStatus(), currentRound: 5, lastLoopMinutes: 55 } });
+  assert.doesNotMatch(status.headline, /Puffer|Starttakt/);
 });
 
 test("time race coach remains effort-led without inventing a distance pace", () => {

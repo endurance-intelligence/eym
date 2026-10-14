@@ -172,6 +172,23 @@ test("open Backyard mission uses the operational planning horizon instead of the
   assert.equal(profile.distanceKm, 241.2);
 });
 
+test("mission loop events preserve an explicit official round count", () => {
+  const profile = racePrepProfileFromEvent({
+    id: "heartbeat-official",
+    name: "Heartbeat Ultra",
+    date: "2026-11-21",
+    targetKm: 112,
+    rounds: 19,
+    loopKm: 6.2,
+    loopMode: "time_limit",
+    eventTimeLimit: "15:00:00",
+  });
+  assert.equal(profile.distanceKm, 112);
+  assert.equal(profile.rounds, 19);
+  assert.equal(profile.roundsExplicit, true);
+  assert.equal(profile.date, "2026-11-21");
+});
+
 test("mission loop events can seed Race Prep without a special Backyard-only model", () => {
   const profile = racePrepProfileFromEvent({
     id: "heartbeat",

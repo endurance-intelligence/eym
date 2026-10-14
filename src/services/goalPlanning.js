@@ -107,6 +107,9 @@ export function eventCourseProfile(event = {}) {
   const plannedStopMinutes = loopMode === LOOP_MODES.TIME_LIMIT
     ? Math.max(0, Number(input.plannedStopMinutes ?? 3))
     : 0;
+  const rounds = courseType === "loop"
+    ? Math.max(0, Math.round(Number(input.rounds || input.laps || input.officialRounds || 0)))
+    : 0;
 
   return {
     courseType,
@@ -119,6 +122,7 @@ export function eventCourseProfile(event = {}) {
     eventTimeLimit,
     eventTimeLimitMinutes,
     plannedStopMinutes,
+    rounds,
   };
 }
 

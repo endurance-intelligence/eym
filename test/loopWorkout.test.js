@@ -4,7 +4,6 @@ import {
   LOOP_CONTROL_MODES,
   LOOP_MODES,
   LOOP_PACE_MODES,
-  formatLoopDuration,
   loopMatchPlan,
   loopWorkoutPaceLabel,
   normalizeLoopWorkoutItem,
@@ -31,24 +30,31 @@ test("Backyard loop blocks keep exact decimal distance and use the round interva
   assert.equal(workout.loopTraining.paceMode, LOOP_PACE_MODES.NONE);
 });
 
-test("time-limited loop match plan separates event budget, box stop and running pace", () => {
+test("time-limited loop match plan keeps official distance, rounds and standard loop independent", () => {
   const plan = loopMatchPlan({
     loopKm: 6.2,
     targetKm: 112,
-    eventTimeLimit: "14:00:00",
+    rounds: 19,
+    eventTimeLimit: "15:00:00",
     plannedStopMinutes: 3,
   });
 
   assert.ok(plan);
-  assert.equal(plan.timeLimitMinutes, 840);
+  assert.equal(plan.timeLimitMinutes, 900);
+  assert.equal(plan.targetLoops, 19);
+  assert.equal(plan.roundsExplicit, true);
+  assert.equal(plan.fullLoops, 18);
+  assert.equal(plan.plannedDistanceKm, 112);
+  assert.equal(plan.distanceDeltaKm, 0);
+  assert.ok(Math.abs(plan.finalSegmentKm - 0.4) < 0.01);
+  assert.ok(Math.abs(plan.averageLoopBudgetMinutes - 47.3684) < 0.1);
+});
+
+test("legacy loop events can still estimate rounds when official count is missing", () => {
+  const plan = loopMatchPlan({ loopKm: 6.2, targetKm: 112, eventTimeLimit: "14:00:00", plannedStopMinutes: 3 });
   assert.equal(plan.targetLoops, 18);
+  assert.equal(plan.roundsExplicit, false);
   assert.equal(plan.plannedDistanceKm, 111.6);
-  assert.equal(plan.distanceDeltaKm, -0.4);
-  assert.equal(plan.finalSegmentKm, 0);
-  assert.ok(Math.abs(plan.averageLoopBudgetMinutes - 46.6667) < 0.1);
-  assert.equal(plan.requiredPace, "7:03");
-  assert.equal(formatLoopDuration(plan.averageLoopBudgetMinutes), "46:40 min");
-  assert.equal(formatLoopDuration(plan.runBudgetMinutes), "43:40 min");
 });
 
 test("loop pace stays optional and can be changed to a custom Garmin range", () => {

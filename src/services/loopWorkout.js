@@ -111,15 +111,28 @@ export function loopMatchPlan(input = {}) {
   const plannedStopMinutes = Math.max(0, Number(input.plannedStopMinutes ?? 3));
   if (!(loopKm > 0) || !(targetKm > 0) || !(timeLimitMinutes > 0)) return null;
 
-  // A real loop event is completed in official laps, not in a synthetic GPS
-  // remainder. Use the nearest whole-lap match plan and show the resulting
-  // planned distance transparently instead of inventing a 0.4 km finish leg.
-  const targetLoops = Math.max(1, Math.round(targetKm / loopKm));
-  const plannedDistanceKm = round(targetLoops * loopKm, 1);
+  // Official event facts are authoritative. If the organizer/user supplies an
+  // official round count, never replace it with targetKm / loopKm. A shortened
+  // final round is a valid race format and must stay visible as such.
+  const explicitRounds = positiveInteger(input.rounds || input.laps || input.officialRounds, 0);
+  const targetLoops = explicitRounds || Math.max(1, Math.round(targetKm / loopKm));
+  const standardDistanceBeforeFinish = loopKm * Math.max(0, targetLoops - 1);
+  const explicitFinalSegment = explicitRounds
+    ? round(targetKm - standardDistanceBeforeFinish, 2)
+    : 0;
+  const finalSegmentKm = explicitFinalSegment > 0 && explicitFinalSegment <= loopKm + 0.05
+    ? explicitFinalSegment
+    : 0;
+  const fullLoops = finalSegmentKm > 0 && finalSegmentKm < loopKm - 0.05
+    ? Math.max(0, targetLoops - 1)
+    : targetLoops;
+  const plannedDistanceKm = explicitRounds ? targetKm : round(targetLoops * loopKm, 1);
   const distanceDeltaKm = round(plannedDistanceKm - targetKm, 1);
   const averageLoopBudgetMinutes = timeLimitMinutes / targetLoops;
-  const runBudgetMinutes = Math.max(1, averageLoopBudgetMinutes - plannedStopMinutes);
-  const requiredPaceSeconds = (runBudgetMinutes * 60) / loopKm;
+  const totalStops = Math.max(0, targetLoops - 1);
+  const availableRunMinutes = Math.max(1, timeLimitMinutes - totalStops * plannedStopMinutes);
+  const requiredPaceSeconds = (availableRunMinutes * 60) / targetKm;
+  const runBudgetMinutes = Math.max(1, loopKm * requiredPaceSeconds / 60);
 
   return {
     loopKm,
@@ -127,10 +140,11 @@ export function loopMatchPlan(input = {}) {
     timeLimitMinutes,
     plannedStopMinutes,
     targetLoops,
-    fullLoops: targetLoops,
+    roundsExplicit: Boolean(explicitRounds),
+    fullLoops,
     plannedDistanceKm,
     distanceDeltaKm,
-    finalSegmentKm: 0,
+    finalSegmentKm,
     averageLoopBudgetMinutes,
     runBudgetMinutes,
     requiredPaceSeconds,

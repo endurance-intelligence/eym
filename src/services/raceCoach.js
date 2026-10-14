@@ -225,9 +225,18 @@ function timeCheckpoints(profile) {
   });
 }
 
+function loopCadenceMinutes(profile = {}) {
+  const totalRounds = Math.max(1, Math.round(numeric(profile.rounds)));
+  if (profile.loopMode === "fixed_interval" && numeric(profile.loopIntervalMinutes) > 0) {
+    return Math.max(1, numeric(profile.loopIntervalMinutes));
+  }
+  return profile.durationMinutes > 0 ? Math.max(1, numeric(profile.durationMinutes) / totalRounds) : 0;
+}
+
 function loopCheckpoints(profile) {
   const totalRounds = Math.max(1, Math.round(numeric(profile.rounds)));
-  const interval = Math.max(1, numeric(profile.loopIntervalMinutes));
+  const interval = loopCadenceMinutes(profile);
+  const fixedStart = profile.loopMode === "fixed_interval";
   const rawRounds = totalRounds <= 20
     ? Array.from({ length: totalRounds }, (_, index) => index + 1)
     : [...new Set([
@@ -243,9 +252,11 @@ function loopCheckpoints(profile) {
     key: `loop-${roundNumber}`,
     fraction: roundNumber / totalRounds,
     marker: `Runde ${roundNumber}`,
-    target: `Start + ${durationLabel((roundNumber - 1) * interval)}`,
+    target: fixedStart
+      ? `Start + ${durationLabel((roundNumber - 1) * interval)}`
+      : `bis ca. ${durationLabel(roundNumber * interval)}`,
     round: roundNumber,
-    elapsedMinutes: (roundNumber - 1) * interval,
+    elapsedMinutes: fixedStart ? (roundNumber - 1) * interval : roundNumber * interval,
   }));
 }
 
@@ -326,7 +337,7 @@ export function buildRaceCoachPlan(inputProfile = {}, { routeProfile = null, fue
       duration: durationLabel(profile.durationMinutes),
       distance: profile.distanceKm > 0 ? `${round(profile.distanceKm, 1).toLocaleString("de-DE")} km` : "offene Distanz",
       pace: targetPaceSeconds > 0 ? paceLabel(targetPaceSeconds) : "nach Belastung",
-      loopInterval: profile.format === "loop" ? `${Math.round(profile.loopIntervalMinutes)} min` : "",
+      loopInterval: profile.format === "loop" ? `${Math.round(loopCadenceMinutes(profile))} min` : "",
     },
   };
 }
@@ -385,9 +396,10 @@ export function evaluateRaceCoach({ plan, status: inputStatus } = {}) {
   }
 
   if (profile.format === "loop") {
-    const interval = numeric(profile.loopIntervalMinutes);
+    const fixedStart = profile.loopMode === "fixed_interval";
+    const interval = fixedStart ? numeric(profile.loopIntervalMinutes) : 0;
     position = `Runde ${Math.min(status.currentRound, profile.rounds)} von ${profile.rounds}`;
-    if (status.lastLoopMinutes > 0 && interval > 0) {
+    if (fixedStart && status.lastLoopMinutes > 0 && interval > 0) {
       const buffer = interval - status.lastLoopMinutes;
       position += ` · ${Math.max(0, round(buffer, 1)).toLocaleString("de-DE")} min Puffer`;
       if (buffer < 0) {

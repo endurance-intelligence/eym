@@ -38,6 +38,7 @@ test("organizer gels stay disabled by default while hybrid mode is default", () 
   const plan = normalizeRaceSupplyPlan({});
   assert.equal(plan.mode, "hybrid");
   assert.equal(plan.organizerGelApproved, false);
+  assert.deepEqual(plan.organizerResources, ["water"]);
 });
 
 test("aid stations create carry segments from start to finish", () => {

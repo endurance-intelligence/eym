@@ -131,8 +131,10 @@ export function raceEventKey(event = {}, index = 0) {
   return String(event.id || event.key || event.eventId || event.name || event.title || `race-${index}`);
 }
 
-export function raceEventsFromState(state = {}) {
+export function raceEventsFromState(state = {}, now = new Date()) {
   const mission = state.mission || {};
+  const today = new Date(now);
+  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
   const raw = [
     ...(Array.isArray(mission.milestones) ? mission.milestones : []),
     ...(Array.isArray(mission.events) ? mission.events : []),
@@ -140,12 +142,13 @@ export function raceEventsFromState(state = {}) {
   ];
   const seen = new Set();
   return raw.filter((event) => {
-    if (!event || typeof event !== "object") return false;
+    if (!event || typeof event !== "object" || event.archived) return false;
     const key = raceEventKey(event);
     if (seen.has(key)) return false;
     seen.add(key);
+    if (event.date && String(event.date) < todayKey) return false;
     return Boolean(event.date || event.name || event.title);
-  }).sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+  }).sort((a, b) => String(a.date || "9999-12-31").localeCompare(String(b.date || "9999-12-31")));
 }
 
 function reviewHours(review = {}) {
@@ -309,7 +312,7 @@ export function buildRacePhases({ event = {}, state = {}, temperatureC = null } 
 export function defaultRaceSupplyPlan() {
   return {
     mode: "hybrid",
-    organizerResources: ["water", "iso", "cola", "banana", "savory"],
+    organizerResources: ["water"],
     organizerGelApproved: false,
     gelPriority: [...PIT_CREW_DEFAULT_GEL_PRIORITY],
     aidStations: [],
@@ -377,13 +380,98 @@ function adaptPitDrinkToRace(selection = [], targetMl = 0) {
   });
 }
 
+function gelPortion(productId) {
+  const product = pitProduct(productId);
+  const portion = (product?.portions || []).find((item) => Number(item.carbs || 0) > 0);
+  if (!product || !portion) return null;
+  return { product, portion };
+}
+
+function buildGelLedLoopFuelRotation({ event = {}, state = {}, supply = {}, temperatureC = null } = {}) {
+  const normalizedSupply = normalizeRaceSupplyPlan(supply);
+  const rounds = raceRoundCount(event);
+  if (!rounds) return [];
+  const targets = raceFuelTargets({ event, state, temperatureC });
+  const hours = raceDurationHours(event);
+  const roundHours = hours > 0 ? hours / rounds : 1;
+  const carbMid = targets.carbs.high > 0 ? (targets.carbs.low + targets.carbs.high) / 2 : 0;
+  const targetCarbsPerRound = carbMid > 0 ? carbMid * roundHours : 0;
+  const fluidMid = (targets.hydration.low + targets.hydration.high) / 2;
+  const fluidPerRound = clamp(Math.round((fluidMid * roundHours) / 50) * 50, 150, 750);
+  const gelPriority = normalizeGelPriority(normalizedSupply.gelPriority).filter((id) => gelPortion(id));
+  if (!gelPriority.length) return [];
+
+  const smallestGel = [...gelPriority].sort((left, right) => Number(gelPortion(left)?.portion?.carbs || 999) - Number(gelPortion(right)?.portion?.carbs || 999))[0];
+  let cumulativeCarbs = 0;
+  const rows = [];
+
+  for (let round = 1; round <= rounds; round += 1) {
+    const primaryIndex = gelPriority.length > 1 && round % 4 === 0 ? 1 : 0;
+    const primaryId = gelPriority[primaryIndex];
+    const chosen = [primaryId];
+    let roundCarbs = Number(gelPortion(primaryId)?.portion?.carbs || 0);
+    cumulativeCarbs += roundCarbs;
+    const cumulativeTarget = targetCarbsPerRound * round;
+    let guard = 0;
+    while (targetCarbsPerRound > 0 && cumulativeCarbs < cumulativeTarget - 8 && guard < 2) {
+      const extraId = smallestGel || primaryId;
+      chosen.push(extraId);
+      const extraCarbs = Number(gelPortion(extraId)?.portion?.carbs || 0);
+      roundCarbs += extraCarbs;
+      cumulativeCarbs += extraCarbs;
+      guard += 1;
+      if (!(extraCarbs > 0)) break;
+    }
+
+    const items = chosen.map((productId, index) => {
+      const entry = gelPortion(productId);
+      return {
+        productId,
+        portionId: String(entry.portion.id),
+        quantity: 1,
+        timing: "carry",
+        label: entry.product.label,
+        category: "gel",
+        portionLabel: entry.portion.label || "1 Gel",
+        carbs: Number(entry.portion.carbs || 0),
+        fluidMl: 0,
+        sodiumMg: Number(entry.portion.sodiumMg || 0),
+        slot: index === 0 ? "basis" : "ergänzung",
+      };
+    });
+    items.push({
+      productId: "race-water",
+      portionId: String(fluidPerRound),
+      quantity: 1,
+      timing: "carry",
+      label: normalizedSupply.mode === "vp" ? "Wasser / bestätigter VP-Drink" : "Wasser / eigener Drink",
+      category: "drink",
+      portionLabel: `${fluidPerRound} ml Orientierung`,
+      carbs: 0,
+      fluidMl: fluidPerRound,
+      sodiumMg: 0,
+    });
+
+    rows.push({
+      round,
+      items,
+      carbs: Math.round(roundCarbs),
+      fluidMl: fluidPerRound,
+      why: "Gel-basierte Eigenversorgung. Unbestätigtes VP-Essen bleibt Reserve und wird nicht fest in den Rennplan geschrieben.",
+      gelIds: chosen,
+    });
+  }
+  return rows;
+}
+
 export function buildRaceFuelRotation({ event = {}, state = {}, supply = {}, temperatureC = null } = {}) {
   const normalizedSupply = normalizeRaceSupplyPlan(supply);
   const rounds = raceRoundCount(event);
-  if (!rounds || !["loop", "backyard"].includes(raceFormat(event))) return [];
+  const format = raceFormat(event);
+  if (!rounds || !["loop", "backyard"].includes(format)) return [];
+  if (format === "loop") return buildGelLedLoopFuelRotation({ event, state, supply: normalizedSupply, temperatureC });
   const targets = raceFuelTargets({ event, state, temperatureC });
   const hours = raceDurationHours(event);
-  const format = raceFormat(event);
   const loopIntervalMinutes = positive(event.loopIntervalMinutes || event.profile?.loopIntervalMinutes) || 60;
   const roundHours = hours > 0 ? hours / rounds : format === "backyard" ? loopIntervalMinutes / 60 : 1;
   const fluidMid = (targets.hydration.low + targets.hydration.high) / 2;
@@ -438,9 +526,9 @@ export function resourceOptions() {
 }
 
 export function supplyModeCopy(mode) {
-  if (mode === "own") return "Eigene Versorgung ist die Primärquelle. VPs dienen nur als Backup.";
-  if (mode === "vp") return "VP-Angebot trägt die Basis. Eigene, getestete Gels bleiben die verlässliche Reserve.";
-  return "Eigene, getestete Gels bilden die Basis; Wasser, Drinks und Essen können gezielt vom VP kommen.";
+  if (mode === "own") return "Eigene Gels und eigene Drinks sind die Primärquelle. VPs bleiben Backup.";
+  if (mode === "vp") return "Nur bestätigte VP-Ressourcen tragen die Basis; eigene Gels bleiben die verlässliche Reserve.";
+  return "Eigene, getestete Gels bilden die Basis. Vom VP wird nur das fest eingeplant, was du ausdrücklich bestätigst.";
 }
 
 export function aidStationSegments(event = {}, plan = {}, state = {}, temperatureC = null) {

@@ -128,21 +128,25 @@ export function racePrepProfileFromEvent(event = {}) {
         : 0
     : 0;
   const eventDuration = fixedLoopDuration || parseDuration(event.eventTimeLimit) || parseDuration(event.targetTime);
-  const horizonRounds = isLoop && loopIntervalMinutes > 0 && eventDuration > 0 ? Math.ceil(eventDuration / loopIntervalMinutes) : 0;
+  const explicitRounds = isLoop ? Math.max(0, Math.round(numeric(event.rounds || event.laps || event.officialRounds))) : 0;
+  const horizonRounds = isLoop && event.loopMode === "fixed_interval" && loopIntervalMinutes > 0 && eventDuration > 0 ? Math.ceil(eventDuration / loopIntervalMinutes) : 0;
   const targetRounds = isLoop && targetDistance > 0 ? Math.max(1, Math.round(targetDistance / loopKm)) : 0;
-  const rounds = horizonRounds || targetRounds;
+  const rounds = explicitRounds || horizonRounds || targetRounds;
   const format = isLoop ? "loop" : targetDistance > 0 ? "distance" : "time";
 
   return normalizeRacePrepProfile({
     ...emptyRacePrepProfile(),
     id: "",
     name: event.name || "Wettkampf",
+    date: event.date || "",
+    time: event.time || "",
     format,
     distanceKm: targetDistance,
     durationMinutes: eventDuration,
     loopKm: loopKm || 6.7,
     loopIntervalMinutes: loopIntervalMinutes || 60,
     rounds: rounds || 10,
+    roundsExplicit: explicitRounds > 0,
     eventLimitMode,
     planningHorizonHours,
     performanceTargetKm: targetDistance,

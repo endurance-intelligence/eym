@@ -14,16 +14,18 @@ test("Fuel Lab is a product and tolerance laboratory, not a second race planner"
   assert.match(fuelPageSource, /activeTab === "products"/);
 });
 
-test("Race owns the race setup and nutrition planning surfaces", () => {
+test("Race owns setup, strategy and compact nutrition planning surfaces", () => {
   assert.match(racePageSource, /<RacePrepPlanner setupOnly \/>/);
-  assert.match(racePageSource, /Persönliche Fuel-Prio/);
-  assert.match(racePageSource, /Pit-Crew-Logik/);
+  assert.match(racePageSource, /Eigene Gel-Basis/);
+  assert.match(racePageSource, /Rundenlogik/);
   assert.match(racePageSource, /Verpflegung & VP/);
+  assert.doesNotMatch(racePageSource, /\["weather", "Wetter"\]/);
 });
 
-test("Race Rennbasis hides duplicate nutrition planning while keeping the shared editor", () => {
+test("Race Setup hides duplicate nutrition planning while keeping the shared editor", () => {
   assert.match(racePrepSource, /setupOnly = false/);
-  assert.match(racePrepSource, /Rennbasis speichern/);
+  assert.match(racePrepSource, /Setup speichern/);
+  assert.match(racePrepSource, /Offizielle Runden/);
   assert.match(fuelCss, /\.race-prep-planner\.setup-only \.race-prep-fuel-decision/);
   assert.match(fuelCss, /\.race-prep-planner\.setup-only \.race-prep-schedule/);
 });

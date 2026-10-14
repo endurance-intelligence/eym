@@ -45,19 +45,21 @@ function localDateKey(date = new Date()) {
 
 function sourceOptions(state) {
   const todayKey = localDateKey();
-  const missionRaceEvents = missionEvents(state.mission).filter((event) => !event.date || event.date >= todayKey);
-  const missionEventById = new Map(missionRaceEvents.map((event) => [String(event.id || ""), event]));
+  const allMissionEvents = missionEvents(state.mission);
+  const missionEventById = new Map(allMissionEvents.map((event) => [String(event.id || ""), event]));
+  const missionRaceEvents = allMissionEvents.filter((event) => !event.date || event.date >= todayKey);
   const saved = (Array.isArray(state.racePrepPlans) ? state.racePrepPlans : []).map((profile) => {
     const origin = missionEventById.get(String(profile.originEventId || ""));
+    const date = origin?.date || profile.date || "";
     return {
       key: `saved:${profile.id}`,
       label: profile.name || "Gespeicherter Race-Prep-Plan",
-      detail: origin?.date || "Race Prep",
-      date: origin?.date || profile.date || "",
+      detail: date || "Race Prep",
+      date,
       time: origin?.time || profile.time || "",
       profile: sourceProfileWithEventContext(profile, origin),
     };
-  });
+  }).filter((item) => !item.date || item.date >= todayKey);
   const events = missionRaceEvents.map((event) => ({
     key: `event:${event.id}`,
     label: event.name || "Wettkampf",
@@ -99,6 +101,7 @@ function sourceProfileWithEventContext(profile = {}, event = null) {
     courseType: event.courseType || profile.courseType || "",
     loopMode: event.loopMode || profile.loopMode || "",
     loopKm: Number(event.loopKm || profile.loopKm || 0),
+    rounds: Math.max(0, Math.round(Number(event.rounds || event.laps || event.officialRounds || profile.rounds || 0))),
     loopIntervalMinutes: Number(event.loopIntervalMinutes || profile.loopIntervalMinutes || 0),
     eventLimitMode: event.eventLimitMode || profile.eventLimitMode || "",
     planningHorizonHours: Number(event.planningHorizonHours || profile.planningHorizonHours || 0),
@@ -568,7 +571,7 @@ export default function RaceCoach() {
       <div className="race-coach-empty">
         <p className="eyebrow">Race Strategy</p>
         <h2>Erst Rennen vorbereiten</h2>
-        <p>Öffne Race → Rennbasis oder hinterlege unter Ziele ein Wettkampfziel. Danach baut EI daraus Strecke, Pace, Versorgung und Wetterstrategie.</p>
+        <p>Öffne Race → Setup oder hinterlege unter Ziele ein Wettkampfziel. Danach baut EI daraus Strecke, Pace, Versorgung und Wetterstrategie.</p>
       </div>
     );
   }
@@ -692,8 +695,8 @@ export default function RaceCoach() {
 
       <div className="race-coach-summary">
         <article><span>Rennen</span><strong>{plan.trackPlan ? `${exactNumberLabel(plan.profile.distanceKm)} km` : plan.summary.distance}</strong><small>{source.label}</small></article>
-        <article><span>Zielzeit</span><strong>{plan.summary.duration}</strong><small>{setup.targetDurationMinutes > 0 ? "von dir festgelegt" : plan.profile.durationEstimated ? "aus Rennbasis geschätzt" : "aus Rennbasis"}</small></article>
-        <article><span>{plan.profile.format === "loop" ? "Starttakt" : "Ø Ziel-Schnitt"}</span><strong>{plan.profile.format === "loop" ? plan.summary.loopInterval : plan.routePlan ? paceLabel(plan.routePlan.averagePaceSecondsPerKm) : plan.summary.pace}</strong><small>{plan.trackPlan ? "Rennziel zählt · nicht die GPS-Abweichung" : plan.routePlan ? "Splits werden ans Profil angepasst" : "Race-Plan"}</small></article>
+        <article><span>Zielzeit</span><strong>{plan.summary.duration}</strong><small>{setup.targetDurationMinutes > 0 ? "von dir festgelegt" : plan.profile.durationEstimated ? "aus Setup geschätzt" : "aus Setup"}</small></article>
+        <article><span>{plan.profile.format === "loop" ? (plan.profile.loopMode === "fixed_interval" ? "Starttakt" : "Runden") : "Ø Ziel-Schnitt"}</span><strong>{plan.profile.format === "loop" ? (plan.profile.loopMode === "fixed_interval" ? plan.summary.loopInterval : numberLabel(plan.profile.rounds)) : plan.routePlan ? paceLabel(plan.routePlan.averagePaceSecondsPerKm) : plan.summary.pace}</strong><small>{plan.profile.format === "loop" && plan.profile.loopMode !== "fixed_interval" ? "offizielle Rennrunden aus Setup" : plan.trackPlan ? "Rennziel zählt · nicht die GPS-Abweichung" : plan.routePlan ? "Splits werden ans Profil angepasst" : "Race-Plan"}</small></article>
         <article className="race-coach-strategy-status"><span>Strategie</span><strong>{plan.trackPlan ? `${plan.trackPlan.lapsLabel} Runden` : plan.routePlan ? `${plan.routePlan.segments.length} Splits` : "Basisplan"}</strong><small>{plan.trackPlan ? `${plan.trackPlan.lapDistanceM} m Bahn · Track Race` : plan.routePlan ? "Kilometerweise vorbereitet" : "GPX ergänzt die exakten Splits"}</small></article>
       </div>
 

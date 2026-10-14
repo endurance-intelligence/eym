@@ -39,12 +39,22 @@ function evidenceToneLabel(tone) {
 
 export default function RacePrepPlanner({ setupOnly = false }) {
   const { state, setState } = useApp();
+  const allEvents = useMemo(() => missionEvents(state.mission), [state.mission]);
   const events = useMemo(() => {
     const today = new Date();
     const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-    return missionEvents(state.mission).filter((event) => event.date >= todayKey);
-  }, [state.mission]);
-  const savedPlans = Array.isArray(state.racePrepPlans) ? state.racePrepPlans : [];
+    return allEvents.filter((event) => event.date >= todayKey);
+  }, [allEvents]);
+  const savedPlans = useMemo(() => {
+    const today = new Date();
+    const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    const eventById = new Map(allEvents.map((event) => [String(event.id || ""), event]));
+    return (Array.isArray(state.racePrepPlans) ? state.racePrepPlans : []).filter((profile) => {
+      const origin = eventById.get(String(profile.originEventId || ""));
+      const date = origin?.date || profile.date || "";
+      return !date || date >= todayKey;
+    });
+  }, [allEvents, state.racePrepPlans]);
   const initialEvent = events[0] || null;
   const [draft, setDraft] = useState(() => racePrepProfileWithEvidenceDefaults(
     initialEvent ? racePrepProfileFromEvent(initialEvent) : racePrepProfileFromPreset("marathon"),
@@ -96,13 +106,7 @@ export default function RacePrepPlanner({ setupOnly = false }) {
   function update(field, value) {
     setDraft((current) => {
       const next = { ...current, [field]: value };
-      if (field === "distanceKm") {
-        if (current.durationEstimated) next.durationMinutes = 0;
-        if (current.format === "loop" && Number(current.loopKm || 0) > 0) next.rounds = Math.max(1, Math.ceil(Number(value || 0) / Number(current.loopKm)));
-      }
-      if (field === "loopKm" && current.format === "loop" && Number(value || 0) > 0 && Number(current.distanceKm || 0) > 0) {
-        next.rounds = Math.max(1, Math.ceil(Number(current.distanceKm) / Number(value)));
-      }
+      if (field === "distanceKm" && current.durationEstimated) next.durationMinutes = 0;
       if (field === "durationMinutes") next.durationEstimated = false;
       if (["loopIntervalMinutes", "rounds"].includes(field)) next.durationMinutes = 0;
       return next;
@@ -199,9 +203,9 @@ export default function RacePrepPlanner({ setupOnly = false }) {
     <div className={`race-prep-planner ${setupOnly ? "setup-only" : ""}`}>
       <div className="race-prep-heading">
         <div>
-          <p className="eyebrow">Race · Rennbasis</p>
-          <h2>{setupOnly ? "Rennformat, Distanz und Zeit sauber festlegen" : "Rennen und Versorgung gemeinsam vorbereiten"}</h2>
-          <p>{setupOnly ? "Hier liegt nur die Rennbasis. Fuel, Elektrolyte, Gel-Prio und VP-Logik werden zentral unter Verpflegung & VP geplant." : "Der Coach priorisiert Produkte, die du tatsächlich eingesetzt und gut vertragen hast. Bestand spielt für die sportliche Empfehlung keine Rolle."}</p>
+          <p className="eyebrow">Race · Setup</p>
+          <h2>{setupOnly ? "Offizielle Renndaten sauber übernehmen" : "Rennen und Versorgung gemeinsam vorbereiten"}</h2>
+          <p>{setupOnly ? "Setup beschreibt nur das Rennen. Distanz, Rundenzahl, Zeitlimit und Strecke bleiben offizielle Eventdaten – EI überschreibt sie nicht durch eigene Rechnungen." : "Der Coach priorisiert Produkte, die du tatsächlich eingesetzt und gut vertragen hast. Bestand spielt für die sportliche Empfehlung keine Rolle."}</p>
         </div>
         <label>
           Vorlage / Rennen
@@ -223,8 +227,8 @@ export default function RacePrepPlanner({ setupOnly = false }) {
 
       <section className="race-prep-editor">
         <div className="race-prep-editor-heading">
-          <div><span>Rennbasis</span><h3>Was planst du?</h3></div>
-          <small>Distanz + Dauer steuern die Fuel- und Trinkstrategie.</small>
+          <div><span>Race Setup</span><h3>Was ist offiziell vorgegeben?</h3></div>
+          <small>Eventdaten führen; Strategie und Fuel bauen darauf auf.</small>
         </div>
         <div className="race-prep-editor-grid">
           <label>Rennen / Name<input value={draft.name} onChange={(event) => update("name", event.target.value)} /></label>
@@ -239,9 +243,9 @@ export default function RacePrepPlanner({ setupOnly = false }) {
             {draft.durationEstimated && <small>Aktuell aus der Distanz geschätzt – für den finalen Plan bitte Stunden und Minuten anpassen.</small>}
           </div>
           {draft.format === "loop" && <>
-            <label>Rundenlänge (km)<input type="number" min="0.1" step="0.1" value={draft.loopKm} onChange={(event) => update("loopKm", event.target.value)} /></label>
-            <label>Starttakt je Runde (min)<input type="number" min="10" step="1" value={draft.loopIntervalMinutes} onChange={(event) => update("loopIntervalMinutes", event.target.value)} /></label>
-            <label>{draft.eventLimitMode === "open" ? "Planungshorizont (Runden)" : "Rennrunden"}<input type="number" min="1" step="1" value={draft.rounds} onChange={(event) => update("rounds", event.target.value)} /><small>{draft.eventLimitMode === "open" ? "Beim offenen Backyard legst du damit fest, wie weit die Strategie vorbereitet wird." : "Aus offizieller Distanz und Standardrunde abgeleitet; die letzte Runde darf kürzer sein."}</small></label>
+            <label>Standardrunde (km)<input type="number" min="0.1" step="0.1" value={draft.loopKm} onChange={(event) => update("loopKm", event.target.value)} /><small>Nur die normale Runde – keine Hochrechnung der Gesamtdistanz.</small></label>
+            {(draft.loopMode === "fixed_interval" || /backyard/i.test(draft.name || "")) && <label>Starttakt je Runde (min)<input type="number" min="10" step="1" value={draft.loopIntervalMinutes} onChange={(event) => update("loopIntervalMinutes", event.target.value)} /><small>Nur für Rennen mit festem Starttakt wie Backyard.</small></label>}
+            <label>{draft.eventLimitMode === "open" ? "Planungshorizont (Runden)" : "Offizielle Runden"}<input type="number" min="1" step="1" value={draft.rounds || ""} onChange={(event) => update("rounds", event.target.value)} /><small>{draft.eventLimitMode === "open" ? "Beim offenen Backyard legst du damit fest, wie weit die Strategie vorbereitet wird." : "Manuell bzw. aus dem Event übernommen. EI berechnet diesen Wert nicht aus Distanz ÷ Rundenlänge."}</small></label>
           </>}
         </div>
       </section>
@@ -338,7 +342,7 @@ export default function RacePrepPlanner({ setupOnly = false }) {
 
         {plan.warnings.length > 0 && <div className="race-prep-warnings"><b>Vor dem Rennen klären</b>{plan.warnings.map((warning) => <span key={warning}>{warning}</span>)}</div>}
         <div className="race-prep-editor-actions">
-          <button type="button" onClick={savePlan}>{setupOnly ? "Rennbasis speichern" : "Plan speichern"}</button>
+          <button type="button" onClick={savePlan}>{setupOnly ? "Setup speichern" : "Plan speichern"}</button>
           {sourceKey.startsWith("saved:") && <button type="button" className="secondary" onClick={deletePlan}>Gespeicherten Plan löschen</button>}
         </div>
       </>}

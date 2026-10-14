@@ -85,6 +85,7 @@ test("course profiles keep explicit route and aid-station data while migrating k
     eventTimeLimit: "",
     eventTimeLimitMinutes: 0,
     plannedStopMinutes: 0,
+    rounds: 0,
   });
 
   assert.deepEqual(eventCourseProfile({
@@ -102,6 +103,7 @@ test("course profiles keep explicit route and aid-station data while migrating k
     eventTimeLimit: "14:00:00",
     eventTimeLimitMinutes: 840,
     plannedStopMinutes: 3,
+    rounds: 0,
   });
 
   assert.deepEqual(eventCourseProfile({
@@ -120,8 +122,20 @@ test("course profiles keep explicit route and aid-station data while migrating k
     eventTimeLimit: "",
     eventTimeLimitMinutes: 0,
     plannedStopMinutes: 0,
+    rounds: 0,
   });
 
+
+  const official = eventCourseProfile({
+    name: "Heartbeat Ultra Fulda",
+    courseType: "loop",
+    loopKm: 6.2,
+    rounds: 19,
+    eventTimeLimit: "15:00:00",
+    loopMode: "time_limit",
+  });
+  assert.equal(official.rounds, 19);
+  assert.equal(official.loopKm, 6.2);
   assert.deepEqual(eventCourseProfile({
     name: "Stadt zu Stadt",
     courseType: "point_to_point",
@@ -138,6 +152,7 @@ test("course profiles keep explicit route and aid-station data while migrating k
     eventTimeLimit: "",
     eventTimeLimitMinutes: 0,
     plannedStopMinutes: 0,
+    rounds: 0,
   });
 });
 

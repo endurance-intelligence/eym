@@ -1,21 +1,23 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { aidStationSegments, buildRaceFuelRotation, buildRacePhases, raceDurationHours, raceFuelTargets, raceRoundCount } from "../src/services/raceIntelligence.js";
+import { aidStationSegments, buildRaceFuelRotation, buildRacePhases, raceDurationHours, raceEventsFromState, raceFuelTargets, raceRoundCount } from "../src/services/raceIntelligence.js";
 import { buildPreparationRoadmap } from "../src/services/goalRoadmap.js";
 import { racePrepProfileFromEvent } from "../src/services/racePrepPlanner.js";
 
-test("Heartbeat keeps 112 km official distance and derives 18 race rounds", () => {
-  const event = { name: "Heartbeat Ultra Fulda", targetKm: 112, loopKm: 6.3, loopMode: "time_limit", eventTimeLimit: "15:00:00" };
-  assert.equal(raceRoundCount(event), 18);
+test("Heartbeat keeps official 112 km, 19 rounds and 6.2 km standard loop independently", () => {
+  const event = { name: "Heartbeat Ultra Fulda", targetKm: 112, rounds: 19, loopKm: 6.2, loopMode: "time_limit", eventTimeLimit: "15:00:00" };
+  assert.equal(raceRoundCount(event), 19);
   assert.equal(raceDurationHours(event), 15);
   const profile = racePrepProfileFromEvent(event);
   assert.equal(profile.distanceKm, 112);
-  assert.equal(profile.rounds, 18);
+  assert.equal(profile.rounds, 19);
+  assert.equal(profile.loopKm, 6.2);
+  assert.equal(profile.roundsExplicit, true);
 });
 
-test("Heartbeat phase blocks are 1-3, 4-9, 10-14 and 15-18", () => {
-  const phases = buildRacePhases({ event: { name: "Heartbeat Ultra", targetKm: 112, loopKm: 6.3, loopMode: "time_limit", eventTimeLimit: "15:00:00" }, state: {} });
-  assert.deepEqual(phases.map((phase) => phase.title), ["Runde 1–3", "Runde 4–9", "Runde 10–14", "Runde 15–18"]);
+test("Heartbeat phase blocks respect all 19 official rounds", () => {
+  const phases = buildRacePhases({ event: { name: "Heartbeat Ultra", targetKm: 112, rounds: 19, loopKm: 6.2, loopMode: "time_limit", eventTimeLimit: "15:00:00" }, state: {} });
+  assert.deepEqual(phases.map((phase) => phase.title), ["Runde 1–3", "Runde 4–9", "Runde 10–14", "Runde 15–19"]);
 });
 
 test("aid station carry uses segment time plus carb and fluid corridors", () => {
@@ -63,15 +65,13 @@ test("race hydration prefers reliable sweat calibration over raw drinking histor
   assert.match(target.hydration.reason, /Schweißraten-Messung/);
 });
 
-test("loop race nutrition rotates food and drinks instead of assigning gels to every round", () => {
-  const event = { name: "Heartbeat Ultra", targetKm: 112, loopKm: 6.3, loopMode: "time_limit", eventTimeLimit: "15:00:00" };
+test("regular loop ultras use own gels and hydration instead of inventing organizer food", () => {
+  const event = { name: "Heartbeat Ultra", targetKm: 112, rounds: 19, loopKm: 6.2, loopMode: "time_limit", eventTimeLimit: "15:00:00" };
   const rows = buildRaceFuelRotation({ event, state: { reviews: {} }, supply: {}, temperatureC: 12 });
-  assert.equal(rows.length, 18);
-  const gelRounds = rows.filter((row) => row.gelIds.length > 0);
-  assert.ok(gelRounds.length > 0);
-  assert.ok(gelRounds.length < rows.length);
-  assert.ok(rows.some((row) => row.items.some((item) => item.category === "food")));
-  assert.ok(rows.some((row) => row.items.some((item) => item.category === "drink")));
+  assert.equal(rows.length, 19);
+  assert.ok(rows.every((row) => row.gelIds.length > 0));
+  assert.ok(rows.every((row) => !row.items.some((item) => item.category === "food")));
+  assert.ok(rows.every((row) => row.items.some((item) => item.category === "drink")));
   assert.ok(rows.every((row) => row.fluidMl < 1000));
 });
 
@@ -81,4 +81,19 @@ test("race gel priority changes the gel chosen for planned gel slots", () => {
   const rows = buildRaceFuelRotation({ event, state: { reviews: {} }, supply, temperatureC: 12 });
   const firstGel = rows.flatMap((row) => row.gelIds)[0];
   assert.equal(firstGel, "maurten100");
+});
+
+
+test("Race selectors hide completed and archived events", () => {
+  const state = {
+    mission: {
+      milestones: [
+        { id: "past", name: "Past Race", date: "2026-08-21" },
+        { id: "future", name: "Heartbeat Ultra", date: "2026-11-21" },
+        { id: "archived", name: "Archived Race", date: "2026-12-01", archived: true },
+      ],
+    },
+  };
+  const races = raceEventsFromState(state, new Date("2026-10-14T12:00:00"));
+  assert.deepEqual(races.map((race) => race.id), ["future"]);
 });

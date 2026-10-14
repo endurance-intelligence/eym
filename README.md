@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **4.2.11**
+Current app version: **4.2.12**
 
 **Eat your miles.**
 
@@ -745,3 +745,14 @@ supabase functions deploy event-search
 - Jahresstatistiken summieren Distanz nur noch fuer Distanzsportarten. Kraft & Mobility bleibt sichtbar, wird aber ueber Einheiten und Trainingszeit statt Fantasie-Kilometer dargestellt.
 - Der Langzeitvergleich nutzt fuer Year-over-Year-Deltas denselben Kalenderzeitraum und zeigt Sportarten als interaktive horizontale Balken mit sportartspezifischer Detailmetrik.
 - Analyse > Daten & Trends erhaelt eine neue eingebettete Toolbar, staerkere Kartenhierarchie und einen modernisierten Detail-/Langzeitbereich fuer Desktop und Mobile.
+
+
+## Race truth & compact fuel operations v4.2.12
+
+- Official event facts are authoritative: official distance, official round count and standard lap distance are stored independently and are never overwritten by multiplying rounds by lap length. A shortened final lap remains a valid race format.
+- Mission/Goals now exposes an explicit official-round field for loop races and passes the same value into Race Setup, Race Strategy and Race Fuel.
+- Race Setup replaces the ambiguous “Rennbasis” wording and Strategy focuses on execution, route and pacing. Weather stays embedded in Strategy instead of occupying a duplicate top-level tab. Time-limit loop races use their official round count and overall time budget instead of inheriting a fake 60-minute Backyard cadence.
+- Completed and archived events are removed from active Race selectors; saved plans with a past event date are hidden as well.
+- Regular loop ultras use a gel-led own-supply plan by default. Unconfirmed organizer food is reserve only and is no longer invented as milk rolls, sweets or other fixed race nutrition. Backyard keeps its richer pit-crew rotation because personal box access is part of that format.
+- Fuel & VP is substantially more compact: gel ranking and per-round detail are disclosures, fuel phases stay visible, and only confirmed aid-station resources are allowed to influence the plan.
+- Heartbeat-style events can therefore keep 112 km + 19 official rounds + 6.2 km standard lap exactly as entered, with the shortened final lap shown rather than “corrected”.
