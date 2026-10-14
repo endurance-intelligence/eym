@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **4.2.9**
+Current app version: **4.2.10**
 
 **Eat your miles.**
 
@@ -727,3 +727,10 @@ supabase functions deploy event-search
 - Short labels such as `410`, `420`, `430` and `TRAB` therefore stay readable on small Garmin workout screens.
 - Pace guidance remains technically separate, including the configured pace corridor, so shortening the visible cue does not remove the workout target.
 - The planner field is renamed to “Anzeige auf Garmin” and limited to 10 characters to encourage concise on-watch labels.
+
+## Mobile modal action safety v4.2.10
+
+- Mobile dialogs now render above the fixed bottom navigation instead of behind it.
+- Review, workout-detail and modal action rows stay reachable at the bottom of the dialog while scrolling.
+- Save buttons in long Review and Planner forms remain visible above the device safe area.
+- The normal page keeps its existing bottom-navigation spacing; only open dialogs take visual priority.
