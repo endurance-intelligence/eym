@@ -1,4 +1,5 @@
 import { hydration as hydrationAssessment } from "./insights.js";
+import { eventCourseProfile } from "./goalPlanning.js";
 import {
   PIT_CREW_DEFAULT_GEL_PRIORITY,
   normalizeGelPriority,
@@ -312,9 +313,10 @@ export function buildRacePhases({ event = {}, state = {}, temperatureC = null } 
 export function defaultRaceSupplyPlan() {
   return {
     mode: "hybrid",
-    organizerResources: ["water"],
+    organizerResources: ["water", "iso"],
     organizerGelApproved: false,
     gelPriority: [...PIT_CREW_DEFAULT_GEL_PRIORITY],
+    gelExcludedIds: [],
     aidStations: [],
     note: "",
   };
@@ -332,6 +334,9 @@ export function normalizeRaceSupplyPlan(value = {}) {
     organizerResources: resources,
     organizerGelApproved: Boolean(value.organizerGelApproved),
     gelPriority: normalizeGelPriority(value.gelPriority),
+    gelExcludedIds: Array.isArray(value.gelExcludedIds)
+      ? [...new Set(value.gelExcludedIds.map(String).filter((id) => PIT_CREW_DEFAULT_GEL_PRIORITY.includes(id)))]
+      : [],
     aidStations: Array.isArray(value.aidStations)
       ? value.aidStations.map((station, index) => ({
           id: String(station.id || `vp-${index + 1}`),
@@ -350,6 +355,16 @@ export function raceGelOptions() {
     id,
     label: pitProduct(id)?.label || id,
   }));
+}
+
+export function activeRaceGelPriority(plan = {}) {
+  const normalized = normalizeRaceSupplyPlan(plan);
+  const excluded = new Set(normalized.gelExcludedIds || []);
+  return normalized.gelPriority.filter((id) => !excluded.has(id));
+}
+
+export function raceAidStationMode(event = {}) {
+  return eventCourseProfile(event).aidStationMode;
 }
 
 function weatherFlagsForRace(temperatureC) {
@@ -398,29 +413,38 @@ function buildGelLedLoopFuelRotation({ event = {}, state = {}, supply = {}, temp
   const targetCarbsPerRound = carbMid > 0 ? carbMid * roundHours : 0;
   const fluidMid = (targets.hydration.low + targets.hydration.high) / 2;
   const fluidPerRound = clamp(Math.round((fluidMid * roundHours) / 50) * 50, 150, 750);
-  const gelPriority = normalizeGelPriority(normalizedSupply.gelPriority).filter((id) => gelPortion(id));
+  const gelPriority = activeRaceGelPriority(normalizedSupply).filter((id) => gelPortion(id));
   if (!gelPriority.length) return [];
 
-  const smallestGel = [...gelPriority].sort((left, right) => Number(gelPortion(left)?.portion?.carbs || 999) - Number(gelPortion(right)?.portion?.carbs || 999))[0];
+  const aidMode = raceAidStationMode(event);
+  const electrolyteAtLoopVp = aidMode === "every_loop";
   let cumulativeCarbs = 0;
   const rows = [];
 
   for (let round = 1; round <= rounds; round += 1) {
-    const primaryIndex = gelPriority.length > 1 && round % 4 === 0 ? 1 : 0;
+    let primaryIndex = 0;
+    if (gelPriority.length >= 4 && round % 16 === 0) primaryIndex = 3;
+    else if (gelPriority.length >= 3 && round % 8 === 0) primaryIndex = 2;
+    else if (gelPriority.length >= 2 && round % 4 === 0) primaryIndex = 1;
     const primaryId = gelPriority[primaryIndex];
     const chosen = [primaryId];
     let roundCarbs = Number(gelPortion(primaryId)?.portion?.carbs || 0);
     cumulativeCarbs += roundCarbs;
-    const cumulativeTarget = targetCarbsPerRound * round;
-    let guard = 0;
-    while (targetCarbsPerRound > 0 && cumulativeCarbs < cumulativeTarget - 8 && guard < 2) {
-      const extraId = smallestGel || primaryId;
-      chosen.push(extraId);
-      const extraCarbs = Number(gelPortion(extraId)?.portion?.carbs || 0);
-      roundCarbs += extraCarbs;
-      cumulativeCarbs += extraCarbs;
-      guard += 1;
-      if (!(extraCarbs > 0)) break;
+
+    // At an aid station after every loop, one preferred gel plus the electrolyte/sports drink
+    // is the robust baseline. Unknown drink carbohydrates stay deliberately uncounted.
+    if (!electrolyteAtLoopVp) {
+      const cumulativeTarget = targetCarbsPerRound * round;
+      let guard = 0;
+      while (targetCarbsPerRound > 0 && cumulativeCarbs < cumulativeTarget - 8 && guard < 2) {
+        const extraId = gelPriority[Math.min(guard + 1, gelPriority.length - 1)] || primaryId;
+        chosen.push(extraId);
+        const extraCarbs = Number(gelPortion(extraId)?.portion?.carbs || 0);
+        roundCarbs += extraCarbs;
+        cumulativeCarbs += extraCarbs;
+        guard += 1;
+        if (!(extraCarbs > 0)) break;
+      }
     }
 
     const items = chosen.map((productId, index) => {
@@ -440,16 +464,17 @@ function buildGelLedLoopFuelRotation({ event = {}, state = {}, supply = {}, temp
       };
     });
     items.push({
-      productId: "race-water",
+      productId: electrolyteAtLoopVp ? "race-vp-electrolyte" : "race-own-electrolyte",
       portionId: String(fluidPerRound),
       quantity: 1,
-      timing: "carry",
-      label: normalizedSupply.mode === "vp" ? "Wasser / bestätigter VP-Drink" : "Wasser / eigener Drink",
+      timing: electrolyteAtLoopVp ? "vp" : "carry",
+      label: electrolyteAtLoopVp ? "Elektrolyt-/Sportdrink am VP" : "Eigener Elektrolyt-Drink",
       category: "drink",
       portionLabel: `${fluidPerRound} ml Orientierung`,
       carbs: 0,
       fluidMl: fluidPerRound,
       sodiumMg: 0,
+      uncountedCarbs: electrolyteAtLoopVp,
     });
 
     rows.push({
@@ -457,7 +482,9 @@ function buildGelLedLoopFuelRotation({ event = {}, state = {}, supply = {}, temp
       items,
       carbs: Math.round(roundCarbs),
       fluidMl: fluidPerRound,
-      why: "Gel-basierte Eigenversorgung. Unbestätigtes VP-Essen bleibt Reserve und wird nicht fest in den Rennplan geschrieben.",
+      why: electrolyteAtLoopVp
+        ? "Eigene Gels führen den sicheren KH-Plan. Am Runden-VP kommt Elektrolyt-/Sportdrink dazu; dessen unbekannte KH werden nicht eingerechnet."
+        : "Eigene Gels und Elektrolytgetränk führen den Plan. Unbestätigtes Veranstalter-Essen bleibt Reserve.",
       gelIds: chosen,
     });
   }

@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **4.2.12**
+Current app version: **4.2.13**
 
 **Eat your miles.**
 
@@ -756,3 +756,13 @@ supabase functions deploy event-search
 - Regular loop ultras use a gel-led own-supply plan by default. Unconfirmed organizer food is reserve only and is no longer invented as milk rolls, sweets or other fixed race nutrition. Backyard keeps its richer pit-crew rotation because personal box access is part of that format.
 - Fuel & VP is substantially more compact: gel ranking and per-round detail are disclosures, fuel phases stay visible, and only confirmed aid-station resources are allowed to influence the plan.
 - Heartbeat-style events can therefore keep 112 km + 19 official rounds + 6.2 km standard lap exactly as entered, with the shortened final lap shown rather than “corrected”.
+
+
+## Race fuel controls & Goals mission redesign v4.2.13
+
+- Race gel priority now separates ranking from inclusion: every gel can be activated or moved to reserve, and reserve gels never appear in the generated round plan.
+- Loop events with `Verpflegung nach jeder Runde` derive their VP directly from the event. No manual VP rows are required for this format.
+- The loop-ultra baseline uses own tested gels plus electrolyte/sports drink at the round VP; unknown drink carbohydrates are deliberately not counted until the product is known.
+- Fuel phases moved behind the round-details disclosure so the main Race surface stays compact.
+- Manual VP editing is only shown for events configured with fixed aid stations.
+- Goals received a new mission hero, compact race-setup disclosure and a true roadmap flow instead of stacked full-width boxes.

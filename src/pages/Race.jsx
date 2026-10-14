@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Card, PageTitle } from "../components/UI";
+import { eventCourseProfile } from "../services/goalPlanning";
 import RaceCoach from "../components/RaceCoach";
 import RacePrepPlanner from "../components/RacePrepPlanner";
 import { useApp } from "../context/AppContext";
 import {
+  activeRaceGelPriority,
   aidStationSegments,
   buildRacePhases,
   buildRaceFuelRotation,
@@ -22,7 +24,6 @@ import {
   raceRoundCount,
   resourceLabel,
   resourceOptions,
-  supplyModeCopy,
 } from "../services/raceIntelligence";
 import { fetchRaceWeatherForecast, raceForecastConfidence, resolveRaceWeatherDuration } from "../services/raceWeatherStrategy";
 import "./Race.css";
@@ -42,6 +43,11 @@ function RaceNutrition({ event }) {
   const key = raceEventKey(event);
   const stored = state.racePlanningByEvent?.[key];
   const supply = normalizeRaceSupplyPlan(stored?.supply || defaultRaceSupplyPlan());
+  const courseProfile = eventCourseProfile(event);
+  const aidMode = courseProfile.aidStationMode;
+  const roundVp = aidMode === "every_loop";
+  const manualVp = aidMode === "fixed_stations";
+  const activeGelIds = activeRaceGelPriority(supply);
   const [forecastTemperature, setForecastTemperature] = useState({ key: "", value: null });
   const forecastTemperatureC = forecastTemperature.key === key ? forecastTemperature.value : null;
   const temperatureC = forecastTemperatureC ?? stored?.temperatureC ?? null;
@@ -53,7 +59,7 @@ function RaceNutrition({ event }) {
     () => buildRacePhases({ event, state, temperatureC }),
     [event, state, temperatureC],
   );
-  const segments = aidStationSegments(event, supply, state, temperatureC);
+  const segments = manualVp ? aidStationSegments(event, supply, state, temperatureC) : [];
   const resources = resourceOptions();
   const gelOptions = useMemo(() => raceGelOptions(), []);
   const fuelRotation = buildRaceFuelRotation({ event, state, supply, temperatureC });
@@ -109,6 +115,13 @@ function RaceNutrition({ event }) {
     updateSupply({ gelPriority: current });
   }
 
+  function toggleGelActive(productId) {
+    const excluded = new Set(supply.gelExcludedIds || []);
+    if (excluded.has(productId)) excluded.delete(productId);
+    else excluded.add(productId);
+    updateSupply({ gelExcludedIds: [...excluded] });
+  }
+
   function addStation() {
     const nextIndex = supply.aidStations.length + 1;
     let stationId = nextIndex;
@@ -151,8 +164,8 @@ function RaceNutrition({ event }) {
       <Card className="wide race-intel-hero">
         <div>
           <p className="eyebrow">Race Fuel</p>
-          <h2>Eigene Basis. VP als Reserve.</h2>
-          <p>Getestete Gels führen den Plan. Unbestätigte Veranstalter-Verpflegung wird nicht fest verplant.</p>
+          <h2>{roundVp ? "Eigene Gels. Elektrolyt am Runden-VP." : "Eigene Gels führen den Plan."}</h2>
+          <p>{roundVp ? "Jede Runde endet an der im Event hinterlegten Versorgung. Unbekanntes VP-Essen bleibt Reserve." : "Getestete Gels führen den Plan. Unbestätigte Veranstalter-Verpflegung wird nicht fest verplant."}</p>
         </div>
         <div className="race-intel-targets">
           <article><span>KH-Korridor</span><strong>{targets.carbs.label}</strong><small>{targets.carbs.reason}</small></article>
@@ -177,27 +190,21 @@ function RaceNutrition({ event }) {
         </p>
       </Card>
 
-      <Card className="wide">
+      <Card className="wide race-supply-compact">
         <div className="race-intel-heading">
-          <div><p className="eyebrow">Versorgungsmodell</p><h2>Woher kommt was?</h2></div>
-          <span>{supply.mode === "hybrid" ? "EMPFOHLEN" : "INDIVIDUELL"}</span>
+          <div><p className="eyebrow">Rennversorgung</p><h2>Klare Quellen statt Versorgungsmodus.</h2></div>
+          <span>{roundVp ? "VP JE RUNDE" : aidMode === "self_supported" ? "SELBSTVERSORGT" : "FLEXIBEL"}</span>
         </div>
-        <div className="race-mode-grid">
-          {[
-            ["own", "Eigene Basis", "Eigene Gels und Drinks führen."],
-            ["hybrid", "Eigene Basis + VP", "Eigene Gels führen; bestätigte VP-Ressourcen ergänzen."],
-            ["vp", "VP-basiert", "Nur bestätigtes Veranstalterangebot einplanen."],
-          ].map(([value, label, text]) => (
-            <button type="button" className={supply.mode === value ? "selected" : ""} onClick={() => updateSupply({ mode: value })} key={value}>
-              <strong>{label}</strong><span>{text}</span>
-            </button>
-          ))}
+        <div className="race-supply-source-grid">
+          <article><small>Fuel</small><strong>Eigene Gels</strong><span>{activeGelIds.length} aktiv im Rennplan</span></article>
+          <article><small>Getränk</small><strong>{roundVp ? "Elektrolyt-/Sportdrink am VP" : "Eigener Elektrolyt-Drink"}</strong><span>{roundVp ? "Aus dem Event: Versorgung nach jeder Runde" : "Trinkkorridor bleibt wetter- und durstabhängig"}</span></article>
+          <article><small>VP-Essen</small><strong>{aidMode === "self_supported" ? "nicht verfügbar" : "Reserve"}</strong><span>{aidMode === "self_supported" ? "Alles Nötige selbst mitführen" : "Nur bestätigte Extras werden bewusst ergänzt"}</span></article>
         </div>
-        <p className="race-intel-note">{supplyModeCopy(supply.mode)}</p>
-        <div className="race-resource-box">
-          <div><strong>Was ist am VP wirklich bestätigt?</strong><span>Nur aktiv gewählte Ressourcen dürfen in die Planung. Unbekanntes Essen bleibt Reserve.</span></div>
+        {roundVp && <p className="race-intel-note">Der Runden-VP kommt direkt aus deinen Eventdaten. Keine manuellen VP-Einträge nötig; Elektrolyt-/Sportdrink wird für jede Runde als verfügbare Getränkebasis angenommen.</p>}
+        {aidMode !== "self_supported" && <details className="race-vp-extras">
+          <summary>Optionale VP-Extras bestätigen</summary>
           <div className="race-resource-chips">
-            {resources.filter((item) => item.value !== "organizerGel").map((item) => (
+            {resources.filter((item) => !["water", "iso", "organizerGel"].includes(item.value)).map((item) => (
               <button type="button" className={supply.organizerResources.includes(item.value) ? "selected" : ""} onClick={() => toggleOrganizerResource(item.value)} key={item.value}>
                 {item.label}
               </button>
@@ -210,12 +217,12 @@ function RaceNutrition({ event }) {
               Veranstalter-Gel {supply.organizerGelApproved ? "freigegeben" : "nur Reserve"}
             </button>
           </div>
-        </div>
+        </details>}
       </Card>
 
       <Card className="wide race-fuel-priority-card compact">
         <div className="race-intel-heading">
-          <div><p className="eyebrow">Eigene Gel-Basis</p><h2>{gelOptions.find((item) => item.id === supply.gelPriority[0])?.label || "Gel-Priorität festlegen"}</h2><p>Hauptquelle für den Rennplan · VP-Essen bleibt Reserve, solange es nicht bestätigt ist.</p></div>
+          <div><p className="eyebrow">Eigene Gel-Basis</p><h2>{gelOptions.find((item) => item.id === activeGelIds[0])?.label || "Keine Gels aktiv"}</h2><p>Nur aktivierte Gels dürfen in der Rundenplanung auftauchen. Die Reihenfolge steuert die Häufigkeit.</p></div>
           <span>GEL-PRIO</span>
         </div>
         <details className="race-gel-priority-details">
@@ -223,55 +230,55 @@ function RaceNutrition({ event }) {
           <div className="race-gel-priority-list">
             {supply.gelPriority.map((productId, index) => {
               const option = gelOptions.find((item) => item.id === productId);
-              return <article key={productId}>
-                <b>#{index + 1}</b>
-                <span><strong>{option?.label || productId}</strong><small>{index === 0 ? "Primäre Gel-Quelle" : "Rotation / Ergänzung"}</small></span>
-                <div><button type="button" onClick={() => moveGelPriority(productId, -1)} disabled={index === 0} aria-label={`${option?.label || productId} nach oben`}>↑</button><button type="button" onClick={() => moveGelPriority(productId, 1)} disabled={index === supply.gelPriority.length - 1} aria-label={`${option?.label || productId} nach unten`}>↓</button></div>
+              const excluded = (supply.gelExcludedIds || []).includes(productId);
+              const activeRank = activeGelIds.indexOf(productId);
+              return <article className={excluded ? "excluded" : ""} key={productId}>
+                <b>{excluded ? "–" : `#${activeRank + 1}`}</b>
+                <span><strong>{option?.label || productId}</strong><small>{excluded ? "Reserve · nicht eingeplant" : activeRank === 0 ? "Primäre Gel-Quelle" : "Rotation / Ergänzung"}</small></span>
+                <div className="race-gel-actions">
+                  <button type="button" className={`race-gel-use-toggle ${excluded ? "" : "selected"}`} onClick={() => toggleGelActive(productId)}>{excluded ? "Aktivieren" : "Im Plan"}</button>
+                  <button type="button" onClick={() => moveGelPriority(productId, -1)} disabled={index === 0} aria-label={`${option?.label || productId} nach oben`}>↑</button>
+                  <button type="button" onClick={() => moveGelPriority(productId, 1)} disabled={index === supply.gelPriority.length - 1} aria-label={`${option?.label || productId} nach unten`}>↓</button>
+                </div>
               </article>;
             })}
           </div>
         </details>
       </Card>
 
-      <Card className="wide">
-        <div className="race-intel-heading">
-          <div><p className="eyebrow">Fuel-Blöcke</p><h2>Vier Phasen statt jede Runde einzeln.</h2></div>
-          <span>PACE · FUEL · HYDRATION</span>
-        </div>
-        <div className="race-phase-grid">
-          {phases.map((phase) => (
-            <article key={phase.key}>
-              <small>{phase.title}</small>
-              <strong>{phase.label}</strong>
-              <span>{phase.effort}</span>
-              <b>{phase.carbLabel}</b>
-              <em>{phase.hydrationLabel} · Orientierung</em>
-              <p>{phase.note}</p>
-            </article>
-          ))}
-        </div>
-      </Card>
-
       {fuelRotation.length > 0 && <Card className="wide race-fuel-rotation-card">
         <div className="race-intel-heading">
-          <div><p className="eyebrow">Rundenlogik</p><h2>Gel-basierte Eigenversorgung. VP bleibt Reserve.</h2><p>Die Detailrunde ist nur die operative Checkliste; unbekannte Veranstalter-Verpflegung wird nicht fest eingeplant.</p></div>
+          <div><p className="eyebrow">Rundenlogik</p><h2>{roundVp ? "Eigene Gels + Elektrolyt am Runden-VP." : "Gel-basierte Eigenversorgung."}</h2><p>Die Hauptansicht bleibt kompakt. Fuel-Phasen und jede einzelne Runde liegen gemeinsam in der Detailansicht.</p></div>
           <span>{fuelRotation.length} RUNDEN</span>
         </div>
         <div className="race-round-glance">
           <span><b>{fuelRotation[0]?.carbs || 0}–{Math.max(...fuelRotation.map((row) => row.carbs))} g</b> KH je Runde</span>
           <span><b>{Math.min(...fuelRotation.map((row) => row.fluidMl))}–{Math.max(...fuelRotation.map((row) => row.fluidMl))} ml</b> Trinkorientierung</span>
-          <span><b>{supply.gelPriority.length}</b> Gel-Optionen</span>
+          <span><b>{activeGelIds.length}</b> aktive Gels</span>
         </div>
         <details className="race-round-details">
-          <summary>Alle {fuelRotation.length} Runden anzeigen</summary>
+          <summary>Rundenplan & Fuel-Phasen anzeigen</summary>
+          <div className="race-round-phase-detail">
+            <div className="race-round-detail-title"><span>Fuel-Phasen</span><small>Orientierung über das Rennen · die Runden bleiben operativ</small></div>
+            <div className="race-phase-grid compact">
+              {phases.map((phase) => (
+                <article key={phase.key}>
+                  <small>{phase.title}</small>
+                  <strong>{phase.label}</strong>
+                  <b>{phase.carbLabel}</b>
+                  <em>{phase.hydrationLabel}</em>
+                </article>
+              ))}
+            </div>
+          </div>
           <div className="race-fuel-rotation">
             {fuelRotation.map((row) => <article key={row.round}>
-              <header><b>Runde {row.round}</b><span>{row.carbs} g KH · {row.fluidMl} ml</span></header>
+              <header><b>Runde {row.round}</b><span>{row.carbs} g sichere Gel-KH · {row.fluidMl} ml</span></header>
               <div className="race-fuel-rotation-items">
                 {row.items.map((item, index) => <span className={`${item.category} ${item.timing || "now"}`} key={`${item.productId}-${index}`}>
-                  <small>{(item.timing || "now") === "carry" ? "AUF DIE RUNDE" : "IM PIT"}</small>
+                  <small>{item.timing === "vp" ? "AM VP" : (item.timing || "now") === "carry" ? "AUF DIE RUNDE" : "IM PIT"}</small>
                   <strong>{item.label}</strong>
-                  <em>{item.portionLabel}</em>
+                  <em>{item.portionLabel}{item.uncountedCarbs ? " · KH nicht eingerechnet" : ""}</em>
                 </span>)}
               </div>
             </article>)}
@@ -279,7 +286,7 @@ function RaceNutrition({ event }) {
         </details>
       </Card>}
 
-      <Card className="wide">
+      {manualVp && <Card className="wide">
         <div className="race-intel-heading">
           <div><p className="eyebrow">Verpflegungspunkte</p><h2>Nur bestätigte VPs detailliert planen.</h2></div>
           <button type="button" onClick={addStation}>+ VP hinzufügen</button>
@@ -319,7 +326,7 @@ function RaceNutrition({ event }) {
             ))}
           </div>
         )}
-      </Card>
+      </Card>}
 
       <Card className="wide race-intel-footnote">
         <div><strong>Fuel Lab bleibt das Labor.</strong><span>Produkte, Bestand und Verträglichkeit werden dort gepflegt. Die konkrete Rennplanung passiert ausschließlich hier in Race.</span></div>

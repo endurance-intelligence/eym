@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useApp } from "../context/AppContext";
-import { Card, PageTitle, Metric } from "../components/UI";
+import { Card, PageTitle } from "../components/UI";
 import EventAutocomplete from "../components/EventAutocomplete";
 import EditorModal from "../components/EditorModal";
 import TrainingSectionNav from "../components/SectionNav";
@@ -146,6 +146,8 @@ export default function Mission() {
     intermediateEvents: goalPath,
     now: new Date(),
   }), [goalPath, mainTarget]);
+  const nextRoadmapStep = preparationRoadmap[0] || null;
+  const intermediateGoalPath = goalPath.filter((item) => !item.isMainTarget && String(item.id) !== String(mainTarget?.id || ""));
   const selectedMilestone = goalPath.find((item) => String(item.id) === String(requestedMilestoneId)) || null;
   const archivedMilestones = milestones.filter((item) => item.archived);
 
@@ -522,31 +524,51 @@ export default function Mission() {
       <TrainingSectionNav />
       <div className="grid mission-grid">
         {mainTarget && (
-          <Card className="hero wide mission-main-hero">
-            <div className="mission-main-heading">
-              <div>
+          <Card className="hero wide mission-main-hero mission-main-hero-v2">
+            <div className="mission-main-top">
+              <div className="mission-main-identity">
                 <p className="eyebrow">Hauptziel</p>
                 <h2>{mainTarget.name}</h2>
-                <p className="mission-location">📍 {mainTarget.location || "Noch kein Ort hinterlegt"}</p>
+                <div className="mission-main-meta">
+                  <span>{fmtDate(mainTarget.date)}{mainTarget.time ? ` · ${mainTarget.time} Uhr` : ""}</span>
+                  <span>{mainTarget.location || "Ort noch offen"}</span>
+                </div>
               </div>
-              <button onClick={() => edit(mainTarget)}>Hauptziel bearbeiten</button>
+              <div className="mission-main-actions">
+                <div className="mission-countdown-tile"><small>Countdown</small><strong>{daysUntil(mainTarget.date)}</strong><span>Tage</span></div>
+                <button onClick={() => edit(mainTarget)}>Hauptziel bearbeiten</button>
+              </div>
             </div>
-            <div className="hero-stats mission-hero-stats">
-              <Metric label="Ziel" value={`${mainTarget.targetKm || state.mission.targetKm || 0} km`} />
-              <Metric label="Countdown" value={`${daysUntil(mainTarget.date)} Tage`} sub={`${fmtDate(mainTarget.date)}${mainTarget.time ? ` · ${mainTarget.time} Uhr` : ""}`} />
-              <Metric label="Vorbereitungsumfang" value={`${preparationKm.toFixed(0)} km`} sub={`seit ${fmtDate(preparationStartDate)}`} />
-              <Metric label="Laufeinheiten" value={preparationRuns.length} sub="im aktuellen Aufbau" />
+
+            <div className="mission-focus-grid">
+              <article className="primary"><small>Ziel</small><strong>{mainTarget.targetKm || state.mission.targetKm || 0} km</strong><span>{mainCourseProfile.courseType === "loop" ? `${mainCourseProfile.rounds || "–"} Runden · ${String(mainCourseProfile.loopKm || 0).replace(".", ",")} km Standardrunde` : "Offizielle Renndistanz"}</span></article>
+              <article><small>Aktueller Fokus</small><strong>{nextRoadmapStep?.label || "Aufbau läuft"}</strong><span>{nextRoadmapStep?.title || "Konstanz und zielspezifische Vorbereitung"}</span></article>
+              <article><small>Nächste Station</small><strong>{nextRoadmapStep ? eventDateLabel(nextRoadmapStep.date) : eventDateLabel(mainTarget.date)}</strong><span>{nextRoadmapStep?.title || mainTarget.name}</span></article>
+              <article><small>Aufbau bisher</small><strong>{preparationKm.toFixed(0)} km</strong><span>{preparationRuns.length} Laufeinheiten · seit {fmtDate(preparationStartDate)}</span></article>
             </div>
-            {mainCourseProfile.loopMode === LOOP_MODES.FIXED_INTERVAL && <div className="mission-loop-plan mission-main-loop-plan"><span><small>Rundenformat</small><strong>{loopModeLabel(mainCourseProfile.loopMode)}</strong></span><span><small>Rundenstart</small><strong>alle {mainCourseProfile.loopIntervalMinutes} Minuten</strong></span><span><small>Event</small><strong>{mainCourseProfile.eventLimitMode === "limited" ? `limitiert · ${formatLoopDuration(mainCourseProfile.eventTimeLimitMinutes, { compact: true })}` : "Open End"}</strong></span>{mainCourseProfile.eventLimitMode === "open" && mainCourseProfile.planningHorizonHours > 0 && <span><small>Einsatzplanung</small><strong>{mainCourseProfile.planningHorizonHours} h</strong></span>}<span><small>Garmin</small><strong>Runde & Pause per LAP</strong></span></div>}
-            {mainLoopMatchPlan && <div className="mission-loop-plan match-plan mission-main-loop-plan">
-              <span><small>Offizielle Distanz</small><strong>{String(mainLoopMatchPlan.targetKm).replace(".", ",")} km</strong></span>
-              <span><small>Offizielle Runden</small><strong>{mainLoopMatchPlan.targetLoops}</strong></span>
-              <span><small>Standardrunde</small><strong>{String(mainLoopMatchPlan.loopKm).replace(".", ",")} km</strong></span>
-              <span><small>Zeitlimit</small><strong>{formatLoopDuration(mainLoopMatchPlan.timeLimitMinutes, { compact: true })}</strong></span>
-              {mainLoopMatchPlan.finalSegmentKm > 0 && mainLoopMatchPlan.finalSegmentKm < mainLoopMatchPlan.loopKm - 0.05 && <span><small>Schlussrunde</small><strong>verkürzt · ca. {String(mainLoopMatchPlan.finalSegmentKm).replace(".", ",")} km</strong></span>}
-              <span><small>Boxenstopp</small><strong>{String(mainLoopMatchPlan.plannedStopMinutes).replace(".", ",")} min geplant</strong></span>
-              <p>Diese Werte kommen aus dem Event. Die offizielle Distanz bleibt führend; EI ersetzt weder Rundenzahl noch Distanz durch eine eigene Multiplikation.</p>
-            </div>}
+
+            {(mainLoopMatchPlan || mainCourseProfile.loopMode === LOOP_MODES.FIXED_INTERVAL) && <details className="mission-race-setup-details">
+              <summary>
+                <div><small>Race Setup</small><strong>{mainLoopMatchPlan ? `${mainLoopMatchPlan.targetLoops} Runden · ${String(mainLoopMatchPlan.loopKm).replace(".", ",")} km · ${formatLoopDuration(mainLoopMatchPlan.timeLimitMinutes, { compact: true })}` : `${loopModeLabel(mainCourseProfile.loopMode)} · ${String(mainCourseProfile.loopKm).replace(".", ",")} km`}</strong></div>
+                <span>Details</span>
+              </summary>
+              <div className="mission-race-setup-grid">
+                {mainLoopMatchPlan ? <>
+                  <span><small>Offizielle Distanz</small><strong>{String(mainLoopMatchPlan.targetKm).replace(".", ",")} km</strong></span>
+                  <span><small>Offizielle Runden</small><strong>{mainLoopMatchPlan.targetLoops}</strong></span>
+                  <span><small>Standardrunde</small><strong>{String(mainLoopMatchPlan.loopKm).replace(".", ",")} km</strong></span>
+                  <span><small>Zeitlimit</small><strong>{formatLoopDuration(mainLoopMatchPlan.timeLimitMinutes, { compact: true })}</strong></span>
+                  {mainLoopMatchPlan.finalSegmentKm > 0 && mainLoopMatchPlan.finalSegmentKm < mainLoopMatchPlan.loopKm - 0.05 && <span><small>Schlussrunde</small><strong>verkürzt · ca. {String(mainLoopMatchPlan.finalSegmentKm).replace(".", ",")} km</strong></span>}
+                  <span><small>Boxenstopp</small><strong>{String(mainLoopMatchPlan.plannedStopMinutes).replace(".", ",")} min geplant</strong></span>
+                </> : <>
+                  <span><small>Rundenformat</small><strong>{loopModeLabel(mainCourseProfile.loopMode)}</strong></span>
+                  <span><small>Rundenstart</small><strong>alle {mainCourseProfile.loopIntervalMinutes} Minuten</strong></span>
+                  <span><small>Event</small><strong>{mainCourseProfile.eventLimitMode === "limited" ? `limitiert · ${formatLoopDuration(mainCourseProfile.eventTimeLimitMinutes, { compact: true })}` : "Open End"}</strong></span>
+                  <span><small>Garmin</small><strong>Runde & Pause per LAP</strong></span>
+                </>}
+              </div>
+              {mainLoopMatchPlan && <p>Offizielle Distanz, Rundenzahl und Standardrunde bleiben eigenständige Eventdaten. EI rechnet sie nicht gegeneinander um.</p>}
+            </details>}
           </Card>
         )}
 
@@ -628,34 +650,42 @@ export default function Mission() {
           </form>
         </EditorModal>}
 
-        {goalPath.length > 0 && <Card className="wide mission-goal-path">
-          <div className="mission-goal-path-heading">
-            <p className="eyebrow">Auf dem Weg zum Hauptziel</p>
-            <h2>{mainTarget ? `Auf dem Weg zum Hauptziel ${mainTarget.name}` : "Nächste Stationen"}</h2>
+        {goalPath.length > 0 && <Card className="wide mission-goal-path mission-goal-path-v2">
+          <div className="mission-goal-path-heading mission-roadmap-heading">
+            <div><p className="eyebrow">Roadmap</p><h2>Der Weg bis {mainTarget?.name || "zum Hauptziel"}</h2><span>Nur die nächsten relevanten Schritte – Details bleiben bei Bedarf aufklappbar.</span></div>
+            {mainTarget && <b>{daysUntil(mainTarget.date)} Tage</b>}
           </div>
-          {preparationRoadmap.length > 0 && <div className="mission-training-roadmap">
-            {preparationRoadmap.map((step) => <article className={`mission-training-step ${step.tone}`} key={step.id}>
+          <div className="mission-roadmap-flow">
+            {preparationRoadmap.map((step, index) => <article className={`mission-roadmap-step ${step.tone} ${index === 0 ? "next" : ""}`} key={step.id}>
+              <div className="mission-roadmap-marker">{index + 1}</div>
               <time dateTime={step.date}>{eventDateLabel(step.date)}</time>
-              <div><small>{step.label}</small><h3>{step.title}</h3><p>{step.text}</p></div>
+              <div><small>{index === 0 ? "Nächste Station" : step.label}</small><h3>{step.title}</h3><p>{step.text}</p></div>
             </article>)}
-            <div className="mission-training-step race"><time dateTime={mainTarget?.date}>{eventDateLabel(mainTarget?.date)}</time><div><small>RACE DAY</small><h3>{mainTarget?.name}</h3><p>Bis hierhin trainiert EI die noch offenen Fähigkeiten – nicht die volle Distanz als Pflicht-Generalprobe.</p></div></div>
-          </div>}
-          <div className="mission-goal-path-list">
-            {goalPath.map((item) => {
-              const days = daysUntil(item.date);
-              const role = item.isMainTarget ? "Hauptziel" : `${item.priority || "B"}-Event`;
-              const priorityClass = item.isMainTarget ? "main" : `priority-${String(item.priority || "B").toLowerCase()}`;
-              return <article className={`mission-goal-path-item ${priorityClass}`} key={item.id}>
-                <time dateTime={item.date}>{eventDateLabel(item.date)}</time>
-                <div className="mission-goal-path-copy">
-                  <div className="mission-goal-path-title"><h3>{item.name}</h3>{item.isMainTarget && <span>★ Hauptziel</span>}</div>
-                  <div className="mission-goal-path-meta"><span>{role}</span><span>{days} {days === 1 ? "Tag" : "Tage"}</span></div>
-                  {timelineWeather(item)}
-                </div>
-                <button type="button" className="mission-goal-path-details" onClick={() => openMilestoneDetails(item.id)}>Details <span aria-hidden="true">→</span></button>
-              </article>;
-            })}
+            {mainTarget && <article className="mission-roadmap-step race">
+              <div className="mission-roadmap-marker">★</div>
+              <time dateTime={mainTarget.date}>{eventDateLabel(mainTarget.date)}</time>
+              <div><small>Race Day</small><h3>{mainTarget.name}</h3><p>Frisch und vorbereitet an die Startlinie – ohne die volle Renndistanz im Training erzwingen zu müssen.</p></div>
+            </article>}
           </div>
+          {intermediateGoalPath.length > 0 && <details className="mission-intermediate-events">
+            <summary>Zwischenziele & Events anzeigen ({intermediateGoalPath.length})</summary>
+            <div className="mission-goal-path-list">
+              {intermediateGoalPath.map((item) => {
+                const days = daysUntil(item.date);
+                const role = `${item.priority || "B"}-Event`;
+                const priorityClass = `priority-${String(item.priority || "B").toLowerCase()}`;
+                return <article className={`mission-goal-path-item ${priorityClass}`} key={item.id}>
+                  <time dateTime={item.date}>{eventDateLabel(item.date)}</time>
+                  <div className="mission-goal-path-copy">
+                    <div className="mission-goal-path-title"><h3>{item.name}</h3></div>
+                    <div className="mission-goal-path-meta"><span>{role}</span><span>{days} {days === 1 ? "Tag" : "Tage"}</span></div>
+                    {timelineWeather(item)}
+                  </div>
+                  <button type="button" className="mission-goal-path-details" onClick={() => openMilestoneDetails(item.id)}>Details <span aria-hidden="true">→</span></button>
+                </article>;
+              })}
+            </div>
+          </details>}
         </Card>}
 
         {selectedMilestone && <EditorModal

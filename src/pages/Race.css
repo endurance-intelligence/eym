@@ -56,3 +56,23 @@
 @media(max-width:900px){.race-intelligence-stack>.card,.race-setup-shell{padding:16px}.race-intel-hero{grid-template-columns:1fr}}
 @media(max-width:620px){.race-round-glance{grid-template-columns:1fr}.race-intel-facts{grid-template-columns:1fr 1fr}.race-intelligence-stack>.card,.race-setup-shell{padding:14px}.race-intel-heading{align-items:flex-start}.race-intel-heading>span{font-size:8px}.race-phase-grid{grid-template-columns:1fr 1fr}}
 @media(max-width:430px){.race-intel-facts,.race-phase-grid{grid-template-columns:1fr}.race-intel-targets{grid-template-columns:1fr}}
+
+/* v4.2.13 – explicit gel inclusion, event-driven VP logic and quieter fuel details */
+.race-supply-compact{display:grid;gap:10px}
+.race-supply-source-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.race-supply-source-grid article{display:grid;gap:3px;padding:11px 12px;border:1px solid var(--border);border-radius:12px;background:var(--bg-input)}
+.race-supply-source-grid small{color:var(--muted);font-size:8px;font-weight:900;letter-spacing:.08em;text-transform:uppercase}
+.race-supply-source-grid strong{font-size:14px}.race-supply-source-grid span{color:var(--muted);font-size:9px;line-height:1.4}
+.race-vp-extras{padding-top:8px;border-top:1px solid var(--border)}
+.race-vp-extras>summary{cursor:pointer;list-style:none;color:var(--accent-bright);font-size:10px;font-weight:850}.race-vp-extras>summary::-webkit-details-marker{display:none}
+.race-vp-extras[open] .race-resource-chips{margin-top:9px}
+.race-gel-priority-list article.excluded{opacity:.6;background:color-mix(in srgb,var(--bg-input) 78%,transparent)}
+.race-gel-priority-list article.excluded>span strong{text-decoration:line-through;text-decoration-thickness:1px;text-decoration-color:var(--muted)}
+.race-gel-priority-list .race-gel-actions{display:flex;align-items:center;justify-content:flex-end;gap:5px;flex-wrap:wrap}
+.race-gel-priority-list .race-gel-use-toggle{width:auto;min-width:70px;padding:0 9px;font-size:9px;font-weight:850}
+.race-gel-priority-list .race-gel-use-toggle.selected{border-color:var(--success);background:var(--success-surface);color:var(--success-bright)}
+.race-round-phase-detail{display:grid;gap:7px;margin:10px 0 12px;padding:10px;border:1px solid var(--border);border-radius:12px;background:color-mix(in srgb,var(--bg-sidebar) 76%,transparent)}
+.race-round-detail-title{display:flex;align-items:baseline;justify-content:space-between;gap:10px}.race-round-detail-title>span{font-size:11px;font-weight:900}.race-round-detail-title>small{color:var(--muted);font-size:9px}
+.race-phase-grid.compact{margin-top:0}.race-phase-grid.compact article{padding:8px 9px}.race-phase-grid.compact article p,.race-phase-grid.compact article span{display:none}.race-phase-grid.compact strong{font-size:12px}.race-phase-grid.compact b,.race-phase-grid.compact em{font-size:9px}
+@media(max-width:760px){.race-supply-source-grid{grid-template-columns:1fr}.race-gel-priority-list .race-gel-actions{grid-column:2;justify-content:flex-start}.race-round-detail-title{display:grid}.race-phase-grid.compact{grid-template-columns:1fr 1fr}}
+@media(max-width:430px){.race-phase-grid.compact{grid-template-columns:1fr}}

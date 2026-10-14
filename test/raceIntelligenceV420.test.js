@@ -97,3 +97,28 @@ test("Race selectors hide completed and archived events", () => {
   const races = raceEventsFromState(state, new Date("2026-10-14T12:00:00"));
   assert.deepEqual(races.map((race) => race.id), ["future"]);
 });
+
+test("excluded gels never enter the loop-ultra race plan", () => {
+  const event = { name: "Heartbeat Ultra", targetKm: 112, rounds: 19, loopKm: 6.2, loopMode: "time_limit", eventTimeLimit: "15:00:00", aidStationMode: "every_loop" };
+  const supply = {
+    gelPriority: ["226ers-high", "226ers-high-strawberry", "sis-beta", "maurten100"],
+    gelExcludedIds: ["maurten100"],
+  };
+  const rows = buildRaceFuelRotation({ event, state: { reviews: {} }, supply, temperatureC: 12 });
+  assert.equal(rows.length, 19);
+  assert.ok(rows.every((row) => !row.gelIds.includes("maurten100")));
+  assert.ok(rows.every((row) => row.items.some((item) => item.productId === "race-vp-electrolyte" && item.timing === "vp")));
+});
+
+test("every-loop aid station uses one preferred gel baseline instead of auto-filling with low-priority gels", () => {
+  const event = { name: "Heartbeat Ultra", targetKm: 112, rounds: 19, loopKm: 6.2, loopMode: "time_limit", eventTimeLimit: "15:00:00", aidStationMode: "every_loop" };
+  const supply = {
+    gelPriority: ["226ers-high", "226ers-high-strawberry", "sis-beta", "maurten100"],
+    gelExcludedIds: ["maurten100"],
+  };
+  const rows = buildRaceFuelRotation({ event, state: { reviews: {} }, supply, temperatureC: 12 });
+  assert.ok(rows.every((row) => row.gelIds.length === 1));
+  assert.equal(rows[0].gelIds[0], "226ers-high");
+  assert.equal(rows[3].gelIds[0], "226ers-high-strawberry");
+  assert.equal(rows[7].gelIds[0], "sis-beta");
+});
