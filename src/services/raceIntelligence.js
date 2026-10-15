@@ -14,12 +14,29 @@ const RESOURCE_LABELS = {
   iso: "Iso / Sportdrink",
   cola: "Cola",
   banana: "Banane / Obst",
+  pretzelSticks: "Salzstangen",
+  breadRoll: "Brötchen",
+  pasta: "Nudeln",
+  pickle: "Essiggurke",
+  potatoes: "Kartoffeln",
   savory: "Salziges",
   broth: "Brühe",
   organizerGel: "Veranstalter-Gel",
   toilet: "Toilette",
   dropbag: "Dropbag",
   crew: "Crew-Zugang",
+};
+
+const VP_FUEL_OPTIONS = {
+  cola: { carbs: 27, quantityLabel: (count) => `${count * 250} ml Cola`, role: "fuel" },
+  banana: { carbs: 23, quantityLabel: (count) => count === 1 ? "1 Banane" : `${count} Bananen`, role: "fuel" },
+  pretzelSticks: { carbs: 25, quantityLabel: (count) => `${count} Handvoll Salzstangen`, role: "fuel" },
+  breadRoll: { carbs: 25, quantityLabel: (count) => count === 1 ? "1 Brötchen" : `${count} Brötchen`, role: "fuel" },
+  pasta: { carbs: 30, quantityLabel: (count) => count === 1 ? "1 kleine Portion Nudeln" : `${count} kleine Portionen Nudeln`, role: "fuel" },
+  potatoes: { carbs: 18, quantityLabel: (count) => count === 1 ? "1 kleine Kartoffel" : `${count} kleine Kartoffeln`, role: "fuel" },
+  pickle: { carbs: 2, quantityLabel: () => "Essiggurke", role: "support" },
+  broth: { carbs: 0, quantityLabel: () => "Brühe", role: "support" },
+  savory: { carbs: 0, quantityLabel: () => "Salziges", role: "support" },
 };
 
 function number(value) {
@@ -393,6 +410,78 @@ export function raceDrinkOptions(state = {}) {
     });
 }
 
+function normalizedSearchText(value) {
+  return String(value || "")
+    .toLocaleLowerCase("de-DE")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+export function searchRaceDrinkOptions(state = {}, query = "") {
+  const options = raceDrinkOptions(state);
+  const tokens = normalizedSearchText(query).split(/\s+/).filter(Boolean);
+  if (!tokens.length) return options;
+  return options
+    .map((option, index) => {
+      const haystack = normalizedSearchText(option.label);
+      if (!tokens.every((token) => haystack.includes(token))) return null;
+      const exact = haystack === tokens.join(" ");
+      const starts = haystack.startsWith(tokens[0]);
+      return { option, score: exact ? 3 : starts ? 2 : 1, index };
+    })
+    .filter(Boolean)
+    .sort((left, right) => right.score - left.score || left.index - right.index)
+    .map((entry) => entry.option);
+}
+
+export function raceVpAlternatives(resources = [], replacementCarbs = 0, round = 1) {
+  const selected = [...new Set((Array.isArray(resources) ? resources : []).map(String))];
+  const fuel = selected
+    .map((key) => ({ key, ...(VP_FUEL_OPTIONS[key] || {}) }))
+    .filter((item) => item.role === "fuel" && item.carbs > 0);
+  const support = selected
+    .map((key) => ({ key, ...(VP_FUEL_OPTIONS[key] || {}) }))
+    .filter((item) => item.role === "support")
+    .map((item) => ({ key: item.key, label: item.quantityLabel(1), note: "salzige/warme Ergänzung · nicht als KH-Ersatz gerechnet" }));
+
+  if (!(replacementCarbs > 0) || !fuel.length) {
+    return { replacements: [], support: support.slice(0, 1) };
+  }
+
+  const candidates = fuel.map((item) => {
+    const count = Math.max(1, Math.min(4, Math.round(replacementCarbs / item.carbs)));
+    const carbs = count * item.carbs;
+    return {
+      key: item.key,
+      label: item.quantityLabel(count),
+      carbs,
+      difference: Math.abs(carbs - replacementCarbs),
+    };
+  }).sort((left, right) => left.difference - right.difference);
+
+  const offset = candidates.length > 1 ? Math.max(0, Number(round || 1) - 1) % candidates.length : 0;
+  const rotated = [...candidates.slice(offset), ...candidates.slice(0, offset)];
+  return { replacements: rotated.slice(0, 2), support: support.slice(0, 1) };
+}
+
+function normalizedOrganizerDrinkProduct(value = null) {
+  if (!value || typeof value !== "object") return null;
+  const label = String(value.label || "").trim();
+  const carbs = positive(value.carbs);
+  const preparedVolumeMl = positive(value.preparedVolumeMl);
+  if (!label || !(carbs > 0)) return null;
+  return {
+    id: String(value.id || "organizer-search"),
+    label,
+    carbs,
+    sodiumMg: positive(value.sodiumMg),
+    preparedVolumeMl,
+    source: String(value.source || "Produktsuche"),
+  };
+}
+
 function raceDrinkSource(plan = {}, event = {}) {
   if (["own", "organizer_known", "organizer_unknown"].includes(plan.drinkSource)) return plan.drinkSource;
   return raceAidStationMode(event) === "every_loop" ? "organizer_unknown" : "own";
@@ -403,7 +492,10 @@ export function raceDrinkPlanForVolume({ event = {}, state = {}, supply = {}, fl
   const source = raceDrinkSource(normalized, event);
   const options = raceDrinkOptions(state);
   const productId = source === "own" ? normalized.ownDrinkProductId : normalized.organizerDrinkProductId;
-  const product = options.find((item) => item.id === productId) || null;
+  const localProduct = options.find((item) => item.id === productId) || null;
+  const product = source === "organizer_known"
+    ? localProduct || normalized.organizerDrinkProduct || null
+    : localProduct;
   const ml = Math.max(0, Math.round(number(fluidMl)));
 
   if (source === "organizer_unknown") {
@@ -411,14 +503,14 @@ export function raceDrinkPlanForVolume({ event = {}, state = {}, supply = {}, fl
     return {
       source,
       productId: "",
-      label: "Veranstalter-Sportdrink · Produkt unbekannt",
+      label: "VP-Sportdrink",
       fluidMl: ml,
       carbs,
       sodiumMg: 0,
       carbsPer100Ml: STANDARD_UNKNOWN_SPORT_DRINK_CARBS_PER_100_ML,
       estimated: true,
       configured: true,
-      note: `Planungsannahme: ${STANDARD_UNKNOWN_SPORT_DRINK_CARBS_PER_100_ML} g KH / 100 ml.`,
+      note: `Produkt unbekannt · Planungsannahme ${STANDARD_UNKNOWN_SPORT_DRINK_CARBS_PER_100_ML} g KH / 100 ml.`,
     };
   }
 
@@ -426,7 +518,7 @@ export function raceDrinkPlanForVolume({ event = {}, state = {}, supply = {}, fl
     return {
       source,
       productId: "",
-      label: source === "own" ? "Eigenes Getränk · Produkt wählen" : "Veranstaltergetränk · Produkt wählen",
+      label: source === "own" ? "Eigenes Getränk" : "Veranstalter-Drink",
       fluidMl: ml,
       carbs: 0,
       sodiumMg: 0,
@@ -450,8 +542,8 @@ export function raceDrinkPlanForVolume({ event = {}, state = {}, supply = {}, fl
     estimated: false,
     configured: preparedVolumeMl > 0,
     note: preparedVolumeMl > 0
-      ? `${compactNumber(product.carbs, 1)} g KH pro ${compactNumber(preparedVolumeMl)} ml laut Fuel Lab.`
-      : "Misch-/Trinkvolumen fehlt im Fuel Lab; Getränk-KH werden bis dahin nicht eingerechnet.",
+      ? `${compactNumber(product.carbs, 1)} g KH pro ${compactNumber(preparedVolumeMl)} ml · ${product.source || "Fuel Lab"}.`
+      : "Misch-/Trinkvolumen fehlt; Getränk-KH werden bis dahin nicht eingerechnet.",
   };
 }
 
@@ -472,6 +564,7 @@ export function defaultRaceSupplyPlan(state = {}) {
     drinkSource: "",
     ownDrinkProductId: "",
     organizerDrinkProductId: "",
+    organizerDrinkProduct: null,
     aidStations: [],
     note: "",
   };
@@ -499,6 +592,7 @@ export function normalizeRaceSupplyPlan(value = {}, state = {}) {
     drinkSource: ["own", "organizer_known", "organizer_unknown"].includes(value.drinkSource) ? value.drinkSource : "",
     ownDrinkProductId: availableDrinkIds.has(String(value.ownDrinkProductId || "")) ? String(value.ownDrinkProductId) : "",
     organizerDrinkProductId: availableDrinkIds.has(String(value.organizerDrinkProductId || "")) ? String(value.organizerDrinkProductId) : "",
+    organizerDrinkProduct: normalizedOrganizerDrinkProduct(value.organizerDrinkProduct),
     aidStations: Array.isArray(value.aidStations)
       ? value.aidStations.map((station, index) => ({
           id: String(station.id || `vp-${index + 1}`),
@@ -654,6 +748,10 @@ function buildGelLedLoopFuelRotation({ event = {}, state = {}, supply = {}, temp
       uncountedCarbs: !drink.configured && !drink.estimated,
     });
 
+    const vpAlternatives = aidMode === "every_loop"
+      ? raceVpAlternatives(normalizedSupply.organizerResources, gelCarbs, round)
+      : { replacements: [], support: [] };
+
     rows.push({
       round,
       items,
@@ -663,7 +761,8 @@ function buildGelLedLoopFuelRotation({ event = {}, state = {}, supply = {}, temp
       targetCarbs: Math.round(targetCarbsPerRound),
       fluidMl: fluidPerRound,
       drink,
-      why: "Getränke-KH werden zuerst auf das Rundenziel angerechnet; Gels schließen nur die verbleibende Lücke. Unbestätigtes VP-Essen bleibt Reserve.",
+      vpAlternatives,
+      why: "Getränke-KH werden zuerst auf das Rundenziel angerechnet; Gels schließen nur die verbleibende Lücke. Bestätigte VP-Lebensmittel erscheinen als optionale Alternative und werden nicht doppelt gezählt.",
       gelIds: chosen,
     });
   }

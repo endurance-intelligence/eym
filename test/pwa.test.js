@@ -14,5 +14,5 @@ test("web app manifest and offline shell use the GitHub Pages relative scope", a
   assert.match(worker, /apple-touch-icon\.png/);
   assert.match(worker, /request\.mode === "navigate"/);
   assert.match(worker, /fetch\(request, \{ cache: "no-store" \}\)/);
-  assert.match(worker, /eym-shell-v4\.2\.16/);
+  assert.match(worker, /eym-shell-v4\.2\.17/);
 });

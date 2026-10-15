@@ -541,7 +541,7 @@ export default function Mission() {
             </div>
 
             <div className="mission-focus-grid">
-              <article className="primary"><small>Ziel</small><strong>{mainTarget.targetKm || state.mission.targetKm || 0} km</strong><span>{mainCourseProfile.courseType === "loop" ? `${mainCourseProfile.rounds || "–"} Runden · ${String(mainCourseProfile.loopKm || 0).replace(".", ",")} km Standardrunde` : "Offizielle Renndistanz"}</span></article>
+              <article className="mission-focus-primary"><small>Ziel</small><strong>{mainTarget.targetKm || state.mission.targetKm || 0} km</strong><span>{mainCourseProfile.courseType === "loop" ? `${mainCourseProfile.rounds || "–"} Runden · ${String(mainCourseProfile.loopKm || 0).replace(".", ",")} km Standardrunde` : "Offizielle Renndistanz"}</span></article>
               <article><small>Aktueller Fokus</small><strong>{nextRoadmapStep?.label || "Aufbau läuft"}</strong><span>{nextRoadmapStep?.title || "Konstanz und zielspezifische Vorbereitung"}</span></article>
               <article><small>Nächste Station</small><strong>{nextRoadmapStep ? eventDateLabel(nextRoadmapStep.date) : eventDateLabel(mainTarget.date)}</strong><span>{nextRoadmapStep?.title || mainTarget.name}</span></article>
               <article><small>Aufbau bisher</small><strong>{preparationKm.toFixed(0)} km</strong><span>{preparationRuns.length} Laufeinheiten · seit {fmtDate(preparationStartDate)}</span></article>

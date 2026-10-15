@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **4.2.16**
+Current app version: **4.2.17**
 
 **Eat your miles.**
 
@@ -791,3 +791,11 @@ supabase functions deploy event-search
 - Every-loop races inherit the configured drink source automatically for every round; no repeated VP setup is required.
 - Round cards show total carbohydrate, fluid and the actual drink contribution in a denser layout.
 - The selected Endurance Intelligence motion-E icon is now used for browser favicons, Apple touch icons and PWA icons.
+
+## Race fuel operations v4.2.17
+
+- Round cards are wider and cleaner so product names no longer collapse into narrow multi-line columns. Unknown organizer drink is shortened to `VP-Sportdrink`; the 6 g KH / 100 ml assumption remains visible in the setup instead of being repeated as a long product name in every round.
+- `Veranstalter · bekannt` now accepts a text search such as `Maurten Drink Mix`: EI first searches the athlete's Fuel Lab and, when there is no local match, can query the existing product database. A found organizer drink can be used race-specifically without adding it to Fuel Lab; the prepared volume can be confirmed before carbohydrate values are applied.
+- Confirmed VP foods now create optional round alternatives instead of being decorative toggles. Carb-bearing foods can replace planned gel carbohydrate; salty/low-carb extras remain labelled support and are not double-counted.
+- VP choices now include Salzstangen, Brötchen, Nudeln, Essiggurke and Kartoffeln in addition to the existing Cola, Banane/Obst, Salziges and Brühe options.
+- The Goals target tile no longer inherits the global `.primary` button text color, fixing the dark `112 km` text in the mission hero.

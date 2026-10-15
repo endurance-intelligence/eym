@@ -35,4 +35,13 @@ test("race fuel UI configures drink source once and applies it to the round plan
   assert.match(raceSource, /Veranstalter · unbekannt/);
   assert.match(raceSource, /Getränke-KH zählen zum selben Kohlenhydratbudget wie Gels/);
   assert.match(raceSource, /6 g KH \/ 100 ml/);
+  assert.match(raceSource, /lookupOpenFoodFactsProductByText/);
+  assert.match(raceSource, /z\. B\. Maurten Drink Mix/);
+  assert.match(raceSource, /OPTIONAL AM VP/);
+  assert.match(raceSource, /statt Gel/);
+});
+
+test("goals target tile avoids the global primary class collision", () => {
+  assert.match(missionSource, /mission-focus-primary/);
+  assert.doesNotMatch(missionSource, /<article className="primary"><small>Ziel<\/small>/);
 });

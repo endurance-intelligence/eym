@@ -22,13 +22,18 @@ import {
   raceGelOptions,
   raceDrinkOptions,
   raceDrinkPlanForVolume,
+  searchRaceDrinkOptions,
   raceLoopDistance,
   raceRoundCount,
   resourceLabel,
   resourceOptions,
 } from "../services/raceIntelligence";
 import { fetchRaceWeatherForecast, raceForecastConfidence, resolveRaceWeatherDuration } from "../services/raceWeatherStrategy";
+import { lookupOpenFoodFactsProductByText } from "../services/productLookup";
 import "./Race.css";
+
+const VP_FOOD_RESOURCE_KEYS = new Set(["cola", "banana", "pretzelSticks", "breadRoll", "pasta", "pickle", "potatoes", "savory", "broth"]);
+const VP_LOGISTICS_RESOURCE_KEYS = new Set(["toilet", "dropbag", "crew"]);
 
 const tabs = [
   ["setup", "Setup"],
@@ -67,6 +72,8 @@ function RaceNutrition({ event }) {
   );
   const segments = manualVp ? aidStationSegments(event, supply, state, temperatureC) : [];
   const resources = resourceOptions();
+  const vpFoodResources = resources.filter((item) => VP_FOOD_RESOURCE_KEYS.has(item.value));
+  const vpLogisticsResources = resources.filter((item) => VP_LOGISTICS_RESOURCE_KEYS.has(item.value));
   const gelOptions = raceGelOptions(state);
   const drinkOptions = raceDrinkOptions(state);
   const drinkSource = supply.drinkSource || (roundVp ? "organizer_unknown" : "own");
@@ -78,6 +85,16 @@ function RaceNutrition({ event }) {
     supply: { ...supply, drinkSource },
     fluidMl: representativeFluidMl,
   });
+  const selectedDrinkId = drinkSource === "own" ? supply.ownDrinkProductId : supply.organizerDrinkProductId;
+  const selectedDrink = drinkOptions.find((option) => option.id === selectedDrinkId) || null;
+  const [drinkSearch, setDrinkSearch] = useState(() => selectedDrink?.label || supply.organizerDrinkProduct?.label || "");
+  const [drinkLookup, setDrinkLookup] = useState({ loading: false, error: "", product: null });
+  const [lookupMixVolumeMl, setLookupMixVolumeMl] = useState(500);
+  const drinkMatches = drinkSearch.trim().length >= 2
+    ? searchRaceDrinkOptions(state, drinkSearch).slice(0, 5)
+    : [];
+  const optionalVpResourceCount = supply.organizerResources
+    .filter((resource) => !["water", "iso"].includes(resource)).length + (supply.organizerGelApproved ? 1 : 0);
 
   useEffect(() => {
     const confidence = raceForecastConfidence(event?.date);
@@ -139,6 +156,61 @@ function RaceNutrition({ event }) {
 
   function chooseDrinkSource(source) {
     updateSupply({ drinkSource: source });
+    const nextProductId = source === "own" ? supply.ownDrinkProductId : supply.organizerDrinkProductId;
+    const nextProduct = drinkOptions.find((option) => option.id === nextProductId);
+    setDrinkSearch(nextProduct?.label || (source === "organizer_known" ? supply.organizerDrinkProduct?.label : "") || "");
+    setDrinkLookup({ loading: false, error: "", product: null });
+  }
+
+  function selectDrinkProduct(option) {
+    if (!option) return;
+    updateSupply(drinkSource === "own"
+      ? { ownDrinkProductId: option.id }
+      : { organizerDrinkProductId: option.id, organizerDrinkProduct: null });
+    setDrinkSearch(option.label);
+    setDrinkLookup({ loading: false, error: "", product: null });
+  }
+
+  async function commitDrinkSearch() {
+    const localMatch = searchRaceDrinkOptions(state, drinkSearch)[0];
+    if (localMatch) {
+      selectDrinkProduct(localMatch);
+      return;
+    }
+    if (drinkSource !== "organizer_known" || drinkSearch.trim().length < 2) return;
+    setDrinkLookup({ loading: true, error: "", product: null });
+    try {
+      const result = await lookupOpenFoodFactsProductByText("", drinkSearch.trim());
+      if (!result?.found || !result.product) {
+        setDrinkLookup({ loading: false, error: "Kein belastbarer Produkttreffer gefunden.", product: null });
+        return;
+      }
+      const product = result.product;
+      const inferredVolume = Number(product.preparedVolumeMl || 0) > 0 ? Number(product.preparedVolumeMl) : 500;
+      setLookupMixVolumeMl(inferredVolume);
+      setDrinkLookup({ loading: false, error: "", product });
+    } catch (error) {
+      setDrinkLookup({ loading: false, error: error?.message || "Produktsuche fehlgeschlagen.", product: null });
+    }
+  }
+
+  function useLookedUpDrink() {
+    const product = drinkLookup.product;
+    if (!product) return;
+    const label = [product.brand, product.name].filter(Boolean).join(" ").trim() || drinkSearch.trim();
+    updateSupply({
+      organizerDrinkProductId: "",
+      organizerDrinkProduct: {
+        id: product.barcode ? `off-${product.barcode}` : `search-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+        label,
+        carbs: Number(product.carbs || 0),
+        sodiumMg: Number(product.sodium || 0),
+        preparedVolumeMl: Math.max(0, Number(product.preparedVolumeMl || lookupMixVolumeMl || 0)),
+        source: product.source || "Produktsuche",
+      },
+    });
+    setDrinkSearch(label);
+    setDrinkLookup({ loading: false, error: "", product: null });
   }
 
   function addStation() {
@@ -233,29 +305,54 @@ function RaceNutrition({ event }) {
           </div>
 
           {drinkSource !== "organizer_unknown" && <div className="race-drink-product-row">
-            <label>
-              {drinkSource === "own" ? "Eigenes Produkt aus Fuel Lab" : "Veranstalter-Produkt aus Fuel Lab"}
-              <select
-                value={drinkSource === "own" ? supply.ownDrinkProductId : supply.organizerDrinkProductId}
-                onChange={(changeEvent) => updateSupply(drinkSource === "own"
-                  ? { ownDrinkProductId: changeEvent.target.value }
-                  : { organizerDrinkProductId: changeEvent.target.value })}
-              >
-                <option value="">Produkt wählen</option>
-                {drinkOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
-              </select>
+            <label className="race-drink-search-field">
+              {drinkSource === "own" ? "Eigenes Getränk suchen" : "Veranstalter-Getränk suchen"}
+              <div className="race-drink-search-control">
+                <input
+                  value={drinkSearch}
+                  placeholder="z. B. Maurten Drink Mix"
+                  onChange={(changeEvent) => setDrinkSearch(changeEvent.target.value)}
+                  onKeyDown={(keyEvent) => {
+                    if (keyEvent.key === "Enter") {
+                      keyEvent.preventDefault();
+                      commitDrinkSearch();
+                    }
+                  }}
+                />
+                <button type="button" onClick={commitDrinkSearch} disabled={drinkSearch.trim().length < 2 || (drinkSource === "own" && !drinkMatches.length)}>{drinkSource === "organizer_known" && !drinkMatches.length ? "Online suchen" : "Übernehmen"}</button>
+              </div>
+              <small>{drinkSource === "organizer_known" ? "Sucht zuerst im Fuel Lab und bei Bedarf in der Produktdatenbank." : "Durchsucht Marke + Produktname in deinem Fuel Lab."}</small>
+              {drinkSearch.trim().length >= 2 && drinkSearch !== selectedDrink?.label && drinkSearch !== supply.organizerDrinkProduct?.label && <div className="race-drink-search-results">
+                {drinkMatches.length > 0
+                  ? drinkMatches.map((option) => <button type="button" key={option.id} onClick={() => selectDrinkProduct(option)}>
+                    <strong>{option.label}</strong>
+                    <span>{option.preparedVolumeMl > 0 ? `${compactNumber(option.carbs, 1)} g KH / ${compactNumber(option.preparedVolumeMl)} ml` : "Mischvolumen im Fuel Lab ergänzen"}</span>
+                  </button>)
+                  : <span>{drinkSource === "organizer_known" ? "Kein Fuel-Lab-Treffer · Suchen prüft zusätzlich die Produktdatenbank." : "Kein passendes Getränk im Fuel Lab gefunden."}</span>}
+              </div>}
+              {drinkLookup.loading && <span className="race-drink-lookup-status">Produktdatenbank wird durchsucht …</span>}
+              {drinkLookup.error && <span className="race-drink-lookup-status error">{drinkLookup.error}</span>}
+              {drinkLookup.product && <div className="race-drink-lookup-result">
+                <div>
+                  <small>Gefundener Veranstalterdrink</small>
+                  <strong>{[drinkLookup.product.brand, drinkLookup.product.name].filter(Boolean).join(" ")}</strong>
+                  <span>{drinkLookup.product.carbs != null ? `${compactNumber(drinkLookup.product.carbs, 1)} g KH pro Portion` : "KH-Daten fehlen"} · {drinkLookup.product.source}</span>
+                </div>
+                <label>Zubereitet auf ml<input type="number" min="100" step="50" value={lookupMixVolumeMl} onChange={(changeEvent) => setLookupMixVolumeMl(Number(changeEvent.target.value) || 0)} /></label>
+                <button type="button" onClick={useLookedUpDrink} disabled={!(Number(drinkLookup.product.carbs || 0) > 0) || !(lookupMixVolumeMl > 0)}>Übernehmen</button>
+              </div>}
             </label>
             <div className={`race-drink-preview ${drinkPreview.configured ? "ready" : "open"}`}>
               <small>{drinkPreview.configured ? "Wird eingerechnet" : "Noch offen"}</small>
-              <strong>{drinkPreview.configured ? `${compactNumber(drinkPreview.carbs, 1)} g KH / ${representativeFluidMl} ml` : "Mischvolumen fehlt"}</strong>
+              <strong>{drinkPreview.configured ? `${drinkPreview.label} · ${compactNumber(drinkPreview.carbs, 1)} g KH / ${representativeFluidMl} ml` : "Produkt auswählen"}</strong>
               <span>{drinkPreview.note}</span>
             </div>
           </div>}
 
           {drinkSource === "organizer_unknown" && <div className="race-drink-preview estimate">
-            <small>Planungsannahme · Produkt unbekannt</small>
-            <strong>6 g KH / 100 ml → ≈{compactNumber(drinkPreview.carbs, 1)} g bei {representativeFluidMl} ml</strong>
-            <span>Sobald das echte Veranstalter-Produkt bekannt ist, auf „Veranstalter · bekannt“ wechseln. Dann nutzt EI dessen Werte aus dem Fuel Lab.</span>
+            <small>VP-Sportdrink · Produkt unbekannt</small>
+            <strong>≈{compactNumber(drinkPreview.carbs, 1)} g KH bei {representativeFluidMl} ml</strong>
+            <span>Planwert: 6 g KH / 100 ml. Sobald das Produkt bekannt ist, unter „Veranstalter · bekannt“ suchen und übernehmen.</span>
           </div>}
 
           {drinkOptions.length === 0 && drinkSource !== "organizer_unknown" && <p className="race-drink-empty">Im Fuel Lab ist noch kein Drink Mix / Elektrolytprodukt verfügbar. <Link to="/fuel">Fuel Lab öffnen →</Link></p>}
@@ -263,20 +360,36 @@ function RaceNutrition({ event }) {
 
         {roundVp && <p className="race-intel-note">Der Runden-VP kommt direkt aus deinen Eventdaten. Die gewählte Getränkebasis gilt automatisch für jede Runde; manuelle VP-Zeilen sind dafür nicht nötig.</p>}
         {aidMode !== "self_supported" && <details className="race-vp-extras">
-          <summary>Optionale VP-Extras bestätigen</summary>
-          <div className="race-resource-chips">
-            {resources.filter((item) => !["water", "iso", "organizerGel"].includes(item.value)).map((item) => (
-              <button type="button" className={supply.organizerResources.includes(item.value) ? "selected" : ""} onClick={() => toggleOrganizerResource(item.value)} key={item.value}>
-                {item.label}
-              </button>
-            ))}
-            <button
-              type="button"
-              className={supply.organizerGelApproved ? "selected warning" : "warning"}
-              onClick={() => updateSupply({ organizerGelApproved: !supply.organizerGelApproved })}
-            >
-              Veranstalter-Gel {supply.organizerGelApproved ? "freigegeben" : "nur Reserve"}
-            </button>
+          <summary>Optionale VP-Extras bestätigen{optionalVpResourceCount > 0 ? ` · ${optionalVpResourceCount} ausgewählt` : ""}</summary>
+          <p>Bestätigte Lebensmittel tauchen in den Runden als optionale Alternative auf. EI zählt sie nicht zusätzlich zum Gel, sondern zeigt passende Tauschoptionen.</p>
+          <div className="race-vp-extra-groups">
+            <section>
+              <small>ESSEN & TRINKEN</small>
+              <div className="race-resource-chips">
+                {vpFoodResources.map((item) => (
+                  <button type="button" className={supply.organizerResources.includes(item.value) ? "selected" : ""} onClick={() => toggleOrganizerResource(item.value)} key={item.value}>
+                    {item.label}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  className={supply.organizerGelApproved ? "selected warning" : "warning"}
+                  onClick={() => updateSupply({ organizerGelApproved: !supply.organizerGelApproved })}
+                >
+                  Veranstalter-Gel {supply.organizerGelApproved ? "freigegeben" : "nur Reserve"}
+                </button>
+              </div>
+            </section>
+            <section>
+              <small>LOGISTIK</small>
+              <div className="race-resource-chips">
+                {vpLogisticsResources.map((item) => (
+                  <button type="button" className={supply.organizerResources.includes(item.value) ? "selected" : ""} onClick={() => toggleOrganizerResource(item.value)} key={item.value}>
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </section>
           </div>
         </details>}
       </Card>
@@ -332,6 +445,17 @@ function RaceNutrition({ event }) {
                     <em>{item.portionLabel}{item.uncountedCarbs ? " · KH nicht eingerechnet" : ""}</em>
                   </span>)}
                 </div>
+                {(row.vpAlternatives?.replacements?.length > 0 || row.vpAlternatives?.support?.length > 0) && <div className="race-round-vp-options">
+                  <small>OPTIONAL AM VP</small>
+                  {row.vpAlternatives.replacements.map((alternative) => <span key={alternative.key}>
+                    <strong>{alternative.label}</strong>
+                    <em>≈{alternative.carbs} g KH · statt Gel</em>
+                  </span>)}
+                  {row.vpAlternatives.support.map((alternative) => <span className="support" key={alternative.key}>
+                    <strong>{alternative.label}</strong>
+                    <em>{alternative.note}</em>
+                  </span>)}
+                </div>}
               </article>;
             })}
           </div>
@@ -417,7 +541,7 @@ export default function Race() {
 
       {activeTab === "fuel" && (
         selected
-          ? <RaceNutrition event={selected} />
+          ? <RaceNutrition key={raceEventKey(selected)} event={selected} />
           : <Card className="wide"><p className="eyebrow">Race Intelligence</p><h2>Noch kein Zielrennen hinterlegt</h2><p className="muted">Lege unter Ziele ein Rennen an. Danach verbindet Race Strecke, Strategie, Fuel, VPs und Wetter.</p><Link className="button-link" to="/mission">Ziel anlegen →</Link></Card>
       )}
 
