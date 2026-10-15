@@ -3216,6 +3216,9 @@ export default function Planner() {
           publishedWeekCurrent: Boolean(publishedWeek && !planChangedAfterPublish),
           weekWasPublished: Boolean(publishedWeek),
         });
+        const detailTodayGuidance = detailWorkout.date === todayKey && unifiedCoach.todaySession?.id === detailWorkout.id
+          ? unifiedCoach.todaySession
+          : null;
         const coachCandidate = scienceAssessment.candidates.find((candidate) => candidate.id === detailWorkout.id) || null;
         const coachCandidateDecision = coachCandidate
           ? coachSuggestionDecision(coachSuggestionDecisions, coachDecisionKey(coachCandidate))
@@ -3269,7 +3272,20 @@ export default function Planner() {
                 {roleAssessment.context && <small>{roleAssessment.context}</small>}
               </section>
 
-              {detailWorkout.notes && <section className="planner-workout-detail-note"><span>Coach-Hinweis</span><p>{detailWorkout.notes}</p></section>}
+              {detailTodayGuidance ? (
+                <section className="planner-workout-detail-today">
+                  <div className="planner-workout-detail-today-head">
+                    <span>Heute konkret</span>
+                    {detailWorkout.notes && <strong>{detailWorkout.notes}</strong>}
+                  </div>
+                  <div className="planner-workout-detail-today-grid">
+                    <article><small>Coach beobachtet</small><p>{(detailTodayGuidance.watch || []).join(" · ")}</p></article>
+                    <article><small>Wenn etwas kippt</small><p>{detailTodayGuidance.adjust}</p></article>
+                  </div>
+                </section>
+              ) : detailWorkout.notes ? (
+                <section className="planner-workout-detail-note"><span>Coach-Hinweis</span><p>{detailWorkout.notes}</p></section>
+              ) : null}
 
               {missedSessionDecision?.cancellationId === detailWorkout.id && (
                 <section className={`planner-workout-detail-system ${missedSessionDecision.tone}`}>

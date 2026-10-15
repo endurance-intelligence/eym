@@ -714,8 +714,12 @@ export function cardiacDriftAssessment(points = [], activity = {}, weather = {})
     }
   }
 
+  const lateTerrainComparable = Math.abs(late.grade - baseline.grade) <= 0.012
+    && Math.abs(late.elevationGainPerKm - baseline.elevationGainPerKm) <= 10
+    && Math.abs(late.altitudeRange - baseline.altitudeRange) <= 20;
   const clear = Boolean(onset && driftPercent >= 3.5);
-  const mild = !clear && driftPercent >= 3 && late.heartRate - baseline.heartRate >= 3;
+  const terrainConfounded = !clear && driftPercent >= 3 && !lateTerrainComparable;
+  const mild = !clear && !terrainConfounded && driftPercent >= 3 && late.heartRate - baseline.heartRate >= 3;
   const heatContext = thermal >= 23;
   const status = clear ? "clear" : mild ? "mild" : "stable";
   const anchor = onset?.point ? {
@@ -730,8 +734,10 @@ export function cardiacDriftAssessment(points = [], activity = {}, weather = {})
   if (clear) {
     text = `Ab ${anchor?.label || "dem letzten Drittel"} stieg die HF über mehrere Minuten um etwa ${hrDelta} bpm, obwohl das Tempo nahezu gleich blieb. Aerobe Entkopplung etwa ${driftPercent.toFixed(1).replace(".", ",")} %.`;
     if (heatContext) text += ` ${Math.round(thermal)} °C wurden dabei bereits als Wärmekontext berücksichtigt.`;
+  } else if (terrainConfounded) {
+    text = `Der rohe Pace/HF-Wert verändert sich im Verlauf um etwa ${driftPercent.toFixed(1).replace(".", ",")} %, die verglichenen Abschnitte haben aber ein unterschiedliches Höhenprofil. Das wird nicht als klares Ermüdungs- oder Drift-Signal gewertet.`;
   } else if (mild) {
-    text = `Im letzten Teil zeigt sich eine leichte aerobe Entkopplung von etwa ${driftPercent.toFixed(1).replace(".", ",")} %. Das ist ein Beobachtungssignal, noch kein klarer Knick.`;
+    text = `Im letzten Teil zeigt sich auf vergleichbarem Gelände eine leichte aerobe Entkopplung von etwa ${driftPercent.toFixed(1).replace(".", ",")} %. Das ist ein Beobachtungssignal, noch kein klarer Knick.`;
   } else if (heatContext && late.heartRate > baseline.heartRate + 2) {
     text = `Die HF stieg im Verlauf leicht an, bleibt unter ${Math.round(thermal)} °C aber ohne klaren, pace-bereinigten Drift-Knick.`;
   }
@@ -745,6 +751,8 @@ export function cardiacDriftAssessment(points = [], activity = {}, weather = {})
     speedChangePercent,
     onset: anchor,
     heatContext,
+    terrainComparable: lateTerrainComparable,
+    terrainConfounded,
     thermal: Number.isFinite(thermal) && thermal > -50 ? thermal : null,
     text,
   };
@@ -814,9 +822,11 @@ function compactCoachMessage(state, activity, review, { load, execution, relevan
 
   const stableDrift = drift?.status === "stable" && drift.available;
   const executionText = execution?.value === "Im Planrahmen" ? "Umfang und Dauer lagen im vorgesehenen Rahmen." : execution?.text;
-  const internalText = stableDrift
-    ? "Herzfrequenz und Pace blieben über den auswertbaren Verlauf stabil."
-    : numeric(activity?.avgHr) > 0 ? "Herzfrequenz und Belastung lagen ohne klares Warnsignal im persönlichen Rahmen." : "Die verfügbaren Belastungssignale liegen im persönlichen Rahmen.";
+  const internalText = drift?.terrainConfounded
+    ? "Herzfrequenz und Pace verändern sich mit dem Höhenprofil; daraus entsteht kein klares Ermüdungs- oder Drift-Warnsignal."
+    : stableDrift
+      ? "Herzfrequenz und Pace blieben über vergleichbare Streckenabschnitte stabil."
+      : numeric(activity?.avgHr) > 0 ? "Herzfrequenz und Belastung lagen ohne klares Warnsignal im persönlichen Rahmen." : "Die verfügbaren Belastungssignale liegen im persönlichen Rahmen.";
   const coldText = environment?.cold ? " Die Kälte wurde bei der Einordnung berücksichtigt." : "";
   return {
     tone: load?.tone === "watch" ? "neutral" : "good",
@@ -873,7 +883,11 @@ export function activityCoachAssessment(state, activity, review = {}, weatherOve
   if (weather?.temperature != null) factors.push(`${Math.round(numeric(weather.temperature))} °C${weather?.humidity != null ? ` · ${Math.round(numeric(weather.humidity))} % Feuchte` : ""}`);
   if (heat.baselineSamples) factors.push(`${heat.baselineSamples} ähnliche milde Läufe`);
   if (heat.heatPairs) factors.push(`Heat Response ${Math.round(heat.expectedHeatDelta) >= 0 ? "+" : ""}${Math.round(heat.expectedHeatDelta)} bpm · ${heat.heatPairs} Vergleichspaare`);
-  if (drift.available) factors.push(`Aerobe Entkopplung ${drift.driftPercent.toLocaleString("de-DE")} %${drift.onset?.label ? ` · Knick ab ${drift.onset.label}` : ""}`);
+  if (drift.available) {
+    factors.push(drift.terrainConfounded
+      ? `Pace/HF-Rohwert ${drift.driftPercent.toLocaleString("de-DE")} % · Höhenprofil nicht direkt vergleichbar`
+      : `Aerobe Entkopplung ${drift.driftPercent.toLocaleString("de-DE")} %${drift.onset?.label ? ` · Knick ab ${drift.onset.label}` : ""}`);
+  }
   factors.push(`Vergleich mit ${athlete.metrics.activeWeeks} aktiven Wochen`);
   const narrative = specificRunNarrative(state, activity, review, load, execution, heat);
   const coachMessage = compactCoachMessage(state, activity, review, { load, execution, relevance, heat, drift, environment });

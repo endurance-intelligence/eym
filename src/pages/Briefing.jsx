@@ -337,19 +337,7 @@ export default function Briefing() {
     : "";
   const todayKey = isoDate(now);
   const todayPlanEntries = state.plan.filter((item) => !item.archived && item.date === todayKey);
-  const coachNeedsAction = ["adjust", "watch"].includes(coach.level) && Boolean(coach.recommendation?.targetWorkoutId);
-  const coachStatusTitle = coach.level === "ok"
-    ? coach.week?.acceptedPlan ? "Bestätigter Plan bleibt gültig" : "Alles im grünen Bereich"
-    : coach.level === "open"
-      ? "Plan steht – Review noch offen"
-      : coach.recommendation.title;
-  const coachStatusText = coach.level === "ok"
-    ? coach.week?.acceptedPlan
-      ? "Seit der Planannahme ist kein neues Signal aufgetaucht, das eine Änderung rechtfertigt."
-      : "Belastung und Erholung passen aktuell zusammen. Plan wie vorgesehen fortsetzen."
-    : coach.level === "open"
-      ? "Der Plan bleibt bestehen. Nach dem nächsten relevanten Lauf kurz bewerten."
-      : coach.recommendation.text;
+  const coachNote = coach.feedback?.briefing || null;
 
   return (
     <>
@@ -407,14 +395,16 @@ export default function Briefing() {
         </Card>
 
 
-        <Card className={`wide science-coach-alert briefing-coach-status ${coach.level}`}>
-          <div className="briefing-coach-status-copy">
-            <p className="eyebrow">Coach-Check</p>
-            <h2>{coachStatusTitle}</h2>
-            <p>{coachStatusText}</p>
-          </div>
-          <Link className="button-link" to="/planner">{coachNeedsAction ? coach.recommendation.action.label : "Plan ansehen"}</Link>
-        </Card>
+        {coachNote?.show && (
+          <Link className={`wide briefing-coach-note ${coach.feedback?.tone || "neutral"}`} to="/coach" aria-label="Coach-Anmerkung öffnen">
+            <div>
+              <p className="eyebrow">Coach-Anmerkung</p>
+              <h2>{coachNote.title}</h2>
+              <p>{coachNote.text}</p>
+            </div>
+            <span>Coach öffnen →</span>
+          </Link>
+        )}
 
         <div className="wide briefing-summary-grid briefing-hub-grid">
           <Link className="briefing-card-link" to="/mission" aria-label="Mission öffnen">

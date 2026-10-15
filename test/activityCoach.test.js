@@ -294,7 +294,9 @@ test("cardiac drift locates a sustained flat-run turning point instead of reacti
 test("a heart-rate rise on a climb is not mislabeled as cardiac drift", () => {
   const activity = { id: "hill", type: "Run", name: "Easy Run", distance: 11.7, duration: 70, avgHr: 143, elevation: 500 };
   const result = cardiacDriftAssessment(steadyRoute({ hillStartMinute: 45 }), activity, { temperature: 18 }, { legs: 7, energy: 7, rpe: 5 });
-  assert.notEqual(result.status, "clear");
+  assert.equal(result.status, "stable");
+  assert.equal(result.terrainConfounded, true);
+  assert.match(result.text, /Höhenprofil/i);
 });
 
 test("quality sessions do not use cardiac drift as their primary judgement", () => {

@@ -3178,3 +3178,15 @@ button:focus-visible,a:focus-visible,summary:focus-visible{
 @media(max-width:950px){.mission-focus-grid{grid-template-columns:1fr 1fr}.mission-roadmap-flow{grid-template-columns:1fr 1fr}.mission-roadmap-flow::before{display:none}.mission-roadmap-step{padding:10px 11px;border:1px solid var(--border);border-radius:12px;background:var(--bg-input)}.mission-roadmap-step.race{grid-column:1/-1}.mission-roadmap-marker{width:30px;height:30px;margin:0}}
 @media(max-width:650px){.mission-main-top,.mission-roadmap-heading{display:grid}.mission-main-actions{justify-content:space-between}.mission-main-actions>button{flex:1}.mission-focus-grid,.mission-roadmap-flow{grid-template-columns:1fr}.mission-roadmap-step.race{grid-column:auto}.mission-main-hero-v2{padding:16px}.mission-main-identity h2{font-size:32px}.mission-countdown-tile{min-width:96px}.mission-race-setup-grid{grid-template-columns:1fr 1fr}}
 @media(max-width:430px){.mission-main-actions{display:grid;grid-template-columns:1fr}.mission-countdown-tile{width:100%}.mission-race-setup-grid{grid-template-columns:1fr}}
+
+/* v4.2.15 – briefing surfaces only the contextual coach note */
+.briefing-coach-note{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:18px;padding:16px 18px;border:1px solid var(--border-strong);border-radius:18px;background:var(--bg-card);color:inherit;text-decoration:none;transition:transform .18s ease,border-color .18s ease,background .18s ease}
+.briefing-coach-note:hover{transform:translateY(-1px);border-color:var(--accent-border-strong);background:color-mix(in srgb,var(--bg-card) 94%,var(--accent) 6%)}
+.briefing-coach-note.watch{border-color:color-mix(in srgb,var(--warning) 48%,var(--border))}
+.briefing-coach-note.good{border-color:color-mix(in srgb,var(--success) 32%,var(--border))}
+.briefing-coach-note>div{display:grid;gap:3px;min-width:0}
+.briefing-coach-note .eyebrow{margin:0;color:var(--accent-bright)}
+.briefing-coach-note h2{margin:0;font-size:18px;line-height:1.25}
+.briefing-coach-note p{margin:0;max-width:86ch;color:var(--muted-bright);font-size:11px;line-height:1.45}
+.briefing-coach-note>span{padding:8px 11px;border:1px solid var(--border);border-radius:11px;color:var(--text);font-size:11px;font-weight:800;white-space:nowrap}
+@media(max-width:700px){.briefing-coach-note{grid-template-columns:1fr;gap:10px}.briefing-coach-note>span{justify-self:start}}

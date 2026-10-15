@@ -11,3 +11,17 @@
 .coach-today-session-grid p,.coach-today-session-grid ul{margin:0;color:var(--text-soft);font-size:11px;line-height:1.5}
 .coach-today-session-grid ul{padding-left:17px}
 @media(max-width:760px){.coach-today-session-grid{grid-template-columns:1fr}.coach-today-session-heading{flex-direction:column}}
+
+/* v4.2.15 – one contextual coach feedback instead of decision/status noise */
+.coach-phase-feedback{display:grid;gap:14px;border-color:color-mix(in srgb,var(--accent) 28%,var(--border));background:linear-gradient(135deg,color-mix(in srgb,var(--bg-card) 96%,var(--accent) 4%),var(--bg-card))}
+.coach-phase-feedback.watch{border-color:color-mix(in srgb,var(--warning) 48%,var(--border))}
+.coach-phase-feedback.good{border-color:color-mix(in srgb,var(--success) 35%,var(--border))}
+.coach-phase-feedback-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.coach-phase-feedback-heading h2{margin:2px 0 0;font-size:22px;line-height:1.2}
+.coach-phase-feedback-heading>span{flex:none;padding:6px 9px;border:1px solid var(--border);border-radius:999px;color:var(--muted-bright);font-size:9px;font-weight:900;letter-spacing:.055em;text-transform:uppercase}
+.coach-phase-feedback-copy{margin:0;max-width:92ch;color:var(--text-soft);font-size:13px;line-height:1.6}
+.coach-phase-feedback-focus{display:grid;gap:4px;padding:12px 14px;border-left:3px solid var(--accent-bright);border-radius:0 10px 10px 0;background:var(--bg-input)}
+.coach-phase-feedback.watch .coach-phase-feedback-focus{border-left-color:var(--warning)}
+.coach-phase-feedback-focus small{color:var(--muted);font-size:9px;font-weight:900;letter-spacing:.08em;text-transform:uppercase}
+.coach-phase-feedback-focus strong{font-size:12px;line-height:1.45}
+@media(max-width:760px){.coach-phase-feedback-heading{display:grid}.coach-phase-feedback-heading>span{justify-self:start}.coach-phase-feedback-heading h2{font-size:19px}.coach-phase-feedback-copy{font-size:12px}}

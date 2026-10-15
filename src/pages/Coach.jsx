@@ -13,10 +13,7 @@ import { activitiesWithGroups } from "../services/activityGroups";
 import { fmtDate } from "../utils/format";
 import { playWorkoutAudioDemo, playWorkoutCountdown, playWorkoutCue, primeWorkoutAudio, speakWorkoutCue, workoutAudioCapabilities, workoutVoiceOptions } from "../services/workoutAudio";
 import { releaseScreenWakeLock, requestScreenWakeLock } from "../services/wakeLock";
-import {
-  buildCoachState,
-  recommendationFeedbackEntry,
-} from "../services/coachState";
+import { buildCoachState } from "../services/coachState";
 import { reviewCoverageSummary } from "../services/reviewCoverage";
 import { buildGoalEngine } from "../services/goalEngine";
 import {
@@ -50,8 +47,6 @@ const DEFAULT_MOBILITY_EQUIPMENT = ["mat", "band"];
 const coachTabs = [
   ["today", "Heute"],
   ["development", "Entwicklung"],
-  
-  
 ];
 
 function SignalCard({ eyebrow, signal }) {
@@ -115,9 +110,7 @@ export default function Coach({ embeddedTab = "" } = {}) {
     now,
     fromDate: `${currentMonth}-01`,
   }), [canonicalActivities, currentMonth, now, reviewActivities, state]);
-  const monthReviewable = monthCoverage.eligible.filter((activity) => activityDate(activity).startsWith(currentMonth));
   const openReviews = monthCoverage.missing.filter((activity) => activityDate(activity).startsWith(currentMonth));
-  const reviewed = monthCoverage.reviewed.filter((activity) => activityDate(activity).startsWith(currentMonth));
   const unifiedCoach = useMemo(() => buildCoachState(state, now), [state, now]);
   const analysis = unifiedCoach.dashboard;
   const athleteAssessment = unifiedCoach.athlete;
@@ -131,9 +124,6 @@ export default function Coach({ embeddedTab = "" } = {}) {
     planner: state.planner,
     referenceDate: now,
   }), [state.mission, state.activities, state.activityGroups, state.reviews, state.profile, state.planner, now]);
-  const recommendationHistory = Array.isArray(state.coachRecommendationHistory) ? state.coachRecommendationHistory : [];
-  const currentRecommendationFeedback = recommendationHistory.find((entry) => entry.recommendationId === unifiedCoach.recommendation.id);
-
   const mobilitySettings = state.mobilityCoach || {};
   const durationMinutes = Number(mobilitySettings.durationMinutes || 25);
   const condition = mobilitySettings.condition || "normal";
@@ -226,21 +216,6 @@ export default function Coach({ embeddedTab = "" } = {}) {
       ...current,
       mobilityCoach: { ...current.mobilityCoach, ...patch },
     }));
-  }
-
-  function saveRecommendationFeedback(status) {
-    const entry = recommendationFeedbackEntry(unifiedCoach.recommendation, status);
-    if (!entry) return;
-    setState((current) => {
-      const history = Array.isArray(current.coachRecommendationHistory) ? current.coachRecommendationHistory : [];
-      return {
-        ...current,
-        coachRecommendationHistory: [
-          entry,
-          ...history.filter((item) => item.recommendationId !== entry.recommendationId),
-        ].slice(0, 50),
-      };
-    });
   }
 
   function isExerciseKnown(id) {
@@ -686,39 +661,22 @@ export default function Coach({ embeddedTab = "" } = {}) {
               <article><small>Wenn etwas kippt</small><p>{unifiedCoach.todaySession?.adjust}</p></article>
             </div>
           </Card>
-          <Card className={`wide insight coach-recommendation unified-${unifiedCoach.level}`}>
-            <div className="coach-recommendation-heading">
-              <div>
-                <p className="eyebrow">Coach-Entscheidung heute</p>
-                <h2>{unifiedCoach.recommendation.title}</h2>
+          {unifiedCoach.feedback?.relevant && (
+            <Card className={`wide coach-phase-feedback ${unifiedCoach.feedback.tone || "neutral"}`}>
+              <div className="coach-phase-feedback-heading">
+                <div>
+                  <p className="eyebrow">Coach-Feedback</p>
+                  <h2>{unifiedCoach.feedback.title}</h2>
+                </div>
+                <span>{unifiedCoach.feedback.phaseLabel}</span>
               </div>
-              <span className={unifiedCoach.tone}>{unifiedCoach.label}</span>
-            </div>
-            <p className="coach-recommendation-copy">{unifiedCoach.recommendation.text}</p>
-            {unifiedCoach.level !== "ok" && <Link className="button-link coach-primary-action" to={unifiedCoach.recommendation.action.href}>{unifiedCoach.recommendation.action.label}</Link>}
-            <details className="coach-evidence coach-decision-evidence">
-              <summary>Warum entscheidet der Coach so?</summary>
-              <ul>{unifiedCoach.recommendation.evidence.map((item) => <li key={item}>{item}.</li>)}</ul>
-              <small>{unifiedCoach.protectionNote}</small>
-            </details>
-            <div className="coach-recommendation-actions">
-              <div>
-                <span>{currentRecommendationFeedback ? "Dein Feedback ist gespeichert:" : "War diese Einordnung hilfreich?"}</span>
-                <button type="button" className={currentRecommendationFeedback?.status === "helpful" ? "selected" : ""} onClick={() => saveRecommendationFeedback("helpful")}>Hilfreich</button>
-                <button type="button" className={currentRecommendationFeedback?.status === "not_helpful" ? "selected" : ""} onClick={() => saveRecommendationFeedback("not_helpful")}>Nicht passend</button>
+              <p className="coach-phase-feedback-copy">{unifiedCoach.feedback.text}</p>
+              <div className="coach-phase-feedback-focus">
+                <small>Diese Woche zählt</small>
+                <strong>{unifiedCoach.feedback.focus}</strong>
               </div>
-            </div>
-          </Card>
-          <details className="card wide coach-today-data">
-            <summary>
-              <div><p className="eyebrow">Daten hinter der Entscheidung</p><h2>{openReviews.length ? `${openReviews.length} Review${openReviews.length === 1 ? "" : "s"} offen` : "Keine offene Pflicht-Rückmeldung"}</h2></div>
-              <span>{analysis.hrWeather.value}</span>
-            </summary>
-            <div className="coach-today-data-grid">
-              <article><small>Reviews im Monat</small><strong>{reviewed.length}/{monthReviewable.length} bewertet</strong><p>{openReviews.length ? `${openReviews.length} relevante ${openReviews.length === 1 ? "Einheit ist" : "Einheiten sind"} noch offen.` : `Alle relevanten Einheiten aus ${monthFormatter.format(now)} sind bewertet.`}</p></article>
-              <article><small>Herzfrequenz & Wetter</small><strong>{analysis.hrWeather.value}</strong><p>{analysis.hrWeather.text}</p></article>
-            </div>
-          </details>
+            </Card>
+          )}
           {openReviews.length > 0 && (
             <Card className="wide">
               <div className="card-heading-row"><div><p className="eyebrow">Review-Warteschlange</p><h2>{monthFormatter.format(now)}</h2></div><span>{openReviews.length}</span></div>

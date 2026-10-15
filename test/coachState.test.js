@@ -92,3 +92,33 @@ test("Coach Today starts from the actual planned session and names what to watch
   assert.ok(result.todaySession.watch.some((item) => /HF/i.test(item)));
   assert.match(result.todaySession.adjust, /verkürzen|Tempo/i);
 });
+
+test("coach feedback can criticise an easy run that was faster and more expensive than planned", () => {
+  const state = stateWithRuns();
+  state.activities = [
+    run("latest-fast", "2026-07-23", { duration: 43, avgHr: 136 }),
+    run("cmp-1", "2026-07-20", { avgHr: 122 }),
+    run("cmp-2", "2026-07-17", { avgHr: 121 }),
+    run("cmp-3", "2026-07-14", { avgHr: 123 }),
+  ];
+  state.plan = [
+    { id: "easy-plan", date: "2026-07-23", title: "8 km locker", type: "Easy Run", distance: 8, duration: 52, matchedActivityId: "latest-fast" },
+    { id: "next-key", date: "2026-07-26", title: "Langer spezifischer Reiz", type: "Long Run", distance: 20, keySession: true },
+  ];
+  state.reviews = { "latest-fast": { legs: 7, energy: 7, rpe: 7, overallFeeling: 7 } };
+
+  const result = buildCoachState(state, new Date("2026-07-24T12:00:00"));
+  assert.equal(result.feedback.tone, "watch");
+  assert.match(result.feedback.title, /unnötig teuer/i);
+  assert.match(result.feedback.text, /statt des vorgesehenen lockeren Korridors/i);
+  assert.match(result.feedback.text, /HF rund .* bpm über/i);
+  assert.equal(result.feedback.briefing.show, true);
+});
+
+test("Today concrete explicitly evaluates heart rate on comparable terrain", () => {
+  const state = stateWithRuns();
+  state.plan = [{ id: "today-easy-terrain", date: "2026-07-24", title: "10 km locker", type: "Easy Run", distance: 10, duration: 62 }];
+  const result = buildCoachState(state, new Date("2026-07-24T12:00:00"));
+  assert.ok(result.todaySession.watch.some((item) => /Anstiege|Gefälle/i.test(item)));
+  assert.match(result.todaySession.adjust, /vergleichbaren Streckenabschnitten/i);
+});

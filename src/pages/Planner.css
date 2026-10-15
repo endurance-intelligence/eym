@@ -2885,3 +2885,13 @@
   .planner-track-set-actions{grid-column:1}
   .planner-track-cue-input{grid-column:2}
 }
+
+/* v4.2.15 – same Today concrete guidance in the workout detail */
+.planner-workout-detail-today{display:grid;gap:9px;padding:13px 14px;border:1px solid color-mix(in srgb,var(--accent) 45%,var(--border));border-radius:12px;background:color-mix(in srgb,var(--bg-card-alt) 92%,var(--accent) 8%)}
+.planner-workout-detail-today-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.planner-workout-detail-today-head>span,.planner-workout-detail-today-grid small{color:var(--accent-bright);font-size:8px;font-weight:900;letter-spacing:.075em;text-transform:uppercase}
+.planner-workout-detail-today-head>strong{font-size:10px;color:var(--text-soft);font-weight:700;text-align:right}
+.planner-workout-detail-today-grid{display:grid;grid-template-columns:1fr 1.2fr;gap:8px}
+.planner-workout-detail-today-grid article{display:grid;gap:4px;padding:10px 11px;border:1px solid var(--border);border-radius:10px;background:var(--bg-input)}
+.planner-workout-detail-today-grid p{margin:0;color:var(--text-soft);font-size:10px;line-height:1.5}
+@media(max-width:620px){.planner-workout-detail-today-head{display:grid}.planner-workout-detail-today-head>strong{text-align:left}.planner-workout-detail-today-grid{grid-template-columns:1fr}}

@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **4.2.14**
+Current app version: **4.2.15**
 
 **Eat your miles.**
 
@@ -773,3 +773,12 @@ supabase functions deploy event-search
 - Fuel Lab gel priority and exclusion directly control the loop-race rotation; excluded reserve gels cannot re-enter the round plan.
 - Fuel phase guidance moved into each compact round card; the separate four-card phase block was removed.
 - Round cards use content-height alignment and an auto-fit grid so short cards are no longer stretched to match taller neighbours.
+
+
+## Coach context & terrain-aware guidance v4.2.15
+
+- Coach Today remains the operative view for the current session and now uses terrain-aware heart-rate wording.
+- The generic decision/status cards were replaced by one contextual Coach Feedback card that can praise, criticise or redirect based on the latest session, the current preparation phase and the next key stimulus.
+- Briefing shows a compact Coach note that links directly to the Coach page.
+- Today's workout detail reuses the same Today concrete guidance instead of a separate generic coach note.
+- Aerobic decoupling only becomes a warning when compared sections are sufficiently similar in terrain; a raw pace/HR change caused by different elevation profiles is labelled as context, not fatigue.
