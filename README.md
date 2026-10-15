@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **4.2.13**
+Current app version: **4.2.14**
 
 **Eat your miles.**
 
@@ -766,3 +766,10 @@ supabase functions deploy event-search
 - Fuel phases moved behind the round-details disclosure so the main Race surface stays compact.
 - Manual VP editing is only shown for events configured with fixed aid stations.
 - Goals received a new mission hero, compact race-setup disclosure and a true roadmap flow instead of stacked full-width boxes.
+
+
+## Race Fuel shelf & compact rounds v4.2.14
+- Race gel selection now mirrors every non-archived Gel product in Fuel Lab instead of a fixed four-product list.
+- Fuel Lab gel priority and exclusion directly control the loop-race rotation; excluded reserve gels cannot re-enter the round plan.
+- Fuel phase guidance moved into each compact round card; the separate four-card phase block was removed.
+- Round cards use content-height alignment and an auto-fit grid so short cards are no longer stretched to match taller neighbours.

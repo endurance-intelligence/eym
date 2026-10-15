@@ -38,16 +38,20 @@ function eventLabel(event) {
   return event?.name || event?.title || "Rennen";
 }
 
+function phaseForRound(phases = [], round = 0) {
+  return phases.find((phase) => round >= Number(phase.roundFrom || 0) && round <= Number(phase.roundTo || 0)) || null;
+}
+
 function RaceNutrition({ event }) {
   const { state, setState } = useApp();
   const key = raceEventKey(event);
   const stored = state.racePlanningByEvent?.[key];
-  const supply = normalizeRaceSupplyPlan(stored?.supply || defaultRaceSupplyPlan());
+  const supply = normalizeRaceSupplyPlan(stored?.supply || defaultRaceSupplyPlan(state), state);
   const courseProfile = eventCourseProfile(event);
   const aidMode = courseProfile.aidStationMode;
   const roundVp = aidMode === "every_loop";
   const manualVp = aidMode === "fixed_stations";
-  const activeGelIds = activeRaceGelPriority(supply);
+  const activeGelIds = activeRaceGelPriority(supply, state);
   const [forecastTemperature, setForecastTemperature] = useState({ key: "", value: null });
   const forecastTemperatureC = forecastTemperature.key === key ? forecastTemperature.value : null;
   const temperatureC = forecastTemperatureC ?? stored?.temperatureC ?? null;
@@ -61,7 +65,7 @@ function RaceNutrition({ event }) {
   );
   const segments = manualVp ? aidStationSegments(event, supply, state, temperatureC) : [];
   const resources = resourceOptions();
-  const gelOptions = useMemo(() => raceGelOptions(), []);
+  const gelOptions = raceGelOptions(state);
   const fuelRotation = buildRaceFuelRotation({ event, state, supply, temperatureC });
 
   useEffect(() => {
@@ -96,7 +100,7 @@ function RaceNutrition({ event }) {
   }
 
   function updateSupply(patch) {
-    updatePlan({ supply: normalizeRaceSupplyPlan({ ...supply, ...patch }) });
+    updatePlan({ supply: normalizeRaceSupplyPlan({ ...supply, ...patch }, state) });
   }
 
   function toggleOrganizerResource(resource) {
@@ -222,8 +226,8 @@ function RaceNutrition({ event }) {
 
       <Card className="wide race-fuel-priority-card compact">
         <div className="race-intel-heading">
-          <div><p className="eyebrow">Eigene Gel-Basis</p><h2>{gelOptions.find((item) => item.id === activeGelIds[0])?.label || "Keine Gels aktiv"}</h2><p>Nur aktivierte Gels dürfen in der Rundenplanung auftauchen. Die Reihenfolge steuert die Häufigkeit.</p></div>
-          <span>GEL-PRIO</span>
+          <div><p className="eyebrow">Eigene Gel-Basis</p><h2>{gelOptions.find((item) => item.id === activeGelIds[0])?.label || "Keine Gels aktiv"}</h2><p>Alle nicht archivierten Gels aus deinem Fuel Lab stehen hier zur Auswahl. Nur aktivierte Gels dürfen in den Rennplan.</p></div>
+          <span>{gelOptions.length} GELS IM FUEL LAB</span>
         </div>
         <details className="race-gel-priority-details">
           <summary>Gel-Reihenfolge bearbeiten</summary>
@@ -257,31 +261,22 @@ function RaceNutrition({ event }) {
           <span><b>{activeGelIds.length}</b> aktive Gels</span>
         </div>
         <details className="race-round-details">
-          <summary>Rundenplan & Fuel-Phasen anzeigen</summary>
-          <div className="race-round-phase-detail">
-            <div className="race-round-detail-title"><span>Fuel-Phasen</span><small>Orientierung über das Rennen · die Runden bleiben operativ</small></div>
-            <div className="race-phase-grid compact">
-              {phases.map((phase) => (
-                <article key={phase.key}>
-                  <small>{phase.title}</small>
-                  <strong>{phase.label}</strong>
-                  <b>{phase.carbLabel}</b>
-                  <em>{phase.hydrationLabel}</em>
-                </article>
-              ))}
-            </div>
-          </div>
+          <summary>Alle {fuelRotation.length} Runden anzeigen</summary>
           <div className="race-fuel-rotation">
-            {fuelRotation.map((row) => <article key={row.round}>
-              <header><b>Runde {row.round}</b><span>{row.carbs} g sichere Gel-KH · {row.fluidMl} ml</span></header>
-              <div className="race-fuel-rotation-items">
-                {row.items.map((item, index) => <span className={`${item.category} ${item.timing || "now"}`} key={`${item.productId}-${index}`}>
-                  <small>{item.timing === "vp" ? "AM VP" : (item.timing || "now") === "carry" ? "AUF DIE RUNDE" : "IM PIT"}</small>
-                  <strong>{item.label}</strong>
-                  <em>{item.portionLabel}{item.uncountedCarbs ? " · KH nicht eingerechnet" : ""}</em>
-                </span>)}
-              </div>
-            </article>)}
+            {fuelRotation.map((row) => {
+              const phase = phaseForRound(phases, row.round);
+              return <article key={row.round}>
+                <header><b>Runde {row.round}</b><span>{row.carbs} g Gel-KH · {row.fluidMl} ml</span></header>
+                {phase && <div className="race-round-phase-line"><strong>{phase.label}</strong><span>{phase.carbLabel} · {phase.hydrationLabel}</span></div>}
+                <div className="race-fuel-rotation-items">
+                  {row.items.map((item, index) => <span className={`${item.category} ${item.timing || "now"}`} key={`${item.productId}-${index}`}>
+                    <small>{item.timing === "vp" ? "AM VP" : (item.timing || "now") === "carry" ? "AUF DIE RUNDE" : "IM PIT"}</small>
+                    <strong>{item.label}</strong>
+                    <em>{item.portionLabel}{item.uncountedCarbs ? " · KH nicht eingerechnet" : ""}</em>
+                  </span>)}
+                </div>
+              </article>;
+            })}
           </div>
         </details>
       </Card>}

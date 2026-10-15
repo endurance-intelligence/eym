@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { aidStationSegments, buildRaceFuelRotation, buildRacePhases, raceDurationHours, raceEventsFromState, raceFuelTargets, raceRoundCount } from "../src/services/raceIntelligence.js";
+import { aidStationSegments, buildRaceFuelRotation, buildRacePhases, raceDurationHours, raceEventsFromState, raceFuelTargets, raceGelOptions, raceRoundCount } from "../src/services/raceIntelligence.js";
 import { buildPreparationRoadmap } from "../src/services/goalRoadmap.js";
 import { racePrepProfileFromEvent } from "../src/services/racePrepPlanner.js";
 
@@ -121,4 +121,38 @@ test("every-loop aid station uses one preferred gel baseline instead of auto-fil
   assert.equal(rows[0].gelIds[0], "226ers-high");
   assert.equal(rows[3].gelIds[0], "226ers-high-strawberry");
   assert.equal(rows[7].gelIds[0], "sis-beta");
+});
+
+
+test("Race gel selection mirrors every non-archived Gel from Fuel Lab", () => {
+  const state = {
+    fuel: [
+      { id: "gel-a", brand: "Alpha", name: "Fast 45", category: "Gel", carbs: 45, servingQuantity: 70, servingUnit: "g" },
+      { id: "gel-b", brand: "Beta", name: "Neutral 50", category: "Gel", carbs: 50 },
+      { id: "drink-a", brand: "Drink", name: "Mix", category: "Drink Mix", carbs: 30 },
+      { id: "gel-old", brand: "Old", name: "Archived", category: "Gel", carbs: 40, archived: true },
+    ],
+  };
+  const options = raceGelOptions(state);
+  assert.deepEqual(options.map((item) => item.id), ["gel-a", "gel-b"]);
+  assert.equal(options[0].label, "Alpha Fast 45");
+  assert.equal(options[0].carbs, 45);
+});
+
+test("Fuel Lab gel priority and exclusion directly control every loop round", () => {
+  const event = { name: "Loop Ultra", targetKm: 40, rounds: 8, loopKm: 5, eventTimeLimit: "06:00:00", aidStationMode: "every_loop" };
+  const state = {
+    reviews: {},
+    fuel: [
+      { id: "gel-a", brand: "Alpha", name: "Fast 45", category: "Gel", carbs: 45 },
+      { id: "gel-b", brand: "Beta", name: "Neutral 50", category: "Gel", carbs: 50 },
+      { id: "gel-c", brand: "Gamma", name: "Backup", category: "Gel", carbs: 30 },
+    ],
+  };
+  const supply = { gelPriority: ["gel-b", "gel-a", "gel-c"], gelExcludedIds: ["gel-c"] };
+  const rows = buildRaceFuelRotation({ event, state, supply, temperatureC: 12 });
+  assert.equal(rows.length, 8);
+  assert.ok(rows.every((row) => !row.gelIds.includes("gel-c")));
+  assert.equal(rows[0].gelIds[0], "gel-b");
+  assert.ok(rows.every((row) => row.items.some((item) => item.label === "Beta Neutral 50" || item.label === "Alpha Fast 45")));
 });

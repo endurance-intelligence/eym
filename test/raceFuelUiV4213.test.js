@@ -5,11 +5,13 @@ import { readFileSync } from "node:fs";
 const raceSource = readFileSync(new URL("../src/pages/Race.jsx", import.meta.url), "utf8");
 const missionSource = readFileSync(new URL("../src/pages/Mission.jsx", import.meta.url), "utf8");
 
-test("race fuel UI lets the athlete exclude gels and keeps phases inside round details", () => {
+test("race fuel UI uses the Fuel Lab shelf and keeps phase guidance inside each round", () => {
   assert.match(raceSource, /toggleGelActive/);
   assert.match(raceSource, /Reserve · nicht eingeplant/);
-  assert.match(raceSource, /Rundenplan & Fuel-Phasen anzeigen/);
-  assert.doesNotMatch(raceSource, /<div><p className="eyebrow">Fuel-Blöcke<\/p><h2>Vier Phasen statt jede Runde einzeln\.<\/h2><\/div>/);
+  assert.match(raceSource, /Alle \{fuelRotation\.length\} Runden anzeigen/);
+  assert.match(raceSource, /phaseForRound\(phases, row\.round\)/);
+  assert.match(raceSource, /Alle nicht archivierten Gels aus deinem Fuel Lab/);
+  assert.doesNotMatch(raceSource, /race-phase-grid compact/);
 });
 
 test("every-loop events do not expose manual VP editing by default", () => {
