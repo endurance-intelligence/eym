@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { aidStationSegments, buildRaceFuelRotation, buildRacePhases, raceDurationHours, raceEventsFromState, raceFuelTargets, raceGelOptions, raceRoundCount } from "../src/services/raceIntelligence.js";
+import { aidStationSegments, buildRaceFuelRotation, buildRacePhases, raceDrinkOptions, raceDrinkPlanForVolume, raceDurationHours, raceEventsFromState, raceFuelTargets, raceGelOptions, raceRoundCount } from "../src/services/raceIntelligence.js";
 import { buildPreparationRoadmap } from "../src/services/goalRoadmap.js";
 import { racePrepProfileFromEvent } from "../src/services/racePrepPlanner.js";
 
@@ -69,7 +69,7 @@ test("regular loop ultras use own gels and hydration instead of inventing organi
   const event = { name: "Heartbeat Ultra", targetKm: 112, rounds: 19, loopKm: 6.2, loopMode: "time_limit", eventTimeLimit: "15:00:00" };
   const rows = buildRaceFuelRotation({ event, state: { reviews: {} }, supply: {}, temperatureC: 12 });
   assert.equal(rows.length, 19);
-  assert.ok(rows.every((row) => row.gelIds.length > 0));
+  assert.ok(rows.some((row) => row.gelIds.length > 0));
   assert.ok(rows.every((row) => !row.items.some((item) => item.category === "food")));
   assert.ok(rows.every((row) => row.items.some((item) => item.category === "drink")));
   assert.ok(rows.every((row) => row.fluidMl < 1000));
@@ -107,20 +107,20 @@ test("excluded gels never enter the loop-ultra race plan", () => {
   const rows = buildRaceFuelRotation({ event, state: { reviews: {} }, supply, temperatureC: 12 });
   assert.equal(rows.length, 19);
   assert.ok(rows.every((row) => !row.gelIds.includes("maurten100")));
-  assert.ok(rows.every((row) => row.items.some((item) => item.productId === "race-vp-electrolyte" && item.timing === "vp")));
+  assert.ok(rows.every((row) => row.items.some((item) => item.category === "drink" && item.timing === "vp")));
 });
 
-test("every-loop aid station uses one preferred gel baseline instead of auto-filling with low-priority gels", () => {
+test("every-loop aid station only schedules gels when the drink leaves a carbohydrate gap", () => {
   const event = { name: "Heartbeat Ultra", targetKm: 112, rounds: 19, loopKm: 6.2, loopMode: "time_limit", eventTimeLimit: "15:00:00", aidStationMode: "every_loop" };
   const supply = {
     gelPriority: ["226ers-high", "226ers-high-strawberry", "sis-beta", "maurten100"],
     gelExcludedIds: ["maurten100"],
   };
   const rows = buildRaceFuelRotation({ event, state: { reviews: {} }, supply, temperatureC: 12 });
-  assert.ok(rows.every((row) => row.gelIds.length === 1));
-  assert.equal(rows[0].gelIds[0], "226ers-high");
-  assert.equal(rows[3].gelIds[0], "226ers-high-strawberry");
-  assert.equal(rows[7].gelIds[0], "sis-beta");
+  assert.ok(rows.some((row) => row.gelIds.length === 0));
+  assert.ok(rows.some((row) => row.gelIds.length === 1));
+  assert.equal(rows.flatMap((row) => row.gelIds)[0], "226ers-high");
+  assert.ok(rows.every((row) => row.drinkCarbs > 0));
 });
 
 
@@ -154,5 +154,57 @@ test("Fuel Lab gel priority and exclusion directly control every loop round", ()
   assert.equal(rows.length, 8);
   assert.ok(rows.every((row) => !row.gelIds.includes("gel-c")));
   assert.equal(rows[0].gelIds[0], "gel-b");
-  assert.ok(rows.every((row) => row.items.some((item) => item.label === "Beta Neutral 50" || item.label === "Alpha Fast 45")));
+  assert.ok(rows.flatMap((row) => row.gelIds).every((id) => ["gel-a", "gel-b"].includes(id)));
+  assert.ok(rows.some((row) => row.gelIds.length === 0));
+});
+
+test("race drink shelf mirrors Fuel Lab drink mix and electrolyte products", () => {
+  const state = {
+    fuel: [
+      { id: "iso", brand: "Isostar", name: "Hydrate", category: "Drink Mix", carbs: 30, sodium: 300, preparedVolumeMl: 500 },
+      { id: "salt", brand: "Dryll", name: "Electrolyte", category: "Elektrolyte", carbs: 0, sodium: 450, preparedVolumeMl: 650 },
+      { id: "gel", brand: "Gel", name: "Fast", category: "Gel", carbs: 50 },
+      { id: "old", brand: "Old", name: "Drink", category: "Drink Mix", carbs: 20, preparedVolumeMl: 500, archived: true },
+    ],
+  };
+  const options = raceDrinkOptions(state);
+  assert.deepEqual(options.map((item) => item.id), ["iso", "salt"]);
+  assert.equal(options[0].preparedVolumeMl, 500);
+  assert.equal(options[0].carbs, 30);
+});
+
+test("unknown organizer sports drink uses a labelled six-percent carbohydrate planning value", () => {
+  const event = { name: "Loop Ultra", rounds: 10, loopKm: 5, targetKm: 50, aidStationMode: "every_loop" };
+  const drink = raceDrinkPlanForVolume({ event, state: {}, supply: { drinkSource: "organizer_unknown" }, fluidMl: 650 });
+  assert.equal(drink.estimated, true);
+  assert.equal(drink.carbsPer100Ml, 6);
+  assert.equal(drink.carbs, 39);
+  assert.match(drink.note, /6 g KH \/ 100 ml/);
+});
+
+test("known own or organizer drink scales Fuel Lab carbohydrate to the planned fluid volume", () => {
+  const state = { fuel: [{ id: "iso", brand: "Isostar", name: "Hydrate", category: "Drink Mix", carbs: 30, sodium: 300, preparedVolumeMl: 500 }] };
+  const event = { name: "Loop Ultra", rounds: 10, loopKm: 5, targetKm: 50, aidStationMode: "every_loop" };
+  const own = raceDrinkPlanForVolume({ event, state, supply: { drinkSource: "own", ownDrinkProductId: "iso" }, fluidMl: 650 });
+  const organizer = raceDrinkPlanForVolume({ event, state, supply: { drinkSource: "organizer_known", organizerDrinkProductId: "iso" }, fluidMl: 650 });
+  assert.equal(own.carbs, 39);
+  assert.equal(organizer.carbs, 39);
+  assert.equal(own.sodiumMg, 390);
+});
+
+test("drink carbohydrate reduces gel frequency instead of stacking a gel on every loop", () => {
+  const event = { name: "Heartbeat Ultra", targetKm: 112, rounds: 19, loopKm: 6.2, loopMode: "time_limit", eventTimeLimit: "15:00:00", aidStationMode: "every_loop" };
+  const state = {
+    reviews: {},
+    fuel: [
+      { id: "gel-a", brand: "226ERS", name: "High Energy", category: "Gel", carbs: 50 },
+      { id: "iso", brand: "Isostar", name: "Hydrate", category: "Drink Mix", carbs: 30, preparedVolumeMl: 500 },
+    ],
+  };
+  const rows = buildRaceFuelRotation({ event, state, supply: { drinkSource: "organizer_known", organizerDrinkProductId: "iso", gelPriority: ["gel-a"] }, temperatureC: 12 });
+  assert.equal(rows.length, 19);
+  assert.ok(rows.every((row) => row.drinkCarbs > 0));
+  assert.ok(rows.some((row) => row.gelIds.length === 0));
+  assert.ok(rows.some((row) => row.gelIds.length === 1));
+  assert.ok(rows.every((row) => row.items.some((item) => item.category === "drink" && /g KH/.test(item.portionLabel))));
 });

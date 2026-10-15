@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **4.2.15**
+Current app version: **4.2.16**
 
 **Eat your miles.**
 
@@ -782,3 +782,12 @@ supabase functions deploy event-search
 - Briefing shows a compact Coach note that links directly to the Coach page.
 - Today's workout detail reuses the same Today concrete guidance instead of a separate generic coach note.
 - Aerobic decoupling only becomes a warning when compared sections are sufficiently similar in terrain; a raw pace/HR change caused by different elevation profiles is labelled as context, not fatigue.
+
+## Race drink intelligence & icon refresh v4.2.16
+
+- Race now distinguishes own drink, a known organizer drink and an unknown organizer sports drink. Known products use the Fuel Lab as the source of truth.
+- For an unknown organizer sports drink, EI uses a clearly labelled planning assumption of 6 g carbohydrate per 100 ml until the real product is known.
+- Drink carbohydrates are counted against the same per-round carbohydrate budget as gels, so the gel plan only closes the remaining gap instead of stacking a full gel plan on top of a carbohydrate drink.
+- Every-loop races inherit the configured drink source automatically for every round; no repeated VP setup is required.
+- Round cards show total carbohydrate, fluid and the actual drink contribution in a denser layout.
+- The selected Endurance Intelligence motion-E icon is now used for browser favicons, Apple touch icons and PWA icons.

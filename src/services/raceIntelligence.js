@@ -355,6 +355,106 @@ export function raceGelOptions(state = {}) {
   });
 }
 
+const STANDARD_UNKNOWN_SPORT_DRINK_CARBS_PER_100_ML = 6;
+
+export function raceDrinkOptions(state = {}) {
+  return (Array.isArray(state.fuel) ? state.fuel : [])
+    .filter((item) => {
+      if (item?.archived) return false;
+      const category = String(item?.category || "").toLowerCase();
+      return category === "drink mix" || category === "elektrolyte";
+    })
+    .map((item) => {
+      const servingQuantity = positive(item.servingQuantity);
+      const directCarbs = number(item.carbs);
+      const carbsPer100 = number(item.carbsPer100);
+      const carbs = directCarbs > 0
+        ? directCarbs
+        : servingQuantity > 0 && carbsPer100 > 0
+          ? servingQuantity / 100 * carbsPer100
+          : 0;
+      const directSodium = number(item.sodium);
+      const sodiumPer100 = number(item.sodiumPer100);
+      const sodiumMg = directSodium > 0
+        ? directSodium
+        : servingQuantity > 0 && sodiumPer100 > 0
+          ? servingQuantity / 100 * sodiumPer100
+          : 0;
+      const preparedVolumeMl = positive(item.preparedVolumeMl)
+        || (String(item.servingUnit || "").toLowerCase() === "ml" ? servingQuantity : 0);
+      return {
+        id: String(item.id),
+        label: fuelDisplayName(item),
+        carbs,
+        sodiumMg,
+        preparedVolumeMl,
+        category: item.category,
+      };
+    });
+}
+
+function raceDrinkSource(plan = {}, event = {}) {
+  if (["own", "organizer_known", "organizer_unknown"].includes(plan.drinkSource)) return plan.drinkSource;
+  return raceAidStationMode(event) === "every_loop" ? "organizer_unknown" : "own";
+}
+
+export function raceDrinkPlanForVolume({ event = {}, state = {}, supply = {}, fluidMl = 0 } = {}) {
+  const normalized = normalizeRaceSupplyPlan(supply, state);
+  const source = raceDrinkSource(normalized, event);
+  const options = raceDrinkOptions(state);
+  const productId = source === "own" ? normalized.ownDrinkProductId : normalized.organizerDrinkProductId;
+  const product = options.find((item) => item.id === productId) || null;
+  const ml = Math.max(0, Math.round(number(fluidMl)));
+
+  if (source === "organizer_unknown") {
+    const carbs = ml * STANDARD_UNKNOWN_SPORT_DRINK_CARBS_PER_100_ML / 100;
+    return {
+      source,
+      productId: "",
+      label: "Veranstalter-Sportdrink · Produkt unbekannt",
+      fluidMl: ml,
+      carbs,
+      sodiumMg: 0,
+      carbsPer100Ml: STANDARD_UNKNOWN_SPORT_DRINK_CARBS_PER_100_ML,
+      estimated: true,
+      configured: true,
+      note: `Planungsannahme: ${STANDARD_UNKNOWN_SPORT_DRINK_CARBS_PER_100_ML} g KH / 100 ml.`,
+    };
+  }
+
+  if (!product) {
+    return {
+      source,
+      productId: "",
+      label: source === "own" ? "Eigenes Getränk · Produkt wählen" : "Veranstaltergetränk · Produkt wählen",
+      fluidMl: ml,
+      carbs: 0,
+      sodiumMg: 0,
+      carbsPer100Ml: 0,
+      estimated: false,
+      configured: false,
+      note: "Getränk aus dem Fuel Lab wählen, damit KH und Natrium in den Rennplan einfließen.",
+    };
+  }
+
+  const preparedVolumeMl = positive(product.preparedVolumeMl);
+  const factor = preparedVolumeMl > 0 ? ml / preparedVolumeMl : 0;
+  return {
+    source,
+    productId: product.id,
+    label: product.label,
+    fluidMl: ml,
+    carbs: factor > 0 ? product.carbs * factor : 0,
+    sodiumMg: factor > 0 ? product.sodiumMg * factor : 0,
+    carbsPer100Ml: preparedVolumeMl > 0 ? product.carbs / preparedVolumeMl * 100 : 0,
+    estimated: false,
+    configured: preparedVolumeMl > 0,
+    note: preparedVolumeMl > 0
+      ? `${compactNumber(product.carbs, 1)} g KH pro ${compactNumber(preparedVolumeMl)} ml laut Fuel Lab.`
+      : "Misch-/Trinkvolumen fehlt im Fuel Lab; Getränk-KH werden bis dahin nicht eingerechnet.",
+  };
+}
+
 function normalizedRaceGelPriority(value, options = []) {
   const available = options.map((option) => String(option.id));
   const allowed = new Set(available);
@@ -369,6 +469,9 @@ export function defaultRaceSupplyPlan(state = {}) {
     organizerGelApproved: false,
     gelPriority: raceGelOptions(state).map((item) => item.id),
     gelExcludedIds: [],
+    drinkSource: "",
+    ownDrinkProductId: "",
+    organizerDrinkProductId: "",
     aidStations: [],
     note: "",
   };
@@ -376,8 +479,10 @@ export function defaultRaceSupplyPlan(state = {}) {
 
 export function normalizeRaceSupplyPlan(value = {}, state = {}) {
   const gelOptions = raceGelOptions(state);
+  const drinkOptions = raceDrinkOptions(state);
   const defaults = defaultRaceSupplyPlan(state);
   const availableGelIds = new Set(gelOptions.map((item) => String(item.id)));
+  const availableDrinkIds = new Set(drinkOptions.map((item) => String(item.id)));
   const resources = Array.isArray(value.organizerResources)
     ? value.organizerResources.filter((key) => RESOURCE_LABELS[key])
     : defaults.organizerResources;
@@ -391,6 +496,9 @@ export function normalizeRaceSupplyPlan(value = {}, state = {}) {
     gelExcludedIds: Array.isArray(value.gelExcludedIds)
       ? [...new Set(value.gelExcludedIds.map(String).filter((id) => availableGelIds.has(id)))]
       : [],
+    drinkSource: ["own", "organizer_known", "organizer_unknown"].includes(value.drinkSource) ? value.drinkSource : "",
+    ownDrinkProductId: availableDrinkIds.has(String(value.ownDrinkProductId || "")) ? String(value.ownDrinkProductId) : "",
+    organizerDrinkProductId: availableDrinkIds.has(String(value.organizerDrinkProductId || "")) ? String(value.organizerDrinkProductId) : "",
     aidStations: Array.isArray(value.aidStations)
       ? value.aidStations.map((station, index) => ({
           id: String(station.id || `vp-${index + 1}`),
@@ -462,6 +570,13 @@ function gelPortion(productId, state = {}) {
   return { product, portion };
 }
 
+function gelPriorityIndexForSlot(slotNumber, length) {
+  if (length >= 4 && slotNumber % 16 === 0) return 3;
+  if (length >= 3 && slotNumber % 8 === 0) return 2;
+  if (length >= 2 && slotNumber % 4 === 0) return 1;
+  return 0;
+}
+
 function buildGelLedLoopFuelRotation({ event = {}, state = {}, supply = {}, temperatureC = null } = {}) {
   const normalizedSupply = normalizeRaceSupplyPlan(supply, state);
   const rounds = raceRoundCount(event);
@@ -474,37 +589,37 @@ function buildGelLedLoopFuelRotation({ event = {}, state = {}, supply = {}, temp
   const fluidMid = (targets.hydration.low + targets.hydration.high) / 2;
   const fluidPerRound = clamp(Math.round((fluidMid * roundHours) / 50) * 50, 150, 750);
   const gelPriority = activeRaceGelPriority(normalizedSupply, state).filter((id) => gelPortion(id, state));
-  if (!gelPriority.length) return [];
-
   const aidMode = raceAidStationMode(event);
-  const electrolyteAtLoopVp = aidMode === "every_loop";
+  const drinkTiming = aidMode === "every_loop" ? "vp" : "carry";
   let cumulativeCarbs = 0;
+  let gelSlotNumber = 0;
   const rows = [];
 
   for (let round = 1; round <= rounds; round += 1) {
-    let primaryIndex = 0;
-    if (gelPriority.length >= 4 && round % 16 === 0) primaryIndex = 3;
-    else if (gelPriority.length >= 3 && round % 8 === 0) primaryIndex = 2;
-    else if (gelPriority.length >= 2 && round % 4 === 0) primaryIndex = 1;
-    const primaryId = gelPriority[primaryIndex];
-    const chosen = [primaryId];
-    let roundCarbs = Number(gelPortion(primaryId, state)?.portion?.carbs || 0);
-    cumulativeCarbs += roundCarbs;
+    const drink = raceDrinkPlanForVolume({ event, state, supply: normalizedSupply, fluidMl: fluidPerRound });
+    const drinkCarbs = Number(drink.carbs || 0);
+    cumulativeCarbs += drinkCarbs;
 
-    // At an aid station after every loop, one preferred gel plus the electrolyte/sports drink
-    // is the robust baseline. Unknown drink carbohydrates stay deliberately uncounted.
-    if (!electrolyteAtLoopVp) {
-      const cumulativeTarget = targetCarbsPerRound * round;
-      let guard = 0;
-      while (targetCarbsPerRound > 0 && cumulativeCarbs < cumulativeTarget - 8 && guard < 2) {
-        const extraId = gelPriority[Math.min(guard + 1, gelPriority.length - 1)] || primaryId;
-        chosen.push(extraId);
-        const extraCarbs = Number(gelPortion(extraId, state)?.portion?.carbs || 0);
-        roundCarbs += extraCarbs;
-        cumulativeCarbs += extraCarbs;
-        guard += 1;
-        if (!(extraCarbs > 0)) break;
-      }
+    const chosen = [];
+    let gelCarbs = 0;
+    const cumulativeTarget = targetCarbsPerRound * round;
+    let guard = 0;
+    while (
+      gelPriority.length
+      && targetCarbsPerRound > 0
+      && cumulativeCarbs < cumulativeTarget - 8
+      && guard < 2
+    ) {
+      gelSlotNumber += 1;
+      const primaryIndex = gelPriorityIndexForSlot(gelSlotNumber, gelPriority.length);
+      const productId = gelPriority[primaryIndex] || gelPriority[0];
+      const entry = gelPortion(productId, state);
+      const carbs = Number(entry?.portion?.carbs || 0);
+      if (!(carbs > 0)) break;
+      chosen.push(productId);
+      gelCarbs += carbs;
+      cumulativeCarbs += carbs;
+      guard += 1;
     }
 
     const items = chosen.map((productId, index) => {
@@ -523,28 +638,32 @@ function buildGelLedLoopFuelRotation({ event = {}, state = {}, supply = {}, temp
         slot: index === 0 ? "basis" : "ergänzung",
       };
     });
+
     items.push({
-      productId: electrolyteAtLoopVp ? "race-vp-electrolyte" : "race-own-electrolyte",
+      productId: drink.productId || `race-${drink.source}-drink`,
       portionId: String(fluidPerRound),
       quantity: 1,
-      timing: electrolyteAtLoopVp ? "vp" : "carry",
-      label: electrolyteAtLoopVp ? "Elektrolyt-/Sportdrink am VP" : "Eigener Elektrolyt-Drink",
+      timing: drinkTiming,
+      label: drink.label,
       category: "drink",
-      portionLabel: `${fluidPerRound} ml Orientierung`,
-      carbs: 0,
+      portionLabel: `${fluidPerRound} ml${drink.configured || drink.estimated ? ` · ${drink.estimated ? "≈" : ""}${compactNumber(drinkCarbs, 1)} g KH` : " · KH offen"}`,
+      carbs: drinkCarbs,
       fluidMl: fluidPerRound,
-      sodiumMg: 0,
-      uncountedCarbs: electrolyteAtLoopVp,
+      sodiumMg: Number(drink.sodiumMg || 0),
+      estimatedCarbs: Boolean(drink.estimated),
+      uncountedCarbs: !drink.configured && !drink.estimated,
     });
 
     rows.push({
       round,
       items,
-      carbs: Math.round(roundCarbs),
+      carbs: Math.round(gelCarbs + drinkCarbs),
+      gelCarbs: Math.round(gelCarbs),
+      drinkCarbs: Math.round(drinkCarbs * 10) / 10,
+      targetCarbs: Math.round(targetCarbsPerRound),
       fluidMl: fluidPerRound,
-      why: electrolyteAtLoopVp
-        ? "Eigene Gels führen den sicheren KH-Plan. Am Runden-VP kommt Elektrolyt-/Sportdrink dazu; dessen unbekannte KH werden nicht eingerechnet."
-        : "Eigene Gels und Elektrolytgetränk führen den Plan. Unbestätigtes Veranstalter-Essen bleibt Reserve.",
+      drink,
+      why: "Getränke-KH werden zuerst auf das Rundenziel angerechnet; Gels schließen nur die verbleibende Lücke. Unbestätigtes VP-Essen bleibt Reserve.",
       gelIds: chosen,
     });
   }

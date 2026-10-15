@@ -9,7 +9,10 @@ test("web app manifest and offline shell use the GitHub Pages relative scope", a
   assert.equal(manifest.scope, "./");
   assert.equal(manifest.display, "standalone");
   assert.match(worker, /manifest\.webmanifest/);
+  assert.deepEqual(manifest.icons.map((icon) => icon.src), ["./icon-192.png", "./icon-512.png"]);
+  assert.match(worker, /favicon-32x32\.png/);
+  assert.match(worker, /apple-touch-icon\.png/);
   assert.match(worker, /request\.mode === "navigate"/);
   assert.match(worker, /fetch\(request, \{ cache: "no-store" \}\)/);
-  assert.match(worker, /eym-shell-v4\.2\.15/);
+  assert.match(worker, /eym-shell-v4\.2\.16/);
 });

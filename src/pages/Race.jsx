@@ -20,6 +20,8 @@ import {
   raceFormatLabel,
   raceFuelTargets,
   raceGelOptions,
+  raceDrinkOptions,
+  raceDrinkPlanForVolume,
   raceLoopDistance,
   raceRoundCount,
   resourceLabel,
@@ -66,7 +68,16 @@ function RaceNutrition({ event }) {
   const segments = manualVp ? aidStationSegments(event, supply, state, temperatureC) : [];
   const resources = resourceOptions();
   const gelOptions = raceGelOptions(state);
-  const fuelRotation = buildRaceFuelRotation({ event, state, supply, temperatureC });
+  const drinkOptions = raceDrinkOptions(state);
+  const drinkSource = supply.drinkSource || (roundVp ? "organizer_unknown" : "own");
+  const fuelRotation = buildRaceFuelRotation({ event, state, supply: { ...supply, drinkSource }, temperatureC });
+  const representativeFluidMl = fuelRotation[0]?.fluidMl || 650;
+  const drinkPreview = raceDrinkPlanForVolume({
+    event,
+    state,
+    supply: { ...supply, drinkSource },
+    fluidMl: representativeFluidMl,
+  });
 
   useEffect(() => {
     const confidence = raceForecastConfidence(event?.date);
@@ -124,6 +135,10 @@ function RaceNutrition({ event }) {
     if (excluded.has(productId)) excluded.delete(productId);
     else excluded.add(productId);
     updateSupply({ gelExcludedIds: [...excluded] });
+  }
+
+  function chooseDrinkSource(source) {
+    updateSupply({ drinkSource: source });
   }
 
   function addStation() {
@@ -201,10 +216,52 @@ function RaceNutrition({ event }) {
         </div>
         <div className="race-supply-source-grid">
           <article><small>Fuel</small><strong>Eigene Gels</strong><span>{activeGelIds.length} aktiv im Rennplan</span></article>
-          <article><small>Getränk</small><strong>{roundVp ? "Elektrolyt-/Sportdrink am VP" : "Eigener Elektrolyt-Drink"}</strong><span>{roundVp ? "Aus dem Event: Versorgung nach jeder Runde" : "Trinkkorridor bleibt wetter- und durstabhängig"}</span></article>
+          <article><small>Getränk</small><strong>{drinkPreview.label}</strong><span>{drinkPreview.configured || drinkPreview.estimated ? `${drinkPreview.estimated ? "≈" : ""}${compactNumber(drinkPreview.carbs, 1)} g KH bei ${representativeFluidMl} ml` : "Produktdaten noch offen"}</span></article>
           <article><small>VP-Essen</small><strong>{aidMode === "self_supported" ? "nicht verfügbar" : "Reserve"}</strong><span>{aidMode === "self_supported" ? "Alles Nötige selbst mitführen" : "Nur bestätigte Extras werden bewusst ergänzt"}</span></article>
         </div>
-        {roundVp && <p className="race-intel-note">Der Runden-VP kommt direkt aus deinen Eventdaten. Keine manuellen VP-Einträge nötig; Elektrolyt-/Sportdrink wird für jede Runde als verfügbare Getränkebasis angenommen.</p>}
+
+        <div className="race-drink-config">
+          <div className="race-drink-config-copy">
+            <p className="eyebrow">Getränkebasis</p>
+            <strong>{roundVp ? "Was steht nach jeder Runde am VP?" : "Was trinkst du im Rennen?"}</strong>
+            <span>Getränke-KH zählen zum selben Kohlenhydratbudget wie Gels. EI plant Gels nur für den verbleibenden Bedarf.</span>
+          </div>
+          <div className="race-drink-source-options" role="group" aria-label="Getränkequelle">
+            <button type="button" className={drinkSource === "own" ? "selected" : ""} onClick={() => chooseDrinkSource("own")}>Eigenes Getränk</button>
+            {aidMode !== "self_supported" && <button type="button" className={drinkSource === "organizer_known" ? "selected" : ""} onClick={() => chooseDrinkSource("organizer_known")}>Veranstalter · bekannt</button>}
+            {aidMode !== "self_supported" && <button type="button" className={drinkSource === "organizer_unknown" ? "selected" : ""} onClick={() => chooseDrinkSource("organizer_unknown")}>Veranstalter · unbekannt</button>}
+          </div>
+
+          {drinkSource !== "organizer_unknown" && <div className="race-drink-product-row">
+            <label>
+              {drinkSource === "own" ? "Eigenes Produkt aus Fuel Lab" : "Veranstalter-Produkt aus Fuel Lab"}
+              <select
+                value={drinkSource === "own" ? supply.ownDrinkProductId : supply.organizerDrinkProductId}
+                onChange={(changeEvent) => updateSupply(drinkSource === "own"
+                  ? { ownDrinkProductId: changeEvent.target.value }
+                  : { organizerDrinkProductId: changeEvent.target.value })}
+              >
+                <option value="">Produkt wählen</option>
+                {drinkOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+              </select>
+            </label>
+            <div className={`race-drink-preview ${drinkPreview.configured ? "ready" : "open"}`}>
+              <small>{drinkPreview.configured ? "Wird eingerechnet" : "Noch offen"}</small>
+              <strong>{drinkPreview.configured ? `${compactNumber(drinkPreview.carbs, 1)} g KH / ${representativeFluidMl} ml` : "Mischvolumen fehlt"}</strong>
+              <span>{drinkPreview.note}</span>
+            </div>
+          </div>}
+
+          {drinkSource === "organizer_unknown" && <div className="race-drink-preview estimate">
+            <small>Planungsannahme · Produkt unbekannt</small>
+            <strong>6 g KH / 100 ml → ≈{compactNumber(drinkPreview.carbs, 1)} g bei {representativeFluidMl} ml</strong>
+            <span>Sobald das echte Veranstalter-Produkt bekannt ist, auf „Veranstalter · bekannt“ wechseln. Dann nutzt EI dessen Werte aus dem Fuel Lab.</span>
+          </div>}
+
+          {drinkOptions.length === 0 && drinkSource !== "organizer_unknown" && <p className="race-drink-empty">Im Fuel Lab ist noch kein Drink Mix / Elektrolytprodukt verfügbar. <Link to="/fuel">Fuel Lab öffnen →</Link></p>}
+        </div>
+
+        {roundVp && <p className="race-intel-note">Der Runden-VP kommt direkt aus deinen Eventdaten. Die gewählte Getränkebasis gilt automatisch für jede Runde; manuelle VP-Zeilen sind dafür nicht nötig.</p>}
         {aidMode !== "self_supported" && <details className="race-vp-extras">
           <summary>Optionale VP-Extras bestätigen</summary>
           <div className="race-resource-chips">
@@ -252,7 +309,7 @@ function RaceNutrition({ event }) {
 
       {fuelRotation.length > 0 && <Card className="wide race-fuel-rotation-card">
         <div className="race-intel-heading">
-          <div><p className="eyebrow">Rundenlogik</p><h2>{roundVp ? "Eigene Gels + Elektrolyt am Runden-VP." : "Gel-basierte Eigenversorgung."}</h2><p>Die Hauptansicht bleibt kompakt. Fuel-Phasen und jede einzelne Runde liegen gemeinsam in der Detailansicht.</p></div>
+          <div><p className="eyebrow">Rundenlogik</p><h2>{roundVp ? "Gels + Getränk am Runden-VP." : "Gel- und Getränkelogik."}</h2><p>Getränke-KH werden zuerst angerechnet. Die Rundenansicht zeigt nur, was du dort tatsächlich brauchst.</p></div>
           <span>{fuelRotation.length} RUNDEN</span>
         </div>
         <div className="race-round-glance">
@@ -266,7 +323,7 @@ function RaceNutrition({ event }) {
             {fuelRotation.map((row) => {
               const phase = phaseForRound(phases, row.round);
               return <article key={row.round}>
-                <header><b>Runde {row.round}</b><span>{row.carbs} g Gel-KH · {row.fluidMl} ml</span></header>
+                <header><b>Runde {row.round}</b><span>{row.carbs} g KH · {row.fluidMl} ml</span></header>
                 {phase && <div className="race-round-phase-line"><strong>{phase.label}</strong><span>{phase.carbLabel} · {phase.hydrationLabel}</span></div>}
                 <div className="race-fuel-rotation-items">
                   {row.items.map((item, index) => <span className={`${item.category} ${item.timing || "now"}`} key={`${item.productId}-${index}`}>

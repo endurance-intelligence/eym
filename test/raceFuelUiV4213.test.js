@@ -17,7 +17,7 @@ test("race fuel UI uses the Fuel Lab shelf and keeps phase guidance inside each 
 test("every-loop events do not expose manual VP editing by default", () => {
   assert.match(raceSource, /const manualVp = aidMode === "fixed_stations"/);
   assert.match(raceSource, /\{manualVp && <Card className="wide">/);
-  assert.match(raceSource, /Keine manuellen VP-Einträge nötig/);
+  assert.match(raceSource, /manuelle VP-Zeilen sind dafür nicht nötig/);
 });
 
 test("goals uses the mission hero and compact roadmap instead of the old metric grid", () => {
@@ -26,4 +26,13 @@ test("goals uses the mission hero and compact roadmap instead of the old metric 
   assert.match(missionSource, /mission-roadmap-flow/);
   assert.match(missionSource, /mission-race-setup-details/);
   assert.doesNotMatch(missionSource, /<Metric label="Countdown"/);
+});
+
+test("race fuel UI configures drink source once and applies it to the round plan", () => {
+  assert.match(raceSource, /Getränkebasis/);
+  assert.match(raceSource, /Eigenes Getränk/);
+  assert.match(raceSource, /Veranstalter · bekannt/);
+  assert.match(raceSource, /Veranstalter · unbekannt/);
+  assert.match(raceSource, /Getränke-KH zählen zum selben Kohlenhydratbudget wie Gels/);
+  assert.match(raceSource, /6 g KH \/ 100 ml/);
 });
