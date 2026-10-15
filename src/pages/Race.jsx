@@ -164,9 +164,23 @@ function RaceNutrition({ event }) {
 
   function selectDrinkProduct(option) {
     if (!option) return;
-    updateSupply(drinkSource === "own"
-      ? { ownDrinkProductId: option.id }
-      : { organizerDrinkProductId: option.id, organizerDrinkProduct: null });
+    if (drinkSource === "own") {
+      updateSupply({ ownDrinkProductId: option.id });
+    } else if (option.source === "Fuel Lab") {
+      updateSupply({ organizerDrinkProductId: option.id, organizerDrinkProduct: null });
+    } else {
+      updateSupply({
+        organizerDrinkProductId: "",
+        organizerDrinkProduct: {
+          id: option.id,
+          label: option.label,
+          carbs: Number(option.carbs || 0),
+          sodiumMg: Number(option.sodiumMg || 0),
+          preparedVolumeMl: Number(option.preparedVolumeMl || 0),
+          source: option.source || "EI Produktkatalog",
+        },
+      });
+    }
     setDrinkSearch(option.label);
     setDrinkLookup({ loading: false, error: "", product: null });
   }
@@ -190,7 +204,15 @@ function RaceNutrition({ event }) {
       setLookupMixVolumeMl(inferredVolume);
       setDrinkLookup({ loading: false, error: "", product });
     } catch (error) {
-      setDrinkLookup({ loading: false, error: error?.message || "Produktsuche fehlgeschlagen.", product: null });
+      const raw = String(error?.message || "");
+      const offline = /failed to fetch|network|fetch/i.test(raw);
+      setDrinkLookup({
+        loading: false,
+        error: offline
+          ? "Online-Suche gerade nicht erreichbar · EI rechnet bis zur Produktbestätigung vorläufig mit 6 g KH / 100 ml."
+          : raw || "Produktsuche fehlgeschlagen.",
+        product: null,
+      });
     }
   }
 
@@ -326,7 +348,7 @@ function RaceNutrition({ event }) {
                 {drinkMatches.length > 0
                   ? drinkMatches.map((option) => <button type="button" key={option.id} onClick={() => selectDrinkProduct(option)}>
                     <strong>{option.label}</strong>
-                    <span>{option.preparedVolumeMl > 0 ? `${compactNumber(option.carbs, 1)} g KH / ${compactNumber(option.preparedVolumeMl)} ml` : "Mischvolumen im Fuel Lab ergänzen"}</span>
+                    <span>{option.preparedVolumeMl > 0 ? `${compactNumber(option.carbs, 1)} g KH / ${compactNumber(option.preparedVolumeMl)} ml` : "Mischvolumen ergänzen"} · {option.source || "Fuel Lab"}</span>
                   </button>)
                   : <span>{drinkSource === "organizer_known" ? "Kein Fuel-Lab-Treffer · Suchen prüft zusätzlich die Produktdatenbank." : "Kein passendes Getränk im Fuel Lab gefunden."}</span>}
               </div>}
@@ -342,9 +364,9 @@ function RaceNutrition({ event }) {
                 <button type="button" onClick={useLookedUpDrink} disabled={!(Number(drinkLookup.product.carbs || 0) > 0) || !(lookupMixVolumeMl > 0)}>Übernehmen</button>
               </div>}
             </label>
-            <div className={`race-drink-preview ${drinkPreview.configured ? "ready" : "open"}`}>
-              <small>{drinkPreview.configured ? "Wird eingerechnet" : "Noch offen"}</small>
-              <strong>{drinkPreview.configured ? `${drinkPreview.label} · ${compactNumber(drinkPreview.carbs, 1)} g KH / ${representativeFluidMl} ml` : "Produkt auswählen"}</strong>
+            <div className={`race-drink-preview ${drinkPreview.configured ? "ready" : drinkPreview.estimated ? "estimate" : "open"}`}>
+              <small>{drinkPreview.configured ? "Wird exakt eingerechnet" : drinkPreview.estimated ? "Vorläufig eingerechnet" : "Noch offen"}</small>
+              <strong>{drinkPreview.configured || drinkPreview.estimated ? `${drinkPreview.label} · ${drinkPreview.estimated ? "≈" : ""}${compactNumber(drinkPreview.carbs, 1)} g KH / ${representativeFluidMl} ml` : "Produkt auswählen"}</strong>
               <span>{drinkPreview.note}</span>
             </div>
           </div>}
@@ -444,12 +466,17 @@ function RaceNutrition({ event }) {
                     <strong>{item.label}</strong>
                     <em>{item.portionLabel}{item.uncountedCarbs ? " · KH nicht eingerechnet" : ""}</em>
                   </span>)}
+                  {row.remainingCarbGap > 8 && <span className="carb-gap">
+                    <small>NOCH OFFEN</small>
+                    <strong>≈{compactNumber(row.remainingCarbGap, 0)} g KH</strong>
+                    <em>Nicht automatisch mit einem zweiten Gel überladen</em>
+                  </span>}
                 </div>
                 {(row.vpAlternatives?.replacements?.length > 0 || row.vpAlternatives?.support?.length > 0) && <div className="race-round-vp-options">
-                  <small>OPTIONAL AM VP</small>
+                  <small>OPTIONALE GEL-ALTERNATIVE AM VP</small>
                   {row.vpAlternatives.replacements.map((alternative) => <span key={alternative.key}>
                     <strong>{alternative.label}</strong>
-                    <em>≈{alternative.carbs} g KH · statt Gel</em>
+                    <em>≈{alternative.carbs} g KH · statt 1 Gel</em>
                   </span>)}
                   {row.vpAlternatives.support.map((alternative) => <span className="support" key={alternative.key}>
                     <strong>{alternative.label}</strong>

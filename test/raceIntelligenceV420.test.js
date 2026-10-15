@@ -217,7 +217,10 @@ test("race drink search matches brand and product tokens independent of case", (
       { id: "iso", brand: "Isostar", name: "Hydrate", category: "Drink Mix", carbs: 30, preparedVolumeMl: 500 },
     ],
   };
-  assert.deepEqual(searchRaceDrinkOptions(state, "maurten drink mix").map((item) => item.id), ["maurten-320"]);
+  const maurten = searchRaceDrinkOptions(state, "maurten drink mix");
+  assert.equal(maurten[0].id, "maurten-320");
+  assert.ok(maurten.some((item) => item.label === "Maurten Drink Mix 160"));
+  assert.ok(maurten.some((item) => item.label === "Maurten Drink Mix 320 Caf 100"));
   assert.deepEqual(searchRaceDrinkOptions(state, "HYDRATE").map((item) => item.id), ["iso"]);
 });
 
@@ -238,11 +241,14 @@ test("known organizer drink can use a race-specific product found outside Fuel L
   assert.match(drink.note, /Produktsuche/);
 });
 
-test("confirmed VP foods create optional gel replacements without double-counting them", () => {
-  const alternatives = raceVpAlternatives(["banana", "pretzelSticks", "pickle"], 50, 1);
-  assert.ok(alternatives.replacements.some((item) => /Banan/.test(item.label)));
-  assert.ok(alternatives.replacements.some((item) => /Salzstangen/.test(item.label)));
-  assert.equal(alternatives.support[0]?.label, "Essiggurke");
+test("confirmed VP foods create realistic rotating gel alternatives without banana overload", () => {
+  const first = raceVpAlternatives(["banana", "pretzelSticks", "breadRoll", "pasta", "potatoes", "pickle"], 50, 1);
+  const third = raceVpAlternatives(["banana", "pretzelSticks", "breadRoll", "pasta", "potatoes", "pickle"], 50, 3);
+  assert.ok(first.replacements.length > 0);
+  assert.ok(first.replacements.every((item) => !/2 Bananen/.test(item.label)));
+  assert.ok(first.replacements.some((item) => /Salzstangen|Brötchen|Nudeln|Kartoffel/.test(item.label)));
+  assert.notEqual(first.replacements[0]?.label, third.replacements[0]?.label);
+  assert.equal(third.support[0]?.label, "1 Essiggurke");
 });
 
 test("VP resource shelf includes common ultra foods", () => {
@@ -264,4 +270,28 @@ test("round plan exposes confirmed VP alternatives only on gel rounds", () => {
   });
   assert.ok(rows.some((row) => row.gelCarbs > 0 && row.vpAlternatives.replacements.length > 0));
   assert.ok(rows.filter((row) => row.gelCarbs === 0).every((row) => row.vpAlternatives.replacements.length === 0));
+});
+
+
+test("known organizer drink without a resolved product keeps a provisional drink estimate", () => {
+  const event = { name: "Loop Ultra", rounds: 10, loopKm: 5, targetKm: 50, aidStationMode: "every_loop" };
+  const drink = raceDrinkPlanForVolume({ event, state: {}, supply: { drinkSource: "organizer_known" }, fluidMl: 650 });
+  assert.equal(drink.configured, false);
+  assert.equal(drink.estimated, true);
+  assert.equal(drink.carbs, 39);
+  assert.match(drink.note, /vorläufig 6 g KH \/ 100 ml/);
+});
+
+test("loop planner never auto-stacks two gels into one round when drink data are unresolved", () => {
+  const event = { name: "Heartbeat Ultra", targetKm: 112, rounds: 19, loopKm: 6.2, loopMode: "time_limit", eventTimeLimit: "15:00:00", aidStationMode: "every_loop" };
+  const state = { reviews: {}, fuel: [{ id: "gel-a", brand: "226ERS", name: "High Energy", category: "Gel", carbs: 50 }] };
+  const rows = buildRaceFuelRotation({ event, state, supply: { drinkSource: "organizer_known", gelPriority: ["gel-a"] }, temperatureC: 12 });
+  assert.ok(rows.every((row) => row.gelIds.length <= 1));
+  assert.ok(rows.every((row) => row.drinkCarbs > 0));
+});
+
+test("specific salty VP foods suppress the vague savory placeholder", () => {
+  const alternatives = raceVpAlternatives(["savory", "pretzelSticks", "pasta", "potatoes"], 50, 3);
+  assert.ok(alternatives.replacements.some((item) => /Salzstangen|Nudeln|Kartoffel/.test(item.label)));
+  assert.ok(alternatives.support.every((item) => !/etwas Salziges/i.test(item.label)));
 });

@@ -256,9 +256,7 @@ function searchScore(product, query) {
   return coverage * 0.85 + completeness * 0.15;
 }
 
-export async function lookupOpenFoodFactsProductByText(brand, name) {
-  const query = [brand, name].filter(Boolean).join(" ").trim();
-  if (!query) throw new Error("Für die Produktsuche fehlen Marke und Produktname.");
+async function lookupOpenFoodFactsProductByTextDirect(query) {
   const params = new URLSearchParams({
     search_terms: query,
     search_simple: "1",
@@ -277,6 +275,33 @@ export async function lookupOpenFoodFactsProductByText(brand, name) {
   if (!best || best.score < 0.62) return { found: false, query };
   const barcode = cleanBarcode(best.product.code);
   return productResult(barcode, best.product, "Open Food Facts · Namenssuche");
+}
+
+async function lookupOpenFoodFactsProductByTextProxy(query) {
+  const { supabase, supabaseConfigured } = await import("./supabase.js");
+  if (!supabaseConfigured) throw new Error("Produkt-Proxy ist nicht konfiguriert.");
+  const { data, error } = await supabase.functions.invoke("open-food-facts", { body: { action: "search", query } });
+  if (error) throw error;
+  if (!data?.found || !data?.product) return { found: false, query };
+  const barcode = cleanBarcode(data.product.code);
+  return productResult(barcode, data.product, "Open Food Facts · Server-Suche");
+}
+
+export async function lookupOpenFoodFactsProductByText(brand, name) {
+  const query = [brand, name].filter(Boolean).join(" ").trim();
+  if (!query) throw new Error("Für die Produktsuche fehlen Marke und Produktname.");
+
+  try {
+    return await lookupOpenFoodFactsProductByTextProxy(query);
+  } catch (proxyError) {
+    try {
+      return await lookupOpenFoodFactsProductByTextDirect(query);
+    } catch (directError) {
+      const proxyMessage = String(proxyError?.message || "");
+      const directMessage = String(directError?.message || "");
+      throw new Error(directMessage || proxyMessage || "Produktsuche fehlgeschlagen.", { cause: directError });
+    }
+  }
 }
 
 export function openFoodFactsContributionUrl(rawBarcode) {

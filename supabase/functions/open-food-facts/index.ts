@@ -9,6 +9,54 @@ const jsonHeaders = { ...corsHeaders, "Content-Type": "application/json; charset
 const APP_NAME = "Endurance Intelligence";
 const APP_VERSION = "3.2.0";
 
+const SEARCH_FIELDS = [
+  "code", "product_name", "generic_name", "brands", "brand_owner", "owner", "manufacturing_places", "categories", "categories_tags", "quantity",
+  "serving_quantity", "serving_size", "nutrition_data_per", "nutriments", "ingredients_text", "ingredients_text_de", "image_front_small_url", "image_front_url",
+  "image_nutrition_url", "image_ingredients_url", "completeness", "last_modified_t",
+].join(",");
+
+function normalizedSearchText(value: unknown) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function searchScore(product: Record<string, unknown>, query: string) {
+  const tokens = normalizedSearchText(query).split(" ").filter((token) => token.length > 1);
+  if (!tokens.length) return 0;
+  const categories = Array.isArray(product.categories_tags) ? product.categories_tags.join(" ") : "";
+  const haystack = normalizedSearchText([product.brands, product.product_name, product.generic_name, product.categories, categories].filter(Boolean).join(" "));
+  const matched = tokens.filter((token) => haystack.includes(token)).length;
+  const coverage = matched / tokens.length;
+  const completeness = Math.max(0, Math.min(1, Number(product.completeness || 0)));
+  return coverage * 0.85 + completeness * 0.15;
+}
+
+async function searchProduct(query: string) {
+  const params = new URLSearchParams({
+    search_terms: query,
+    search_simple: "1",
+    action: "process",
+    json: "1",
+    page_size: "12",
+    fields: SEARCH_FIELDS,
+  });
+  const response = await fetch(`https://world.openfoodfacts.org/cgi/search.pl?${params}`, {
+    headers: { Accept: "application/json", "User-Agent": `${APP_NAME.replaceAll(" ", "")}/${APP_VERSION}` },
+  });
+  if (!response.ok) throw new Error(`Produktdaten konnten nicht geladen werden (${response.status}).`);
+  const payload = await response.json();
+  const ranked = (Array.isArray(payload?.products) ? payload.products : [])
+    .map((product: Record<string, unknown>) => ({ product, score: searchScore(product, query) }))
+    .sort((left: { score: number }, right: { score: number }) => right.score - left.score);
+  const best = ranked[0];
+  if (!best || best.score < 0.62) return null;
+  return best.product;
+}
+
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: jsonHeaders });
 }
@@ -186,6 +234,12 @@ Deno.serve(async (request) => {
     const user = await authenticatedUser(request);
     if (!user) return json({ message: "Nicht angemeldet." }, 401);
     const body = await request.json().catch(() => ({}));
+    if (body.action === "search") {
+      const query = cleanText(body.query, 180);
+      if (query.length < 2) return json({ message: "Suchbegriff ist zu kurz." }, 400);
+      const product = await searchProduct(query);
+      return json(product ? { ok: true, found: true, product } : { ok: true, found: false, query });
+    }
     if (body.action !== "contribute") return json({ message: "Unbekannte Aktion." }, 400);
     const product = body.product as Record<string, unknown>;
     const barcode = cleanBarcode(product?.barcode);

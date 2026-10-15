@@ -1,6 +1,6 @@
 # Endurance Intelligence
 
-Current app version: **4.2.17**
+Current app version: **4.2.18**
 
 **Eat your miles.**
 
@@ -799,3 +799,12 @@ supabase functions deploy event-search
 - Confirmed VP foods now create optional round alternatives instead of being decorative toggles. Carb-bearing foods can replace planned gel carbohydrate; salty/low-carb extras remain labelled support and are not double-counted.
 - VP choices now include Salzstangen, Brötchen, Nudeln, Essiggurke and Kartoffeln in addition to the existing Cola, Banane/Obst, Salziges and Brühe options.
 - The Goals target tile no longer inherits the global `.primary` button text color, fixing the dark `112 km` text in the mission hero.
+
+
+## Race fuel decision logic v4.2.18
+- Known organizer drinks now search Fuel Lab first, then EI's verified race-drink shelf, then Open Food Facts through the Supabase proxy so browser CORS failures no longer break the workflow.
+- Maurten Drink Mix 160/320/320 Caf 100 are available as built-in race-drink matches; exact event products can still be confirmed through online search.
+- A known-but-not-yet-confirmed organizer drink uses a clearly marked temporary 6 g KH / 100 ml planning value instead of silently adding extra gels.
+- EI automatically schedules at most one gel per loop. Remaining carbohydrate gaps are shown explicitly instead of being filled with a second large gel.
+- VP food alternatives use realistic portions and combinations, rotate through the foods the athlete actually confirmed, and avoid suggestions such as two bananas per stop.
+- Specific salty foods suppress the generic “Salziges” placeholder; broth/pickle support is rotated rather than repeated on every loop.

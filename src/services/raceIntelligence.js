@@ -28,16 +28,39 @@ const RESOURCE_LABELS = {
 };
 
 const VP_FUEL_OPTIONS = {
-  cola: { carbs: 27, quantityLabel: (count) => `${count * 250} ml Cola`, role: "fuel" },
-  banana: { carbs: 23, quantityLabel: (count) => count === 1 ? "1 Banane" : `${count} Bananen`, role: "fuel" },
-  pretzelSticks: { carbs: 25, quantityLabel: (count) => `${count} Handvoll Salzstangen`, role: "fuel" },
-  breadRoll: { carbs: 25, quantityLabel: (count) => count === 1 ? "1 Brötchen" : `${count} Brötchen`, role: "fuel" },
-  pasta: { carbs: 30, quantityLabel: (count) => count === 1 ? "1 kleine Portion Nudeln" : `${count} kleine Portionen Nudeln`, role: "fuel" },
-  potatoes: { carbs: 18, quantityLabel: (count) => count === 1 ? "1 kleine Kartoffel" : `${count} kleine Kartoffeln`, role: "fuel" },
-  pickle: { carbs: 2, quantityLabel: () => "Essiggurke", role: "support" },
-  broth: { carbs: 0, quantityLabel: () => "Brühe", role: "support" },
-  savory: { carbs: 0, quantityLabel: () => "Salziges", role: "support" },
+  cola: { role: "fuel", family: "sweet", portions: [{ label: "200 ml Cola", carbs: 22 }, { label: "250 ml Cola", carbs: 27 }] },
+  banana: { role: "fuel", family: "sweet", portions: [{ label: "½ Banane", carbs: 12 }, { label: "1 Banane", carbs: 23 }] },
+  pretzelSticks: { role: "fuel", family: "salty", portions: [{ label: "1 kleine Handvoll Salzstangen", carbs: 25 }] },
+  breadRoll: { role: "fuel", family: "salty", portions: [{ label: "½ Brötchen", carbs: 13 }, { label: "1 Brötchen", carbs: 25 }] },
+  pasta: { role: "fuel", family: "salty", portions: [{ label: "1 kleine Portion Nudeln", carbs: 30 }] },
+  potatoes: { role: "fuel", family: "salty", portions: [{ label: "1 kleine Kartoffel", carbs: 18 }, { label: "2 kleine Kartoffeln", carbs: 36 }] },
+  pickle: { role: "support", family: "salty", portions: [{ label: "1 Essiggurke", carbs: 2 }] },
+  broth: { role: "support", family: "salty", portions: [{ label: "1 Becher Brühe", carbs: 0 }] },
+  savory: { role: "support", family: "salty", portions: [{ label: "etwas Salziges", carbs: 0 }] },
 };
+
+const KNOWN_RACE_DRINKS = [
+  { id: "catalog-maurten-160", label: "Maurten Drink Mix 160", carbs: 40, sodiumMg: 0, preparedVolumeMl: 500, category: "Drink Mix", source: "EI Produktkatalog" },
+  { id: "catalog-maurten-320", label: "Maurten Drink Mix 320", carbs: 80, sodiumMg: 0, preparedVolumeMl: 500, category: "Drink Mix", source: "EI Produktkatalog" },
+  { id: "catalog-maurten-320-caf100", label: "Maurten Drink Mix 320 Caf 100", carbs: 80, sodiumMg: 0, preparedVolumeMl: 500, category: "Drink Mix", source: "EI Produktkatalog" },
+];
+
+const VP_PAIR_COMPATIBILITY = new Set([
+  "banana+pretzelSticks",
+  "banana+cola",
+  "breadRoll+pretzelSticks",
+  "breadRoll+cola",
+  "breadRoll+potatoes",
+  "pasta+potatoes",
+  "pasta+pretzelSticks",
+  "potatoes+pretzelSticks",
+]);
+
+function compatibleVpPair(leftKey, rightKey) {
+  const direct = `${leftKey}+${rightKey}`;
+  const reverse = `${rightKey}+${leftKey}`;
+  return VP_PAIR_COMPATIBILITY.has(direct) || VP_PAIR_COMPATIBILITY.has(reverse);
+}
 
 function number(value) {
   const parsed = Number(value);
@@ -420,50 +443,102 @@ function normalizedSearchText(value) {
 }
 
 export function searchRaceDrinkOptions(state = {}, query = "") {
-  const options = raceDrinkOptions(state);
+  const fuelLab = raceDrinkOptions(state).map((option) => ({ ...option, source: option.source || "Fuel Lab" }));
+  const options = [...fuelLab, ...KNOWN_RACE_DRINKS.filter((catalog) => !fuelLab.some((item) => normalizedSearchText(item.label) === normalizedSearchText(catalog.label)))];
   const tokens = normalizedSearchText(query).split(/\s+/).filter(Boolean);
-  if (!tokens.length) return options;
+  if (!tokens.length) return fuelLab;
   return options
     .map((option, index) => {
       const haystack = normalizedSearchText(option.label);
       if (!tokens.every((token) => haystack.includes(token))) return null;
       const exact = haystack === tokens.join(" ");
       const starts = haystack.startsWith(tokens[0]);
-      return { option, score: exact ? 3 : starts ? 2 : 1, index };
+      const fuelLabBonus = option.source === "Fuel Lab" ? 0.25 : 0;
+      return { option, score: (exact ? 3 : starts ? 2 : 1) + fuelLabBonus, index };
     })
     .filter(Boolean)
     .sort((left, right) => right.score - left.score || left.index - right.index)
     .map((entry) => entry.option);
 }
 
-export function raceVpAlternatives(resources = [], replacementCarbs = 0, round = 1) {
-  const selected = [...new Set((Array.isArray(resources) ? resources : []).map(String))];
-  const fuel = selected
-    .map((key) => ({ key, ...(VP_FUEL_OPTIONS[key] || {}) }))
-    .filter((item) => item.role === "fuel" && item.carbs > 0);
-  const support = selected
-    .map((key) => ({ key, ...(VP_FUEL_OPTIONS[key] || {}) }))
-    .filter((item) => item.role === "support")
-    .map((item) => ({ key: item.key, label: item.quantityLabel(1), note: "salzige/warme Ergänzung · nicht als KH-Ersatz gerechnet" }));
+function vpFuelPortions(resources = []) {
+  return [...new Set((Array.isArray(resources) ? resources : []).map(String))]
+    .flatMap((key) => {
+      const option = VP_FUEL_OPTIONS[key];
+      if (!option || option.role !== "fuel") return [];
+      return (option.portions || []).map((portion, index) => ({
+        key,
+        id: `${key}-${index}`,
+        family: option.family || "neutral",
+        label: portion.label,
+        carbs: positive(portion.carbs),
+      })).filter((portion) => portion.carbs > 0);
+    });
+}
 
-  if (!(replacementCarbs > 0) || !fuel.length) {
-    return { replacements: [], support: support.slice(0, 1) };
+function vpReplacementCandidates(resources = [], replacementCarbs = 0) {
+  const portions = vpFuelPortions(resources);
+  const minimumUseful = Math.max(12, replacementCarbs * 0.65);
+  const maximumUseful = replacementCarbs * 1.2;
+  const candidates = portions.map((portion) => ({
+    key: portion.id,
+    resourceKeys: [portion.key],
+    label: portion.label,
+    carbs: portion.carbs,
+    balanced: false,
+  }));
+
+  for (let leftIndex = 0; leftIndex < portions.length; leftIndex += 1) {
+    for (let rightIndex = leftIndex + 1; rightIndex < portions.length; rightIndex += 1) {
+      const left = portions[leftIndex];
+      const right = portions[rightIndex];
+      if (left.key === right.key || !compatibleVpPair(left.key, right.key)) continue;
+      const carbs = left.carbs + right.carbs;
+      candidates.push({
+        key: `${left.id}+${right.id}`,
+        resourceKeys: [left.key, right.key],
+        label: `${left.label} + ${right.label}`,
+        carbs,
+        balanced: left.family !== right.family,
+      });
+    }
   }
 
-  const candidates = fuel.map((item) => {
-    const count = Math.max(1, Math.min(4, Math.round(replacementCarbs / item.carbs)));
-    const carbs = count * item.carbs;
-    return {
-      key: item.key,
-      label: item.quantityLabel(count),
-      carbs,
-      difference: Math.abs(carbs - replacementCarbs),
-    };
-  }).sort((left, right) => left.difference - right.difference);
+  return candidates
+    .filter((candidate) => candidate.carbs >= minimumUseful && candidate.carbs <= maximumUseful)
+    .map((candidate) => ({
+      ...candidate,
+      difference: Math.abs(candidate.carbs - replacementCarbs),
+      score: Math.abs(candidate.carbs - replacementCarbs) - (candidate.balanced ? 4 : 0),
+    }))
+    .sort((left, right) => left.score - right.score || left.difference - right.difference || left.label.localeCompare(right.label, "de"))
+    .slice(0, 8);
+}
 
-  const offset = candidates.length > 1 ? Math.max(0, Number(round || 1) - 1) % candidates.length : 0;
-  const rotated = [...candidates.slice(offset), ...candidates.slice(0, offset)];
-  return { replacements: rotated.slice(0, 2), support: support.slice(0, 1) };
+export function raceVpAlternatives(resources = [], replacementCarbs = 0, round = 1) {
+  const selected = [...new Set((Array.isArray(resources) ? resources : []).map(String))];
+  const candidates = replacementCarbs > 0 ? vpReplacementCandidates(selected, replacementCarbs) : [];
+  const specificSaltySelected = selected.some((key) => ["pretzelSticks", "breadRoll", "pasta", "potatoes", "pickle", "broth"].includes(key));
+  const supportPool = selected
+    .map((key) => ({ key, ...(VP_FUEL_OPTIONS[key] || {}) }))
+    .filter((item) => item.role === "support" && !(item.key === "savory" && specificSaltySelected))
+    .map((item) => ({ key: item.key, label: item.portions?.[0]?.label || RESOURCE_LABELS[item.key] || item.key, note: "Geschmack/Salz variieren · nicht als KH-Ersatz gerechnet" }));
+
+  if (!(replacementCarbs > 0) || !candidates.length) {
+    const supportIndex = supportPool.length ? Math.max(0, Number(round || 1) - 1) % supportPool.length : 0;
+    return { replacements: [], support: supportPool.length ? [supportPool[supportIndex]] : [] };
+  }
+
+  const preferredIndex = Math.max(0, Number(round || 1) - 1) % candidates.length;
+  const preferred = candidates[preferredIndex];
+  const alternate = candidates.find((candidate) => candidate.key !== preferred.key && candidate.resourceKeys.every((key) => !preferred.resourceKeys.includes(key)))
+    || candidates.find((candidate) => candidate.key !== preferred.key);
+  const supportIndex = supportPool.length ? Math.floor(Math.max(0, Number(round || 1) - 1) / 2) % supportPool.length : 0;
+
+  return {
+    replacements: [preferred, alternate].filter(Boolean).slice(0, 2),
+    support: supportPool.length && Number(round || 1) % 3 === 0 ? [supportPool[supportIndex]] : [],
+  };
 }
 
 function normalizedOrganizerDrinkProduct(value = null) {
@@ -515,17 +590,21 @@ export function raceDrinkPlanForVolume({ event = {}, state = {}, supply = {}, fl
   }
 
   if (!product) {
+    const provisionalOrganizer = source === "organizer_known";
+    const carbs = provisionalOrganizer ? ml * STANDARD_UNKNOWN_SPORT_DRINK_CARBS_PER_100_ML / 100 : 0;
     return {
       source,
       productId: "",
-      label: source === "own" ? "Eigenes Getränk" : "Veranstalter-Drink",
+      label: source === "own" ? "Eigenes Getränk" : "VP-Drink · Produkt offen",
       fluidMl: ml,
-      carbs: 0,
+      carbs,
       sodiumMg: 0,
-      carbsPer100Ml: 0,
-      estimated: false,
+      carbsPer100Ml: provisionalOrganizer ? STANDARD_UNKNOWN_SPORT_DRINK_CARBS_PER_100_ML : 0,
+      estimated: provisionalOrganizer,
       configured: false,
-      note: "Getränk aus dem Fuel Lab wählen, damit KH und Natrium in den Rennplan einfließen.",
+      note: provisionalOrganizer
+        ? `Produkt noch nicht bestätigt · vorläufig ${STANDARD_UNKNOWN_SPORT_DRINK_CARBS_PER_100_ML} g KH / 100 ml eingeplant.`
+        : "Getränk aus dem Fuel Lab wählen, damit KH und Natrium in den Rennplan einfließen.",
     };
   }
 
@@ -702,7 +781,7 @@ function buildGelLedLoopFuelRotation({ event = {}, state = {}, supply = {}, temp
       gelPriority.length
       && targetCarbsPerRound > 0
       && cumulativeCarbs < cumulativeTarget - 8
-      && guard < 2
+      && guard < 1
     ) {
       gelSlotNumber += 1;
       const primaryIndex = gelPriorityIndexForSlot(gelSlotNumber, gelPriority.length);
@@ -748,6 +827,7 @@ function buildGelLedLoopFuelRotation({ event = {}, state = {}, supply = {}, temp
       uncountedCarbs: !drink.configured && !drink.estimated,
     });
 
+    const remainingCarbGap = Math.max(0, Math.round((cumulativeTarget - cumulativeCarbs) * 10) / 10);
     const vpAlternatives = aidMode === "every_loop"
       ? raceVpAlternatives(normalizedSupply.organizerResources, gelCarbs, round)
       : { replacements: [], support: [] };
@@ -759,10 +839,11 @@ function buildGelLedLoopFuelRotation({ event = {}, state = {}, supply = {}, temp
       gelCarbs: Math.round(gelCarbs),
       drinkCarbs: Math.round(drinkCarbs * 10) / 10,
       targetCarbs: Math.round(targetCarbsPerRound),
+      remainingCarbGap,
       fluidMl: fluidPerRound,
       drink,
       vpAlternatives,
-      why: "Getränke-KH werden zuerst auf das Rundenziel angerechnet; Gels schließen nur die verbleibende Lücke. Bestätigte VP-Lebensmittel erscheinen als optionale Alternative und werden nicht doppelt gezählt.",
+      why: "Getränke-KH werden zuerst auf das Rundenziel angerechnet. Pro Runde wird höchstens ein Gel automatisch eingeplant; eine Restlücke wird sichtbar statt mit einem zweiten Gel überladen. Bestätigte VP-Lebensmittel erscheinen als rotierende Alternative und werden nicht doppelt gezählt.",
       gelIds: chosen,
     });
   }
